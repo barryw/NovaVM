@@ -1,16 +1,19 @@
-// test_page_in_top.sv — Task 11d integration capstone.
+// test_page_in_top.sv — Task 11d/T8 paged-library loader capstone.
 //
-// Proves the FULL page-in path end-to-end through the REAL top.sv (-DSYNTHESIS):
+// Proves the FULL paged-library flow end-to-end through the REAL top.sv
+// (-DSYNTHESIS) running the REAL `libcall.bin` loader and a REAL formatted
+// module (`testmod.bin`) — not a synthetic pattern, not a hand-rolled driver:
 //
-//   CPU executes a 6502 program in basic_rom that writes the page-in MMIO
-//   register block ($BA76-$BA7C): PGD_SRC* = XRAM/SDRAM byte base, PGD_WORDS*
-//   = 8192, PGD_CMD = 0x01. The CMD write raises a pixel-domain `busy`, which
-//   drives the CPU RDY low (pgd_rdy). A pixel->sdram CDC start pulse kicks the
-//   sdram_clk-domain page_dma core, which page-mode-streams 8192 words (16 KB)
-//   from the SDRAM through sdram.v's stream port, serializing each word into
-//   the two 8-bit byte writes of bank-1 ext_rom (dpram_dc port A, sdram_clk).
-//   On completion page_dma's `done` crosses sdram->pixel, clears busy, and the
-//   CPU resumes. The next STATUS read shows done/ok.
+//   The CPU resets into a tiny basic_rom trampoline at $C000 that JSRs the real
+//   resident loader `lib_call` (tests/asm/libcall.bin, ORG $9C00, loaded into
+//   main RAM). lib_call reads the mailbox ($0300..), does modtab_lookup
+//   (MODULE_ID_TEST $7F -> SHELF_BASE $060000 + 8192 words), fires the page-in
+//   MMIO ($BA76), and STALLS (pgd_rdy low) while the sdram_clk-domain page_dma
+//   page-mode-streams the 16 KB module image from SDRAM into bank-1 ext_rom.
+//   It then SEI-swaps ROMSWAP_EXTENSION ($04) to validate the "NL" header,
+//   caches LIB_RESIDENT, JSRs the module at $C000 (which dispatches FN 0 ECHO:
+//   RESULT = ARG0), restores ROMSWAP_BASIC ($02), and RTSes. Back in the
+//   trampoline the CPU stashes LIB_RESULT ($0313) to $0400 and halts.
 //
 // HARNESS: top.sv (DUT) + a REAL sdram.v stream consumer + the sdram_model
 //   timing oracle. top.sv's exposed stream port wires to sdram.v's stream port;
@@ -18,13 +21,19 @@
 //   so XRAM port A is quiescent — N1). A SEPARATE faster sdram_clk genuinely
 //   exercises the pixel<->sdram CDC (unlike the same-clock top tests).
 //
-// PATTERN (unique-per-word so a dropped/wrong-row/skewed word is caught):
-//   word(i) = {i[7:0], i[15:8]}  ->  ext_rom[2i] = i[7:0], ext_rom[2i+1] = i[15:8]
+// MODULE STAGING (byte-exact at the loader's shelf base $060000):
+//   page_dma decodes even byte = stream_dout[15:8], odd byte = stream_dout[7:0]
+//   (a[0]?lo:hi). The sdram_model poke_word(byte,{hi,lo}) puts hi at the even
+//   byte. So staging word k = {testmod[2k], testmod[2k+1]} at byte $060000+2k
+//   yields ext_rom[2k]==testmod[2k], ext_rom[2k+1]==testmod[2k+1] after page-in.
 //
 // VERIFY:
-//   - STATUS busy went high during the copy, then cleared with ok=1.
-//   - ext_rom_inst.mem[] holds the 16 KB pattern byte-exact + correct order.
-//   - CPU reads $C000.. via ROMSWAP_EXT and lands the resident bytes in RAM.
+//   - pgd_rdy went low (CPU stalled INSIDE lib_call) + pgd_active went high.
+//   - ext_rom_inst.mem[] holds the 16 KB testmod.bin image byte-exact.
+//   - LIB_RESIDENT ($0318) == $7F (loader cached the module id).
+//   - LIB_STATUS  ($0302) == $00 (ECHO returned LERR_OK).
+//   - The stashed RESULT at $0400 == $DEADBEEF — the module ECHO ran on the
+//     paged-in image and the real ROMSWAP_EXT/BASIC dance worked end-to-end.
 //
 // Run: make -C test test_page_in_top
 
@@ -269,80 +278,56 @@ module test_page_in_top;
     endtask
 
     // -----------------------------------------------------------------------
-    // 6502 driver split across two regions so the CPU never fetches from a ROM
-    // bank while that bank is swapped out:
+    // basic_rom @ $C000 trampoline. The reset vector points here. It does the
+    // minimum: JSR the real resident loader (lib_call @ $9C00 in RAM), then
+    // stash the 32-bit LIB_RESULT ($0313) to a scratch RAM address ($0400), then
+    // halt. ALL the page-in + ROMSWAP + module-dispatch logic lives in the real
+    // libcall.bin running from RAM, so this trampoline never has the ground
+    // pulled out from under it by a bank swap.
     //
-    //   ROM part (basic_rom @ $C000): arm the page-in, fire PGD_CMD (the CPU
-    //   stalls here for the whole copy), stash STATUS, then JMP $0200 into RAM.
-    //
-    //   RAM part ($0200, loaded via dbg_poke): ROMSWAP to ext_rom, read the
-    //   first 4 resident bytes into $0300-$0303 (executing from RAM, which is
-    //   never swapped), ROMSWAP back to BASIC, then halt-loop in RAM. This is
-    //   the CPU-read proof that the paged-in image is live at $C000.
-    //
-    //   ; --- ROM @ $C000: arm + fire + jump to RAM ---
-    //   $C000: A9 00       LDA #$00
-    //   $C002: 8D 78 BA    STA $BA78      ; PGD_SRCL = 0
-    //   $C005: 8D 79 BA    STA $BA79      ; PGD_SRCM = 0
-    //   $C008: 8D 7A BA    STA $BA7A      ; PGD_SRCH = 0
-    //   $C00B: 8D 7B BA    STA $BA7B      ; PGD_WORDSL = 0
-    //   $C00E: A9 20       LDA #$20
-    //   $C010: 8D 7C BA    STA $BA7C      ; PGD_WORDSH = 0x20 -> 0x2000 = 8192
-    //   $C013: A9 01       LDA #$01
-    //   $C015: 8D 76 BA    STA $BA76      ; PGD_CMD = 1 (start; CPU stalls here)
-    //   $C018: AD 77 BA    LDA $BA77      ; read STATUS (after resume)
-    //   $C01B: 8D 04 03    STA $0304      ; stash STATUS for the testbench
-    //   $C01E: 4C 00 02    JMP $0200      ; into the RAM reader
+    //   $C000: 20 00 9C    JSR $9C00      ; lib_call (page-in + validate + dispatch)
+    //   $C003: AD 13 03    LDA $0313      ; LIB_RESULT byte0
+    //   $C006: 8D 00 04    STA $0400
+    //   $C009: AD 14 03    LDA $0314      ; LIB_RESULT byte1
+    //   $C00C: 8D 01 04    STA $0401
+    //   $C00F: AD 15 03    LDA $0315      ; LIB_RESULT byte2
+    //   $C012: 8D 02 04    STA $0402
+    //   $C015: AD 16 03    LDA $0316      ; LIB_RESULT byte3
+    //   $C018: 8D 03 04    STA $0403
+    //   $C01B: 4C 1B C0    JMP $C01B      ; halt
     // -----------------------------------------------------------------------
-    localparam int PROG_LEN = 33;
+    localparam int PROG_LEN = 30;
     byte unsigned prog [PROG_LEN] = '{
-        8'hA9, 8'h00,
-        8'h8D, 8'h78, 8'hBA,
-        8'h8D, 8'h79, 8'hBA,
-        8'h8D, 8'h7A, 8'hBA,
-        8'h8D, 8'h7B, 8'hBA,
-        8'hA9, 8'h20,
-        8'h8D, 8'h7C, 8'hBA,
-        8'hA9, 8'h01,
-        8'h8D, 8'h76, 8'hBA,
-        8'hAD, 8'h77, 8'hBA,
-        8'h8D, 8'h04, 8'h03,
-        8'h4C, 8'h00, 8'h02
+        8'h20, 8'h00, 8'h9C,
+        8'hAD, 8'h13, 8'h03,
+        8'h8D, 8'h00, 8'h04,
+        8'hAD, 8'h14, 8'h03,
+        8'h8D, 8'h01, 8'h04,
+        8'hAD, 8'h15, 8'h03,
+        8'h8D, 8'h02, 8'h04,
+        8'hAD, 8'h16, 8'h03,
+        8'h8D, 8'h03, 8'h04,
+        8'h4C, 8'h1B, 8'hC0
     };
 
-    // RAM reader @ $0200 (loaded via dbg_poke). Runs from RAM so the ROM-bank
-    // swap below never pulls the executing code out from under the CPU.
-    //
-    //   $0200: A9 04       LDA #$04
-    //   $0202: 8D 3F A0    STA $A03F      ; ROMSWAP_EXT  (ext_rom live at $C000)
-    //   $0205: AD 00 C0    LDA $C000      ; ext_rom[0]
-    //   $0208: 8D 00 03    STA $0300
-    //   $020B: AD 01 C0    LDA $C001
-    //   $020E: 8D 01 03    STA $0301
-    //   $0211: AD 02 C0    LDA $C002
-    //   $0214: 8D 02 03    STA $0302
-    //   $0217: AD 03 C0    LDA $C003
-    //   $021A: 8D 03 03    STA $0303
-    //   $021D: A9 02       LDA #$02
-    //   $021F: 8D 3F A0    STA $A03F      ; ROMSWAP_BASIC
-    //   $0222: 4C 22 02    JMP $0222      ; halt
-    localparam int RAM_PROG_LEN = 37;
-    localparam logic [15:0] RAM_PROG_BASE = 16'h0200;
-    byte unsigned ram_prog [RAM_PROG_LEN] = '{
-        8'hA9, 8'h04,
-        8'h8D, 8'h3F, 8'hA0,
-        8'hAD, 8'h00, 8'hC0,
-        8'h8D, 8'h00, 8'h03,
-        8'hAD, 8'h01, 8'hC0,
-        8'h8D, 8'h01, 8'h03,
-        8'hAD, 8'h02, 8'hC0,
-        8'h8D, 8'h02, 8'h03,
-        8'hAD, 8'h03, 8'hC0,
-        8'h8D, 8'h03, 8'h03,
-        8'hA9, 8'h02,
-        8'h8D, 8'h3F, 8'hA0,
-        8'h4C, 8'h22, 8'h02
-    };
+    // The real resident loader, loaded into main RAM at its ORG.
+    localparam logic [15:0] LIBCALL_BASE = 16'h9C00;   // libcall.bin ORG
+    localparam int          LIBCALL_MAX  = 512;        // bin is 151 bytes
+    byte unsigned libcall_img [LIBCALL_MAX];
+    int           libcall_len;
+
+    // The real formatted module image (16 KB), staged into SDRAM at the shelf.
+    localparam int          TESTMOD_LEN  = 16384;
+    byte unsigned testmod_img [TESTMOD_LEN];
+    int           testmod_read;
+
+    // Loader's shelf base (libabi.inc SHELF_BASE = $060000). modtab_lookup in
+    // libcall.bin programs PGD_SRC* to exactly this byte base for MODULE_ID_TEST.
+    localparam logic [24:0] SHELF_BASE   = 25'h060000;
+
+    // Distinctive 32-bit ECHO argument. ECHO copies ARG0 -> RESULT, so the
+    // stashed RESULT at $0400 must equal this after the whole flow.
+    localparam logic [31:0] ARG0_VALUE   = 32'hDEADBEEF;
 
     // RAM-load helper (debug poke path writes main RAM).
     task automatic ram_poke(input logic [15:0] addr, input logic [7:0] data);
@@ -355,14 +340,22 @@ module test_page_in_top;
     endtask
 
     // -----------------------------------------------------------------------
-    // Preload the unique 16 KB pattern into SDRAM (model backdoor — the same
-    // port-B-style preload path test_page_dma uses). word(i) = {i[7:0], i[15:8]}.
+    // Stage the 16 KB testmod.bin image into SDRAM at the loader's shelf base
+    // (model backdoor — the same path test_page_dma uses). For word k:
+    //   word = {testmod[2k], testmod[2k+1]} -> hi lane = byte 2k, lo lane = 2k+1
+    // page_dma writes ext_rom[2k]=hi, ext_rom[2k+1]=lo, so the resident image is
+    // byte-exact (no swap). Staged at byte base $060000 = SHELF_BASE so the real
+    // modtab_lookup's PGD_SRC* program lands on it.
     // -----------------------------------------------------------------------
     localparam int N_WORDS = 8192;
-    task automatic preload_unique_pattern(input int n_words);
-        int i;
-        for (i = 0; i < n_words; i++)
-            chip.poke_word(25'(2*i), {i[7:0], i[15:8]});
+    task automatic stage_module_at_shelf(input int n_words);
+        int k;
+        logic [7:0] hi, lo;
+        for (k = 0; k < n_words; k++) begin
+            hi = testmod_img[2*k];
+            lo = testmod_img[2*k+1];
+            chip.poke_word(SHELF_BASE + 25'(2*k), {hi, lo});
+        end
     endtask
 
     // -----------------------------------------------------------------------
@@ -375,14 +368,14 @@ module test_page_in_top;
     always @(posedge sdram_clk)
         if (dut.pgd_active) saw_pgd_active <= 1'b1;
 
-    // ext_rom byte-exact verify against the unique pattern.
+    // ext_rom byte-exact verify against the staged testmod.bin image.
     task automatic verify_ext_rom(input string name, input int n_words);
         int k, mism;
         logic [7:0] exp_even, exp_odd;
         mism = 0;
         for (k = 0; k < n_words; k++) begin
-            exp_even = k[7:0];
-            exp_odd  = k[15:8];
+            exp_even = testmod_img[2*k];
+            exp_odd  = testmod_img[2*k+1];
             if (dut.ext_rom_inst.mem[14'(2*k)]   !== exp_even ||
                 dut.ext_rom_inst.mem[14'(2*k+1)] !== exp_odd) begin
                 if (mism < 6)
@@ -396,9 +389,29 @@ module test_page_in_top;
         check(name, mism == 0);
     endtask
 
+    // File descriptors for the bin loads (run dir is e6502.FPGA/ — the test
+    // Makefile cd's to the parent — so the path is ../tests/asm/).
+    int fd_lc, fd_tm;
+
     initial begin
-        $display("=== Task 11d: CPU MMIO -> page-in -> 16 KB resident at $C000 ===");
+        $display("=== T8: real libcall.bin pages in real testmod.bin, CPU dispatches ECHO ===");
         $display("");
+
+        // Load the real loader + module images from disk via $fopen/$fread
+        // (same idiom as test_cpu_dormann). $fread of a packed-byte array fills
+        // from index 0 and returns the byte count.
+        fd_lc = $fopen("../tests/asm/libcall.bin", "rb");
+        if (fd_lc == 0) $fatal(1, "Could not open ../tests/asm/libcall.bin");
+        libcall_len = $fread(libcall_img, fd_lc);
+        $fclose(fd_lc);
+
+        fd_tm = $fopen("../tests/asm/testmod.bin", "rb");
+        if (fd_tm == 0) $fatal(1, "Could not open ../tests/asm/testmod.bin");
+        testmod_read = $fread(testmod_img, fd_tm);
+        $fclose(fd_tm);
+
+        $display("Loaded libcall.bin = %0d bytes, testmod.bin = %0d bytes",
+                 libcall_len, testmod_read);
 
         // Hold everything in reset; load ROM during the CPU-held gap.
         rst           = 1;
@@ -416,66 +429,114 @@ module test_page_in_top;
         repeat (2000) @(posedge sdram_clk);
         check("sdram controller exited reset", sdram_ctrl.reset == 0);
 
-        // Preload the 16 KB unique pattern into SDRAM.
-        $display("Preloading %0d-word unique pattern into SDRAM...", N_WORDS);
-        preload_unique_pattern(N_WORDS);
+        check("libcall.bin loaded (151 bytes)", libcall_len == 151);
+        check("testmod.bin loaded (16384 bytes)", testmod_read == TESTMOD_LEN);
+        check_eq8("testmod header = JMP ($4C)", testmod_img[0], 8'h4C);
+        check_eq8("testmod magic 'N' @ +3",     testmod_img[3], 8'h4E);
+        check_eq8("testmod magic 'L' @ +4",     testmod_img[4], 8'h4C);
+        check_eq8("testmod id = $7F @ +5",       testmod_img[5], 8'h7F);
 
-        // Load the ROM driver into basic_rom @ $C000 and the reset vector.
-        $display("Loading %0d-byte ROM driver into basic_rom...", PROG_LEN);
+        // Stage the real module image into SDRAM at the loader's shelf base.
+        $display("Staging %0d-byte testmod.bin into SDRAM at shelf $%06X...",
+                 TESTMOD_LEN, SHELF_BASE);
+        stage_module_at_shelf(N_WORDS);
+
+        // Load the $C000 trampoline into basic_rom + the reset vector.
+        $display("Loading %0d-byte $C000 trampoline into basic_rom...", PROG_LEN);
         for (int i = 0; i < PROG_LEN; i++)
             rom_write(1'b0, 14'(i), prog[i]);
         rom_write(1'b0, 14'h3FFC, 8'h00);   // reset vector low  = $00
         rom_write(1'b0, 14'h3FFD, 8'hC0);   // reset vector high = $C0
         repeat (8) @(posedge clk);
 
-        // Load the RAM reader @ $0200 (executes from RAM, survives ROM swaps).
-        $display("Loading %0d-byte RAM reader @ $%04X...", RAM_PROG_LEN, RAM_PROG_BASE);
-        for (int i = 0; i < RAM_PROG_LEN; i++)
-            ram_poke(RAM_PROG_BASE + 16'(i), ram_prog[i]);
+        // Load the real libcall.bin into main RAM at its ORG ($9C00).
+        $display("Loading libcall.bin into RAM @ $%04X...", LIBCALL_BASE);
+        for (int i = 0; i < libcall_len; i++)
+            ram_poke(LIBCALL_BASE + 16'(i), libcall_img[i]);
         repeat (4) @(posedge clk);
 
-        check_eq8("basic_rom[0] loaded", dut.basic_rom_inst.mem[14'h0000], 8'hA9);
-        check_eq8("reset vector hi", dut.basic_rom_inst.mem[14'h3FFD], 8'hC0);
-        check_eq8("ram_prog[0] loaded", dut.main_ram.mem[RAM_PROG_BASE], 8'hA9);
+        // Set up the mailbox in low RAM before releasing the CPU.
+        //   $0300 LIB_MOD_ID    = $7F  (MODULE_ID_TEST)
+        //   $0301 LIB_FN_ID     = $00  (FN 0 ECHO)
+        //   $0302 LIB_STATUS    = $FF  (sentinel; ECHO must overwrite with $00)
+        //   $0303 LIB_ARG0      = $DEADBEEF (LE)
+        //   $0313 LIB_RESULT    = $00000000 (cleared; ECHO must fill it)
+        //   $0317 LIB_HOME_BANK = $02  (ROMSWAP_BASIC — caller's home bank)
+        //   $0318 LIB_RESIDENT  = $00  (none resident yet)
+        ram_poke(16'h0300, 8'h7F);
+        ram_poke(16'h0301, 8'h00);
+        ram_poke(16'h0302, 8'hFF);
+        ram_poke(16'h0303, ARG0_VALUE[7:0]);
+        ram_poke(16'h0304, ARG0_VALUE[15:8]);
+        ram_poke(16'h0305, ARG0_VALUE[23:16]);
+        ram_poke(16'h0306, ARG0_VALUE[31:24]);
+        ram_poke(16'h0313, 8'h00);
+        ram_poke(16'h0314, 8'h00);
+        ram_poke(16'h0315, 8'h00);
+        ram_poke(16'h0316, 8'h00);
+        ram_poke(16'h0317, 8'h02);
+        ram_poke(16'h0318, 8'h00);
+        repeat (4) @(posedge clk);
 
-        // Release the CPU. It runs the driver, which triggers the page-in.
+        check_eq8("basic_rom[0] = JSR ($20)", dut.basic_rom_inst.mem[14'h0000], 8'h20);
+        check_eq8("reset vector hi", dut.basic_rom_inst.mem[14'h3FFD], 8'hC0);
+        check_eq8("libcall[0] loaded (LDA $0300 = $AD)",
+                  dut.main_ram.mem[LIBCALL_BASE], 8'hAD);
+        check_eq8("mailbox MOD_ID = $7F", dut.main_ram.mem[16'h0300], 8'h7F);
+        check_eq8("mailbox ARG0 lo = $EF", dut.main_ram.mem[16'h0303], 8'hEF);
+
+        // Release the CPU. It resets to $C000, JSRs lib_call, which triggers the
+        // page-in, validates, dispatches ECHO, restores the bank, and returns.
         dbg_cpu_reset = 0;
         repeat (4) @(posedge clk);
         dbg_pause = 0;
 
-        // Run long enough for: program prologue + the 16 KB page-in (the CPU is
-        // stalled the whole copy) + ROMSWAP + 4 byte copies + halt. The copy is
-        // ~2 sdram_clk/word (~18k sdram cycles ~= 5-6k pixel cycles at this
-        // ratio); the CPU runs at half pixel rate. 200k pixel cycles is far
-        // more than enough and keeps the watchdog (#200ms) comfortably clear.
-        repeat (200000) @(posedge clk);
+        // Run long enough for: reset prologue + JSR lib_call + the 16 KB page-in
+        // (the CPU stalls the whole copy) + validate + ROMSWAP dance + module
+        // dispatch + RESULT stash + halt. The copy is ~2 sdram_clk/word (~18k
+        // sdram cycles ~= 5-6k pixel cycles at this ratio); the CPU runs at half
+        // pixel rate. 300k pixel cycles is far more than enough and keeps the
+        // watchdog (#200ms) comfortably clear.
+        repeat (300000) @(posedge clk);
 
         // -----------------------------------------------------------------
         // Assertions
         // -----------------------------------------------------------------
         $display("");
-        $display("Final CPU PC = 0x%04X (expect RAM halt loop $0222)", dbg_cpu_pc);
-        check("CPU reached RAM halt loop", (dbg_cpu_pc >= 16'h0222) && (dbg_cpu_pc <= 16'h0225));
+        $display("Final CPU PC = 0x%04X (expect $C000 halt loop $C01B)", dbg_cpu_pc);
+        check("CPU reached $C01B halt loop", (dbg_cpu_pc >= 16'hC01B) && (dbg_cpu_pc <= 16'hC01E));
 
-        // The CPU was stalled (pgd_rdy low) and the sdram-side copy ran.
-        check("CPU was stalled during page-in (pgd_rdy went low)", saw_pgd_stall);
-        check("page_dma copy ran (pgd_active went high)",          saw_pgd_active);
+        // The page-in happened INSIDE lib_call: CPU stalled (pgd_rdy low) and the
+        // sdram-side page_dma copy ran (pgd_active high).
+        check("CPU stalled during page-in inside lib_call (pgd_rdy went low)", saw_pgd_stall);
+        check("page_dma copy ran (pgd_active went high)",                      saw_pgd_active);
 
-        // STATUS read after the stall must show ok=1 (bit1), busy=0 (bit0).
-        check_eq8("STATUS after page-in = ok (bit1 set, busy clear)",
-                  dut.main_ram.mem[16'h0304], 8'h02);
+        // ext_rom resident image — byte-exact vs testmod.bin, all 16 KB.
+        $display("Verifying 16 KB ext_rom resident image vs testmod.bin...");
+        verify_ext_rom("16 KB ext_rom == testmod.bin byte-exact", N_WORDS);
 
-        // ext_rom resident image — byte-exact + correct byte order, all 16 KB.
-        $display("Verifying 16 KB ext_rom resident image...");
-        verify_ext_rom("16 KB resident at $C000 byte-exact + order", N_WORDS);
+        // Loader cached the module id and ECHO returned LERR_OK.
+        check_eq8("LIB_RESIDENT ($0318) = $7F (loader cached module)",
+                  dut.main_ram.mem[16'h0318], 8'h7F);
+        check_eq8("LIB_STATUS ($0302) = $00 (ECHO LERR_OK)",
+                  dut.main_ram.mem[16'h0302], 8'h00);
 
-        // CPU-read proof: the program copied ext_rom[0..3] into $0300-$0303
-        // through the real CPU read path (ROMSWAP_EXT). Pattern: word0 =
-        // {0,0} -> bytes 0,1 = 0,0; word1 = {1,0} -> bytes 2,3 = 1,0.
-        check_eq8("CPU read $C000 -> $0300", dut.main_ram.mem[16'h0300], 8'h00);
-        check_eq8("CPU read $C001 -> $0301", dut.main_ram.mem[16'h0301], 8'h00);
-        check_eq8("CPU read $C002 -> $0302", dut.main_ram.mem[16'h0302], 8'h01);
-        check_eq8("CPU read $C003 -> $0303", dut.main_ram.mem[16'h0303], 8'h00);
+        // END-TO-END PROOF: the module ECHO ran on the paged-in image and the
+        // real SEI/ROMSWAP_EXT->JSR $C000->ROMSWAP_BASIC dance worked. The
+        // stashed RESULT at $0400 must equal the 32-bit ARG0 ($DEADBEEF).
+        $display("Stashed RESULT @ $0400 = 0x%02X%02X%02X%02X (expect DEADBEEF)",
+                 dut.main_ram.mem[16'h0403], dut.main_ram.mem[16'h0402],
+                 dut.main_ram.mem[16'h0401], dut.main_ram.mem[16'h0400]);
+        check_eq8("RESULT byte0 @ $0400 = $EF", dut.main_ram.mem[16'h0400], ARG0_VALUE[7:0]);
+        check_eq8("RESULT byte1 @ $0401 = $BE", dut.main_ram.mem[16'h0401], ARG0_VALUE[15:8]);
+        check_eq8("RESULT byte2 @ $0402 = $AD", dut.main_ram.mem[16'h0402], ARG0_VALUE[23:16]);
+        check_eq8("RESULT byte3 @ $0403 = $DE", dut.main_ram.mem[16'h0403], ARG0_VALUE[31:24]);
+
+        // ROMSWAP restored: the CPU is fetching the halt loop from basic_rom at
+        // $C01B, which is only possible if lib_call swapped the bank back to
+        // BASIC after dispatch (ext_rom_active cleared). Observe the bank flag.
+        check("ROMSWAP restored to primary bank (ext_rom_active low)",
+              dut.ext_rom_active == 1'b0);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
