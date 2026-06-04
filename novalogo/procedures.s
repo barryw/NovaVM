@@ -368,6 +368,7 @@ proc_edit_run:
 
       LDA   #EXT_CMD_EDIT
       STA   EXT_CMD
+      JSR   ensure_ext_resident    ; re-page host ext into bank 1 if a module clobbered it
       JSR   EXT_TRAMPOLINE         ; swap to ext ROM, run editor, swap back
 
       ; editor returns the final buffer length in ARG1

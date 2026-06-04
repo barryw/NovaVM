@@ -1472,6 +1472,38 @@ ext_eval_args:
       RTS
 
 ; ---------------------------------------------------------------------
+; ensure_ext_resident — guarantee the active runtime's OWN extension is mapped
+;   in bank 1 before a legacy EXT_TRAMPOLINE (JSR $C000) call. A prior
+;   lib_call(MODULE) page-in physically overwrote bank 1 with the module; this
+;   re-pages the host ext (staged in XRAM at $07C000) back into bank 1 on demand.
+;
+;   At boot the host ext IS in bank 1 (cold_start seeds LIB_RESIDENT=$FF), so the
+;   common case is a cheap HIT (no page-in, no behaviour change for legacy cmds).
+;
+;   No PGD_STATUS poll — matches lib_call, which relies on the page-in completing
+;   synchronously / CPU stall. Clobbers A. Caller has no live A/X/Y across this.
+; ---------------------------------------------------------------------
+ensure_ext_resident:
+      LDA   LIB_RESIDENT
+      CMP   #LIB_RESIDENT_HOSTEXT
+      BEQ   @done                 ; ext already in bank 1 -> nothing to do (HIT)
+      LDA   #HOST_EXT_XRAM_L
+      STA   PGD_SRCL
+      LDA   #HOST_EXT_XRAM_M
+      STA   PGD_SRCM
+      LDA   #HOST_EXT_XRAM_H
+      STA   PGD_SRCH
+      LDA   #<SHELF_SLOT_WORDS
+      STA   PGD_WORDSL
+      LDA   #>SHELF_SLOT_WORDS
+      STA   PGD_WORDSH
+      LDA   #PGD_START
+      STA   PGD_CMD               ; DMA host ext -> bank 1 (CPU stalls on HW; sync on emu)
+      LDA   #LIB_RESIDENT_HOSTEXT
+      STA   LIB_RESIDENT
+@done:
+      RTS
+
 ; ext_invoke — dispatch the looked-up extension command and leave its
 ;   result in eval_type/eval_val_hi/eval_val_lo/eval_val_frac, then RTS.
 ;
@@ -1494,6 +1526,7 @@ ext_invoke:
       BNE   @lib_call             ; non-zero module id -> paged-library path
 
 ; --- Legacy path: RAM trampoline to extension ROM ---
+      JSR   ensure_ext_resident   ; re-page host ext into bank 1 if a module clobbered it
       JSR   EXT_TRAMPOLINE
       LDA   EXT_RESULT_TYPE
       STA   eval_type

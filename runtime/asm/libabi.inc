@@ -79,4 +79,17 @@ SHELF_BASE_M     = $00
 SHELF_BASE_H     = $06            ; $060000
 SHELF_SLOT_WORDS = $2000          ; 8192 words = 16KB per slot
 
+; --- Host-extension re-page (4c.0c: coexistence of legacy ext + paged modules) ---
+; LIB_RESIDENT marker meaning "the active runtime's OWN extension is in bank 1"
+; (distinct from every module id $01-$7F and from $00=none). A legacy ext command
+; checks LIB_RESIDENT; if not $FF it re-pages the host ext from XRAM before calling.
+LIB_RESIDENT_HOSTEXT = $FF
+; XRAM address $07C000 where the active runtime's extension is staged for re-page.
+; NOT a modtab module slot — disjoint from module slots 0-2 ($060000/$064000/$068000)
+; and within the 512KB XRAM. NovaHost must stage the active runtime's extensionRom
+; here on HW (firmware follow-on); this task does the emulator side.
+HOST_EXT_XRAM_L  = $00
+HOST_EXT_XRAM_M  = $C0
+HOST_EXT_XRAM_H  = $07            ; $07C000
+
 .endif ; LIBABI_INC_INCLUDED

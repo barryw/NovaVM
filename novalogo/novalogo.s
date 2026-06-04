@@ -47,6 +47,12 @@ cold_start:
       LDA   #ROMSWAP_LOGO
       STA   LIB_HOME_BANK
 
+      ; At boot the runtime's own extension IS in bank 1 (loaded by NovaHost /
+      ; the emulator). Seed LIB_RESIDENT=$FF so legacy ext commands take the cheap
+      ; HIT path in ensure_ext_resident until a lib_call(MODULE) clobbers bank 1.
+      LDA   #LIB_RESIDENT_HOSTEXT
+      STA   LIB_RESIDENT
+
       ; Zero NovaLogo turtle/graphics state ($9F00..$9F1F) so each session starts
       ; in a known mode. The extension pins its turtle state here (extension.s
       ; TURTLE_STATE_BASE=$9F00); RAM is stale across soft-reboot on HW, and a
