@@ -5,13 +5,13 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Verifies the paged-library "test module" image (id=$7F, ECHO/ADD) built from
+/// Verifies the paged-library "test module" image (id=$7F, ECHO/ADD/SUM) built from
 /// tests/asm/testmod.s carries the canonical module header at $C000:
 ///   $C000  JMP dispatch  ($4C ...)
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($7F  MODULE_ID_TEST)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($02)
+///   $C007  fn count      ($03)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc; this test
 /// is the byte-exact guard the loader (lib_call) and FPGA page-in proofs depend on.
 /// The 16 KB image is a deterministic, committed build artifact (tests/asm/testmod.bin),
@@ -32,7 +32,7 @@ public class ModuleFormatTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x7F, img[5]);   // MODULE_ID_TEST
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x02, img[7]);   // fn count
+        Assert.AreEqual(0x03, img[7]);   // fn count
     }
 
     private static string RepoPath(params string[] parts)

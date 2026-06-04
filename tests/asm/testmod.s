@@ -1,13 +1,13 @@
-; testmod.s — minimal paged library for loader proofs. id=$7F, 2 functions.
+; testmod.s — minimal paged library for loader proofs. id=$7F, 3 functions.
       .include "libabi.inc"
       .include "libmod.inc"
 
       .segment "CODE"
-      lib_module_header MODULE_ID_TEST, LIB_ABI_VERSION, 2
+      lib_module_header MODULE_ID_TEST, LIB_ABI_VERSION, 3
 
 dispatch:
       lda     LIB_FN_ID
-      cmp     #2
+      cmp     #3
       bcs     bad_fn
       asl
       tax
@@ -24,6 +24,7 @@ bad_fn:
 jtable:
       .word   fn_echo-1               ; FN 0: ECHO
       .word   fn_add-1                ; FN 1: ADD
+      .word   fn_sum-1                ; FN 2: SUM
 
 ; FN 0 ECHO: RESULT = ARG0 (32-bit copy)
 fn_echo:
@@ -49,6 +50,57 @@ fn_add:
       inx
       dey
       bne     @a
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+
+; FN 2 SUM: ARG0 is BYTES(ptr16,len16) — LIB_ARG0/+1=ptr, LIB_ARG0+2/+3=len.
+; RESULT (32-bit LE INT) = sum of those `len` main-RAM bytes. Walks (LIB_ZP),Y.
+; 16-bit length: LIB_SCRATCH/+1 is a down-counter; @loop exits the moment it hits
+; zero (correct for len=0, <256, and >256). Each byte is folded into the 32-bit
+; accumulator BEFORE the pointer/counter are touched, so the carry chain that
+; ADC/INC mem would otherwise clobber stays self-contained per byte.
+fn_sum:
+      lda     #0                       ; RESULT = 0
+      sta     LIB_RESULT
+      sta     LIB_RESULT+1
+      sta     LIB_RESULT+2
+      sta     LIB_RESULT+3
+      lda     LIB_ARG0                 ; ptr -> ZP pointer pair
+      sta     LIB_ZP
+      lda     LIB_ARG0+1
+      sta     LIB_ZP+1
+      lda     LIB_ARG0+2               ; len -> 16-bit down-counter
+      sta     LIB_SCRATCH
+      lda     LIB_ARG0+3
+      sta     LIB_SCRATCH+1
+      ldy     #0
+@loop:
+      lda     LIB_SCRATCH              ; remaining == 0 ?  (lo|hi)
+      ora     LIB_SCRATCH+1
+      beq     @done
+      lda     (LIB_ZP),y               ; fetch byte, fold into 32-bit RESULT
+      clc
+      adc     LIB_RESULT
+      sta     LIB_RESULT
+      bcc     @adv                     ; no carry out of byte 0 → nothing to propagate
+      inc     LIB_RESULT+1
+      bne     @adv
+      inc     LIB_RESULT+2
+      bne     @adv
+      inc     LIB_RESULT+3
+@adv:
+      inc     LIB_ZP                   ; advance source pointer (16-bit)
+      bne     @dec
+      inc     LIB_ZP+1
+@dec:
+      lda     LIB_SCRATCH              ; remaining -= 1 (16-bit)
+      bne     @declo
+      dec     LIB_SCRATCH+1
+@declo:
+      dec     LIB_SCRATCH
+      jmp     @loop
+@done:
       lda     #LERR_OK
       sta     LIB_STATUS
       rts

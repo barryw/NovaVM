@@ -107,6 +107,48 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void Sum_Bytes_SmallBuffer()
+        {
+            var (bus, entry) = Setup();
+            byte[] buf = { 1, 2, 3, 4, 5, 10, 20 };       // sum = 45
+            const ushort ptr = 0x0500;
+            for (int i = 0; i < buf.Length; i++) bus.PokeRam((ushort)(ptr + i), buf[i]);
+
+            // ARG0 is BYTES(ptr16, len16): low word = ptr, high word = len.
+            var r = CallLib(bus, entry, 0x7F, fn: 2, arg0: ptr | (buf.Length << 16));
+
+            CollectionAssert.AreEqual(BitConverter.GetBytes(45), r);
+            Assert.AreEqual(0x00, bus.PeekRam(STATUS), "status must be OK");
+        }
+
+        [TestMethod]
+        public void Sum_Bytes_Over256()
+        {
+            var (bus, entry) = Setup();
+            const int len = 300;                          // > 256 exercises the high length byte
+            const ushort ptr = 0x0500;
+            for (int i = 0; i < len; i++) bus.PokeRam((ushort)(ptr + i), 1);  // all 1s → sum = 300
+
+            var r = CallLib(bus, entry, 0x7F, fn: 2, arg0: ptr | (len << 16));
+
+            CollectionAssert.AreEqual(BitConverter.GetBytes(len), r);
+            Assert.AreEqual(0x00, bus.PeekRam(STATUS), "status must be OK");
+        }
+
+        [TestMethod]
+        public void Sum_Bytes_ZeroLen()
+        {
+            var (bus, entry) = Setup();
+            const ushort ptr = 0x0500;
+            bus.PokeRam(ptr, 0xFF);                        // present but must NOT be summed
+
+            var r = CallLib(bus, entry, 0x7F, fn: 2, arg0: ptr | (0 << 16));
+
+            CollectionAssert.AreEqual(BitConverter.GetBytes(0), r);
+            Assert.AreEqual(0x00, bus.PeekRam(STATUS), "status must be OK");
+        }
+
+        [TestMethod]
         public void BadMagic_SetsStatus_NoDispatch()
         {
             var (bus, entry) = Setup();
