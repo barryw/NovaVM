@@ -37,14 +37,17 @@ fn_echo:
       rts
 
 ; FN 1 ADD: RESULT = ARG0 + ARG1 (32-bit LE)
+; Y counts the bytes down (DEY touches only N/Z, never C) so the inter-byte
+; carry survives to the next ADC; CPX would have cleared it.
 fn_add:
       clc
       ldx     #0
+      ldy     #4
 @a:   lda     LIB_ARG0,x
       adc     LIB_ARG1,x
       sta     LIB_RESULT,x
       inx
-      cpx     #4
+      dey
       bne     @a
       lda     #LERR_OK
       sta     LIB_STATUS
