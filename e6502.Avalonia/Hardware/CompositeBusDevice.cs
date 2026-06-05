@@ -329,6 +329,28 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _xmc.TryWriteLinear(at + i, data[i]);
     }
 
+    // Dynamic module shelf (libabi.inc): N=4 cache slots at SHELF_BASE + i*$4000;
+    // the directory (slot->id tags + LRU order) lives in the loader band.
+    internal const int ShelfBaseAddr = 0x060000;
+    internal const int ShelfSlotBytes = 0x4000;
+    internal const int ShelfN = 4;
+    internal const ushort ShelfTag = 0x0418;   // SHELF_N bytes
+    internal const ushort ShelfLru = 0x041C;   // SHELF_N bytes
+
+    /// <summary>
+    /// Test hook mirroring the firmware boot path: stage a 16K module image into
+    /// XRAM shelf slot <paramref name="slot"/> and seed the directory so the resident
+    /// loader's scan finds it. Initializes shelf_lru to identity [0,1,2,3] on slot 0.
+    /// </summary>
+    internal void StageShelfModule(int slot, byte[] image, byte id)
+    {
+        ArgumentNullException.ThrowIfNull(image);
+        LoadXram(ShelfBaseAddr + slot * ShelfSlotBytes, image);
+        _ram[ShelfTag + slot] = id;
+        if (slot == 0)
+            for (int i = 0; i < ShelfN; i++) _ram[ShelfLru + i] = (byte)i;
+    }
+
     private void LoadPrimaryRuntimeRom(byte[] data)
     {
         if (data.Length != VgcConstants.RomSize)
