@@ -69,7 +69,7 @@ sd-assets: ehbasic novalogo graphics libcall build/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json
 	@cp $(REPO_ROOT)/tests/asm/testmod.bin $(SD_ASSETS)/lib/testmod.mod
-	@cp $(MODGFX)/graphics.bin $(SD_ASSETS)/lib/graphics.mod
+	@cp $(MODGFX)/graphics.nmod $(SD_ASSETS)/lib/graphics.nmod
 	@cp $(RTASM)/libcall.bin $(SD_ASSETS)/roms/libcall.bin
 	@rm -f $(SD_ASSETS)/soundfonts/GeneralUser_GS.nsfb
 	@echo "SD assets staged under $(CURDIR)/$(SD_ASSETS)"

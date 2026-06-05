@@ -2,7 +2,7 @@ CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
 
-all: graphics.bin
+all: graphics.bin graphics.nmod
 
 graphics.o: graphics.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libgraphics.inc \
@@ -24,7 +24,13 @@ graphics.o: graphics.s \
 graphics.bin: graphics.o graphics.cfg
 	$(LD65) -C graphics.cfg -m graphics.map -o graphics.bin graphics.o
 
+# Self-documenting module: image + NDOC doc (from graphics.s ;@ comments, ids
+# resolved from libgraphics.inc) -> graphics.nmod.
+graphics.nmod: graphics.bin graphics.s ../../tools/nmod_pack.py $(NOVA_ASM)/libgraphics.inc
+	python3 ../../tools/nmod_pack.py --src graphics.s --bin graphics.bin \
+	        --out graphics.nmod --syms $(NOVA_ASM)/libgraphics.inc
+
 clean:
-	rm -f graphics.o graphics.bin graphics.map
+	rm -f graphics.o graphics.bin graphics.map graphics.nmod
 
 .PHONY: all clean

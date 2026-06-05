@@ -807,14 +807,19 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
     if (!f) return false;
 
     size_t actual = f.size();
-    if (actual != expected_len) {
-        logLn("Boot asset wrong size: %s at %s is %u bytes, expected %u",
+    // A LARGER file is fine: a paged-library .nmod carries a documentation
+    // trailer after its `expected_len`-byte image (see tools/nmod_pack.py). We
+    // stream only the first expected_len bytes; the trailer stays on the SD card
+    // for the nova CLI / web UI. Only a SHORT file is an error.
+    if (actual < expected_len) {
+        logLn("Boot asset too short: %s at %s is %u bytes, expected >= %u",
               label, path, (unsigned)actual, (unsigned)expected_len);
         f.close();
         return false;
     }
 
-    logLn("Streaming %s from %s (%u bytes)", label, path, (unsigned)actual);
+    logLn("Streaming %s from %s (%u of %u bytes)", label, path,
+          (unsigned)expected_len, (unsigned)actual);
     uint8_t* buf = (uint8_t*)malloc(4096);
     if (!buf) {
         logLn("Boot asset buffer allocation failed: %s", label);

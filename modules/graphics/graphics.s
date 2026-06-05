@@ -52,6 +52,83 @@ GFX_FIO_NAME_LIMIT = $3F
       .segment "CODE"
       lib_module_header MODULE_ID_GRAPHICS, LIB_ABI_VERSION, GFX_FN_COUNT
 
+; ===========================================================================
+; NDOC documentation (extracted by tools/nmod_pack.py into graphics.nmod).
+; Function ids resolve symbolically from runtime/asm/libgraphics.inc. Only the
+; draw domain ($00-$09) is documented so far; the other live domains
+; (text/sprite/copper/blit/vsprite/msprite/image/anim/tween/turtle) grow here.
+; ===========================================================================
+;@module GRAPHICS
+;@version 1.0
+;@brief Nova virtual graphics controller: drawing, text, sprites, copper, blitter, turtle.
+;
+;@fn GFN_GCLS
+;@brief Clear the graphics plane to the background colour.
+;@ret void
+;
+;@fn GFN_GCOLOR
+;@brief Set the current draw colour for subsequent primitives.
+;@arg color u8 palette index (0-15)
+;@ret void
+;@effect Persists as the pen colour used by later PLOT/LINE/CIRCLE/RECT/FILL/PAINT.
+;
+;@fn GFN_PLOT
+;@brief Plot a single pixel in the current colour.
+;@arg x s16 x coordinate (0-319)
+;@arg y s16 y coordinate (0-199)
+;@ret void
+;
+;@fn GFN_UNPLOT
+;@brief Clear a single pixel to the background colour.
+;@arg x s16 x coordinate (0-319)
+;@arg y s16 y coordinate (0-199)
+;@ret void
+;
+;@fn GFN_LINE
+;@brief Draw a line in the current colour.
+;@arg x0 s16 start x
+;@arg y0 s16 start y
+;@arg x1 s16 end x
+;@arg y1 s16 end y
+;@ret void
+;
+;@fn GFN_CIRCLE
+;@brief Draw a circle (or ellipse) outline in the current colour.
+;@arg cx s16 centre x
+;@arg cy s16 centre y
+;@arg rx s16 x radius
+;@arg ry s16 y radius (0 = circle, ry = rx)
+;@ret void
+;
+;@fn GFN_RECT
+;@brief Draw a rectangle outline in the current colour.
+;@arg x0 s16 left
+;@arg y0 s16 top
+;@arg x1 s16 right
+;@arg y1 s16 bottom
+;@ret void
+;
+;@fn GFN_FILL
+;@brief Draw a filled rectangle in the current colour.
+;@arg x0 s16 left
+;@arg y0 s16 top
+;@arg x1 s16 right
+;@arg y1 s16 bottom
+;@ret void
+;
+;@fn GFN_PAINT
+;@brief Flood-fill the connected region at (x,y) with the current colour.
+;@arg x s16 seed x
+;@arg y s16 seed y
+;@ret void
+;
+;@fn GFN_GTEXT
+;@brief Draw a text string at a pixel position in the current colour.
+;@arg x s16 x coordinate
+;@arg y s16 y coordinate
+;@arg str bytes pointer+length of the string (copied via the VGC FIO_NAME buffer)
+;@ret void
+
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
 ;
 ; The jtable index is fn*2. With fn-ids now reaching $8B the index exceeds 255
