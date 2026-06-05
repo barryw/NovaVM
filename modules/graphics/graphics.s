@@ -35,10 +35,11 @@
 ; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8);
 ; the image/mem domain $A0-$A9 is live (batch 4b.9); the anim domain $C0-$C7 and
 ; the tween domain $D0-$DA are live (batch 4b.11). The $B0-$B2 turtle-render fns
-; (INIT/DRAW/ERASE) are live (batch 4c.2-2); $B3-$BF stay reserved.
+; (INIT/DRAW/ERASE) are live (batch 4c.2-2); $B3 TURTLE_OP (the turtle command
+; engine) is live (batch 4c.2-3); $B4-$BF stay reserved.
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
-; $5C-$5F, $72-$7F, $8C-$9F, $AA-$AF, $B3-$BF, $C8-$CF, $DB) points at gfn_unimpl so it
+; $5C-$5F, $72-$7F, $8C-$9F, $AA-$AF, $B4-$BF, $C8-$CF, $DB) points at gfn_unimpl so it
 ; resolves to LERR_NO_FN. ids >= GFX_FN_COUNT ($DB+) resolve to LERR_NO_FN via the
 ; dispatch bounds-check.
 GFX_FN_COUNT = $DB
@@ -267,8 +268,8 @@ gfx_jtable:
       .word   gfn_turtle_init-1        ; $B0 TURTLE_INIT  (batch 4c.2-2)
       .word   gfn_turtle_draw-1        ; $B1 TURTLE_DRAW  (batch 4c.2-2)
       .word   gfn_turtle_erase-1       ; $B2 TURTLE_ERASE (batch 4c.2-2)
-      .word   gfn_unimpl-1             ; $B3 turtle-render (reserved)
-      .word   gfn_unimpl-1             ; $B4 turtle-render (reserved)
+      .word   gfn_turtle_op-1          ; $B3 TURTLE_OP — turtle command engine (4c.2-3)
+      .word   gfn_unimpl-1             ; $B4 turtle (reserved)
       .word   gfn_unimpl-1             ; $B5 turtle-render (reserved)
       .word   gfn_unimpl-1             ; $B6 turtle-render (reserved)
       .word   gfn_unimpl-1             ; $B7 turtle-render (reserved)
@@ -2051,6 +2052,857 @@ gfn_turtle_erase:
       jsr     turtle_do_erase
       jmp     finish_ok_nowait
 
+; =====================================================================
+; $B3 TURTLE_OP — the whole NovaLogo turtle command engine, INSIDE the module
+; (batch 4c.2-3-i). Op-dispatched: ARG2 byte0 = a turtle command id (TOP_*,
+; mirroring the legacy EXT_CMD_* values). Value args ride in ARG0/ARG1 as Logo
+; 16.8 fixed point — cell byte0 = FRAC, byte1 = LO, byte2 = HI (the layout the
+; foundation adapter marshals; see libgraphics.inc GFN_TURTLE_OP). The move-math
+; (sincos / 16x16 multiply / 24-bit accumulate) is a FAITHFUL port of
+; novalogo/turtle.s (itself faithful to novalogo/extension.s); only the render
+; path differs — it calls the module's OWN vgc.s helpers + $B0/$B1/$B2 render
+; subs directly instead of nesting a lib_call.
+;
+; Turtle state stays at $9F00 (shared RAM, accessible while the module is paged).
+; Commands set LIB_STATUS = LERR_OK; reporters write a Logo 16.8 value to the
+; LIB_RESULT low word and set OK.
+; =====================================================================
+
+; --- Turtle state at $9F00 (shared RAM; tests read X/Y/HEADING here). Mirrors
+;     novalogo/extension.s:75-93 / turtle.s:50-64. ---
+TURTLE_STATE_BASE  = $9F00
+TURTLE_X_FRAC      = TURTLE_STATE_BASE + 0
+TURTLE_X_LO        = TURTLE_STATE_BASE + 1
+TURTLE_X_HI        = TURTLE_STATE_BASE + 2
+TURTLE_Y_FRAC      = TURTLE_STATE_BASE + 3
+TURTLE_Y_LO        = TURTLE_STATE_BASE + 4
+TURTLE_Y_HI        = TURTLE_STATE_BASE + 5
+TURTLE_HEADING_LO  = TURTLE_STATE_BASE + 6
+TURTLE_HEADING_HI  = TURTLE_STATE_BASE + 7
+TURTLE_PEN         = TURTLE_STATE_BASE + 8   ; 0 = down, 1 = up
+TURTLE_SHOWN       = TURTLE_STATE_BASE + 9
+TURTLE_COLOR       = TURTLE_STATE_BASE + 10
+TURTLE_SPRITE      = TURTLE_STATE_BASE + 11
+TURTLE_INITED      = TURTLE_STATE_BASE + 12
+; $9F0D-$9F10 = bg bookkeeping owned by the module render BSS — leave it.
+TURTLE_GFX_VISIBLE = TURTLE_STATE_BASE + 17  ; 1 = split/full graphics active
+
+; --- Turtle constants ---
+TURTLE_CENTER_X    = 160         ; center of 320-wide graphics
+TURTLE_CENTER_Y    = 80          ; center of the split graphics viewport
+TURTLE_SPLIT_Y     = 160         ; copper split: gfx rows 0-159, text below
+TURTLE_MODE_GFXSPR = 3           ; VGC mode: graphics + sprites
+TURTLE_MODE_TEXT   = 0           ; VGC mode: text only
+
+; --- Logo value-type + cons-cell offsets, for SETPOS [x y]. ---
+;     (novalogo/ext_iface.inc isn't pulled into the module — define locally.)
+TVAL_LIST          = $02
+TVAL_NUMBER        = $00
+TCONS_CAR_TYPE     = 1
+TCONS_CAR_HI       = 2
+TCONS_CAR_LO       = 3
+TCONS_CDR_LO       = 5
+TCONS_CDR_HI       = 6
+
+; --- ARG cell sub-byte aliases (Logo 16.8: [0]=FRAC, [1]=LO, [2]=HI). ---
+TA0_FRAC = LIB_ARG0+0
+TA0_LO   = LIB_ARG0+1
+TA0_HI   = LIB_ARG0+2
+TA1_FRAC = LIB_ARG1+0
+TA1_LO   = LIB_ARG1+1
+TA1_HI   = LIB_ARG1+2
+
+; --- $B3 dispatcher: read op from ARG2 byte0, route via an internal RTS-trick
+;     jump table to the per-op handler. Op ids are EXT_CMD values ($10..$29); we
+;     subtract $10 to index a dense 26-entry table. Out-of-range op -> OK no-op
+;     (commands always OK; an unknown op is a harmless no-op). ---
+gfn_turtle_op:
+      cld                              ; turtle math is binary, never BCD (ext_entry)
+      lda     LIB_ARG2                 ; op id (byte 0)
+      sec
+      sbc     #$10                     ; TOP_FD ($10) -> index 0
+      bcc     @oknoop                  ; op < $10 -> no-op OK
+      cmp     #(top_table_end - top_table) / 2
+      bcs     @oknoop                  ; op past the table -> no-op OK
+      asl                              ; *2 for the word table (max index 25 -> $32, fits 8-bit)
+      tax
+      lda     top_table+1,x            ; handler-1 hi
+      pha
+      lda     top_table,x              ; handler-1 lo
+      pha
+      rts                              ; jump to handler (each ends in jmp finish_*)
+@oknoop:
+      jmp     finish_ok_nowait
+
+top_table:
+      .word   t_fd-1                   ; $10 FD
+      .word   t_bk-1                   ; $11 BK
+      .word   t_rt-1                   ; $12 RT
+      .word   t_lt-1                   ; $13 LT
+      .word   t_cs-1                   ; $14 CS
+      .word   t_pu-1                   ; $15 PU
+      .word   t_pd-1                   ; $16 PD
+      .word   t_st-1                   ; $17 ST
+      .word   t_ht-1                   ; $18 HT
+      .word   t_home-1                 ; $19 HOME
+      .word   t_ts-1                   ; $1A TS
+      .word   t_ss-1                   ; $1B SS
+      .word   t_fs-1                   ; $1C FS
+      .word   t_setxy-1                ; $1D SETXY
+      .word   t_setx-1                 ; $1E SETX
+      .word   t_sety-1                 ; $1F SETY
+      .word   t_seth-1                 ; $20 SETH
+      .word   t_xcor-1                 ; $21 XCOR (reporter)
+      .word   t_ycor-1                 ; $22 YCOR (reporter)
+      .word   t_heading-1              ; $23 HEADING (reporter)
+      .word   t_pendownp-1             ; $24 PENDOWN? (reporter)
+      .word   t_shownp-1               ; $25 SHOWN? (reporter)
+      .word   t_setpc-1                ; $26 SETPC
+      .word   t_setbg-1                ; $27 SETBG
+      .word   t_towards-1              ; $28 TOWARDS (reporter)
+      .word   t_setpos-1               ; $29 SETPOS
+top_table_end:
+
+; =====================================================================
+; turtle_init_state — initialize persistent turtle state, then install the icon
+;   into the module source buffer + reset bg bookkeeping (via gfn_turtle_init).
+;   Mirrors turtle_init_state (turtle.s:98-119) / turtle_init (extension.s:562).
+; =====================================================================
+turtle_init_state:
+      lda     #TURTLE_CENTER_X
+      sta     TURTLE_X_LO
+      stz     TURTLE_X_HI
+      stz     TURTLE_X_FRAC
+      lda     #TURTLE_CENTER_Y
+      sta     TURTLE_Y_LO
+      stz     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      stz     TURTLE_HEADING_LO
+      stz     TURTLE_HEADING_HI
+      stz     TURTLE_PEN               ; pen down
+      lda     #$01
+      sta     TURTLE_SHOWN
+      lda     #TURTLE_COL_WHITE
+      sta     TURTLE_COLOR
+      stz     TURTLE_SPRITE
+      lda     #$01
+      sta     TURTLE_INITED
+      jmp     gfn_turtle_init          ; install icon + reset bg (sets STATUS OK; we ignore)
+
+; =====================================================================
+; turtle_enter_split — copper split: gfx+sprites top, text below; mark visible.
+;   Direct call into the module's copper_split_mode (the GFN_COPPER_SPLIT body).
+;   NOTE (deviation): the legacy ext_ss also runs prepare_split_text to carve the
+;   text window + park the cursor. That touches runtime-owned TEXTWIN/cursor state
+;   the module does not own, so it is intentionally NOT ported here — the gfx-mode
+;   enable (the part that makes drawing land) is the module's concern; the text
+;   window split is the foundation adapter's. The gfx plane (what the tests read)
+;   is written regardless of display mode.
+; =====================================================================
+turtle_enter_split:
+      stz     VGC_P0                   ; idx = 0
+      lda     #TURTLE_SPLIT_Y
+      sta     VGC_P1                   ; splitY = 160
+      lda     #TURTLE_MODE_GFXSPR
+      sta     VGC_P2                   ; mode0 = gfx+sprites (top)
+      lda     #TURTLE_MODE_TEXT
+      sta     VGC_P3                   ; mode1 = text (bottom)
+      jsr     copper_split_mode
+      lda     #$01
+      sta     TURTLE_GFX_VISIBLE
+      rts
+
+; =====================================================================
+; ensure_gfx_mode — init the turtle if needed; if still in full text mode, auto
+;   switch to split screen so drawing is visible + show the turtle there.
+;   Mirrors ensure_gfx_mode (turtle.s:126-136).
+; =====================================================================
+ensure_gfx_mode:
+      lda     TURTLE_INITED
+      bne     @check_mode
+      jsr     turtle_init_state
+@check_mode:
+      lda     TURTLE_GFX_VISIBLE
+      bne     @done
+      jsr     turtle_enter_split
+      jsr     draw_turtle
+@done:
+      rts
+
+; =====================================================================
+; turtle_save_old — snapshot current integer position to BSS old_x/y (the line
+;   start for the post-move pen line). Mirrors turtle_save_old (turtle.s:160).
+; =====================================================================
+turtle_save_old:
+      lda     TURTLE_X_LO
+      sta     turtle_old_x_lo
+      lda     TURTLE_X_HI
+      sta     turtle_old_x_hi
+      lda     TURTLE_Y_LO
+      sta     turtle_old_y_lo
+      lda     TURTLE_Y_HI
+      sta     turtle_old_y_hi
+      rts
+
+; =====================================================================
+; draw_turtle — redraw the rotated turtle at the current position via the
+;   module's own $B1 render sub. gfn_turtle_draw erases the previous stamp
+;   internally, so do NOT pre-erase. No-op when hidden. Mirrors draw_turtle
+;   (turtle.s:176-192).
+;
+;   gfn_turtle_draw consumes the mailbox cells (ARG0/ARG1 lo+hi, ARG2 byte0),
+;   so draw_turtle SAVES the caller's value-arg bytes first and RESTORES them
+;   afterward — it is called both as a final render step AND as a pre-step inside
+;   ensure_gfx_mode (first gfx entry), where it would otherwise clobber the value
+;   args a move/set handler has not yet read. Keeping draw_turtle args-transparent
+;   removes that ordering hazard for every handler. (The legacy draw_turtle_sprite
+;   was immune because its args lived in ZP it never touched.)
+; =====================================================================
+draw_turtle:
+      lda     TURTLE_SHOWN
+      beq     @done
+      ; snapshot the value-arg bytes gfn_turtle_draw overwrites
+      lda     LIB_ARG0+0
+      sta     t_save_a0_0
+      lda     LIB_ARG0+1
+      sta     t_save_a0_1
+      lda     LIB_ARG1+0
+      sta     t_save_a1_0
+      lda     LIB_ARG1+1
+      sta     t_save_a1_1
+      lda     LIB_ARG2+0
+      sta     t_save_a2_0
+      ; marshal X/Y/angle and stamp the turtle
+      lda     TURTLE_X_LO
+      sta     LIB_ARG0+0
+      lda     TURTLE_X_HI
+      sta     LIB_ARG0+1
+      lda     TURTLE_Y_LO
+      sta     LIB_ARG1+0
+      lda     TURTLE_Y_HI
+      sta     LIB_ARG1+1
+      jsr     turtle_heading_u8        ; A = NDK angle byte
+      sta     LIB_ARG2+0
+      jsr     gfn_turtle_draw          ; erase-old + save-bg + rotate-blit (sets STATUS)
+      ; restore the caller's value-arg bytes
+      lda     t_save_a0_0
+      sta     LIB_ARG0+0
+      lda     t_save_a0_1
+      sta     LIB_ARG0+1
+      lda     t_save_a1_0
+      sta     LIB_ARG1+0
+      lda     t_save_a1_1
+      sta     LIB_ARG1+1
+      lda     t_save_a2_0
+      sta     LIB_ARG2+0
+@done:
+      rts
+
+; =====================================================================
+; turtle_render — shared post-move render: pen line (if pen down) old->new, then
+;   redraw the turtle. Reads BSS old_x/y for the line start; TURTLE_X/Y for the
+;   end. Mirrors turtle_render (turtle.s:206-246) but draws the line DIRECTLY via
+;   the module's vgc.s (= draw_line, extension.s:627).
+; =====================================================================
+turtle_render:
+      lda     TURTLE_PEN
+      bne     @no_line                 ; pen up ($01) -> skip line
+      ; --- direct VGC line (draw_line, extension.s:627): color then endpoints ---
+      jsr     vgc_wait_cmd
+      lda     TURTLE_COLOR
+      sta     VGC_P0
+      jsr     vgc_gcolor
+      jsr     vgc_wait_cmd
+      lda     turtle_old_x_lo
+      sta     VGC_P0
+      lda     turtle_old_x_hi
+      sta     VGC_P1
+      lda     turtle_old_y_lo
+      sta     VGC_P2
+      lda     turtle_old_y_hi
+      sta     VGC_P3
+      lda     TURTLE_X_LO
+      sta     VGC_P4
+      lda     TURTLE_X_HI
+      sta     VGC_P5
+      lda     TURTLE_Y_LO
+      sta     VGC_P6
+      lda     TURTLE_Y_HI
+      sta     VGC_P7
+      jsr     vgc_line
+      jsr     vgc_wait_cmd
+@no_line:
+      jmp     draw_turtle              ; tail: redraw turtle at the new position
+
+; =====================================================================
+; heading_mod360 — reduce TURTLE_HEADING to 0-359. (turtle.s:251)
+; =====================================================================
+heading_mod360:
+@loop:
+      lda     TURTLE_HEADING_HI
+      beq     @done                    ; hi = 0 -> always < 360
+      cmp     #>360                    ; hi > 1 -> definitely >= 360
+      bne     @subtract
+      lda     TURTLE_HEADING_LO
+      cmp     #<360
+      bcc     @done
+@subtract:
+      sec
+      lda     TURTLE_HEADING_LO
+      sbc     #<360
+      sta     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      sbc     #>360
+      sta     TURTLE_HEADING_HI
+      bra     @loop
+@done:
+      rts
+
+; =====================================================================
+; turtle_heading_u8 — Logo degrees -> NDK/blitter angle byte.
+;   A = floor((heading * 256) / 360). Cardinals land exactly (90->64 etc).
+;   (turtle.s:276 / extension.s:771) — division via the MATH copro.
+; =====================================================================
+turtle_heading_u8:
+      stz     MATH_DIV_N_LO
+      lda     TURTLE_HEADING_LO
+      sta     MATH_DIV_N_1
+      lda     TURTLE_HEADING_HI
+      sta     MATH_DIV_N_2
+      stz     MATH_DIV_N_HI
+      lda     #<360
+      sta     MATH_DIV_D_LO
+      lda     #>360
+      sta     MATH_DIV_D_HI            ; writing D_HI triggers the divide
+      lda     MATH_RES0
+      rts
+
+; =====================================================================
+; t_fd — FD: move forward by distance (ARG0 = 16.8 distance).
+;   Faithful port of t_fd (turtle.s:293) / ext_fd (extension.s:262). Scratch in
+;   module BSS (the render subs run inline, not via lib_call, so no clobber risk).
+; =====================================================================
+t_fd:
+      ; Snapshot the distance (ARG0 16.8 integer part) to BSS up front so the
+      ; move-math below reads it from a stable home. draw_turtle (reached via
+      ; ensure_gfx_mode on first gfx-mode entry) is already args-transparent — it
+      ; saves/restores LIB_ARG0/1/2 around its X/Y/angle use — so TA0 would survive
+      ; regardless; this snapshot is independent defense-in-depth, not relied upon.
+      lda     TA0_LO
+      sta     t_dist_lo
+      lda     TA0_HI
+      sta     t_dist_hi
+
+      jsr     ensure_gfx_mode
+      jsr     turtle_save_old
+
+      ; heading -> NDK angle -> sincos
+      jsr     turtle_heading_u8
+      sta     MATH_SINCOS_ANGLE        ; triggers sincos
+      lda     MATH_RES0                ; sin (1.7 signed)
+      sta     t_sin_val
+      lda     MATH_RES1                ; cos (1.7 signed)
+      sta     t_cos_val
+
+      ; dx = distance * sin / 128, kept as 16.8 (frac:lo:hi) = result << 1
+      lda     t_dist_lo
+      sta     MATH_MUL16_A_LO
+      lda     t_dist_hi
+      sta     MATH_MUL16_A_HI
+      lda     t_sin_val
+      cmp     #127                     ; +1.0 is 127/128; use 128 so cardinals stay exact
+      bne     :+
+      lda     #128
+:
+      sta     MATH_MUL16_B_LO
+      lda     t_sin_val
+      ora     #$7F
+      bmi     @sin_neg
+      lda     #$00
+      bra     @sin_ext
+@sin_neg:
+      lda     #$FF
+@sin_ext:
+      sta     MATH_MUL16_B_HI          ; triggers multiply
+      lda     MATH_RES0
+      asl
+      sta     t_dx_frac
+      lda     MATH_RES1
+      rol
+      sta     t_dx_lo
+      lda     MATH_RES2
+      rol
+      sta     t_dx_hi
+
+      ; raw_dy = distance * cos / 128 (16.8), then dy = -raw_dy
+      lda     t_dist_lo
+      sta     MATH_MUL16_A_LO
+      lda     t_dist_hi
+      sta     MATH_MUL16_A_HI
+      lda     t_cos_val
+      cmp     #127
+      bne     :+
+      lda     #128
+:
+      sta     MATH_MUL16_B_LO
+      lda     t_cos_val
+      ora     #$7F
+      bmi     @cos_neg
+      lda     #$00
+      bra     @cos_ext
+@cos_neg:
+      lda     #$FF
+@cos_ext:
+      sta     MATH_MUL16_B_HI          ; triggers multiply
+      lda     MATH_RES0
+      asl
+      sta     t_tmp1                   ; raw_dy frac
+      lda     MATH_RES1
+      rol
+      sta     t_tmp2                   ; raw_dy lo
+      lda     MATH_RES2
+      rol
+      sta     t_tmp3                   ; raw_dy hi
+      ; dy = -raw_dy (negate 24-bit)
+      sec
+      lda     #0
+      sbc     t_tmp1
+      sta     t_dy_frac
+      lda     #0
+      sbc     t_tmp2
+      sta     t_dy_lo
+      lda     #0
+      sbc     t_tmp3
+      sta     t_dy_hi
+
+      ; X += dx (24-bit fixed frac:lo:hi)
+      clc
+      lda     TURTLE_X_FRAC
+      adc     t_dx_frac
+      sta     TURTLE_X_FRAC
+      lda     TURTLE_X_LO
+      adc     t_dx_lo
+      sta     TURTLE_X_LO
+      lda     TURTLE_X_HI
+      adc     t_dx_hi
+      sta     TURTLE_X_HI
+      ; Y += dy
+      clc
+      lda     TURTLE_Y_FRAC
+      adc     t_dy_frac
+      sta     TURTLE_Y_FRAC
+      lda     TURTLE_Y_LO
+      adc     t_dy_lo
+      sta     TURTLE_Y_LO
+      lda     TURTLE_Y_HI
+      adc     t_dy_hi
+      sta     TURTLE_Y_HI
+
+      jsr     turtle_render            ; pen line (if down) + redraw
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_bk — BK: negate the 24-bit distance, then fall into FD. (turtle.s:404)
+; =====================================================================
+t_bk:
+      sec
+      lda     #0
+      sbc     TA0_FRAC
+      sta     TA0_FRAC
+      lda     #0
+      sbc     TA0_LO
+      sta     TA0_LO
+      lda     #0
+      sbc     TA0_HI
+      sta     TA0_HI
+      jmp     t_fd
+
+; =====================================================================
+; t_rt — RT: turn right by degrees. (turtle.s:420)
+; =====================================================================
+t_rt:
+      jsr     ensure_gfx_mode
+      clc
+      lda     TURTLE_HEADING_LO
+      adc     TA0_LO
+      sta     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      adc     TA0_HI
+      sta     TURTLE_HEADING_HI
+      jsr     heading_mod360
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_lt — LT: turn left by degrees (add 360 if it goes negative). (turtle.s:435)
+; =====================================================================
+t_lt:
+      jsr     ensure_gfx_mode
+      sec
+      lda     TURTLE_HEADING_LO
+      sbc     TA0_LO
+      sta     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      sbc     TA0_HI
+      sta     TURTLE_HEADING_HI
+      bmi     @add360
+      jsr     heading_mod360
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+@add360:
+      clc
+      lda     TURTLE_HEADING_LO
+      adc     #<360
+      sta     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      adc     #>360
+      sta     TURTLE_HEADING_HI
+      bmi     @add360
+      jsr     heading_mod360
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_home — HOME: move to center, heading 0 (draw line if pen down). (turtle.s:462)
+; =====================================================================
+t_home:
+      jsr     ensure_gfx_mode
+      lda     TURTLE_INITED
+      bne     @go
+      jsr     turtle_init_state
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+@go:
+      jsr     turtle_save_old
+      lda     #TURTLE_CENTER_X
+      sta     TURTLE_X_LO
+      stz     TURTLE_X_HI
+      stz     TURTLE_X_FRAC
+      lda     #TURTLE_CENTER_Y
+      sta     TURTLE_Y_LO
+      stz     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      stz     TURTLE_HEADING_LO
+      stz     TURTLE_HEADING_HI
+      jsr     turtle_render
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_setxy — SETXY x y: move to (x,y), draw line if pen down. (turtle.s:485)
+; =====================================================================
+t_setxy:
+      jsr     ensure_gfx_mode
+      lda     TURTLE_INITED
+      bne     @go
+      jsr     turtle_init_state
+@go:
+      jsr     turtle_save_old
+      lda     TA0_LO
+      sta     TURTLE_X_LO
+      lda     TA0_HI
+      sta     TURTLE_X_HI
+      stz     TURTLE_X_FRAC
+      lda     TA1_LO
+      sta     TURTLE_Y_LO
+      lda     TA1_HI
+      sta     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      jsr     turtle_render
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_setpos — SETPOS [x y]: walk the cons list (ARG0 = list ptr), load x/y into
+;   ARG0/ARG1 low words, then JMP setxy. (turtle.s:507 / extension.s:1108)
+;   The cons cells live in heap RAM, deref'd via the module ZP pointer LIB_ZP.
+; =====================================================================
+t_setpos:
+      jsr     ensure_gfx_mode
+      lda     LIB_ARG0+0               ; list ptr low
+      sta     LIB_ZP
+      lda     LIB_ARG0+1               ; list ptr high
+      sta     LIB_ZP+1
+      ora     LIB_ZP
+      beq     @ok                      ; nil list -> no-op OK
+      ; first element -> X
+      ldy     #TCONS_CAR_TYPE
+      lda     (LIB_ZP),y
+      cmp     #TVAL_NUMBER
+      bne     @ok
+      ldy     #TCONS_CAR_LO
+      lda     (LIB_ZP),y
+      sta     TA0_LO
+      ldy     #TCONS_CAR_HI
+      lda     (LIB_ZP),y
+      sta     TA0_HI
+      stz     TA0_FRAC
+      ; cdr -> second cell
+      ldy     #TCONS_CDR_LO
+      lda     (LIB_ZP),y
+      sta     t_tmp2
+      ldy     #TCONS_CDR_HI
+      lda     (LIB_ZP),y
+      sta     t_tmp3
+      ora     t_tmp2
+      beq     @ok                      ; no second element -> bail (still OK)
+      lda     t_tmp2
+      sta     LIB_ZP
+      lda     t_tmp3
+      sta     LIB_ZP+1
+      ldy     #TCONS_CAR_TYPE
+      lda     (LIB_ZP),y
+      cmp     #TVAL_NUMBER
+      bne     @ok
+      ldy     #TCONS_CAR_LO
+      lda     (LIB_ZP),y
+      sta     TA1_LO
+      ldy     #TCONS_CAR_HI
+      lda     (LIB_ZP),y
+      sta     TA1_HI
+      stz     TA1_FRAC
+      jmp     t_setxy                  ; reuse SETXY (tail; sets STATUS)
+@ok:
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_set_axis_init — shared SETX/SETY prologue: init if needed + save old pos.
+; =====================================================================
+t_set_axis_init:
+      lda     TURTLE_INITED
+      bne     :+
+      jsr     turtle_init_state
+:
+      jmp     turtle_save_old
+
+; t_setx — SETX x: set X only, draw line if pen down. (turtle.s:562)
+t_setx:
+      jsr     ensure_gfx_mode
+      jsr     t_set_axis_init
+      lda     TA0_LO
+      sta     TURTLE_X_LO
+      lda     TA0_HI
+      sta     TURTLE_X_HI
+      stz     TURTLE_X_FRAC
+      jsr     turtle_render
+      jmp     finish_ok_nowait
+
+; t_sety — SETY y: set Y only, draw line if pen down. (turtle.s:572)
+t_sety:
+      jsr     ensure_gfx_mode
+      jsr     t_set_axis_init
+      lda     TA0_LO
+      sta     TURTLE_Y_LO
+      lda     TA0_HI
+      sta     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      jsr     turtle_render
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_seth — SETH degrees: set heading, normalize mod 360. (turtle.s:593)
+; =====================================================================
+t_seth:
+      jsr     ensure_gfx_mode
+      lda     TA0_LO
+      sta     TURTLE_HEADING_LO
+      lda     TA0_HI
+      sta     TURTLE_HEADING_HI
+      lda     TURTLE_HEADING_HI
+      bmi     @add360
+      jsr     heading_mod360
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+@add360:
+      clc
+      lda     TURTLE_HEADING_LO
+      adc     #<360
+      sta     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      adc     #>360
+      sta     TURTLE_HEADING_HI
+      bmi     @add360
+      jsr     heading_mod360
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_cs — CS / CLEARSCREEN / DRAW: reset VGC, clear gfx, split, init + show turtle.
+;   (turtle.s:618 / extension.s:215)
+; =====================================================================
+t_cs:
+      stz     VGC_BGCOL
+      lda     #TURTLE_COL_WHITE
+      sta     VGC_FGCOL
+      stz     VGC_BORDER
+      stz     VGC_GFXTRANS
+      stz     VGC_SCROLLX
+      stz     VGC_SCROLLY
+      stz     VGC_SCROLLCTL
+      lda     #TURTLE_MODE_TEXT
+      sta     VGC_MODE
+      jsr     vgc_gcls                 ; clear the gfx plane
+      jsr     vgc_wait_cmd
+      jsr     turtle_enter_split       ; copper split + GFX_VISIBLE=1
+      jsr     turtle_init_state        ; reset state + reinstall icon + clear bg bookkeeping
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_pu / t_pd — pen up / pen down. (turtle.s:638)
+; =====================================================================
+t_pu:
+      jsr     ensure_gfx_mode
+      lda     #$01
+      sta     TURTLE_PEN
+      jmp     finish_ok_nowait
+t_pd:
+      jsr     ensure_gfx_mode
+      stz     TURTLE_PEN
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_st / t_ht — show / hide turtle. (turtle.s:651)
+; =====================================================================
+t_st:
+      jsr     ensure_gfx_mode
+      lda     #$01
+      sta     TURTLE_SHOWN
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+t_ht:
+      jsr     ensure_gfx_mode
+      jsr     gfn_turtle_erase         ; restore saved bg (module $B2 sub)
+      stz     TURTLE_SHOWN
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_setpc — SETPC color: set pen color. Color in ARG0 byte0. (turtle.s:665)
+; =====================================================================
+t_setpc:
+      jsr     ensure_gfx_mode
+      lda     LIB_ARG0+0
+      sta     TURTLE_COLOR
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_setbg — SETBG color: set VGC bg, clear gfx to it, redraw turtle. Color in
+;   ARG0 byte0. GCLS clears to the current draw color, so set GCOLOR(bg) first.
+;   (turtle.s:675 / extension.s:1348)
+; =====================================================================
+t_setbg:
+      jsr     ensure_gfx_mode
+      jsr     gfn_turtle_erase         ; lift the turtle before repainting
+      lda     LIB_ARG0+0
+      sta     VGC_BGCOL
+      jsr     vgc_wait_cmd
+      lda     LIB_ARG0+0
+      sta     VGC_P0
+      jsr     vgc_gcolor               ; draw color = bg, so GCLS paints bg
+      jsr     vgc_wait_cmd
+      jsr     vgc_gcls
+      jsr     vgc_wait_cmd
+      jsr     draw_turtle
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; t_ts / t_ss / t_fs — screen-mode ops. (extension.s:851/861/871)
+;   TS: full text mode (copper off, mode 0). SS: split (gfx+spr top / text below).
+;   FS: full graphics mode (copper off, mode 3). Text-window setup (prepare_split_
+;   text) stays the adapter's job — see turtle_enter_split deviation note.
+; =====================================================================
+t_ts:
+      jsr     vgc_wait_cmd
+      jsr     copper_off
+      stz     VGC_MODE
+      stz     TURTLE_GFX_VISIBLE
+      jmp     finish_ok_nowait
+t_ss:
+      jsr     turtle_enter_split
+      jmp     finish_ok_nowait
+t_fs:
+      jsr     vgc_wait_cmd
+      jsr     copper_off
+      lda     #TURTLE_MODE_GFXSPR
+      sta     VGC_MODE
+      lda     #$01
+      sta     TURTLE_GFX_VISIBLE
+      jmp     finish_ok_nowait
+
+; =====================================================================
+; Reporters — write a Logo 16.8 value to the LIB_RESULT low word + STATUS OK.
+;   t_report16: A = value HI, X = value LO -> LIB_RESULT [FRAC=0, LO, HI, 0].
+;   Result cell carries the integer in LO/HI with FRAC=0 (matches the legacy
+;   reporters which set EXT_RESULT_FRAC=0).
+; =====================================================================
+t_report16:
+      stz     LIB_RESULT+0             ; FRAC = 0
+      stx     LIB_RESULT+1             ; LO
+      sta     LIB_RESULT+2             ; HI
+      stz     LIB_RESULT+3
+      jmp     finish_ok_nowait
+
+t_xcor:
+      ldx     TURTLE_X_LO
+      lda     TURTLE_X_HI
+      jmp     t_report16
+t_ycor:
+      ldx     TURTLE_Y_LO
+      lda     TURTLE_Y_HI
+      jmp     t_report16
+t_heading:
+      ldx     TURTLE_HEADING_LO
+      lda     TURTLE_HEADING_HI
+      jmp     t_report16
+t_pendownp:
+      lda     TURTLE_PEN
+      bne     @up                      ; pen up ($01) -> 0
+      ldx     #1                       ; pen down ($00) -> 1
+      lda     #0
+      jmp     t_report16
+@up:
+      ldx     #0
+      lda     #0
+      jmp     t_report16
+t_shownp:
+      ldx     TURTLE_SHOWN
+      lda     #0
+      jmp     t_report16
+
+; =====================================================================
+; t_towards — TOWARDS x y: heading angle (degrees) towards (x,y) via ATAN2.
+;   ARG0 = target x, ARG1 = target y. (extension.s:1368)
+; =====================================================================
+t_towards:
+      ; dy = turtle_y - target_y (screen Y is inverted) — set FIRST so DX_HI
+      ; is the LAST write (the math copro triggers ATAN2 on MATH_ATAN_DX_HI;
+      ; the legacy ext_towards wrote DX before DY, latching a stale DY — fixed
+      ; here so TOWARDS computes against the intended operands).
+      sec
+      lda     TURTLE_Y_LO
+      sbc     TA1_LO
+      sta     MATH_ATAN_DY_LO
+      lda     TURTLE_Y_HI
+      sbc     TA1_HI
+      sta     MATH_ATAN_DY_HI
+      ; dx = target_x - turtle_x (signed 16-bit) — DX_HI last -> triggers ATAN2
+      sec
+      lda     TA0_LO
+      sbc     TURTLE_X_LO
+      sta     MATH_ATAN_DX_LO
+      lda     TA0_HI
+      sbc     TURTLE_X_HI
+      sta     MATH_ATAN_DX_HI          ; writing DX_HI triggers ATAN2
+      ; angle u8 (0-255) -> degrees: u8 * 360 / 256 = hi byte of (u8 * 360)
+      lda     MATH_RES0
+      sta     MATH_MUL16_A_LO
+      stz     MATH_MUL16_A_HI
+      lda     #<360
+      sta     MATH_MUL16_B_LO
+      lda     #>360
+      sta     MATH_MUL16_B_HI          ; triggers multiply
+      ldx     MATH_RES1                ; (u8*360) >> 8 low
+      lda     MATH_RES2                ; high
+      jmp     t_report16
+
 ; turtle_icon — the built-in 16x16 upward-triangle turtle, one color (white).
 ; Replicated verbatim from novalogo/extension.s turtle_shape_data. ROM constant
 ; (CODE segment); GFN_TURTLE_INIT copies these 256 bytes into the BSS source
@@ -2092,6 +2944,33 @@ turtle_bg_y:          .res 1         ; stamp top-left Y
 turtle_bg_saved:      .res 1         ; nonzero when turtle_saved_bg holds a region
 turtle_tmp0:          .res 1         ; set_turtle_pos clamp scratch (tmp0)
 turtle_tmp1:          .res 1         ; set_turtle_pos clamp scratch (tmp1)
+; --- Turtle command-engine move-math scratch (batch 4c.2-3). Module BSS, not ZP:
+;     the render runs inline (no lib_call), so plain RAM scratch is safe. old_x/y
+;     are the pre-move integer position the post-move pen line reads. ---
+t_tmp1:               .res 1         ; raw_dy frac / SETPOS cdr scratch
+t_tmp2:               .res 1         ; raw_dy lo  / SETPOS cdr ptr lo
+t_tmp3:               .res 1         ; raw_dy hi  / SETPOS cdr ptr hi
+t_dx_frac:            .res 1
+t_dx_lo:              .res 1
+t_dx_hi:              .res 1
+t_dy_frac:            .res 1
+t_dy_lo:              .res 1
+t_dy_hi:              .res 1
+t_sin_val:            .res 1
+t_cos_val:            .res 1
+t_dist_lo:            .res 1         ; FD/BK distance snapshot (mailbox-clobber safe)
+t_dist_hi:            .res 1
+turtle_old_x_lo:      .res 1
+turtle_old_x_hi:      .res 1
+turtle_old_y_lo:      .res 1
+turtle_old_y_hi:      .res 1
+; draw_turtle saves the caller's value-arg bytes here while it borrows the
+; mailbox cells for the gfn_turtle_draw call (keeps draw_turtle args-transparent).
+t_save_a0_0:          .res 1
+t_save_a0_1:          .res 1
+t_save_a1_0:          .res 1
+t_save_a1_1:          .res 1
+t_save_a2_0:          .res 1
       .segment "CODE"
 
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc

@@ -94,6 +94,23 @@ namespace e6502UnitTests
         private const byte   GFN_TURTLE_INIT = 0xB0, GFN_TURTLE_DRAW = 0xB1,
                              GFN_TURTLE_ERASE = 0xB2;
         private const byte   TURTLE_COL_WHITE = 0x01;
+        // Turtle command-engine fn-id + op-codes ($B3, batch 4c.2-3).
+        // Op rides in ARG2 byte0; value args in ARG0/ARG1 as Logo 16.8 (byte0=FRAC,1=LO,2=HI).
+        private const byte   GFN_TURTLE_OP = 0xB3;
+        private const byte   TOP_FD = 0x10, TOP_BK = 0x11, TOP_RT = 0x12, TOP_LT = 0x13,
+                             TOP_CS = 0x14, TOP_PU = 0x15, TOP_PD = 0x16, TOP_ST = 0x17,
+                             TOP_HT = 0x18, TOP_HOME = 0x19, TOP_TS = 0x1A, TOP_SS = 0x1B,
+                             TOP_FS = 0x1C, TOP_SETXY = 0x1D, TOP_SETX = 0x1E, TOP_SETY = 0x1F,
+                             TOP_SETH = 0x20, TOP_XCOR = 0x21, TOP_YCOR = 0x22, TOP_HEADING = 0x23,
+                             TOP_PENDOWNP = 0x24, TOP_SHOWNP = 0x25, TOP_SETPC = 0x26,
+                             TOP_SETBG = 0x27, TOP_TOWARDS = 0x28, TOP_SETPOS = 0x29;
+        // Turtle state cells at $9F00 (shared RAM).
+        private const ushort TS_X_FRAC = 0x9F00, TS_X_LO = 0x9F01, TS_X_HI = 0x9F02,
+                             TS_Y_FRAC = 0x9F03, TS_Y_LO = 0x9F04, TS_Y_HI = 0x9F05,
+                             TS_HEADING_LO = 0x9F06, TS_HEADING_HI = 0x9F07,
+                             TS_PEN = 0x9F08, TS_SHOWN = 0x9F09, TS_COLOR = 0x9F0A,
+                             TS_INITED = 0x9F0C;
+        private const int    TURTLE_CENTER_X = 160, TURTLE_CENTER_Y = 80;
         // Msprite/meta-sprite-domain fn-ids ($80-$8B), batch 4b.8.
         private const byte   GFN_MS_SPAWN = 0x80, GFN_MS_DESTROY = 0x81,
                              GFN_MS_SHOW = 0x82, GFN_MS_HIDE = 0x83,
@@ -3073,18 +3090,427 @@ namespace e6502UnitTests
             }
         }
 
-        // --- Dispatch density: a still-reserved turtle-render id ($B3) returns
-        // LERR_NO_FN. ($B0-$B2 are now live turtle-render fns, batch 4c.2-2;
-        // $B3-$BF stay reserved -> gfn_unimpl.) ---
+        // =====================================================================
+        // Turtle command engine ($B3 GFN_TURTLE_OP), batch 4c.2-3. The whole
+        // NovaLogo turtle (move-math + render + reporters) now lives IN the
+        // module. Op rides in ARG2 byte0; value args in ARG0/ARG1 as Logo 16.8
+        // (cell byte0 = FRAC, byte1 = LO, byte2 = HI). Move-math updates the
+        // turtle state at $9F00 and renders through the module's own vgc.s +
+        // $B0/$B1/$B2 render subs. Move/draw ops frame-wait inside the
+        // rotate-blit, so they are driven via RunFnPumped.
+        // =====================================================================
+
+        // Set a Logo 16.8 integer value (frac=0) into an ARG cell: byte0=FRAC=0,
+        // byte1=LO, byte2=HI. SetArg(cell, n<<8) lays it out exactly.
+        private static void SetTurtleArg(CompositeBusDevice bus, ushort cell, int intValue) =>
+            SetArg(bus, cell, (intValue & 0xFFFF) << 8);
+
+        // Run a turtle op via GFN_TURTLE_OP (pumped — DRAW/move ops frame-wait).
+        private static void RunTurtleOp(CompositeBusDevice bus, byte op)
+        {
+            SetArg(bus, ARG2, op);        // op id in ARG2 byte0
+            RunFnPumped(bus, GFN_TURTLE_OP);
+        }
+
+        private static int Read16(CompositeBusDevice bus, ushort lo) =>
+            bus.ReadRam(lo) | (bus.ReadRam((ushort)(lo + 1)) << 8);
+
+        // Read the LIB_RESULT low word as a Logo-16.8 integer (frac=byte0 ignored).
+        private static int ResultInt(CompositeBusDevice bus) =>
+            bus.ReadRam((ushort)(RESULT + 1)) | (bus.ReadRam((ushort)(RESULT + 2)) << 8);
+
+        // --- $B3 op dispatch is wired (not gfn_unimpl): a command op returns OK. ---
+        [TestMethod]
+        public void Axis2_TurtleOp_DispatchesOk()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_PD);     // RunFnPumped asserts RTS + STATUS == LERR_OK
+        }
+
+        // --- FD at heading 0 (north) moves Y by exactly -distance (the cardinal
+        // move must be exact — sin(0)=0 so X unchanged, cos(0)=+1 so dy=-dist).
+        // Mirrors NovaLogoTests.TurtleCardinalForwardUsesFullDistance. ---
+        [TestMethod]
+        public void Axis2_TurtleFd_North_MovesYByFullDistance()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);     // init + center + heading 0
+
+            int x0 = Read16(bus, TS_X_LO), y0 = Read16(bus, TS_Y_LO);
+            Assert.AreEqual(TURTLE_CENTER_X, x0, "CS must center X at 160");
+            Assert.AreEqual(TURTLE_CENTER_Y, y0, "CS must center Y at 80");
+
+            SetTurtleArg(bus, ARG0, 50);  // FD 50
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(x0, Read16(bus, TS_X_LO),
+                "FD at heading 0 must leave X unchanged (sin 0 = 0)");
+            Assert.AreEqual(y0 - 50, Read16(bus, TS_Y_LO),
+                "FD 50 at heading 0 must move Y by exactly -50 (cardinal exact)");
+            Assert.AreEqual(0, bus.ReadRam(TS_Y_FRAC),
+                "cardinal FD must leave the Y fraction at 0");
+        }
+
+        // --- FD as the FIRST turtle op (no prior CS): ensure_gfx_mode runs the
+        // first-entry draw_turtle, which borrows the mailbox; the distance must
+        // still survive (args-snapshot fix). FD 50 north from the center -> Y-50. ---
+        [TestMethod]
+        public void Axis2_TurtleFd_FirstOpNoCs_DistanceSurvivesGfxEntry()
+        {
+            using var bus = MakeAxis2Bus();
+            // No CS: TURTLE_INITED / GFX_VISIBLE are 0, so the very first FD goes
+            // through ensure_gfx_mode -> turtle_init_state -> enter_split -> draw_turtle
+            // BEFORE the move-math reads the distance from ARG0.
+            SetTurtleArg(bus, ARG0, 50);
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(1, bus.ReadRam(TS_INITED), "first FD must auto-init the turtle");
+            Assert.AreEqual(TURTLE_CENTER_X, Read16(bus, TS_X_LO),
+                "first FD at heading 0 leaves X centered");
+            Assert.AreEqual(TURTLE_CENTER_Y - 50, Read16(bus, TS_Y_LO),
+                "first FD 50 must move the full distance despite the gfx-entry draw");
+        }
+
+        // --- FD at heading 90 (east, after RT 90) moves X by +distance exactly. ---
+        [TestMethod]
+        public void Axis2_TurtleRt90ThenFd_East_MovesXByFullDistance()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            int x0 = Read16(bus, TS_X_LO), y0 = Read16(bus, TS_Y_LO);
+
+            SetTurtleArg(bus, ARG0, 90);  // RT 90 -> heading 90 (east)
+            RunTurtleOp(bus, TOP_RT);
+            Assert.AreEqual(90, Read16(bus, TS_HEADING_LO), "RT 90 must set heading to 90");
+
+            SetTurtleArg(bus, ARG0, 40);  // FD 40
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(x0 + 40, Read16(bus, TS_X_LO),
+                "FD 40 at heading 90 must move X by exactly +40 (cardinal exact)");
+            Assert.AreEqual(y0, Read16(bus, TS_Y_LO),
+                "FD at heading 90 must leave Y unchanged (cos 90 = 0)");
+        }
+
+        // --- BK is FD with a negated distance: BK 30 at heading 0 moves Y by +30. ---
+        [TestMethod]
+        public void Axis2_TurtleBk_North_MovesYByPositiveDistance()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            int y0 = Read16(bus, TS_Y_LO);
+
+            SetTurtleArg(bus, ARG0, 30);  // BK 30
+            RunTurtleOp(bus, TOP_BK);
+
+            Assert.AreEqual(y0 + 30, Read16(bus, TS_Y_LO),
+                "BK 30 at heading 0 must move Y by +30 (forward negated)");
+        }
+
+        // --- RT / LT change the heading; LT from 0 wraps via +360. ---
+        [TestMethod]
+        public void Axis2_TurtleRtLt_ChangeHeading()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 270);
+            RunTurtleOp(bus, TOP_RT);
+            Assert.AreEqual(270, Read16(bus, TS_HEADING_LO), "RT 270 -> heading 270");
+
+            SetTurtleArg(bus, ARG0, 30);
+            RunTurtleOp(bus, TOP_RT);     // 270 + 30 = 300
+            Assert.AreEqual(300, Read16(bus, TS_HEADING_LO), "RT past 360 wraps: 270+30 -> 300");
+
+            SetTurtleArg(bus, ARG0, 90);
+            RunTurtleOp(bus, TOP_RT);     // 300 + 90 = 390 -> 30
+            Assert.AreEqual(30, Read16(bus, TS_HEADING_LO), "RT 90 from 300 wraps mod 360 -> 30");
+
+            SetTurtleArg(bus, ARG0, 60);
+            RunTurtleOp(bus, TOP_LT);     // 30 - 60 = -30 -> +360 -> 330
+            Assert.AreEqual(330, Read16(bus, TS_HEADING_LO),
+                "LT 60 from 30 wraps negative via +360 -> 330");
+        }
+
+        // --- SETXY sets the integer position; SETH sets the heading mod 360. ---
+        [TestMethod]
+        public void Axis2_TurtleSetxyAndSeth_SetState()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 123);   // SETXY 123 200
+            SetTurtleArg(bus, ARG1, 200);
+            RunTurtleOp(bus, TOP_SETXY);
+            Assert.AreEqual(123, Read16(bus, TS_X_LO), "SETXY must set X");
+            Assert.AreEqual(200, Read16(bus, TS_Y_LO), "SETXY must set Y");
+
+            SetTurtleArg(bus, ARG0, 45);    // SETH 45
+            RunTurtleOp(bus, TOP_SETH);
+            Assert.AreEqual(45, Read16(bus, TS_HEADING_LO), "SETH must set heading");
+
+            SetTurtleArg(bus, ARG0, 400);   // SETH 400 -> 40 (mod 360)
+            RunTurtleOp(bus, TOP_SETH);
+            Assert.AreEqual(40, Read16(bus, TS_HEADING_LO), "SETH 400 must normalize mod 360 -> 40");
+        }
+
+        // --- SETX / SETY set only one axis. ---
+        [TestMethod]
+        public void Axis2_TurtleSetxSety_SetOneAxis()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            int y0 = Read16(bus, TS_Y_LO);
+
+            SetTurtleArg(bus, ARG0, 55);
+            RunTurtleOp(bus, TOP_SETX);
+            Assert.AreEqual(55, Read16(bus, TS_X_LO), "SETX must set X");
+            Assert.AreEqual(y0, Read16(bus, TS_Y_LO), "SETX must leave Y unchanged");
+
+            int x1 = Read16(bus, TS_X_LO);
+            SetTurtleArg(bus, ARG0, 33);
+            RunTurtleOp(bus, TOP_SETY);
+            Assert.AreEqual(33, Read16(bus, TS_Y_LO), "SETY must set Y");
+            Assert.AreEqual(x1, Read16(bus, TS_X_LO), "SETY must leave X unchanged");
+        }
+
+        // --- HOME returns to center, heading 0, after moving away. ---
+        [TestMethod]
+        public void Axis2_TurtleHome_ResetsToCenter()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 30);
+            RunTurtleOp(bus, TOP_RT);
+            SetTurtleArg(bus, ARG0, 25);
+            RunTurtleOp(bus, TOP_FD);     // move off-center
+            Assert.AreNotEqual(TURTLE_CENTER_X, Read16(bus, TS_X_LO), "fixture: FD moved off center");
+
+            RunTurtleOp(bus, TOP_HOME);
+            Assert.AreEqual(TURTLE_CENTER_X, Read16(bus, TS_X_LO), "HOME must recenter X to 160");
+            Assert.AreEqual(TURTLE_CENTER_Y, Read16(bus, TS_Y_LO), "HOME must recenter Y to 80");
+            Assert.AreEqual(0, Read16(bus, TS_HEADING_LO), "HOME must reset heading to 0");
+        }
+
+        // --- Pen-down FD draws a line on the gfx plane between old and new pos. ---
+        [TestMethod]
+        public void Axis2_TurtlePenDownFd_DrawsLineOnPlane()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);     // pen down by default, gfx cleared
+
+            // Hide the turtle first so its stamp doesn't sit on the path we probe.
+            RunTurtleOp(bus, TOP_HT);
+
+            int cx = TURTLE_CENTER_X, cy = TURTLE_CENTER_Y;
+            SetTurtleArg(bus, ARG0, 40);  // FD 40 north -> vertical line cy..cy-40 at x=cx
+            RunTurtleOp(bus, TOP_FD);
+
+            // A pixel midway up the path must be the pen color (white).
+            Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, cx, cy - 20),
+                "pen-down FD must draw the pen line on the gfx plane");
+            Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, cx, cy - 1),
+                "pen line must cover the near endpoint");
+        }
+
+        // --- Pen-up FD does NOT draw a line. PU/PD toggle TURTLE_PEN. ---
+        [TestMethod]
+        public void Axis2_TurtlePenUpFd_DrawsNoLine_AndPenToggles()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            RunTurtleOp(bus, TOP_HT);     // hide turtle so only the (absent) line matters
+
+            RunTurtleOp(bus, TOP_PU);
+            Assert.AreEqual(0x01, bus.ReadRam(TS_PEN), "PU must set TURTLE_PEN = 1 (up)");
+
+            int cx = TURTLE_CENTER_X, cy = TURTLE_CENTER_Y;
+            SetTurtleArg(bus, ARG0, 40);
+            RunTurtleOp(bus, TOP_FD);     // pen up -> no line
+            Assert.AreEqual(0, GfxPixel(bus, cx, cy - 20),
+                "pen-up FD must NOT draw a line on the gfx plane");
+
+            RunTurtleOp(bus, TOP_PD);
+            Assert.AreEqual(0x00, bus.ReadRam(TS_PEN), "PD must set TURTLE_PEN = 0 (down)");
+        }
+
+        // --- SETPC sets the pen color; a subsequent pen-down move draws in it. ---
+        [TestMethod]
+        public void Axis2_TurtleSetpc_SetsPenColor()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            RunTurtleOp(bus, TOP_HT);
+
+            SetArg(bus, ARG0, 7);         // SETPC 7 (color byte in ARG0 byte0)
+            RunTurtleOp(bus, TOP_SETPC);
+            Assert.AreEqual(7, bus.ReadRam(TS_COLOR), "SETPC must set TURTLE_COLOR");
+
+            int cx = TURTLE_CENTER_X, cy = TURTLE_CENTER_Y;
+            SetTurtleArg(bus, ARG0, 30);
+            RunTurtleOp(bus, TOP_FD);
+            Assert.AreEqual(7, GfxPixel(bus, cx, cy - 15),
+                "pen line after SETPC 7 must be drawn in color 7");
+        }
+
+        // --- XCOR / YCOR / HEADING reporters return the $9F00 state via LIB_RESULT. ---
+        [TestMethod]
+        public void Axis2_TurtleReporters_XcorYcorHeading()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 123);
+            SetTurtleArg(bus, ARG1, 45);
+            RunTurtleOp(bus, TOP_SETXY);
+            SetTurtleArg(bus, ARG0, 200);
+            RunTurtleOp(bus, TOP_SETH);
+
+            SetArg(bus, ARG2, TOP_XCOR);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(123, ResultInt(bus), "XCOR must report the turtle X (123)");
+
+            SetArg(bus, ARG2, TOP_YCOR);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(45, ResultInt(bus), "YCOR must report the turtle Y (45)");
+
+            SetArg(bus, ARG2, TOP_HEADING);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(200, ResultInt(bus), "HEADING must report the heading (200)");
+        }
+
+        // --- PENDOWN? / SHOWN? boolean reporters. ---
+        [TestMethod]
+        public void Axis2_TurtleReporters_PendownpShownp()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);     // pen down + shown
+
+            SetArg(bus, ARG2, TOP_PENDOWNP);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(1, ResultInt(bus), "PENDOWN? must be 1 when pen is down");
+
+            RunTurtleOp(bus, TOP_PU);
+            SetArg(bus, ARG2, TOP_PENDOWNP);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(0, ResultInt(bus), "PENDOWN? must be 0 when pen is up");
+
+            SetArg(bus, ARG2, TOP_SHOWNP);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(1, ResultInt(bus), "SHOWN? must be 1 after CS (turtle shown)");
+
+            RunTurtleOp(bus, TOP_HT);
+            SetArg(bus, ARG2, TOP_SHOWNP);
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(0, ResultInt(bus), "SHOWN? must be 0 after HT (turtle hidden)");
+        }
+
+        // --- TOWARDS reports the ATAN2-derived angle (degrees) towards a target.
+        // This is a FAITHFUL port of the legacy ext_towards (extension.s:1368),
+        // which feeds dx = target_x - turtle_x and dy = turtle_y - target_y into
+        // the math copro's ATAN2 (math convention: CCW from +x). So a point due
+        // east (dx>0, dy=0) reports ~0deg and a point due north (dx=0, dy>0)
+        // reports ~90deg. (The legacy reporter does NOT remap into the Logo
+        // north=0 heading convention; the port preserves that behavior exactly.) ---
+        [TestMethod]
+        public void Axis2_TurtleTowards_ReportsAtan2Angle()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);     // center (160,80)
+
+            // Point due east: (260, 80) -> dx=+100, dy=0 -> atan2 0 -> ~0deg.
+            SetTurtleArg(bus, ARG0, 260);
+            SetTurtleArg(bus, ARG1, 80);
+            SetArg(bus, ARG2, TOP_TOWARDS);
+            RunFn(bus, GFN_TURTLE_OP);
+            int east = ResultInt(bus);
+            Assert.IsTrue(east <= 2 || east >= 358, $"TOWARDS due east must be ~0deg (got {east})");
+
+            // Point due north: (160, 0) -> dx=0, dy=+80 -> atan2 64 -> ~90deg.
+            SetTurtleArg(bus, ARG0, 160);
+            SetTurtleArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, TOP_TOWARDS);
+            RunFn(bus, GFN_TURTLE_OP);
+            int north = ResultInt(bus);
+            Assert.IsTrue(north >= 88 && north <= 92, $"TOWARDS due north must be ~90deg (got {north})");
+        }
+
+        // --- SETPOS [x y]: ARG0 points at a Logo cons-cell list in heap RAM. ---
+        [TestMethod]
+        public void Axis2_TurtleSetpos_FollowsConsList()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            // Build two cons cells in heap RAM (above the module BSS band).
+            //   cell layout: [+0 ?][+1 CAR_TYPE][+2 CAR_HI][+3 CAR_LO][+4 ?][+5 CDR_LO][+6 CDR_HI]
+            const ushort cell0 = 0x2000, cell1 = 0x2010;
+            // cell0: CAR = number 137, CDR -> cell1
+            bus.WriteRam((ushort)(cell0 + 1), 0x00);            // CAR_TYPE = VAL_NUMBER
+            bus.WriteRam((ushort)(cell0 + 2), 0x00);            // CAR_HI
+            bus.WriteRam((ushort)(cell0 + 3), 137);             // CAR_LO = x = 137
+            bus.WriteRam((ushort)(cell0 + 5), cell1 & 0xFF);    // CDR_LO
+            bus.WriteRam((ushort)(cell0 + 6), cell1 >> 8);      // CDR_HI
+            // cell1: CAR = number 64, CDR -> nil
+            bus.WriteRam((ushort)(cell1 + 1), 0x00);            // CAR_TYPE = VAL_NUMBER
+            bus.WriteRam((ushort)(cell1 + 2), 0x00);            // CAR_HI
+            bus.WriteRam((ushort)(cell1 + 3), 64);              // CAR_LO = y = 64
+            bus.WriteRam((ushort)(cell1 + 5), 0x00);            // CDR_LO = nil
+            bus.WriteRam((ushort)(cell1 + 6), 0x00);            // CDR_HI
+
+            // ARG0 = list pointer (16-bit, byte0=lo, byte1=hi); type byte not needed.
+            SetArg(bus, ARG0, cell0);
+            RunTurtleOp(bus, TOP_SETPOS);
+
+            Assert.AreEqual(137, Read16(bus, TS_X_LO), "SETPOS must set X from the list head");
+            Assert.AreEqual(64, Read16(bus, TS_Y_LO), "SETPOS must set Y from the list tail");
+        }
+
+        // --- ST after HT re-shows the turtle (TURTLE_SHOWN toggles). ---
+        [TestMethod]
+        public void Axis2_TurtleStHt_ToggleShown()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            Assert.AreEqual(0x01, bus.ReadRam(TS_SHOWN), "CS must leave the turtle shown");
+
+            RunTurtleOp(bus, TOP_HT);
+            Assert.AreEqual(0x00, bus.ReadRam(TS_SHOWN), "HT must hide the turtle");
+
+            RunTurtleOp(bus, TOP_ST);
+            Assert.AreEqual(0x01, bus.ReadRam(TS_SHOWN), "ST must re-show the turtle");
+        }
+
+        // --- An unknown turtle op (outside $10..$29) is a harmless no-op OK. ---
+        [TestMethod]
+        public void Axis2_TurtleOp_UnknownOp_IsOkNoop()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            int x0 = Read16(bus, TS_X_LO);
+
+            SetArg(bus, ARG2, 0x00);      // op < $10 -> no-op
+            RunFn(bus, GFN_TURTLE_OP);    // RunFn asserts STATUS == OK
+            Assert.AreEqual(x0, Read16(bus, TS_X_LO), "unknown op must not move the turtle");
+
+            SetArg(bus, ARG2, 0x7F);      // op past the table -> no-op
+            RunFn(bus, GFN_TURTLE_OP);
+            Assert.AreEqual(x0, Read16(bus, TS_X_LO), "out-of-range op must not move the turtle");
+        }
+
+        // --- Dispatch density: a still-reserved turtle id ($B4) returns
+        // LERR_NO_FN. ($B0-$B2 turtle-render + $B3 TURTLE_OP are now live;
+        // $B4-$BF stay reserved -> gfn_unimpl.) ---
         [TestMethod]
         public void Axis2_TurtleRenderRangeGap_ReturnsNoFn()
         {
             using var bus = MakeAxis2Bus();
 
             bus.WriteRam(STATUS, 0x00);   // poison opposite to expected non-OK
-            RunFnRaw(bus, 0xB3);          // $B3-$BF are reserved
+            RunFnRaw(bus, 0xB4);          // $B4-$BF are reserved
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
-                "id $B3 (reserved turtle-render gap) must report LERR_NO_FN");
+                "id $B4 (reserved turtle gap) must report LERR_NO_FN");
         }
 
         // --- Dispatch bounds: an id at/above GFX_FN_COUNT ($DB) returns LERR_NO_FN. ---
