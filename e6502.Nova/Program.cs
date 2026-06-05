@@ -240,20 +240,8 @@ static int DoModuleValidate(string[] args)
     if (!File.Exists(path)) { Console.Error.WriteLine($"file not found: {path}"); return 1; }
 
     NovaModule mod = NovaModule.Parse(File.ReadAllBytes(path));
-    if (!mod.Valid) { Console.Error.WriteLine($"{path}: INVALID — {mod.Error}"); return 1; }
-    if (mod is { HasDoc: true, Doc: not null })
-    {
-        // fnCount is the dispatch-table span; documented ids must fall within it
-        // (a subset is fine — sparse-dispatch modules like graphics document only
-        // their implemented ids).
-        NovaFn? bad = mod.Doc.Functions.FirstOrDefault(f => f.Id < 0 || f.Id >= mod.FnCount);
-        if (bad is not null)
-        {
-            Console.Error.WriteLine($"{path}: doc id ${bad.Id:X2} ({bad.Name}) " +
-                                    $"out of dispatch range [0, {mod.FnCount})");
-            return 1;
-        }
-    }
+    (bool ok, string? reason) = mod.ValidateForStaging();
+    if (!ok) { Console.Error.WriteLine($"{path}: INVALID — {reason}"); return 1; }
 
     string docNote = mod.HasDoc ? $"{mod.Doc!.Functions.Count} documented functions"
                                 : "no NDOC doc";
@@ -269,9 +257,10 @@ static int DoModulePut(string[] args, string? host)
     if (!File.Exists(local)) { Console.Error.WriteLine($"local file not found: {local}"); return 1; }
 
     NovaModule mod = NovaModule.Parse(File.ReadAllBytes(local));
-    if (!mod.Valid)
+    (bool ok, string? reason) = mod.ValidateForStaging();
+    if (!ok)
     {
-        Console.Error.WriteLine($"refusing to stage invalid module {local}: {mod.Error}");
+        Console.Error.WriteLine($"refusing to stage invalid module {local}: {reason}");
         return 1;
     }
 

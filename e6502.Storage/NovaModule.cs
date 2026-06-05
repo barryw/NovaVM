@@ -95,6 +95,29 @@ public sealed class NovaModule
         };
     }
 
+    /// <summary>
+    /// Full pre-staging gate: the module must parse, and (if it carries an NDOC
+    /// doc) every documented id must fall within the dispatch-table span
+    /// [0, FnCount). A documented subset is fine — sparse-dispatch modules such as
+    /// graphics only annotate their implemented ids. Returns (true, null) when the
+    /// module is safe to stage, else (false, reason). Shared by the nova CLI
+    /// (`module validate`/`put`) and the web (`PUT /api/modules/{name}`) so the two
+    /// surfaces agree on what "valid" means.
+    /// </summary>
+    public (bool Ok, string? Reason) ValidateForStaging()
+    {
+        if (!Valid)
+            return (false, Error);
+        if (HasDoc && Doc is not null)
+        {
+            NovaFn? bad = Doc.Functions.FirstOrDefault(f => f.Id < 0 || f.Id >= FnCount);
+            if (bad is not null)
+                return (false, $"doc id ${bad.Id:X2} ({bad.Name}) " +
+                               $"out of dispatch range [0, {FnCount})");
+        }
+        return (true, null);
+    }
+
     private static NovaModule Invalid(string error) =>
         new() { Valid = false, Error = error };
 

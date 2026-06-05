@@ -284,11 +284,33 @@ sealed class LocalNovaWebServer
                 return;
             }
 
-            if (method == "GET" && path.StartsWith("/api/modules/", StringComparison.Ordinal))
+            if (path.StartsWith("/api/modules/", StringComparison.Ordinal))
             {
-                string modName = Uri.UnescapeDataString(path["/api/modules/".Length..]);
-                await SendJsonAsync(context.Response, await GetModuleDetailAsync(modName, token), token);
-                return;
+                string rest = path["/api/modules/".Length..];
+
+                if (method == "POST" && rest.EndsWith("/staged", StringComparison.Ordinal))
+                {
+                    string stagedName = Uri.UnescapeDataString(rest[..^"/staged".Length]);
+                    await ModuleSetStagedAsync(context, stagedName, token);
+                    return;
+                }
+
+                if (!rest.Contains('/'))
+                {
+                    string modName = Uri.UnescapeDataString(rest);
+                    switch (method)
+                    {
+                        case "GET":
+                            await SendJsonAsync(context.Response, await GetModuleDetailAsync(modName, token), token);
+                            return;
+                        case "PUT":
+                            await ModulePutAsync(context, modName, token);
+                            return;
+                        case "DELETE":
+                            await ModuleDeleteAsync(context, modName, token);
+                            return;
+                    }
+                }
             }
 
             await SendErrorAsync(context.Response, 404, "not found", token);
@@ -528,6 +550,179 @@ sealed class LocalNovaWebServer
             o["functions"] = fns;
         }
         return o;
+    }
+
+    // -- Module staging: validate-then-stage uploads, libraries[] membership
+    //    toggles, and deletes that also unstage. The shared NovaModule gate keeps
+    //    these in agreement with `nova module put/validate`. --
+
+    private static bool IsValidModuleName(string name) =>
+        name.Length > 0 && !name.Contains('/') && !name.Contains('\\')
+        && name != "." && name != ".."
+        && (name.EndsWith(".mod", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".nmod", StringComparison.OrdinalIgnoreCase));
+
+    private async Task ModulePutAsync(HttpListenerContext context, string name, CancellationToken token)
+    {
+        if (!IsValidModuleName(name))
+        {
+            await SendErrorAsync(context.Response, 400, "module name must be a *.mod / *.nmod filename", token);
+            return;
+        }
+
+        byte[] bytes = await ReadBodyAsync(context.Request, token);
+        NovaModule mod = NovaModule.Parse(bytes);
+        (bool ok, string? reason) = mod.ValidateForStaging();
+        if (!ok)
+        {
+            await SendErrorAsync(context.Response, 400, $"refusing to stage invalid module: {reason}", token);
+            return;
+        }
+
+        string boardPath = EnsureAbsolutePath($"lib/{name}");
+        await UploadBytesAsync(boardPath, bytes, token);
+        InvalidateStatusCache();
+        InvalidateInventoryCache();
+        await BroadcastEventAsync("module", new JsonObject
+        {
+            ["name"] = name,
+            ["state"] = "staged",
+            ["size"] = bytes.Length
+        }, token);
+        await SendJsonAsync(context.Response, new JsonObject
+        {
+            ["ok"] = true,
+            ["name"] = name,
+            ["path"] = boardPath,
+            ["id"] = mod.Id,
+            ["idHex"] = $"${mod.Id:X2}",
+            ["fnCount"] = mod.FnCount,
+            ["hasDoc"] = mod.HasDoc
+        }, token);
+    }
+
+    private async Task ModuleSetStagedAsync(HttpListenerContext context, string name, CancellationToken token)
+    {
+        if (!IsValidModuleName(name))
+        {
+            await SendErrorAsync(context.Response, 400, "module name must be a *.mod / *.nmod filename", token);
+            return;
+        }
+
+        JsonObject payload = await ReadJsonObjectAsync(context.Request, token);
+        if (payload["staged"] is not JsonValue stagedNode || !stagedNode.TryGetValue(out bool staged))
+        {
+            await SendErrorAsync(context.Response, 400, "body must be {\"staged\": true|false}", token);
+            return;
+        }
+
+        JsonObject? config = await ReadBootConfigRawAsync(token);
+        if (config is null)
+        {
+            await SendErrorAsync(context.Response, 500, "could not read boot config", token);
+            return;
+        }
+
+        if (staged)
+        {
+            NovaModule mod;
+            try
+            {
+                mod = NovaModule.Parse(await _management.ReadFileAsync(EnsureAbsolutePath($"lib/{name}"), token));
+            }
+            catch (Exception ex)
+            {
+                await SendErrorAsync(context.Response, 404, $"module not on board: {ex.Message}", token);
+                return;
+            }
+            (bool ok, string? reason) = mod.ValidateForStaging();
+            if (!ok)
+            {
+                await SendErrorAsync(context.Response, 400, $"refusing to stage invalid module: {reason}", token);
+                return;
+            }
+            BootLibraries.SetEntry(config, name, mod.Id, mod.AbiVersion, NovaModule.ImageSize);
+        }
+        else
+        {
+            BootLibraries.RemoveEntry(config, name);
+        }
+
+        if (!await WriteBootConfigRawAsync(config, token))
+        {
+            await SendErrorAsync(context.Response, 500, "could not write boot config", token);
+            return;
+        }
+        InvalidateStatusCache();
+        await BroadcastEventAsync("module", new JsonObject
+        {
+            ["name"] = name,
+            ["state"] = staged ? "staged" : "unstaged"
+        }, token);
+        await SendJsonAsync(context.Response, new JsonObject
+        {
+            ["ok"] = true,
+            ["name"] = name,
+            ["staged"] = staged
+        }, token);
+    }
+
+    private async Task ModuleDeleteAsync(HttpListenerContext context, string name, CancellationToken token)
+    {
+        if (!IsValidModuleName(name))
+        {
+            await SendErrorAsync(context.Response, 400, "module name must be a *.mod / *.nmod filename", token);
+            return;
+        }
+
+        await _management.DeletePathAsync(EnsureAbsolutePath($"lib/{name}"), token);
+
+        JsonObject? config = await ReadBootConfigRawAsync(token);
+        if (config is not null && BootLibraries.RemoveEntry(config, name))
+            await WriteBootConfigRawAsync(config, token);
+
+        InvalidateStatusCache();
+        InvalidateInventoryCache();
+        await BroadcastEventAsync("module", new JsonObject
+        {
+            ["name"] = name,
+            ["state"] = "deleted"
+        }, token);
+        await SendJsonAsync(context.Response, new JsonObject
+        {
+            ["ok"] = true,
+            ["name"] = name
+        }, token);
+    }
+
+    // Read boot.json verbatim (NO default-merge) so write-back never injects an
+    // unwanted runtime or rewrites defaultRuntime. Returns null if it can't be read.
+    private async Task<JsonObject?> ReadBootConfigRawAsync(CancellationToken token)
+    {
+        try
+        {
+            string text = await _management.ReadTextFileAsync("/config/boot.json", token);
+            return JsonNode.Parse(text) as JsonObject;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task<bool> WriteBootConfigRawAsync(JsonObject config, CancellationToken token)
+    {
+        try
+        {
+            string json = config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            byte[] bytes = Encoding.UTF8.GetBytes(json + "\n");
+            await UploadBytesAsync("/config/boot.json", bytes, token);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<JsonArray> BuildDiskListAsync(CancellationToken token)

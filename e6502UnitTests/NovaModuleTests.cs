@@ -130,4 +130,53 @@ public class NovaModuleTests
             Array.Empty<NovaArg>(), new NovaRet("s32", ""), null, Array.Empty<string>());
         Assert.AreEqual("CLS() -> s32", fn.Signature());
     }
+
+    // -- ValidateForStaging: the shared gate used by `nova module put`/`validate`
+    //    and the web `PUT /api/modules/{name}` so the CLI and web agree. --
+
+    [TestMethod]
+    public void ValidateForStaging_ValidDocumentedModule_Ok()
+    {
+        // EchoJson documents one fn with id 0; fnCount 1 → 0 is in range [0, 1).
+        NovaModule m = NovaModule.Parse(MakeNmod(MakeImage(0x7F, 1, 1), EchoJson));
+        (bool ok, string? reason) = m.ValidateForStaging();
+        Assert.IsTrue(ok, reason);
+        Assert.IsNull(reason);
+    }
+
+    [TestMethod]
+    public void ValidateForStaging_PlainMod_Ok()
+    {
+        NovaModule m = NovaModule.Parse(MakeImage(0x01, 1, 13));
+        (bool ok, string? reason) = m.ValidateForStaging();
+        Assert.IsTrue(ok, reason);
+        Assert.IsNull(reason);
+    }
+
+    [TestMethod]
+    public void ValidateForStaging_InvalidModule_FailsWithParseReason()
+    {
+        byte[] img = MakeImage(0x7F, 1, 1);
+        img[3] = 0x00;                       // corrupt the "NL" magic
+        NovaModule m = NovaModule.Parse(MakeNmod(img, EchoJson));
+        (bool ok, string? reason) = m.ValidateForStaging();
+        Assert.IsFalse(ok);
+        Assert.AreEqual(m.Error, reason);
+    }
+
+    [TestMethod]
+    public void ValidateForStaging_DocIdOutOfRange_Fails()
+    {
+        // fnCount 1, but the doc declares a function with id 5 → out of [0, 1).
+        const string outOfRange =
+            "{\"ndocVersion\":1,\"module\":{\"name\":\"TESTMOD\",\"id\":127," +
+            "\"abiVersion\":1,\"version\":\"1.0\",\"brief\":\"b\",\"abiNote\":\"x\"}," +
+            "\"functions\":[{\"id\":5,\"idHex\":\"$05\",\"name\":\"OOPS\",\"brief\":\"e\"," +
+            "\"args\":[],\"ret\":{\"type\":\"void\",\"desc\":\"\"}}]}";
+        NovaModule m = NovaModule.Parse(MakeNmod(MakeImage(0x7F, 1, 1), outOfRange));
+        (bool ok, string? reason) = m.ValidateForStaging();
+        Assert.IsFalse(ok);
+        Assert.IsNotNull(reason);
+        StringAssert.Contains(reason, "dispatch range");
+    }
 }
