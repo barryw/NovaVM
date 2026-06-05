@@ -230,6 +230,117 @@ public class NovaLogoTests
             $"Expected '42' from PRINT :X after MAKE \"X 42.\n{screen}");
     }
 
+    // =================================================================
+    // Arity-flip (R1) characterization tests.
+    //
+    // These pin the OBSERVABLE behavior of the one-arg math/logic
+    // reporters (SIN, COS, ABS, INT, ROUND, RANDOM, SQRT, NOT, NUMBER?,
+    // WORD?, LIST?) both when given an argument and when their argument
+    // is missing (under-supply). The R1 refactor flips these reporters
+    // from "arity 0 + hand-rolled eval_expr/BCS prologue" to "arity 1",
+    // letting the dispatcher pre-evaluate the single argument. That is
+    // only safe if behavior stays byte-identical — these tests prove it.
+    //
+    // Reference: PrintWithNoArgGivesGenericNotEnough captures the
+    // dispatcher's generic arity-1 under-supply path (a true arity-1
+    // builtin, PRINT, with no argument). The flipped reporters route
+    // their under-supply through exactly that same generic path.
+    // =================================================================
+
+    [TestMethod]
+    public void PrintWithNoArgGivesGenericNotEnough()
+    {
+        // Reference: an existing arity-1 builtin (PRINT) given no argument
+        // routes through the dispatcher's generic missing-arg path, which
+        // prints the generic "NOT ENOUGH INPUTS" (no command name appended).
+        string screen = RunLogoLines("PRINT");
+        Assert.IsTrue(screen.Contains("NOT ENOUGH INPUTS", StringComparison.Ordinal),
+            $"Expected generic NOT ENOUGH INPUTS from bare PRINT.\n{screen}");
+        Assert.IsFalse(screen.Contains("NOT ENOUGH INPUTS TO", StringComparison.Ordinal),
+            $"Generic arity path must NOT name the command.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ReporterSinComputesAndUnderSupplyIsSilent()
+    {
+        // With an argument: SIN reports a value (PRINT SIN 90 -> 127).
+        string ok = RunLogoLines("PRINT SIN 90");
+        Assert.IsTrue(ok.Contains("127", StringComparison.Ordinal),
+            $"Expected SIN 90 -> 127.\n{ok}");
+        Assert.IsFalse(ok.Contains("NOT ENOUGH", StringComparison.Ordinal),
+            $"SIN 90 should not error.\n{ok}");
+
+        // Bare SIN as a command with no argument: today this terminates the
+        // line silently (handler's SEC/RTS), printing NO command-specific
+        // "NOT ENOUGH INPUTS TO SIN" message. A following good line still runs.
+        string bare = RunLogoLines("SIN", "PRINT \"AOK");
+        Assert.IsFalse(bare.Contains("NOT ENOUGH INPUTS TO SIN", StringComparison.Ordinal),
+            $"Bare SIN must not print a command-specific NOT ENOUGH message.\n{bare}");
+        Assert.IsTrue(bare.Contains("AOK", StringComparison.Ordinal),
+            $"A line after bare SIN should still execute.\n{bare}");
+    }
+
+    [TestMethod]
+    public void ReporterFirstComputesAndKeepsSpecificError()
+    {
+        // FIRST is a list reporter that prints a SPECIFIC under-supply error
+        // ("NOT ENOUGH INPUTS TO FIRST") — it must NOT be flipped. Capture
+        // both its happy path and its specific-error path so a wrongful flip
+        // would break this test.
+        string ok = RunLogoLines("PRINT FIRST [A B C]");
+        Assert.IsTrue(ok.Contains("A", StringComparison.Ordinal),
+            $"Expected FIRST [A B C] -> A.\n{ok}");
+
+        string bare = RunLogoLines("FIRST");
+        Assert.IsTrue(bare.Contains("NOT ENOUGH INPUTS TO FIRST", StringComparison.Ordinal),
+            $"FIRST must keep its command-specific NOT ENOUGH INPUTS TO FIRST message.\n{bare}");
+    }
+
+    [TestMethod]
+    public void ReporterNotComputesAndUnderSupplyIsSilent()
+    {
+        // NOT 0 -> 1, NOT 1 -> 0.
+        string ok = RunLogoLines("PRINT NOT 0");
+        Assert.IsTrue(ok.Contains("1", StringComparison.Ordinal),
+            $"Expected NOT 0 -> 1.\n{ok}");
+        string ok2 = RunLogoLines("PRINT NOT 5");
+        // NOT of a nonzero value is 0.
+        Assert.IsFalse(ok2.Contains("NOT ENOUGH", StringComparison.Ordinal),
+            $"NOT 5 should not error.\n{ok2}");
+
+        // Bare NOT with no argument: silent (SEC/RTS), no specific message.
+        string bare = RunLogoLines("NOT", "PRINT \"AOK");
+        Assert.IsFalse(bare.Contains("NOT ENOUGH INPUTS TO NOT", StringComparison.Ordinal),
+            $"Bare NOT must not print a command-specific NOT ENOUGH message.\n{bare}");
+        Assert.IsTrue(bare.Contains("AOK", StringComparison.Ordinal),
+            $"A line after bare NOT should still execute.\n{bare}");
+    }
+
+    [TestMethod]
+    public void ReporterMathFamilyComputesCorrectly()
+    {
+        // Lock the computed results of every reporter slated for the flip so
+        // the refactor can't silently change a value (only the prologue moves).
+        Assert.IsTrue(RunLogoLines("PRINT COS 0").Contains("127", StringComparison.Ordinal),
+            "COS 0 -> 127");
+        Assert.IsTrue(RunLogoLines("PRINT ABS 7").Contains("7", StringComparison.Ordinal),
+            "ABS 7 -> 7");
+        Assert.IsTrue(RunLogoLines("PRINT ABS 0 - 7").Contains("7", StringComparison.Ordinal),
+            "ABS (0-7) -> 7");
+        Assert.IsTrue(RunLogoLines("PRINT INT 9").Contains("9", StringComparison.Ordinal),
+            "INT 9 -> 9");
+        Assert.IsTrue(RunLogoLines("PRINT ROUND 5").Contains("5", StringComparison.Ordinal),
+            "ROUND 5 -> 5");
+        Assert.IsTrue(RunLogoLines("PRINT SQRT 9").Contains("3", StringComparison.Ordinal),
+            "SQRT 9 -> 3");
+        Assert.IsTrue(RunLogoLines("PRINT NUMBER? 5").Contains("1", StringComparison.Ordinal),
+            "NUMBER? 5 -> 1");
+        Assert.IsTrue(RunLogoLines("PRINT WORD? \"HI").Contains("1", StringComparison.Ordinal),
+            "WORD? \"HI -> 1");
+        Assert.IsTrue(RunLogoLines("PRINT LIST? [A]").Contains("1", StringComparison.Ordinal),
+            "LIST? [A] -> 1");
+    }
+
     [TestMethod]
     public void RepeatPrintsMultipleTimes()
     {
@@ -2704,6 +2815,26 @@ public class NovaLogoTests
         // test don't match a previous procedure's stale confirmation.
         string name = header.Split(' ', StringSplitOptions.RemoveEmptyEntries)[1];
         RunUntilScreenContains(cpu, bus, name + " DEFINED", 60_000_000);
+    }
+
+    // Boot a fresh Logo session, run each line in order (2M cycles per line),
+    // and return the final screen snapshot. Used by the arity-flip
+    // characterization tests to capture under-supply behavior.
+    private static string RunLogoLines(params string[] lines)
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        foreach (string line in lines)
+        {
+            QueueLine(editor, line);
+            RunSteps(cpu, bus, 2_000_000);
+        }
+        return SnapshotScreen(bus.Vgc);
     }
 
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
