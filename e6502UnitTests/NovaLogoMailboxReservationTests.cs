@@ -82,11 +82,19 @@ public class NovaLogoMailboxReservationTests
         // Body is a single long line of REPEAT loops — purely to push editor
         // writes well past proc_body_buf offset $90 ($031F) so the sentinel
         // would be overwritten if BSS still started at $0280/$028F.
+        //
+        // The body uses FOUNDATION-ONLY ops (MAKE/arithmetic), NOT turtle/graphics
+        // commands: since 4c.2-3-ii the turtle commands route through the GRAPHICS
+        // module's lib_call mailbox at $0300-$0313 — writing those cells is the
+        // mailbox's CONTRACT, not BSS/heap clobber, so driving the body with them
+        // would defeat the sentinel sweep. Pure-foundation ops keep the mailbox
+        // untouched while still exercising the editor/proc_body_buf/heap paths the
+        // band-overlap regression test is about.
         QueueText(editor, "TO BOX :N\r");
         QueueText(editor,
-            "REPEAT :N [FD 10 RT 90 FD 10 RT 90 FD 10 RT 90 FD 10 RT 90 " +
-            "FD 10 RT 90 FD 10 RT 90 FD 10 RT 90 FD 10 RT 90 FD 10 RT 90 " +
-            "FD 10 RT 90 FD 10 RT 90 FD 10 RT 90]\r");
+            "REPEAT :N [MAKE \"A 1 MAKE \"B 2 MAKE \"A :A + 9 MAKE \"B :B + 8 " +
+            "MAKE \"A :A + :B MAKE \"B :B + :A MAKE \"A 3 MAKE \"B 4 " +
+            "MAKE \"A :A + 7 MAKE \"B :B + 6 MAKE \"C :A]\r");
         QueueText(editor, "\x13\x11");          // ^S save, ^Q quit editor
         QueueText(editor, "BOX 1\r");           // invoke -> proc_body_buf path
         QueueText(editor, "MAKE \"L [1 2 3 4]\r"); // build a list (heap)

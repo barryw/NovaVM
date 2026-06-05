@@ -36,6 +36,7 @@ catch_resume_hi: .res 1
       .segment "BSS"
 
 pn_buf:         .res 8    ; decimal digit buffer for print_number
+lat_was_visible: .res 1   ; logo_adapt_turtle: pre-call TURTLE_GFX_VISIBLE snapshot
 
 ; =====================================================================
 ; CODE segment — evaluator routines
@@ -1514,6 +1515,22 @@ MODULE_ID_GFXADAPTER = $FE
 GADAPT_SPRITE        = $00        ; SPRITE n x y  -> GFN_SPR_POS then GFN_SPR_ENABLE
 GADAPT_SPRCOLLP      = $01        ; SPRITECOLLISION? n -> GFN_SPR_COLL_MASK, test bit n
 
+; --- Logo turtle adapter sentinel (4c.2-3-ii) ---
+; A foundation-local pseudo-module-id for the 26 turtle commands+reporters, whose
+; whole engine now lives in the GRAPHICS module as GFN_TURTLE_OP ($B3). ext_invoke
+; recognizes it BEFORE the s16 @convert_args (which drops the fraction byte) and
+; runs logo_adapt_turtle, a FRAC-preserving marshal feeding GFN_TURTLE_OP. The op
+; rides in LIB_ARG2 byte0 = the EXT_CMD value. $FD is distinct from real module ids
+; ($01-$7F), MODULE_ID_NONE ($00), MODULE_ID_GFXADAPTER ($FE) and HOSTEXT ($FF).
+MODULE_ID_TURTLE     = $FD
+
+; Turtle screen-mode geometry — the FOUNDATION owns the split text window (the
+; module's turtle_enter_split deviation note: it enables gfx mode but leaves the
+; runtime-owned TEXTWIN/cursor split to the adapter). Mirrors extension.s.
+TURTLE_GFX_VISIBLE   = $9F11      ; module-set flag: 1 = split/full gfx active
+TADP_SPLIT_TEXT_ROW  = 40         ; 160px gfx band / 4px text cell = row 40
+TADP_SPLIT_TEXT_HEIGHT = 10       ; rows 40..49 = the bottom text band
+
 ; ext_invoke — dispatch the looked-up extension command and leave its
 ;   result in eval_type/eval_val_hi/eval_val_lo/eval_val_frac, then RTS.
 ;
@@ -1532,7 +1549,12 @@ GADAPT_SPRCOLLP      = $01        ; SPRITECOLLISION? n -> GFN_SPR_COLL_MASK, tes
 ; ---------------------------------------------------------------------
 ext_invoke:
       LDA   ext_mod_id
-      BNE   @convert_args         ; non-zero module id -> paged-library / adapter path
+      BEQ   @legacy               ; MODULE_ID_NONE ($00) -> legacy RAM trampoline
+      CMP   #MODULE_ID_TURTLE
+      BNE   @convert_args         ; other non-zero module id -> paged-library / adapter path
+      JMP   logo_adapt_turtle     ; turtle: FRAC-preserving marshal (SKIP s16 @convert_args)
+
+@legacy:
 
 ; --- Legacy path: RAM trampoline to extension ROM ---
       JSR   ensure_ext_resident   ; re-page host ext into bank 1 if a module clobbered it
@@ -1740,6 +1762,160 @@ logo_adapt_sprcollp:
 @adapt_err:
       JMP   err_idk_word
 
+; ---------------------------------------------------------------------
+; logo_adapt_turtle — route a Logo turtle command/reporter to the GRAPHICS
+;   module's GFN_TURTLE_OP ($B3). The whole turtle engine (move-math, render,
+;   reporters) lives in the module since step i; this thin adapter only marshals
+;   the foundation's evaluated args into the lib_call mailbox and copies the
+;   result back.
+;
+;   Entry: EXT_CMD = the turtle op id ($10..$29), EXT_ARGC + EXT_ARGn populated.
+;          Reached DIRECTLY from ext_invoke (it SKIPS @convert_args, whose s16
+;          conversion DROPS the fraction byte — fatal for the turtle's sub-pixel
+;          accumulation, e.g. FD 1 must accumulate, not snap).
+;
+;   Arg marshalling — the module reads value args as Logo 16.8 (cell byte0=FRAC,
+;   byte1=LO, byte2=HI), so copy EXT_ARGn FRAC/LO/HI -> LIB_ARGn +0/+1/+2:
+;       LIB_ARGn+0 = EXT_ARGn_FRAC   LIB_ARGn+1 = EXT_ARGn_LO
+;       LIB_ARGn+2 = EXT_ARGn_HI     LIB_ARGn+3 = 0
+;   This preserves the fraction the move handlers (t_fd/t_bk read TA0_FRAC/LO/HI)
+;   need. EXCEPTION: SETPC/SETBG (color) and SETPOS (cons-list ptr) read the value
+;   from LIB_ARG0 byte0/byte1 directly (t_setpc/t_setbg: LIB_ARG0+0 = color;
+;   t_setpos: LIB_ARG0+0/+1 = ptr lo/hi). For those three ops, overwrite ARG0
+;   byte0/byte1 with EXT_ARG0_LO/EXT_ARG0_HI (the unshifted low word). These ops
+;   carry no fraction, so clobbering byte0(FRAC) is harmless.
+;
+;   Op id rides in LIB_ARG2 byte0 = EXT_CMD. Result (reporters): LIB_RESULT
+;   FRAC:LO:HI -> eval_val_frac/lo/hi, type VAL_NUMBER. Commands set LIB_RESULT 0
+;   -> eval_val 0 (matches logo_adapt_sprite's command convention).
+;   Clobbers A, X, Y. May JMP err_idk_word on a lib error (no return).
+; ---------------------------------------------------------------------
+logo_adapt_turtle:
+      ; Zero all 16 LIB_ARG bytes so any unused cell reads 0.
+      LDX   #15
+@zero:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @zero
+
+      ; FRAC-preserving marshal of ARG0/ARG1 based on EXT_ARGC.
+      LDX   EXT_ARGC
+      CPX   #1
+      BCC   @op                   ; argc 0 -> no value args
+      LDA   EXT_ARG0_FRAC
+      STA   LIB_ARG0+0
+      LDA   EXT_ARG0_LO
+      STA   LIB_ARG0+1
+      LDA   EXT_ARG0_HI
+      STA   LIB_ARG0+2
+      CPX   #2
+      BCC   @op                   ; argc 1 -> only ARG0
+      LDA   EXT_ARG1_FRAC
+      STA   LIB_ARG1+0
+      LDA   EXT_ARG1_LO
+      STA   LIB_ARG1+1
+      LDA   EXT_ARG1_HI
+      STA   LIB_ARG1+2
+
+@op:
+      ; Op id -> ARG2 byte0.
+      LDA   EXT_CMD
+      STA   LIB_ARG2+0
+
+      ; SETPC/SETBG/SETPOS read ARG0 as an UNshifted low word (byte0=lo,byte1=hi);
+      ; rewrite ARG0 byte0/byte1 with EXT_ARG0_LO/HI for those three ops.
+      CMP   #EXT_CMD_SETPC
+      BEQ   @arg0_unshifted
+      CMP   #EXT_CMD_SETBG
+      BEQ   @arg0_unshifted
+      CMP   #EXT_CMD_SETPOS
+      BNE   @call
+@arg0_unshifted:
+      LDA   EXT_ARG0_LO
+      STA   LIB_ARG0+0
+      LDA   EXT_ARG0_HI
+      STA   LIB_ARG0+1
+
+@call:
+      ; Snapshot the module's gfx-visible flag so we can detect a text->split
+      ; transition the module makes inside ensure_gfx_mode (it enables gfx mode
+      ; but leaves the foundation-owned text-window split to us).
+      LDA   TURTLE_GFX_VISIBLE
+      STA   lat_was_visible
+
+      LDA   #MODULE_ID_GRAPHICS
+      STA   LIB_MOD_ID
+      LDA   #GFN_TURTLE_OP
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @turtle_err
+
+      JSR   logo_turtle_textwin   ; foundation-side split text-window upkeep
+
+      ; Result: LIB_RESULT FRAC:LO:HI -> eval_val (matches reporter layout;
+      ; commands leave RESULT 0 -> eval_val 0).
+      LDA   LIB_RESULT+0
+      STA   eval_val_frac
+      LDA   LIB_RESULT+1
+      STA   eval_val_lo
+      LDA   LIB_RESULT+2
+      STA   eval_val_hi
+      LDA   #VAL_NUMBER
+      STA   eval_type
+      RTS
+@turtle_err:
+      JMP   err_idk_word
+
+; ---------------------------------------------------------------------
+; logo_turtle_textwin — keep Logo's prompt in the visible split text band when a
+;   turtle op enters (or is) split mode. The GRAPHICS module enables gfx display
+;   but does NOT carve the runtime's text window / park the cursor (its
+;   turtle_enter_split deviation note hands that to the foundation). This mirrors
+;   the legacy ext_cs/ext_ss/ensure_gfx_mode->prepare_split_text behavior:
+;     - CS or SS op           -> always (re)apply the split text window
+;     - any other turtle op    -> apply it only on a text->split transition
+;       (module set TURTLE_GFX_VISIBLE 0->1 inside ensure_gfx_mode)
+;   TS/FS and the reporters never need it (TS/FS leave the text window as legacy
+;   ext_ts/ext_fs did; reporters never enter gfx mode).
+;   Entry: EXT_CMD = op, lat_was_visible = pre-call TURTLE_GFX_VISIBLE.
+;   Clobbers A.
+; ---------------------------------------------------------------------
+logo_turtle_textwin:
+      LDA   EXT_CMD
+      CMP   #EXT_CMD_CS
+      BEQ   @apply               ; CS always re-applies (legacy ext_cs)
+      CMP   #EXT_CMD_SS
+      BEQ   @apply               ; SS always re-applies (legacy ext_ss)
+      ; otherwise only on a 0->1 transition into split
+      LDA   TURTLE_GFX_VISIBLE
+      BEQ   @done                ; still not in gfx mode -> nothing to do
+      LDA   lat_was_visible
+      BNE   @done                ; already was visible -> no transition
+@apply:
+      ; prepare_split_text: form-feed clear, then text window = bottom band,
+      ; cursor parked at the band start (cursor disabled while a command runs;
+      ; the REPL re-enables it at the prompt).
+      LDA   #$0C
+      STA   VGC_CHAROUT          ; form-feed: clear text screen
+@ff_wait:
+      LDA   VGC_CMD
+      AND   #$01
+      BNE   @ff_wait             ; let the VGC settle (no-op on the char path)
+      STZ   TEXTWIN_LEFT
+      LDA   #TADP_SPLIT_TEXT_ROW
+      STA   TEXTWIN_TOP
+      LDA   #80
+      STA   TEXTWIN_WIDTH
+      LDA   #TADP_SPLIT_TEXT_HEIGHT
+      STA   TEXTWIN_HEIGHT
+      STZ   VGC_CURSX
+      LDA   #TADP_SPLIT_TEXT_ROW
+      STA   VGC_CURSY
+      STZ   VGC_CURSEN
+@done:
+      RTS
+
       .segment "RODATA"
 
 ; Extension command table: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
@@ -1751,181 +1927,183 @@ ext_cmd_table:
       .byte MODULE_ID_NONE
       .byte EXT_CMD_TEST
       .byte 1                    ; arity: 1 argument
+      ; --- Turtle commands+reporters (4c.2-3-ii: routed to GFN_TURTLE_OP via the
+      ;     MODULE_ID_TURTLE adapter; fn_id stays the EXT_CMD op id, arity unchanged) ---
       .word str_ext_fd
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_FD
       .byte 1                    ; arity: 1 (distance)
       .word str_ext_forward
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_FD
       .byte 1                    ; FORWARD alias
       .word str_ext_bk
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_BK
       .byte 1                    ; arity: 1 (distance)
       .word str_ext_back
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_BK
       .byte 1                    ; BACK alias
       .word str_ext_backward
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_BK
       .byte 1                    ; BACKWARD alias
       .word str_ext_rt
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_RT
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_right
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_RT
       .byte 1                    ; RIGHT alias
       .word str_ext_lt
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_LT
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_left
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_LT
       .byte 1                    ; LEFT alias
       .word str_ext_cs
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_CS
       .byte 0                    ; arity: 0
       .word str_ext_clearscreen
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_CS
       .byte 0                    ; CLEARSCREEN alias
       .word str_ext_draw
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_CS
       .byte 0                    ; DRAW = CS alias
       .word str_ext_pu
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_PU
       .byte 0
       .word str_ext_penup
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_PU
       .byte 0                    ; PENUP alias
       .word str_ext_pd
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_PD
       .byte 0
       .word str_ext_pendown
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_PD
       .byte 0                    ; PENDOWN alias
       .word str_ext_st
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_ST
       .byte 0
       .word str_ext_showturtle
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_ST
       .byte 0                    ; SHOWTURTLE alias
       .word str_ext_ht
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_HT
       .byte 0
       .word str_ext_hideturtle
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_HT
       .byte 0                    ; HIDETURTLE alias
       .word str_ext_home
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_HOME
       .byte 0
       ; --- Screen modes ---
       .word str_ext_textscreen
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_TS
       .byte 0
       .word str_ext_ts
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_TS
       .byte 0
       .word str_ext_splitscreen
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SS
       .byte 0
       .word str_ext_ss
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SS
       .byte 0
       .word str_ext_fullscreen
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_FS
       .byte 0
       .word str_ext_fs
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_FS
       .byte 0
       ; --- Turtle position ---
       .word str_ext_setxy
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETXY
       .byte 2                    ; arity: 2 (x, y)
       .word str_ext_setpos
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETPOS
       .byte 1                    ; arity: 1 ([x y])
       .word str_ext_setx
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETX
       .byte 1                    ; arity: 1 (x)
       .word str_ext_sety
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETY
       .byte 1                    ; arity: 1 (y)
       .word str_ext_setheading
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETH
       .byte 1                    ; arity: 1 (degrees)
       .word str_ext_seth
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETH
       .byte 1                    ; SETH alias
       ; --- Turtle query reporters ---
       .word str_ext_xcor
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_XCOR
       .byte 0                    ; arity: 0 (reporter)
       .word str_ext_ycor
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_YCOR
       .byte 0
       .word str_ext_heading
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_HEADING
       .byte 0
       .word str_ext_pendownp
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_PENDOWNP
       .byte 0
       .word str_ext_shownp
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SHOWNP
       .byte 0
       ; --- Pen commands ---
       .word str_ext_setpc
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETPC
       .byte 1                    ; arity: 1 (color)
       .word str_ext_setpencolor
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETPC
       .byte 1                    ; SETPENCOLOR alias
       .word str_ext_setbg
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETBG
       .byte 1
       .word str_ext_setbackground
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_SETBG
       .byte 1                    ; SETBACKGROUND alias
       ; --- TOWARDS reporter ---
       .word str_ext_towards
-      .byte MODULE_ID_NONE
+      .byte MODULE_ID_TURTLE
       .byte EXT_CMD_TOWARDS
       .byte 2                    ; arity: 2 (x, y)
       ; --- VGC graphics commands (4c.1-3: routed through lib_call(GRAPHICS)) ---

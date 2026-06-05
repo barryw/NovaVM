@@ -89,27 +89,45 @@ public class NovaLogoLibCallGraphicsTests
     [TestMethod]
     public void LibCallGraphicsAndLegacyTurtleCoexist()
     {
-        // The 4c.0c payoff: a lib_call graphics command pages the GRAPHICS module
-        // into bank 1, clobbering the runtime's own extension. A subsequent LEGACY
-        // turtle command (SETXY/XCOR) must still work — ensure_ext_resident re-pages
-        // the host extension on demand.
+        // The 4c.0c payoff: a lib_call command pages the GRAPHICS module into bank 1,
+        // clobbering the runtime's own extension. A subsequent LEGACY command must
+        // still work — ext_invoke's ensure_ext_resident re-pages the host extension
+        // on demand.
+        //
+        // 4c.2-3-ii: the turtle commands now ROUTE to the GRAPHICS module too (via
+        // the MODULE_ID_TURTLE adapter), so SETXY no longer takes the legacy re-page
+        // path. To prove the re-page still happens we drive a turtle command (FD —
+        // a module lib_call that pages GRAPHICS into bank 1) and THEN a command that
+        // is still MODULE_ID_NONE / legacy: TIMER, the frame-counter reporter handled
+        // by extension.s ext_timer. If the host extension were not re-paged, TIMER
+        // would fall through to "I DON'T KNOW HOW TO" — so a clean numeric report is
+        // the coexistence proof.
         (string screen, CompositeBusDevice bus) = RunLogo(
             "COEXIST_DONE",
             [
                 "CS",
-                "PLOT 10 10",        // lib_call(GRAPHICS) — pages module into bank 1
-                "SETXY 100 50",      // legacy turtle command — re-pages host ext
-                "PRINT XCOR",        // legacy reporter — confirms ext still callable
+                "SETH 90",                 // face east (turtle/module lib_call)
+                "FD 30",                   // turtle move via lib_call(GRAPHICS) — pages module in
+                "MAKE \"T TIMER",          // LEGACY reporter — must re-page host ext to run
+                "PRINT \"TIMERWORD",       // marker proving the next line's reporter ran
+                "PRINT :T",                // observable: TIMER returned a number, ext is alive
                 "PRINT \"COEXIST_DONE",
             ]);
 
         AssertNoError(screen);
 
-        Assert.AreEqual(1, bus.Vgc.GetGfxPixelColor(10, 10),
-            "PLOT should have drawn through lib_call before the turtle command.");
-        Assert.AreEqual(100, bus.ReadRam(TurtleXLo) | (bus.ReadRam(TurtleXHi) << 8),
-            "Legacy SETXY must still set turtle X after the graphics module paged in.");
-        AssertScreenContains(screen, "100"); // XCOR printed 100
+        // FD east from the CS center (160,80): X grows by ~30, Y unchanged. The turtle
+        // state lives in shared $9F00 RAM written by the MODULE's GFN_TURTLE_OP, so a
+        // nonzero eastward delta proves the turtle ran through the paged module.
+        int turtleX = bus.ReadRam(TurtleXLo) | (bus.ReadRam(TurtleXHi) << 8);
+        Assert.IsTrue(turtleX >= 188 && turtleX <= 191,
+            $"FD 30 east must move the module-resident turtle X to ~190 (got {turtleX}).");
+        Assert.IsTrue(CountNonzeroPixels(bus, 160, 80, 190, 80) >= 20,
+            "FD with pen down must draw the eastward pen line through lib_call(GRAPHICS).");
+
+        // The legacy TIMER reporter ran AFTER the module paged in — proving the host
+        // extension was re-paged. Its marker (and numeric output) reached the screen.
+        AssertScreenContains(screen, "TIMERWORD");
     }
 
     [TestMethod]

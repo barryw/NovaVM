@@ -561,6 +561,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1607,6 +1608,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1637,6 +1639,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1666,6 +1669,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1687,6 +1691,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1712,6 +1717,7 @@ public class NovaLogoTests
         bus.WriteRam(0x9F11, 0xAA);     // stale TURTLE_GFX_VISIBLE
         bus.WriteRam(0x9F0C, 0xAA);     // stale TURTLE_INITED
         cpu.Boot();
+        StageGraphicsModule(bus);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);   // runs cold_start
         Assert.AreEqual(0, bus.ReadRam(0x9F11), "cold start must zero TURTLE_GFX_VISIBLE.");
         Assert.AreEqual(0, bus.ReadRam(0x9F0C), "cold start must zero TURTLE_INITED.");
@@ -1724,6 +1730,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1739,6 +1746,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1776,6 +1784,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1827,6 +1836,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1851,6 +1861,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1876,11 +1887,21 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
+        // Hide the turtle before probing the bare pen line. Since the turtle render
+        // moved INTO the GRAPHICS module (4c.2-2), the turtle icon is a gfx-plane
+        // blit with background save/restore — NOT the legacy virtual sprite overlay.
+        // A visible turtle therefore restores the (pre-line) background under its
+        // PREVIOUS footprint when it moves, erasing the lower segment of a freshly
+        // drawn diagonal that passes under the old position. The module's own
+        // pen-line tests (Axis2_TurtlePenDownFd_DrawsLineOnPlane) hide the turtle for
+        // the same reason; do the same here to assert the line geometry itself.
+        QueueLine(editor, "HT");
         QueueLine(editor, "PU");
         QueueLine(editor, "FD 20");
         QueueLine(editor, "PD");
@@ -1911,6 +1932,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1965,6 +1987,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -1986,6 +2009,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -2068,6 +2092,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -2094,6 +2119,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -2125,6 +2151,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
@@ -2151,6 +2178,7 @@ public class NovaLogoTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
+        StageGraphicsModule(bus);
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
