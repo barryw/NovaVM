@@ -1,5 +1,6 @@
 #include "fio_dispatcher.h"
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <esp_attr.h>
 #include <esp_heap_caps.h>
 #include <esp_system.h>
@@ -8,9 +9,16 @@
 #include <utility>
 #include <vector>
 
+#include "shelf_alloc.h"
+
 extern void logLn(const char* fmt, ...);
 extern void novaHostFioActivityStarted();
 extern void novaHostFioActivityFinished(bool ok);
+// Defined in novahost.ino — streams the first expected_len bytes of an SD file
+// to an SDRAM/XRAM byte address. Reused here for on-demand shelf module loads.
+extern bool streamSdramAsset(uint32_t base_addr, const char* label,
+                             const char* const* paths, size_t path_count,
+                             size_t expected_len);
 
 #ifndef NOVAHOST_XLOAD_VERIFY
 #define NOVAHOST_XLOAD_VERIFY 0
@@ -766,6 +774,7 @@ void FioDispatcher::handle_event() {
         case CMD_LOADRUNTIME: handle_load_runtime(); break;
         case CMD_RNG:      handle_rng();      break;
         case CMD_NVGLOAD:  handle_nvgload();  break;
+        case CMD_LOAD_MODULE: handle_load_module(); break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
@@ -3992,6 +4001,72 @@ void FioDispatcher::handle_nvgload() {
     logLn("[fio] NVGLOAD %s -> VGC gfx:$%04X (%u pixels) OK\n",
           scratch, (unsigned)dest, (unsigned)written);
     respond_ok();
+}
+
+// ---------------------------------------------------------------------------
+// LOAD_MODULE — on-demand shelf load. On a shelf miss the 6502 loader writes the
+// module id (FIO_SRC_LO) and dest slot (FIO_END_LO), then issues CMD_LOAD_MODULE.
+// We re-read /config/boot.json to resolve id -> path/size, then stream the 16 KB
+// module image from SD into XRAM/SDRAM at the slot's base. The 6502 owns the
+// shelf directory ($0418/$041C) — this handler MUST NOT touch it; it only streams
+// bytes and responds OK/ERR.
+// ---------------------------------------------------------------------------
+void FioDispatcher::handle_load_module() {
+    uint8_t module_id = _bank[OFF_SRC_LO];
+    uint8_t dest_slot = _bank[OFF_END_LO];
+    if (dest_slot >= SHELF_N) { respond_err(ERR_IO); return; }
+
+    // Resolve id -> path/size from boot.json libraries[] (map not retained
+    // after boot; re-read like stageConfiguredLibraries()).
+    File cfg = SD.open("/config/boot.json", FILE_READ);
+    if (!cfg) { respond_err(ERR_NOT_FOUND); return; }
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, cfg);
+    cfg.close();
+    if (err) {
+        logLn("[fio] LOAD_MODULE boot.json parse failed: %s\n", err.c_str());
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char path_buf[64] = {0};
+    uint32_t found_size = 0;
+    bool found = false;
+    for (JsonObject lib : doc["libraries"].as<JsonArray>()) {
+        if ((lib["id"] | -1) == (int)module_id) {
+            const char* p = lib["path"] | "";
+            if (p[0] != '\0') {
+                strncpy(path_buf, p, sizeof(path_buf) - 1);
+                found_size = lib["size"] | (uint32_t)16384u;
+                found = true;
+            }
+            break;
+        }
+    }
+    if (!found) {
+        logLn("[fio] LOAD_MODULE id=%u not in boot.json libraries\n",
+              (unsigned)module_id);
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    uint32_t dest = SHELF_BASE + (uint32_t)dest_slot * SHELF_SLOT_SIZE;
+    char label[48];
+    snprintf(label, sizeof(label), "module id=%u slot=%u",
+             (unsigned)module_id, (unsigned)dest_slot);
+    const char* path = path_buf;
+    if (!streamSdramAsset(dest, label, &path, 1, (size_t)found_size)) {
+        logLn("[fio] LOAD_MODULE id=%u stream failed (%s)\n",
+              (unsigned)module_id, path_buf);
+        respond_err(ERR_IO);
+        return;
+    }
+    logLn("[fio] LOAD_MODULE id=%u -> slot %u @ XRAM $%06X (%u B) OK\n",
+          (unsigned)module_id, (unsigned)dest_slot, (unsigned)dest,
+          (unsigned)found_size);
+    respond_ok();
+    // NOTE: deliberately does NOT touch the shelf directory ($0418/$041C) — the
+    // 6502 owns it.
 }
 
 // ---------------------------------------------------------------------------

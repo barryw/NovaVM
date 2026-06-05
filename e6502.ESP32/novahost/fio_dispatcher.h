@@ -126,6 +126,7 @@ private:
     static constexpr uint8_t CMD_XPAGE    = 0x29;
     static constexpr uint8_t CMD_RNG      = 0x2A;
     static constexpr uint8_t CMD_NVGLOAD  = 0x2B;
+    static constexpr uint8_t CMD_LOAD_MODULE = 0x2C;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -211,6 +212,7 @@ private:
     void handle_load_runtime();
     void handle_rng();
     void handle_nvgload();
+    void handle_load_module();
     void handle_sidplay();
     void handle_sidstop();
     void handle_midplay();
