@@ -2299,12 +2299,23 @@ draw_turtle:
       rts
 
 ; =====================================================================
-; turtle_render — shared post-move render: pen line (if pen down) old->new, then
-;   redraw the turtle. Reads BSS old_x/y for the line start; TURTLE_X/Y for the
-;   end. Mirrors turtle_render (turtle.s:206-246) but draws the line DIRECTLY via
-;   the module's vgc.s (= draw_line, extension.s:627).
+; turtle_render — shared post-move render: lift the old turtle, draw the pen line
+;   (if pen down) old->new, then redraw the turtle at the new position. Reads BSS
+;   old_x/y for the line start; TURTLE_X/Y for the end. Mirrors turtle_render
+;   (turtle.s:206-246) but draws the line DIRECTLY via the module's vgc.s
+;   (= draw_line, extension.s:627).
+;
+;   ORDER MATTERS: erase the old turtle FIRST, BEFORE the line. The turtle is a
+;   gfx-plane BOB (save-bg/restore-bg), so its saved background under the old
+;   footprint predates this line. If we drew the line first, the post-line
+;   draw_turtle's internal restore-bg would write that stale background back over
+;   the ~16px of fresh line passing under the old position — gapping the line at
+;   every waypoint. The legacy ext_fd erased before draw_line for exactly this
+;   reason (extension.s:273 erase precedes :398 line). With bg_saved cleared here,
+;   draw_turtle's own internal erase then no-ops.
 ; =====================================================================
 turtle_render:
+      jsr     gfn_turtle_erase         ; lift the old turtle before the line (see ORDER note)
       lda     TURTLE_PEN
       bne     @no_line                 ; pen up ($01) -> skip line
       ; --- direct VGC line (draw_line, extension.s:627): color then endpoints ---

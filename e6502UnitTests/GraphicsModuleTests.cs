@@ -3298,20 +3298,20 @@ namespace e6502UnitTests
         public void Axis2_TurtlePenDownFd_DrawsLineOnPlane()
         {
             using var bus = MakeAxis2Bus();
-            RunTurtleOp(bus, TOP_CS);     // pen down by default, gfx cleared
-
-            // Hide the turtle first so its stamp doesn't sit on the path we probe.
-            RunTurtleOp(bus, TOP_HT);
+            RunTurtleOp(bus, TOP_CS);     // pen down + turtle SHOWN by default, gfx cleared
 
             int cx = TURTLE_CENTER_X, cy = TURTLE_CENTER_Y;
             SetTurtleArg(bus, ARG0, 40);  // FD 40 north -> vertical line cy..cy-40 at x=cx
             RunTurtleOp(bus, TOP_FD);
 
-            // A pixel midway up the path must be the pen color (white).
+            // Turtle stays SHOWN: this proves turtle_render erases the old turtle
+            // BEFORE the line, so the BOB restore-bg can't eat the line where it
+            // passes under the old footprint. cy-1 (=79) is inside the old turtle's
+            // 16x16 box (rows 72..87) — with the erase-after-line bug it reads 0.
             Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, cx, cy - 20),
                 "pen-down FD must draw the pen line on the gfx plane");
             Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, cx, cy - 1),
-                "pen line must cover the near endpoint");
+                "pen line must survive the turtle's BOB erase at the near endpoint (under the old footprint)");
         }
 
         // --- Pen-up FD does NOT draw a line. PU/PD toggle TURTLE_PEN. ---

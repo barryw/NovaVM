@@ -1893,15 +1893,9 @@ public class NovaLogoTests
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
         QueueLine(editor, "CS");
-        // Hide the turtle before probing the bare pen line. Since the turtle render
-        // moved INTO the GRAPHICS module (4c.2-2), the turtle icon is a gfx-plane
-        // blit with background save/restore — NOT the legacy virtual sprite overlay.
-        // A visible turtle therefore restores the (pre-line) background under its
-        // PREVIOUS footprint when it moves, erasing the lower segment of a freshly
-        // drawn diagonal that passes under the old position. The module's own
-        // pen-line tests (Axis2_TurtlePenDownFd_DrawsLineOnPlane) hide the turtle for
-        // the same reason; do the same here to assert the line geometry itself.
-        QueueLine(editor, "HT");
+        // Turtle stays SHOWN: turtle_render erases the old turtle before drawing the
+        // line, so the BOB restore-bg does not eat the diagonal where it passes under
+        // the old footprint. The probed second segment survives with the turtle visible.
         QueueLine(editor, "PU");
         QueueLine(editor, "FD 20");
         QueueLine(editor, "PD");
