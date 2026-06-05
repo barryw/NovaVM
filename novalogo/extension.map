@@ -1,20 +1,20 @@
 Modules list:
 -------------
 extension.o:
-    CODE              Offs=000000  Size=002F35  Align=00001  Fill=0000
-    RODATA            Offs=000000  Size=000231  Align=00001  Fill=0000
-    BSS               Offs=000000  Size=000217  Align=00001  Fill=0000
-    ZEROPAGE          Offs=000000  Size=00001C  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=001E5B  Align=00001  Fill=0000
+    RODATA            Offs=000000  Size=000131  Align=00001  Fill=0000
+    BSS               Offs=000000  Size=0001DB  Align=00001  Fill=0000
+    ZEROPAGE          Offs=000000  Size=000019  Align=00001  Fill=0000
 
 
 Segment list:
 -------------
 Name                   Start     End    Size  Align
 ----------------------------------------------------
-ZEROPAGE              0000A3  0000BE  00001C  00001
-BSS                   009800  009A16  000217  00001
-CODE                  00C000  00EF34  002F35  00001
-RODATA                00EF35  00F165  000231  00001
+ZEROPAGE              0000A3  0000BB  000019  00001
+BSS                   009800  0099DA  0001DB  00001
+CODE                  00C000  00DE5A  001E5B  00001
+RODATA                00DE5B  00DF8B  000131  00001
 
 
 Exports list by name:
