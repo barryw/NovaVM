@@ -21,9 +21,6 @@ namespace e6502UnitTests;
 [TestClass]
 public class NovaLogoLibCallGraphicsTests
 {
-    // XRAM shelf slot 0 — matches libabi.inc SHELF_BASE ($060000).
-    private const int GraphicsShelfBase = 0x060000;
-
     // Legacy turtle state ZP (extension.s TURTLE_STATE_BASE = $9F00).
     private const ushort TurtleXLo = 0x9F00 + 1;
     private const ushort TurtleXHi = 0x9F00 + 2;

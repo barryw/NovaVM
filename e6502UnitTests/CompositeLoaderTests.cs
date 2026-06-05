@@ -92,7 +92,7 @@ namespace e6502UnitTests
         [TestMethod]
         public void Gcls_ModuleAtNonZeroSlot_DispatchesViaDirectory()
         {
-            var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+            using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
             var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
             bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);
@@ -115,9 +115,17 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void LibCall_IdZero_ReturnsBadModule()
+        {
+            using var bus = SetupLoaderBus();      // GRAPHICS at slot 0; slots 1-3 empty (tag $00)
+            CallLib(bus, 0x00, 0x00);              // MODULE_ID_NONE must not false-hit an empty slot
+            Assert.AreEqual(LERR_BAD_MODULE, bus.ReadRam(STATUS));
+        }
+
+        [TestMethod]
         public void LibCall_Hit_MovesSlotToFrontOfLru()
         {
-            var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+            using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
             var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
             bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);

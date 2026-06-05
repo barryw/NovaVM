@@ -8,6 +8,8 @@
       .segment "CODE"
 lib_call:
       lda     LIB_MOD_ID
+      beq     lc_bad_module               ; id $00 is never a module; reject before the
+                                          ; RESIDENT short-circuit ($00 also = "none").
       cmp     LIB_RESIDENT
       beq     lc_invoke                   ; HIT → dispatch, no page-in
       jsr     modtab_lookup               ; A=id -> PGD_SRC/WORDS; C=1 unknown
@@ -81,6 +83,8 @@ lcv_ver:   lda #LERR_BAD_VER
 ; The compile-time map is gone: slot is assigned by the host (firmware/test harness),
 ; which seeds shelf_tag[]/shelf_lru[]. See docs/plans/2026-06-05-dynamic-module-shelf-design.md.
 modtab_lookup:
+      cmp     #MODULE_ID_NONE          ; id $00 is never a module (empty-slot tag)
+      beq     mt_miss
       ldx     #0
 mt_scan:
       cmp     SHELF_TAG,x
@@ -88,6 +92,7 @@ mt_scan:
       inx
       cpx     #SHELF_N
       bne     mt_scan
+mt_miss:
       sec                              ; not resident
       rts
 mt_hit:
@@ -113,7 +118,7 @@ mt_hit:
       rts
 
 ; shelf_touch — make slot (in LIB_SCRATCH) the MRU entry of shelf_lru[].
-; Finds it, shifts the preceding entries down one, writes it at [0].
+; Finds it, shifts the preceding entries up one index, writes it at [0].
 shelf_touch:
       ldx     #0
 st_find:

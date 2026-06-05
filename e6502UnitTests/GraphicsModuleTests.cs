@@ -162,7 +162,6 @@ namespace e6502UnitTests
         private const byte   LERR_NO_FN = 0x83;
         private const byte   LERR_OK = 0x00;
         private const ushort LibCallEntry = 0x9C00;   // libcall.bin blob load address
-        private const int    ShelfBase = 0x060000;    // XRAM shelf slot 0 (shared with TEST)
         private const byte   RsBasic = 0x02;          // runtime home ROMSWAP value
         private const ushort Sentinel = 0xFFF9;       // RTS lands here; loop stops
 

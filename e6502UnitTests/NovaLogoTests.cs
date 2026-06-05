@@ -2872,12 +2872,6 @@ public class NovaLogoTests
             $"CATCH \"ERROR should swallow the error so the following PRINT 31415 still runs.\n{screen}");
     }
 
-    // XRAM shelf slot 0 — matches libabi.inc SHELF_BASE ($060000). Graphics and
-    // sprite commands route through lib_call(GRAPHICS) (4c.1-3), which pages the
-    // GRAPHICS module in from this shelf; tests that exercise those commands must
-    // stage graphics.bin here or the command MISSES and aborts the line.
-    private const int GraphicsShelfBase = 0x060000;
-
     private static void StageGraphicsModule(CompositeBusDevice bus) =>
         bus.StageShelfModule(0,
             File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")),
