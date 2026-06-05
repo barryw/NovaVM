@@ -236,28 +236,26 @@ sys_edit_save_hook:
       RTS
 
 ; ===========================================================================
-; Timing services (ported from the NovaLogo extension ROM in Phase B). SID/VGC
-; MMIO survives the bank swap, so these run entirely within one lib_call.
+; Timing services (moved from the NovaLogo extension ROM in Phase B). THIN wrappers
+; over the NDK vgc frame-timing primitives (vgc.s); the NDK owns the wait logic.
 ; ===========================================================================
 
-; --- $01 SYS_FN_WAIT: ARG0 = n frames ---
+; --- $01 SYS_FN_WAIT: ARG0 = n frames -> NDK vgc_wait_frames ---
 sys_wait:
       LDA   LIB_ARG0+0
-      JSR   sys_wait_frames
+      JSR   vgc_wait_frames
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
-; --- $02 SYS_FN_WAITVBL: wait for the next vertical blank ---
+; --- $02 SYS_FN_WAITVBL: wait for the next vertical blank -> NDK vgc_vsync ---
 sys_waitvbl:
-      LDA   VGC_FRAME
-@w:   CMP   VGC_FRAME
-      BEQ   @w
+      JSR   vgc_vsync
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
-; --- $03 SYS_FN_TIMER: reporter -> RESULT = VGC frame counter (8-bit) ---
+; --- $03 SYS_FN_TIMER: reporter -> RESULT = VGC frame counter (8-bit MMIO read) ---
 sys_timer:
       LDA   VGC_FRAME
       STA   LIB_RESULT+0
@@ -266,20 +264,6 @@ sys_timer:
       STZ   LIB_RESULT+3
       LDA   #LERR_OK
       STA   LIB_STATUS
-      RTS
-
-; --- sys_wait_frames — busy-wait A video frames on the VGC frame counter ---
-sys_wait_frames:
-      TAX
-      BEQ   @done
-      LDA   VGC_FRAME
-@wait:
-      CMP   VGC_FRAME
-      BEQ   @wait
-      LDA   VGC_FRAME
-      DEX
-      BNE   @wait
-@done:
       RTS
 
       .segment "BSS"
@@ -301,6 +285,7 @@ se_saved_flag:    .res 1               ; nonzero once the SAVE hook fires
       .include "copper.s"
       .include "editui.s"
       .include "editbuf.s"
+      .include "vgc.s"                 ; NDK frame-timing: vgc_vsync / vgc_wait_frames
 
       .segment "VECTORS"
       ; Module runs under SEI (the loader masks IRQ across the bank swap); hardware

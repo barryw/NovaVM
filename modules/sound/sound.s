@@ -1,16 +1,12 @@
-; sound.s — SOUND module (MODULE_ID_SOUND = $02), the shared audio-services
-; library. Built once, staged to the XRAM shelf, paged into bank 1 on the first
-; lib_call. Header "NL"/$02 at $C000 (lib_module_header); RTS-trick dispatch on
-; LIB_FN_ID.
-;
-; Phase B: TONE/NOISE/VOLUME moved verbatim out of the NovaLogo extension ROM.
-; The handlers poke SID registers (MMIO, survives the bank swap) and busy-wait on
-; the VGC frame counter, so they run entirely within one lib_call.
+; sound.s — SOUND module (MODULE_ID_SOUND = $02). THIN lib_call wrappers over the
+; NDK audio driver (runtime/asm/audio.s). The NDK owns all SID logic; this module
+; only marshals the mailbox args into the NDK routine's inputs and JSRs it.
 
       .include "libabi.inc"
       .include "libmod.inc"
       .include "libsound.inc"
-      .include "nova.inc"              ; SID_BASE, VGC_FRAME
+      .include "nova.inc"              ; NVR0L/H scratch
+      .include "audio.inc"            ; AUDIO_VOLUME/AUDIO_VOICE pseudo-registers
 
       .segment "CODE"
       lib_module_header MODULE_ID_SOUND, LIB_ABI_VERSION, SND_FN_COUNT
@@ -20,26 +16,28 @@
 ; ===========================================================================
 ;@module SOUND
 ;@version 1.0
-;@brief Shared audio services: simple SID tone/noise/volume (the future audio NDK home).
+;@brief Shared audio services: SID tone/noise/volume (thin wrappers over NDK audio.s).
 ;
 ;@fn SND_TONE
 ;@brief Play a sawtooth tone on SID voice 0 for a number of frames.
 ;@arg freq u16 SID frequency word (ARG0)
 ;@arg dur u16 duration in video frames (ARG1)
 ;@ret void
-;@effect Sets master volume to max, gates voice 0 on (sawtooth), waits, gates off.
+;@effect Wraps the NDK audio_tone routine.
 ;@status LERR_OK
 ;
 ;@fn SND_NOISE
 ;@brief Play a noise burst on SID voice 0 for a number of frames.
 ;@arg dur u16 duration in video frames (ARG0)
 ;@ret void
+;@effect Wraps the NDK audio_noise routine.
 ;@status LERR_OK
 ;
 ;@fn SND_VOLUME
 ;@brief Set the SID master volume.
-;@arg vol u8 volume 0-15 (ARG0, clamped)
+;@arg vol u8 volume 0-15 (ARG0, clamped by the NDK)
 ;@ret void
+;@effect Wraps the NDK audio_volume routine (AUDIO_VOICE=0 -> master).
 ;@status LERR_OK
 
 ; ---------------------------------------------------------------------------
@@ -66,72 +64,42 @@ snd_jtable:
       .word   snd_noise-1              ; $01 SND_NOISE
       .word   snd_volume-1             ; $02 SND_VOLUME
 
-; --- $00 SND_TONE: ARG0 = freq (u16), ARG1 = dur (frames) ---
+; --- $00 SND_TONE: ARG0 = freq (u16), ARG1 = dur (frames) -> NDK audio_tone ---
 snd_tone:
-      LDA   #$0F
-      STA   SID_BASE + $18             ; master volume max
       LDA   LIB_ARG0+0
-      STA   SID_BASE + $00             ; freq lo
+      STA   NVR0L                      ; freq lo -> audio_tone input
       LDA   LIB_ARG0+1
-      STA   SID_BASE + $01             ; freq hi
-      LDA   #$09
-      STA   SID_BASE + $05             ; attack/decay
-      LDA   #$A0
-      STA   SID_BASE + $06             ; sustain/release
-      LDA   #$21                       ; sawtooth + gate
-      STA   SID_BASE + $04
-      LDA   LIB_ARG1+0                 ; duration (frames)
-      JSR   wait_frames
-      LDA   #$20                       ; sawtooth, gate off
-      STA   SID_BASE + $04
+      STA   NVR0H                      ; freq hi
+      LDA   LIB_ARG1+0                 ; duration (frames) -> A
+      JSR   audio_tone
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
-; --- $01 SND_NOISE: ARG0 = dur (frames) ---
+; --- $01 SND_NOISE: ARG0 = dur (frames) -> NDK audio_noise ---
 snd_noise:
-      LDA   #$0F
-      STA   SID_BASE + $18
-      LDA   #$00
-      STA   SID_BASE + $00
-      LDA   #$20
-      STA   SID_BASE + $01
-      LDA   #$09
-      STA   SID_BASE + $05
-      LDA   #$A0
-      STA   SID_BASE + $06
-      LDA   #$81                       ; noise + gate
-      STA   SID_BASE + $04
-      LDA   LIB_ARG0+0                 ; duration (frames)
-      JSR   wait_frames
-      LDA   #$80                       ; noise, gate off
-      STA   SID_BASE + $04
+      LDA   LIB_ARG0+0                 ; duration -> A
+      JSR   audio_noise
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
-; --- $02 SND_VOLUME: ARG0 = vol (0-15) ---
+; --- $02 SND_VOLUME: ARG0 = vol (0-15) -> NDK audio_volume ---
 snd_volume:
       LDA   LIB_ARG0+0
-      AND   #$0F
-      STA   SID_BASE + $18
+      STA   AUDIO_VOLUME               ; pseudo-register input (= FIO_SRCL)
+      STZ   AUDIO_VOICE                ; = FIO_SRCH; 0 selects master volume
+      JSR   audio_volume
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
-; --- wait_frames — busy-wait A video frames on the VGC frame counter ---
-wait_frames:
-      TAX
-      BEQ   @done
-      LDA   VGC_FRAME
-@wait:
-      CMP   VGC_FRAME
-      BEQ   @wait
-      LDA   VGC_FRAME
-      DEX
-      BNE   @wait
-@done:
-      RTS
+; ===========================================================================
+; NDK driver bodies, included AFTER the wrappers so .referenced(audio_*) is true
+; (selective emit) and audio_tone's JSR vgc_wait_frames resolves against vgc.s.
+; ===========================================================================
+      .include "audio.s"
+      .include "vgc.s"
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000      ; NMI, RESET, IRQ (module runs under SEI)

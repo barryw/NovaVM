@@ -366,6 +366,17 @@ Requires:
 - `AUDIO.NOTE`
 - `AUDIO.DURATION`
 
+## AUDIO.NOISE
+
+Play a noise burst on SID voice 0 for a number of video frames.
+
+- Kind: `routine`
+- Symbol: `audio_noise`
+- ABI: `register`
+
+Inputs:
+- `A`: duration in frames.
+
 ## AUDIO.NOTE
 
 MIDI note for AUDIO.SOUND.
@@ -614,6 +625,17 @@ Advance fire-and-forget SID sound-effect durations by one frame.
 - Symbol: `audio_tick`
 - Address: `$EF58`
 - ABI: `none`
+
+## AUDIO.TONE
+
+Play a sawtooth tone on SID voice 0 for a number of video frames.
+
+- Kind: `routine`
+- Symbol: `audio_tone`
+- ABI: `register`
+
+Inputs:
+- `NVR0L/NVR0H`: SID frequency word (lo/hi). A: duration in frames.
 
 ## AUDIO.VOICE
 
@@ -3191,6 +3213,16 @@ Wait for the active VGC command to complete.
 - Kind: `routine`
 - Symbol: `vgc_wait_cmd`
 - Address: `$E99D`
+
+## VGC.WAIT_FRAMES
+
+Wait A video frames by busy-waiting the frame counter A times.
+
+- Kind: `routine`
+- Symbol: `vgc_wait_frames`
+
+Inputs:
+- `A`: frame count (0 returns immediately)
 
 ## VSPRITE.BGADDRH
 

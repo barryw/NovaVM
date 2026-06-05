@@ -16,6 +16,11 @@ VGC_IMPLEMENTATION_INCLUDED = 1
       .export vgc_exec
 .endif
       .export vgc_vsync
+; vgc_wait_frames is reference-only so it never bloats the at-capacity BASIC ROM
+; (which links vgc.s wholesale); only the SOUND/SYSTEM modules reference it.
+.if .referenced(vgc_wait_frames)
+      .export vgc_wait_frames
+.endif
       .export vgc_cls
       .export vgc_set_fg
       .export vgc_set_bg
@@ -95,6 +100,24 @@ vgc_vsync:
       CMP   VGC_FRAME
       BEQ   @wait
       RTS
+
+; Wait A video frames (busy-waits vgc_vsync A times). A=0 returns immediately.
+; @label VGC.WAIT_FRAMES
+; @kind routine
+; @symbol vgc_wait_frames
+; @summary Wait A video frames by busy-waiting the frame counter A times.
+; @in A: frame count (0 returns immediately)
+.if .referenced(vgc_wait_frames)
+vgc_wait_frames:
+      TAX
+      BEQ   @vwf_done
+@vwf_loop:
+      JSR   vgc_vsync          ; clobbers A, preserves X
+      DEX
+      BNE   @vwf_loop
+@vwf_done:
+      RTS
+.endif
 
 ; @label VGC.CLS
 ; @kind routine

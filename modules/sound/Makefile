@@ -6,7 +6,8 @@ all: sound.bin sound.nmod
 
 sound.o: sound.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libsound.inc \
-            $(NOVA_ASM)/nova.inc
+            $(NOVA_ASM)/nova.inc $(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s \
+            $(NOVA_ASM)/vgc.inc $(NOVA_ASM)/vgc.s
 	$(CA65) sound.s -o sound.o
 
 sound.bin: sound.o sound.cfg

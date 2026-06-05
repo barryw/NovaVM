@@ -84,6 +84,14 @@ AUDIO_EMIT_ALL = 0
 .if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
       .export audio_volume
 .endif
+; audio_tone/audio_noise are reference-only (NOT in AUDIO_EMIT_ALL) so they never
+; bloat the at-capacity BASIC ROM; only the SOUND module references them.
+.if .referenced(audio_tone)
+      .export audio_tone
+.endif
+.if .referenced(audio_noise)
+      .export audio_noise
+.endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_instrument)
       .export audio_instrument
 .endif
@@ -304,6 +312,62 @@ audio_volume:
       STA   SID2_BASE + SID_REG_VOLUME
 @done:
       LDA   #$00
+      RTS
+.endif
+
+; @label AUDIO.TONE
+; @kind routine
+; @symbol audio_tone
+; @abi register
+; @summary Play a sawtooth tone on SID voice 0 for a number of video frames.
+; @in NVR0L/NVR0H: SID frequency word (lo/hi). A: duration in frames.
+.if .referenced(audio_tone)
+audio_tone:
+      PHA                                ; save duration
+      LDA   #$0F
+      STA   SID_BASE + SID_REG_VOLUME    ; master volume max
+      LDA   NVR0L
+      STA   SID_BASE + SID_REG_FREQ_LO
+      LDA   NVR0H
+      STA   SID_BASE + SID_REG_FREQ_HI
+      LDA   #$09
+      STA   SID_BASE + SID_REG_AD        ; attack=0, decay=9
+      LDA   #$A0
+      STA   SID_BASE + SID_REG_SR        ; sustain=A, release=0
+      LDA   #$21                         ; sawtooth + gate
+      STA   SID_BASE + SID_REG_CTRL
+      PLA                                ; duration (frames)
+      JSR   vgc_wait_frames
+      LDA   #$20                         ; sawtooth, gate off
+      STA   SID_BASE + SID_REG_CTRL
+      RTS
+.endif
+
+; @label AUDIO.NOISE
+; @kind routine
+; @symbol audio_noise
+; @abi register
+; @summary Play a noise burst on SID voice 0 for a number of video frames.
+; @in A: duration in frames.
+.if .referenced(audio_noise)
+audio_noise:
+      PHA                                ; save duration
+      LDA   #$0F
+      STA   SID_BASE + SID_REG_VOLUME    ; master volume max
+      LDA   #$00
+      STA   SID_BASE + SID_REG_FREQ_LO
+      LDA   #$20
+      STA   SID_BASE + SID_REG_FREQ_HI
+      LDA   #$09
+      STA   SID_BASE + SID_REG_AD
+      LDA   #$A0
+      STA   SID_BASE + SID_REG_SR
+      LDA   #$81                         ; noise + gate
+      STA   SID_BASE + SID_REG_CTRL
+      PLA                                ; duration (frames)
+      JSR   vgc_wait_frames
+      LDA   #$80                         ; noise, gate off
+      STA   SID_BASE + SID_REG_CTRL
       RTS
 .endif
 

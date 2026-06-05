@@ -40,7 +40,7 @@
     {
       "label": "AUDIO.INIT",
       "source": "../runtime/asm/audio.s",
-      "line": 356,
+      "line": 420,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -65,7 +65,7 @@
     {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../runtime/asm/audio.s",
-      "line": 310,
+      "line": 374,
       "inputs": [],
       "outputs": [
         {
@@ -306,7 +306,7 @@
     {
       "label": "AUDIO.MIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 529,
+      "line": 593,
       "inputs": [],
       "outputs": [
         {
@@ -327,7 +327,7 @@
     {
       "label": "AUDIO.MIDPLAY_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 584,
+      "line": 648,
       "inputs": [],
       "outputs": [
         {
@@ -348,7 +348,7 @@
     {
       "label": "AUDIO.MIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 542,
+      "line": 606,
       "inputs": [],
       "outputs": [
         {
@@ -366,7 +366,7 @@
     {
       "label": "AUDIO.MUSIC_LOOP",
       "source": "../runtime/asm/audio.s",
-      "line": 672,
+      "line": 736,
       "inputs": [],
       "outputs": [
         {
@@ -386,7 +386,7 @@
     {
       "label": "AUDIO.MUSIC_NOTE",
       "source": "../runtime/asm/audio.s",
-      "line": 739,
+      "line": 803,
       "inputs": [
         {
           "name": "X",
@@ -409,7 +409,7 @@
     {
       "label": "AUDIO.MUSIC_PLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 631,
+      "line": 695,
       "inputs": [],
       "outputs": [
         {
@@ -427,7 +427,7 @@
     {
       "label": "AUDIO.MUSIC_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 723,
+      "line": 787,
       "inputs": [],
       "outputs": [
         {
@@ -445,7 +445,7 @@
     {
       "label": "AUDIO.MUSIC_PRIORITY",
       "source": "../runtime/asm/audio.s",
-      "line": 685,
+      "line": 749,
       "inputs": [],
       "outputs": [
         {
@@ -465,7 +465,7 @@
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
       "source": "../runtime/asm/audio.s",
-      "line": 618,
+      "line": 682,
       "inputs": [],
       "outputs": [
         {
@@ -488,7 +488,7 @@
     {
       "label": "AUDIO.MUSIC_STOP",
       "source": "../runtime/asm/audio.s",
-      "line": 647,
+      "line": 711,
       "inputs": [],
       "outputs": [
         {
@@ -506,7 +506,7 @@
     {
       "label": "AUDIO.MUSIC_TEMPO",
       "source": "../runtime/asm/audio.s",
-      "line": 659,
+      "line": 723,
       "inputs": [],
       "outputs": [
         {
@@ -525,6 +525,23 @@
       "address": "$F019"
     },
     {
+      "label": "AUDIO.NOISE",
+      "source": "../runtime/asm/audio.s",
+      "line": 346,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "duration in frames."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_noise",
+      "abi": "register",
+      "summary": "Play a noise burst on SID voice 0 for a number of video frames."
+    },
+    {
       "label": "AUDIO.NOTE",
       "source": "../runtime/asm/audio.inc",
       "line": 189,
@@ -539,7 +556,7 @@
     {
       "label": "AUDIO.PLAY_SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 176,
+      "line": 184,
       "inputs": [
         {
           "name": "A",
@@ -582,7 +599,7 @@
     {
       "label": "AUDIO.SET_VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 193,
+      "line": 201,
       "inputs": [
         {
           "name": "A",
@@ -609,7 +626,7 @@
     {
       "label": "AUDIO.SFLOAD",
       "source": "../runtime/asm/audio.s",
-      "line": 554,
+      "line": 618,
       "inputs": [],
       "outputs": [
         {
@@ -630,7 +647,7 @@
     {
       "label": "AUDIO.SFLOAD_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 600,
+      "line": 664,
       "inputs": [],
       "outputs": [
         {
@@ -651,7 +668,7 @@
     {
       "label": "AUDIO.SFX_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 710,
+      "line": 774,
       "inputs": [],
       "outputs": [
         {
@@ -669,7 +686,7 @@
     {
       "label": "AUDIO.SIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 500,
+      "line": 564,
       "inputs": [],
       "outputs": [
         {
@@ -691,7 +708,7 @@
     {
       "label": "AUDIO.SIDPLAY_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 568,
+      "line": 632,
       "inputs": [],
       "outputs": [
         {
@@ -713,7 +730,7 @@
     {
       "label": "AUDIO.SIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 517,
+      "line": 581,
       "inputs": [],
       "outputs": [
         {
@@ -731,7 +748,7 @@
     {
       "label": "AUDIO.SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 208,
+      "line": 216,
       "inputs": [],
       "outputs": [
         {
@@ -753,7 +770,7 @@
     {
       "label": "AUDIO.STATUS",
       "source": "../runtime/asm/audio.s",
-      "line": 698,
+      "line": 762,
       "inputs": [],
       "outputs": [
         {
@@ -879,7 +896,7 @@
     {
       "label": "AUDIO.TICK",
       "source": "../runtime/asm/audio.s",
-      "line": 393,
+      "line": 457,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -888,6 +905,23 @@
       "abi": "none",
       "summary": "Advance fire-and-forget SID sound-effect durations by one frame.",
       "address": "$EF58"
+    },
+    {
+      "label": "AUDIO.TONE",
+      "source": "../runtime/asm/audio.s",
+      "line": 318,
+      "inputs": [
+        {
+          "name": "NVR0L/NVR0H",
+          "description": "SID frequency word (lo/hi). A: duration in frames."
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_tone",
+      "abi": "register",
+      "summary": "Play a sawtooth tone on SID voice 0 for a number of video frames."
     },
     {
       "label": "AUDIO.VOICE",
@@ -904,7 +938,7 @@
     {
       "label": "AUDIO.VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 271,
+      "line": 279,
       "inputs": [],
       "outputs": [
         {
@@ -4192,7 +4226,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 355,
+      "line": 378,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4212,7 +4246,7 @@
     {
       "label": "VGC.CLS",
       "source": "../runtime/asm/vgc.s",
-      "line": 99,
+      "line": 122,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4224,7 +4258,7 @@
     {
       "label": "VGC.COMMAND",
       "source": "../runtime/asm/vgc.s",
-      "line": 53,
+      "line": 58,
       "inputs": [
         {
           "name": "A",
@@ -4241,7 +4275,7 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 149,
+      "line": 172,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4253,7 +4287,7 @@
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 140,
+      "line": 163,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4265,7 +4299,7 @@
     {
       "label": "VGC.EXEC",
       "source": "../runtime/asm/vgc.s",
-      "line": 76,
+      "line": 81,
       "inputs": [
         {
           "name": "A",
@@ -4281,7 +4315,7 @@
     {
       "label": "VGC.FILL",
       "source": "../runtime/asm/vgc.s",
-      "line": 382,
+      "line": 405,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4301,7 +4335,7 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 300,
+      "line": 323,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4313,7 +4347,7 @@
     {
       "label": "VGC.FLASH_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 290,
+      "line": 313,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4325,7 +4359,7 @@
     {
       "label": "VGC.GCLS",
       "source": "../runtime/asm/vgc.s",
-      "line": 311,
+      "line": 334,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4336,7 +4370,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../runtime/asm/vgc.s",
-      "line": 319,
+      "line": 342,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4361,7 +4395,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../runtime/asm/vgc.s",
-      "line": 364,
+      "line": 387,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4381,7 +4415,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../runtime/asm/vgc.s",
-      "line": 194,
+      "line": 217,
       "inputs": [
         {
           "name": "A",
@@ -4398,7 +4432,7 @@
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 183,
+      "line": 206,
       "inputs": [
         {
           "name": "A",
@@ -4415,7 +4449,7 @@
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 172,
+      "line": 195,
       "inputs": [
         {
           "name": "A",
@@ -4432,7 +4466,7 @@
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../runtime/asm/vgc.s",
-      "line": 158,
+      "line": 181,
       "inputs": [
         {
           "name": "A",
@@ -4453,7 +4487,7 @@
     {
       "label": "VGC.LINE",
       "source": "../runtime/asm/vgc.s",
-      "line": 346,
+      "line": 369,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4473,7 +4507,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../runtime/asm/vgc.s",
-      "line": 203,
+      "line": 226,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -4494,7 +4528,7 @@
     {
       "label": "VGC.MEM_READ",
       "source": "../runtime/asm/vgc.s",
-      "line": 234,
+      "line": 257,
       "inputs": [],
       "outputs": [
         {
@@ -4516,7 +4550,7 @@
     {
       "label": "VGC.MEM_WRITE",
       "source": "../runtime/asm/vgc.s",
-      "line": 244,
+      "line": 267,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4534,7 +4568,7 @@
     {
       "label": "VGC.PAINT",
       "source": "../runtime/asm/vgc.s",
-      "line": 391,
+      "line": 414,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4550,7 +4584,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 328,
+      "line": 351,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4566,7 +4600,7 @@
     {
       "label": "VGC.RECT",
       "source": "../runtime/asm/vgc.s",
-      "line": 373,
+      "line": 396,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4586,7 +4620,7 @@
     {
       "label": "VGC.REVERSE",
       "source": "../runtime/asm/vgc.s",
-      "line": 255,
+      "line": 278,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4598,7 +4632,7 @@
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../runtime/asm/vgc.s",
-      "line": 267,
+      "line": 290,
       "inputs": [
         {
           "name": "A",
@@ -4615,7 +4649,7 @@
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 280,
+      "line": 303,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4627,7 +4661,7 @@
     {
       "label": "VGC.SET_BG",
       "source": "../runtime/asm/vgc.s",
-      "line": 122,
+      "line": 145,
       "inputs": [
         {
           "name": "X",
@@ -4644,7 +4678,7 @@
     {
       "label": "VGC.SET_BORDER",
       "source": "../runtime/asm/vgc.s",
-      "line": 131,
+      "line": 154,
       "inputs": [
         {
           "name": "X",
@@ -4661,7 +4695,7 @@
     {
       "label": "VGC.SET_FG",
       "source": "../runtime/asm/vgc.s",
-      "line": 113,
+      "line": 136,
       "inputs": [
         {
           "name": "X",
@@ -4678,7 +4712,7 @@
     {
       "label": "VGC.SET_FONT",
       "source": "../runtime/asm/vgc.s",
-      "line": 225,
+      "line": 248,
       "inputs": [
         {
           "name": "X",
@@ -4695,7 +4729,7 @@
     {
       "label": "VGC.SET_MODE",
       "source": "../runtime/asm/vgc.s",
-      "line": 216,
+      "line": 239,
       "inputs": [
         {
           "name": "X",
@@ -4712,7 +4746,7 @@
     {
       "label": "VGC.UNPLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 337,
+      "line": 360,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4728,7 +4762,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "../runtime/asm/vgc.s",
-      "line": 87,
+      "line": 92,
       "inputs": [],
       "outputs": [
         {
@@ -4745,7 +4779,7 @@
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "../runtime/asm/vgc.s",
-      "line": 63,
+      "line": 68,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4753,6 +4787,22 @@
       "symbol": "vgc_wait_cmd",
       "summary": "Wait for the active VGC command to complete.",
       "address": "$E99D"
+    },
+    {
+      "label": "VGC.WAIT_FRAMES",
+      "source": "../runtime/asm/vgc.s",
+      "line": 105,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "frame count (0 returns immediately)"
+        }
+      ],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_wait_frames",
+      "summary": "Wait A video frames by busy-waiting the frame counter A times."
     },
     {
       "label": "VSPRITE.BGADDRH",

@@ -11,7 +11,8 @@ system.o: system.s \
             $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editui.s \
             $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
-            $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s
+            $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s \
+            $(NOVA_ASM)/vgc.s
 	$(CA65) system.s -o system.o
 
 system.bin: system.o system.cfg
