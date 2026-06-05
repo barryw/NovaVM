@@ -1899,9 +1899,12 @@ logo_turtle_textwin:
       LDA   #$0C
       STA   VGC_CHAROUT          ; form-feed: clear text screen
 @ff_wait:
+      ; Inlined VGC busy-poll (mirrors legacy prepare_split_text's JSR wait_vgc).
+      ; We cannot JSR vgc_wait_cmd here: that helper is extension-ROM code, not
+      ; linked into this foundation bank, so it is unreachable from foundation code.
       LDA   VGC_CMD
       AND   #$01
-      BNE   @ff_wait             ; let the VGC settle (no-op on the char path)
+      BNE   @ff_wait
       STZ   TEXTWIN_LEFT
       LDA   #TADP_SPLIT_TEXT_ROW
       STA   TEXTWIN_TOP
