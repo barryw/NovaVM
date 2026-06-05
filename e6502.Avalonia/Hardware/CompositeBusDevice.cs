@@ -253,6 +253,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         LoadExtBankStatic(CurrentRom);
         PokeResidentLoader();
 
+        // Pre-stage the shared-library modules into the XRAM shelf, mirroring the
+        // firmware's boot.json libraries[] staging, so lib_call(GRAPHICS)/lib_call(SYSTEM)
+        // resolve without an SD-backed demand-load (which the emulator does not model).
+        StageConfiguredModules();
+
         InitVectorTable();
     }
 
@@ -359,6 +364,29 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _ram[ShelfTag + slot] = id;
         if (slot == 0)
             for (int i = 0; i < ShelfN; i++) _ram[ShelfLru + i] = (byte)i;
+    }
+
+    // Boot-time shelf staging, the emulator's stand-in for the firmware reading
+    // boot.json libraries[] and streaming each module from SD into a shelf slot.
+    // Slot assignment matches boot.json array order: graphics (id $01) -> slot 0,
+    // system (id $03, the shared text editor) -> slot 1. Modules absent from
+    // Resources/ are silently skipped — a runtime that never lib_calls them is
+    // unaffected, and the build copies the .bin images in alongside the ROMs.
+    private void StageConfiguredModules()
+    {
+        // Seed the LRU to identity [0,1,2,3] up front (firmware does this at boot),
+        // so staging only slot 1 still leaves the directory well-formed.
+        for (int i = 0; i < ShelfN; i++) _ram[ShelfLru + i] = (byte)i;
+        StageModuleFromResources("graphics.bin", slot: 0, id: 0x01);
+        StageModuleFromResources("system.bin",   slot: 1, id: 0x03);
+    }
+
+    private void StageModuleFromResources(string fileName, int slot, byte id)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "Resources", fileName);
+        if (!File.Exists(path))
+            return;
+        StageShelfModule(slot, File.ReadAllBytes(path), id);
     }
 
     private void LoadPrimaryRuntimeRom(byte[] data)

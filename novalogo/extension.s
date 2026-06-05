@@ -9,14 +9,6 @@
 NOVALOGO_TURTLE_STATE_EXTERNAL = 1   ; mailbox-ABI only; turtle state lives in the GRAPHICS module
       .include "ext_iface.inc"
       .include "vgc.inc"
-      .include "editbuf.inc"
-
-; Editor display colors. The shared editor no longer dictates the global
-; background/border/foreground — this runtime owns them. Change these to
-; restyle the NovaLogo editor. (Palette mode 0: 0=black, 1=white, 15=grey-light.)
-EDITOR_BGCOL      = $00        ; black background
-EDITOR_BORDER     = $00        ; black border
-EDITOR_FGCOL      = $01        ; white text (cursor is an inverted cell -> white)
 
       .segment "CODE"
 
@@ -117,7 +109,7 @@ ext_dispatch:
       .word ext_wait-1          ; cmd $48: WAIT
       .word ext_waitvbl-1       ; cmd $49: WAITVBL
       .word ext_timer-1         ; cmd $4A: TIMER
-      .word ext_edit-1          ; cmd $4B: EDIT (shared editor)
+      .word ext_unsupported-1   ; cmd $4B: EDIT (moved to SYSTEM module $03, SYS_FN_EDIT)
 
 ; =====================================================================
 ; ext_unsupported — unknown command, just return
@@ -141,161 +133,6 @@ ext_test:
       STZ   EXT_RESULT_TYPE    ; VAL_NUMBER
       RTS
 
-; =====================================================================
-; ext_edit — run the shared EDITUI/EDITBUF editor on a RAM text buffer.
-;   The base ROM passes a buffer ptr/len/cap and a title in the mailbox
-;   (see EXT_CMD_EDIT in ext_iface.inc). We snapshot the VGC display state,
-;   switch to full-screen text (the editor owns the whole screen), run the
-;   modal editor, then restore the display EXACTLY — graphics/turtle are
-;   never cleared. A nonzero RESULT_HI means the user asked to save.
-; =====================================================================
-ext_edit:
-      ; --- snapshot the display registers editui_init will clobber ---
-      LDA   VGC_MODE
-      STA   ee_saved_mode
-      LDA   VGC_PALETTE
-      STA   ee_saved_palette
-      LDA   VGC_BGCOL
-      STA   ee_saved_bgcol
-      LDA   VGC_BORDER
-      STA   ee_saved_border
-      LDA   VGC_FGCOL
-      STA   ee_saved_fgcol
-      LDA   VGC_CURSX
-      STA   ee_saved_cursx
-      LDA   VGC_CURSY
-      STA   ee_saved_cursy
-      LDA   VGC_CURSEN
-      STA   ee_saved_cursen
-
-      ; --- the editor owns the whole screen: copper off, full text window ---
-      JSR   copper_off
-      STZ   TEXTWIN_LEFT
-      STZ   TEXTWIN_TOP
-      LDA   #80
-      STA   TEXTWIN_WIDTH
-      LDA   #25
-      STA   TEXTWIN_HEIGHT
-
-      ; --- runtime-chosen editor colors (the engine no longer sets these) ---
-      LDA   #EDITOR_BGCOL
-      STA   VGC_BGCOL
-      LDA   #EDITOR_BORDER
-      STA   VGC_BORDER
-      LDA   #EDITOR_FGCOL
-      STA   VGC_FGCOL
-
-      ; --- editbuf config from the mailbox ---
-      LDA   EXT_ARG0_LO
-      STA   EDITBUF_BUFL
-      LDA   EXT_ARG0_HI
-      STA   EDITBUF_BUFH
-      LDA   EXT_ARG2_LO
-      STA   EDITBUF_CAPL
-      LDA   EXT_ARG2_HI
-      STA   EDITBUF_CAPH
-      LDA   EXT_ARG1_LO
-      STA   EDITBUF_LENL
-      LDA   EXT_ARG1_HI
-      STA   EDITBUF_LENH
-      LDA   EXT_ARG3_LO
-      STA   EDITBUF_TITLEL
-      LDA   EXT_ARG3_HI
-      STA   EDITBUF_TITLEH
-      STZ   EDITBUF_STATUSL
-      STZ   EDITBUF_STATUSH
-
-      ; --- install hooks explicitly (BSS is not zeroed between sessions) ---
-      LDA   #<ext_edit_save_hook
-      STA   EDITBUF_SAVE_VECL
-      LDA   #>ext_edit_save_hook
-      STA   EDITBUF_SAVE_VECH
-      STZ   EDITBUF_INDENT_VECL    ; 0 => editbuf installs its no-op default
-      STZ   EDITBUF_INDENT_VECH
-      STZ   EDITBUF_HILITE_VECL
-      STZ   EDITBUF_HILITE_VECH
-      STZ   EDITBUF_MENU_VECL      ; keep EDITUI's default menus for now
-      STZ   EDITBUF_MENU_VECH
-
-      ; --- run the modal editor ---
-      STZ   ee_saved_flag
-      JSR   editbuf_reset_state
-      ; Place the cursor where the host asked (start of the body line), instead
-      ; of the default offset 0. Cursor offset rides in the ARG FRAC bytes.
-      LDA   EXT_ARG2_FRAC
-      STA   EDITBUF_CURL
-      LDA   EXT_ARG3_FRAC
-      STA   EDITBUF_CURH
-      JSR   editbuf_run            ; A = exit reason
-
-      ; --- publish results to the mailbox ---
-      STA   EXT_RESULT_LO          ; editbuf exit reason
-      LDA   ee_saved_flag
-      STA   EXT_RESULT_HI          ; nonzero => save requested
-      LDA   EDITBUF_LENL
-      STA   EXT_ARG1_LO            ; final length back to the host
-      LDA   EDITBUF_LENH
-      STA   EXT_ARG1_HI
-
-      ; --- restore the display exactly (never clear graphics) ---
-      ; Restore the host's palette + colors FIRST: the form-feed clear below
-      ; fills color RAM with the *current* text color, so the host's colors
-      ; must be back in place before we clear, or the editor's panel color
-      ; leaks into the restored text area.
-      LDA   ee_saved_palette
-      STA   VGC_PALETTE
-      LDA   ee_saved_bgcol
-      STA   VGC_BGCOL
-      LDA   ee_saved_border
-      STA   VGC_BORDER
-      LDA   ee_saved_fgcol
-      STA   VGC_FGCOL
-
-      ; Plain full-text restore: clear the editor chrome and restore the saved
-      ; display registers. The turtle now lives in the GRAPHICS module, so the
-      ; extension no longer owns the split-screen rebuild — when graphics were
-      ; active, restoring ee_saved_mode brings the gfx layer back, and the
-      ; foundation re-applies the split text window on the next turtle op
-      ; (logo_turtle_textwin, keyed off the module's TURTLE_GFX_VISIBLE flag).
-      STZ   TEXTWIN_LEFT
-      STZ   TEXTWIN_TOP
-      LDA   #80
-      STA   TEXTWIN_WIDTH
-      LDA   #25
-      STA   TEXTWIN_HEIGHT
-      LDA   #$0C                   ; form feed: clear text plane only
-      STA   VGC_CHAROUT
-      LDA   ee_saved_mode
-      STA   VGC_MODE
-      LDA   ee_saved_cursx
-      STA   VGC_CURSX
-      LDA   ee_saved_cursy
-      STA   VGC_CURSY
-      LDA   ee_saved_cursen
-      STA   VGC_CURSEN
-      RTS
-
-; ext_edit_save_hook — SAVE hook while the editor runs. For now it just records
-; that the user asked to save and reports success; the base ROM builds the
-; procedure record from the final buffer when the editor exits. (Cross-bank
-; live validation is the next increment.)
-ext_edit_save_hook:
-      LDA   #1
-      STA   ee_saved_flag
-      LDA   #EDITBUF_SAVE_OK
-      RTS
-
-      .segment "BSS"
-ee_saved_mode:    .res 1
-ee_saved_palette: .res 1
-ee_saved_bgcol:   .res 1
-ee_saved_border:  .res 1
-ee_saved_fgcol:   .res 1
-ee_saved_cursx:   .res 1
-ee_saved_cursy:   .res 1
-ee_saved_cursen:  .res 1
-ee_saved_flag:    .res 1          ; nonzero once the SAVE hook fires
-      .segment "CODE"
 
 ; =====================================================================
 ; ext_tone — TONE freq dur: play a tone on SID voice 0
@@ -410,8 +247,6 @@ wait_frames:
 @done:
       RTS
 
-      .include "copper.s"
-      ; Shared text editor (pulls vtext.s + blitter.s, all include-guarded).
-      ; Its BSS lands in $9800-$9BFF, ZP in $A3+.
-      .include "editui.s"
-      .include "editbuf.s"
+      ; The shared text editor moved out of this extension ROM into the SYSTEM
+      ; module (modules/system/system.s, MODULE_ID_SYSTEM=$03). Logo's TO/EDIT now
+      ; routes through lib_call(SYSTEM, SYS_FN_EDIT) — see novalogo/procedures.s.

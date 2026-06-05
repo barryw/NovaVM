@@ -25,13 +25,17 @@ namespace e6502UnitTests;
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// shipped novalogo.bin running on the Avalonia CompositeBusDevice): cold-start
-/// Logo, paint a $5A sentinel across $0300-$031F directly in host RAM, then
-/// drive the real ROM through a program that exercises every region that
-/// previously occupied the mailbox:
-///   * define + invoke a procedure  -> drives proc_body_buf (the offender)
-///   * build a list                 -> drives the list/heap machinery
-///   * heap allocation via REPEAT    -> drives the bump allocator
-/// We then assert every byte $0300-$031F still equals $5A.
+/// Logo and define a procedure through the editor — which now lives in the SYSTEM
+/// module and runs via lib_call(SYSTEM, SYS_FN_EDIT), so it legitimately drives the
+/// $0300 mailbox and the $0420-$08FF module-BSS band during definition (that band
+/// is FOR paged modules; it is not a runtime clobber). THEN paint a $5A sentinel
+/// across the whole reserved band and drive the real ROM through FOUNDATION-ONLY
+/// work — no further module/lib_call:
+///   * invoke the procedure  -> re-tokenizer + proc_body_buf (Logo BSS, $0900+)
+///   * build a list          -> the list/heap machinery
+///   * heap allocation        -> the bump allocator ($09E0+)
+/// We then assert every band byte $0300-$08FF still equals $5A. (Foundation paths
+/// touch the band only if the novalogo.cfg BSS/heap carve regressed.)
 ///
 /// We deliberately do NOT mock — this exercises the actual tokenizer,
 /// procedure editor and heap in the shipped ROM image, the same way
@@ -67,36 +71,36 @@ public class NovaLogoMailboxReservationTests
         // Wait for the Logo prompt ("?") after cold start.
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        // Paint the band sentinel AFTER Logo has cold-started (cold start
-        // clears low RAM), so any later corruption is the runtime's doing.
-        for (ushort a = MailboxStart; a < MailboxEnd; a++)
-            bus.WriteRam(a, Sentinel);
-
-        // Define + invoke a procedure (drives proc_body_buf, the $028F-based
-        // 2048-byte BSS buffer whose offsets $71-$90 straddle the $0300-$031F
-        // mailbox), build a list, and force heap allocation. The editor writes
-        // the typed body straight into proc_body_buf at offset (header length),
-        // so the body must be long enough (>~145 chars total) to reach through
-        // the mailbox window. SaveAndQuit (^S ^Q) commits the body.
+        // Define the procedure via the editor FIRST, then PRINT a marker so we know
+        // the editor exited and proc_build_record ran. The editor now lives in the
+        // SYSTEM module and runs via lib_call(SYSTEM, SYS_FN_EDIT), so DURING the
+        // definition it legitimately drives the $0300 mailbox AND its working store
+        // in the $0420-$08FF module-BSS band — that is the band's PURPOSE for a
+        // paged module, not a runtime clobber (the same reason this test avoids
+        // turtle/graphics commands, which also lib_call). So we paint the sentinel
+        // AFTER the definition and then exercise only FOUNDATION paths.
         //
-        // Body is a single long line of REPEAT loops — purely to push editor
-        // writes well past proc_body_buf offset $90 ($031F) so the sentinel
-        // would be overwritten if BSS still started at $0280/$028F.
-        //
-        // The body uses FOUNDATION-ONLY ops (MAKE/arithmetic), NOT turtle/graphics
-        // commands: since 4c.2-3-ii the turtle commands route through the GRAPHICS
-        // module's lib_call mailbox at $0300-$0313 — writing those cells is the
-        // mailbox's CONTRACT, not BSS/heap clobber, so driving the body with them
-        // would defeat the sentinel sweep. Pure-foundation ops keep the mailbox
-        // untouched while still exercising the editor/proc_body_buf/heap paths the
-        // band-overlap regression test is about.
+        // Body is a single long line of REPEAT loops so the editor writes the typed
+        // body well past proc_body_buf offset $90 — the offset that, before the
+        // novalogo.cfg carve, would have straddled $0300-$031F.
         QueueText(editor, "TO BOX :N\r");
         QueueText(editor,
             "REPEAT :N [MAKE \"A 1 MAKE \"B 2 MAKE \"A :A + 9 MAKE \"B :B + 8 " +
             "MAKE \"A :A + :B MAKE \"B :B + :A MAKE \"A 3 MAKE \"B 4 " +
             "MAKE \"A :A + 7 MAKE \"B :B + 6 MAKE \"C :A]\r");
         QueueText(editor, "\x13\x11");          // ^S save, ^Q quit editor
-        QueueText(editor, "BOX 1\r");           // invoke -> proc_body_buf path
+        QueueText(editor, "PRINT \"DEFINED\r"); // editor exited + proc record built
+        RunUntilScreenContains(cpu, bus, "DEFINED", 200_000_000);
+
+        // Paint the band sentinel NOW: the editor (a paged module) is done, and
+        // everything below is FOUNDATION-ONLY — invoking the proc (drives the
+        // re-tokenizer + proc_body_buf, both in Logo BSS at $0900+), building a list
+        // and hammering the heap bump allocator ($09E0+). None of these foundation
+        // paths may dip into $0300-$08FF if the novalogo.cfg carve holds.
+        for (ushort a = MailboxStart; a < MailboxEnd; a++)
+            bus.WriteRam(a, Sentinel);
+
+        QueueText(editor, "BOX 1\r");           // invoke -> re-tokenize/proc_body_buf path
         QueueText(editor, "MAKE \"L [1 2 3 4]\r"); // build a list (heap)
         QueueText(editor, "SHOW :L\r");
         QueueText(editor, "REPEAT 8 [MAKE \"L FPUT 0 :L]\r"); // hammer the heap

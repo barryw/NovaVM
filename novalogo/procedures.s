@@ -344,40 +344,47 @@ proc_edit_run:
       LDA   #0
       STA   proc_editor_title,Y
 
-      ; --- mailbox: ARG0=buf ARG1=len ARG2=cap ARG3=title; cursor in FRAC bytes
+      ; --- lib_call(SYSTEM, SYS_FN_EDIT): the editor moved out of the extension
+      ;     ROM into the shared SYSTEM module. 32-bit LE mailbox cells at $0303+:
+      ;       ARG0 = buffer ptr (low word) + initial cursor offset (high word)
+      ;       ARG1 = current length   ARG2 = capacity   ARG3 = NUL title ptr
+      ;     The editor edits the buffer in place and runs entirely within the call
+      ;     (no module->runtime callback); the proc record is built from the final
+      ;     buffer after it returns.
       LDA   #<proc_body_buf
-      STA   EXT_ARG0_LO
+      STA   LIB_ARG0+0
       LDA   #>proc_body_buf
-      STA   EXT_ARG0_HI
-      LDA   proc_body_len_lo
-      STA   EXT_ARG1_LO
-      LDA   proc_body_len_hi
-      STA   EXT_ARG1_HI
-      LDA   #<2048
-      STA   EXT_ARG2_LO
-      LDA   #>2048
-      STA   EXT_ARG2_HI
-      LDA   #<proc_editor_title
-      STA   EXT_ARG3_LO
-      LDA   #>proc_editor_title
-      STA   EXT_ARG3_HI
-      LDA   proc_edit_cur_lo
-      STA   EXT_ARG2_FRAC          ; initial cursor offset (see ext_iface.inc)
+      STA   LIB_ARG0+1
+      LDA   proc_edit_cur_lo          ; initial cursor offset -> ARG0 high word
+      STA   LIB_ARG0+2
       LDA   proc_edit_cur_hi
-      STA   EXT_ARG3_FRAC
+      STA   LIB_ARG0+3
+      LDA   proc_body_len_lo
+      STA   LIB_ARG1+0
+      LDA   proc_body_len_hi
+      STA   LIB_ARG1+1
+      LDA   #<2048
+      STA   LIB_ARG2+0
+      LDA   #>2048
+      STA   LIB_ARG2+1
+      LDA   #<proc_editor_title
+      STA   LIB_ARG3+0
+      LDA   #>proc_editor_title
+      STA   LIB_ARG3+1
 
-      LDA   #EXT_CMD_EDIT
-      STA   EXT_CMD
-      JSR   ensure_ext_resident    ; re-page host ext into bank 1 if a module clobbered it
-      JSR   EXT_TRAMPOLINE         ; swap to ext ROM, run editor, swap back
+      LDA   #MODULE_ID_SYSTEM
+      STA   LIB_MOD_ID
+      LDA   #SYS_FN_EDIT
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND           ; page in SYSTEM, run editor, restore host bank
 
-      ; editor returns the final buffer length in ARG1
-      LDA   EXT_ARG1_LO
+      ; editor returns the final buffer length in ARG1, save flag in RESULT byte1
+      LDA   LIB_ARG1+0
       STA   proc_body_len_lo
-      LDA   EXT_ARG1_HI
+      LDA   LIB_ARG1+1
       STA   proc_body_len_hi
 
-      LDA   EXT_RESULT_HI
+      LDA   LIB_RESULT+1
       BEQ   @abandoned
       ; Strip line 1 + the END line -> proc_body_src/proc_body_len = body only.
       JSR   proc_extract_body

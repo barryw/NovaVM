@@ -62,6 +62,12 @@
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
         <Copy SourceFiles="$(ProjectDir)../assembly/apps/keyboard/keyboard.bin" DestinationFiles="$(HOME)/e6502-programs/keyboard.bin" />
+        <!-- Shared-library modules: rebuild + stage their 16K images into Resources so
+             CompositeBusDevice pre-stages them into the XRAM shelf at boot. -->
+        <Exec Command="make -C $(ProjectDir)../modules/graphics" />
+        <Exec Command="make -C $(ProjectDir)../modules/system" />
+        <Copy SourceFiles="$(ProjectDir)../modules/graphics/graphics.bin" DestinationFiles="$(ProjectDir)Resources/graphics.bin" />
+        <Copy SourceFiles="$(ProjectDir)../modules/system/system.bin" DestinationFiles="$(ProjectDir)Resources/system.bin" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
@@ -93,6 +99,8 @@
         <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
         <Copy SourceFiles="Resources/novalogo_ext.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo_ext.bin')" />
         <Copy SourceFiles="Resources/libcall.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/libcall.bin')" />
+        <Copy SourceFiles="Resources/graphics.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/graphics.bin')" />
+        <Copy SourceFiles="Resources/system.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/system.bin')" />
     </Target>
 
     <ItemGroup>
@@ -125,6 +133,12 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\libcall.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\graphics.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\system.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>

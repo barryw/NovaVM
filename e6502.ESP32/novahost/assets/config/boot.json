@@ -44,7 +44,8 @@
     "hd0": ""
   },
   "libraries": [
-    { "name": "graphics", "id": 1, "path": "/lib/graphics.nmod", "base": 393216, "size": 16384 }
+    { "name": "graphics", "id": 1, "path": "/lib/graphics.nmod", "base": 393216, "size": 16384 },
+    { "name": "system", "id": 3, "path": "/lib/system.nmod", "base": 409600, "size": 16384 }
   ],
   "network": {
     "gameServer": {

@@ -30,7 +30,12 @@ graphics.nmod: graphics.bin graphics.s ../../tools/nmod_pack.py $(NOVA_ASM)/libg
 	python3 ../../tools/nmod_pack.py --src graphics.s --bin graphics.bin \
 	        --out graphics.nmod --syms $(NOVA_ASM)/libgraphics.inc
 
+# Copy the raw 16K image into the Avalonia Resources dir, where CompositeBusDevice
+# pre-stages it into the XRAM shelf at boot (mirrors firmware boot.json staging).
+install: graphics.bin
+	cp graphics.bin ../../e6502.Avalonia/Resources/graphics.bin
+
 clean:
 	rm -f graphics.o graphics.bin graphics.map graphics.nmod
 
-.PHONY: all clean
+.PHONY: all clean install
