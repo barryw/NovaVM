@@ -54,13 +54,12 @@ GFX_FIO_NAME_LIMIT = $3F
 
 ; ===========================================================================
 ; NDOC documentation (extracted by tools/nmod_pack.py into graphics.nmod).
-; Function ids resolve symbolically from runtime/asm/libgraphics.inc. Only the
-; draw domain ($00-$09) is documented so far; the other live domains
-; (text/sprite/copper/blit/vsprite/msprite/image/anim/tween/turtle) grow here.
+; Function ids resolve symbolically from runtime/asm/libgraphics.inc. Every
+; implemented (non-gfn_unimpl) GFN is documented here.
 ; ===========================================================================
 ;@module GRAPHICS
 ;@version 1.0
-;@brief Nova virtual graphics controller: drawing, text, sprites, copper, blitter, turtle.
+;@brief Nova virtual graphics controller: drawing, text, sprites, copper, blitter, vsprites, meta-sprites, images, animation, tweening, turtle.
 ;
 ;@fn GFN_GCLS
 ;@brief Clear the graphics plane to the background colour.
@@ -70,18 +69,18 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@brief Set the current draw colour for subsequent primitives.
 ;@arg color u8 palette index (0-15)
 ;@ret void
-;@effect Persists as the pen colour used by later PLOT/LINE/CIRCLE/RECT/FILL/PAINT.
+;@effect Persists as the pen colour used by later primitives.
 ;
 ;@fn GFN_PLOT
 ;@brief Plot a single pixel in the current colour.
-;@arg x s16 x coordinate (0-319)
-;@arg y s16 y coordinate (0-199)
+;@arg x s16 x coordinate
+;@arg y s16 y coordinate
 ;@ret void
 ;
 ;@fn GFN_UNPLOT
 ;@brief Clear a single pixel to the background colour.
-;@arg x s16 x coordinate (0-319)
-;@arg y s16 y coordinate (0-199)
+;@arg x s16 x coordinate
+;@arg y s16 y coordinate
 ;@ret void
 ;
 ;@fn GFN_LINE
@@ -128,6 +127,783 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@arg y s16 y coordinate
 ;@arg str bytes pointer+length of the string (copied via the VGC FIO_NAME buffer)
 ;@ret void
+;
+;@fn GFN_COLOR
+;@brief Set the text foreground, background, and border colours.
+;@arg fg u8 foreground palette index
+;@arg bg u8 background palette index
+;@arg border u8 border palette index
+;@ret void
+;
+;@fn GFN_FONT
+;@brief Select the active text font slot.
+;@arg slot u8 font slot index
+;@ret void
+;
+;@fn GFN_MODE
+;@brief Set the graphics/text display mode.
+;@arg mode u8 VGC mode value
+;@ret void
+;
+;@fn GFN_REVERSE
+;@brief Enable reverse-video text using the current fg/bg.
+;@ret void
+;
+;@fn GFN_REVERSEOFF
+;@brief Disable reverse-video text.
+;@ret void
+;
+;@fn GFN_FLASH
+;@brief Enable flashing text.
+;@ret void
+;
+;@fn GFN_FLASHOFF
+;@brief Disable flashing text.
+;@ret void
+;
+;@fn GFN_LOCATE
+;@brief Move the text cursor to a column/row.
+;@arg col u8 cursor column
+;@arg row u8 cursor row
+;@ret void
+;
+;@fn GFN_CLS
+;@brief Clear the text screen.
+;@ret void
+;
+;@fn GFN_DISPLAYON
+;@brief Restore full display brightness (VGC_DIMMER = $0F).
+;@ret void
+;
+;@fn GFN_DISPLAYOFF
+;@brief Blank the display output while keeping timing (VGC_DIMMER = $00).
+;@ret void
+;
+;@fn GFN_SPR_DEFINE
+;@brief Set one shape pixel of a sprite to a colour.
+;@arg idx u8 sprite index (0-15)
+;@arg x u8 pixel x within the 16x16 shape (0-15)
+;@arg y u8 pixel y within the 16x16 shape (0-15)
+;@arg color u8 palette index
+;@ret void
+;
+;@fn GFN_SPR_ROW
+;@brief Write one 16-pixel sprite shape row (8 nibble-packed bytes).
+;@arg idx u8 sprite index
+;@arg row u8 shape row (0-15)
+;@arg bytes0_3 u32 first 4 packed shape bytes
+;@arg bytes4_7 u32 last 4 packed shape bytes
+;@ret void
+;
+;@fn GFN_SPR_CLEAR
+;@brief Clear a sprite's shape data.
+;@arg idx u8 sprite index
+;@ret void
+;
+;@fn GFN_SPR_COPY
+;@brief Copy shape data from one sprite to another.
+;@arg src u8 source sprite index
+;@arg dst u8 destination sprite index
+;@ret void
+;
+;@fn GFN_SPR_POS
+;@brief Move a sprite to a position (16-bit signed X, byte Y).
+;@arg idx u8 sprite index
+;@arg x s16 sprite x position
+;@arg y u8 sprite y position
+;@ret void
+;
+;@fn GFN_SPR_ENABLE
+;@brief Enable (show) a sprite.
+;@arg idx u8 sprite index
+;@ret void
+;
+;@fn GFN_SPR_DISABLE
+;@brief Disable (hide) a sprite.
+;@arg idx u8 sprite index
+;@ret void
+;
+;@fn GFN_SPR_FLIP
+;@brief Set a sprite's horizontal/vertical flip flags.
+;@arg idx u8 sprite index
+;@arg flags u8 flip flags
+;@ret void
+;
+;@fn GFN_SPR_PRIORITY
+;@brief Set a sprite's render priority.
+;@arg idx u8 sprite index
+;@arg pri u8 priority level
+;@ret void
+;
+;@fn GFN_SPR_SHAPE
+;@brief Set a sprite's shape-slot index (attribute register write).
+;@arg idx u8 sprite index
+;@arg shape u8 shape slot index
+;@ret void
+;@effect Writes the VGC_SPR_SHAPE attribute register directly (no command issued).
+;
+;@fn GFN_SPR_SETREG
+;@brief Write one 8-bit sprite attribute field.
+;@arg idx u8 sprite index
+;@arg field u8 attribute field offset
+;@arg val u8 value
+;@ret void
+;@effect Writes the $A040 sprite attribute block directly (no command issued).
+;
+;@fn GFN_SPR_SETREG16
+;@brief Write one 16-bit sprite attribute field.
+;@arg idx u8 sprite index
+;@arg field u8 attribute field offset
+;@arg val16 u16 16-bit value
+;@ret void
+;@effect Writes the $A040 sprite attribute block directly (no command issued).
+;
+;@fn GFN_SPR_GETX
+;@brief Read a sprite's 16-bit X position (reporter).
+;@arg idx u8 sprite index
+;@ret u16 sprite X position
+;@effect Returns the X position in RESULT.
+;
+;@fn GFN_SPR_GETY
+;@brief Read a sprite's Y byte (reporter).
+;@arg idx u8 sprite index
+;@ret u8 sprite Y position
+;@effect Returns the Y byte in RESULT.
+;
+;@fn GFN_SPR_COLL_STATUS
+;@brief Read the sprite-sprite collision status low byte (reporter).
+;@ret u8 collision status byte
+;@effect Returns the status byte in RESULT.
+;
+;@fn GFN_SPR_COLL_MASK
+;@brief Read the 16-bit sprite-sprite collision mask (reporter).
+;@ret u16 collision mask (one bit per sprite)
+;@effect Returns the mask in RESULT.
+;
+;@fn GFN_SPR_COLL_CLEAR
+;@brief Clear the sprite-sprite collision mask and acknowledge its IRQ.
+;@ret void
+;
+;@fn GFN_SPR_COLL_READCLEAR
+;@brief Read the 16-bit sprite-sprite collision mask, then clear it (reporter).
+;@ret u16 collision mask before clearing
+;@effect Returns the mask in RESULT and clears it.
+;
+;@fn GFN_SPR_COLL_IRQON
+;@brief Enable the sprite-sprite collision IRQ (and CLI).
+;@ret void
+;
+;@fn GFN_SPR_COLL_IRQOFF
+;@brief Disable the sprite-sprite collision IRQ.
+;@ret void
+;
+;@fn GFN_SPR_BG_STATUS
+;@brief Read the sprite-background collision status low byte (reporter).
+;@ret u8 collision status byte
+;@effect Returns the status byte in RESULT.
+;
+;@fn GFN_SPR_BG_MASK
+;@brief Read the 16-bit sprite-background collision mask (reporter).
+;@ret u16 collision mask (one bit per sprite)
+;@effect Returns the mask in RESULT.
+;
+;@fn GFN_SPR_BG_CLEAR
+;@brief Clear the sprite-background collision mask and acknowledge its IRQ.
+;@ret void
+;
+;@fn GFN_SPR_BG_READCLEAR
+;@brief Read the 16-bit sprite-background collision mask, then clear it (reporter).
+;@ret u16 collision mask before clearing
+;@effect Returns the mask in RESULT and clears it.
+;
+;@fn GFN_SPR_BG_IRQON
+;@brief Enable the sprite-background collision IRQ (and CLI).
+;@ret void
+;
+;@fn GFN_SPR_BG_IRQOFF
+;@brief Disable the sprite-background collision IRQ.
+;@ret void
+;
+;@fn GFN_COPPER_LIST
+;@brief Select the copper list that ADD/CLEAR will edit.
+;@arg idx u8 copper list index (0-127)
+;@ret void
+;@effect Sets state read by later COPPER_ADD/COPPER_CLEAR.
+;
+;@fn GFN_COPPER_ADD
+;@brief Add a register-write event to the target copper list.
+;@arg x s16 column (raster x position)
+;@arg y u8 scanline (raster y position)
+;@arg reg u16 VGC register specifier
+;@arg val u8 value to write
+;@ret void
+;
+;@fn GFN_COPPER_CLEAR
+;@brief Empty the target copper list.
+;@ret void
+;
+;@fn GFN_COPPER_ON
+;@brief Enable copper execution.
+;@ret void
+;
+;@fn GFN_COPPER_OFF
+;@brief Disable copper execution.
+;@ret void
+;
+;@fn GFN_COPPER_USE
+;@brief Make a copper list active at the next vblank.
+;@arg idx u8 copper list index
+;@ret void
+;
+;@fn GFN_COPPER_END
+;@brief Finish editing the current list (target becomes the active list).
+;@ret void
+;
+;@fn GFN_COPPER_SPLIT
+;@brief Build a split-screen copper list with two VGC_MODE rules at a scanline.
+;@arg idx u8 copper list index
+;@arg splitY u8 scanline of the mode split
+;@arg mode0 u8 VGC mode above the split
+;@arg mode1 u8 VGC mode below the split
+;@ret void
+;@effect Runs the full off/list/clear/add/add/use/on sequence and leaves the copper enabled.
+;
+;@fn GFN_COPPER_SET_REG
+;@brief Add a copper write to a direct VGC register (observable CopperEvent).
+;@arg x s16 column (raster x position)
+;@arg y u8 scanline (raster y position)
+;@arg regIndex u8 VGC register index
+;@arg val u8 value to write
+;@ret void
+;
+;@fn GFN_COPPER_SET_SPRITE_REG
+;@brief Add a copper write to a sprite attribute register (observable CopperEvent).
+;@arg x s16 column (raster x position)
+;@arg y u8 scanline (raster y position)
+;@arg sprfield u8 byte0 = sprite index, byte1 = VGC_SPR_*_OFF field
+;@arg val u8 value to write
+;@ret void
+;
+;@fn GFN_BLITCOPY
+;@brief 2-D rectangular copy between memory spaces (tightly packed, stride = width).
+;@arg spaces u8 byte0 = srcSpace, byte1 = dstSpace
+;@arg src u32 source offset (24-bit)
+;@arg dst u32 destination offset (24-bit)
+;@arg wh u32 width (bytes 0-1) and height (bytes 2-3)
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;
+;@fn GFN_BLITFILL
+;@brief Fill a tightly-packed rectangle with a byte value.
+;@arg spacefill u8 byte1 = dstSpace, byte2 = fill value
+;@arg dst u32 destination offset (24-bit)
+;@arg wh u32 width (bytes 0-1) and height (bytes 2-3)
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;
+;@fn GFN_BLIT_START
+;@brief Issue a blit copy on caller-preloaded BLT_* registers, then wait.
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;
+;@fn GFN_BLIT_WAIT
+;@brief Poll BLT_STATUS to completion for a caller-issued blit.
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;
+;@fn GFN_DMACOPY
+;@brief 1-D bulk copy between memory spaces.
+;@arg spaces u8 byte0 = srcSpace, byte1 = dstSpace
+;@arg src u32 source offset (24-bit)
+;@arg dst u32 destination offset (24-bit)
+;@arg len u32 length in bytes (24-bit)
+;@ret void
+;@effect Self-waits for the DMA to finish before returning.
+;
+;@fn GFN_DMAFILL
+;@brief Fill a DMA range with a byte value.
+;@arg spacefill u8 byte1 = dstSpace, byte2 = fill value
+;@arg dst u32 destination offset (24-bit)
+;@arg len u32 length in bytes (24-bit)
+;@ret void
+;@effect Self-waits for the DMA to finish before returning.
+;
+;@fn GFN_BLIT_STATUS
+;@brief Read the blitter controller status byte (reporter).
+;@ret u8 blitter status (BUSY/OK/ERROR)
+;@effect Returns the status byte in RESULT.
+;
+;@fn GFN_BLIT_ERR
+;@brief Read the blitter controller error byte (reporter).
+;@ret u8 blitter error code (0 = none)
+;@effect Returns the error byte in RESULT.
+;
+;@fn GFN_BLIT_COUNT
+;@brief Read the 24-bit blitter bytes-written counter (reporter).
+;@ret u32 bytes written (24-bit)
+;@effect Returns the count in RESULT.
+;
+;@fn GFN_DMA_STATUS
+;@brief Read the DMA controller status byte (reporter).
+;@ret u8 DMA status (BUSY/OK/ERROR)
+;@effect Returns the status byte in RESULT.
+;
+;@fn GFN_DMA_ERR
+;@brief Read the DMA controller error byte (reporter).
+;@ret u8 DMA error code (0 = none)
+;@effect Returns the error byte in RESULT.
+;
+;@fn GFN_DMA_COUNT
+;@brief Read the 24-bit DMA bytes-moved counter (reporter).
+;@ret u32 bytes moved (24-bit)
+;@effect Returns the count in RESULT.
+;
+;@fn GFN_VS_BLIT
+;@brief Virtual-sprite rectangular copy (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_BLIT_START
+;@brief Virtual-sprite rectangular copy, issue only (no wait).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_FILL
+;@brief Virtual-sprite rectangular fill (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the fill to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_USE_ORIGINAL
+;@brief Point the vsprite source at its original (unrotated) buffer.
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Sets SRC* state read by a later blit.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_USE_ROTATED
+;@brief Point the vsprite source at its rotated buffer.
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Sets SRC* state read by a later blit.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_ROTATE
+;@brief Rotate the vsprite original buffer into its rotated buffer (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_BLIT
+;@brief Blit the vsprite onto the gfx plane at its X/Y (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_BLIT_START
+;@brief Blit the vsprite onto the gfx plane, issue only (no wait).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_FILL
+;@brief Fill a region of the gfx plane at the vsprite X/Y (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the fill to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_SAVE_BG
+;@brief Save the gfx-plane background under the vsprite into its BG buffer (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_RESTORE_BG
+;@brief Restore the saved background back onto the gfx plane (self-waits).
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect Self-waits for the blit to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_ROTATE_BLIT
+;@brief Rotate then frame-wait then blit the vsprite onto the gfx plane.
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect PUMPED: frame-waits on VGC_FRAME — the caller must pump the bus.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_ROTATE_BLIT_KEYED
+;@brief Rotate, frame-wait, then colour-keyed blit the vsprite onto the gfx plane.
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@effect PUMPED: frame-waits on VGC_FRAME — the caller must pump the bus.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_GFX_ROTATE_BLIT_NOWAIT
+;@brief Rotate then blit the vsprite onto the gfx plane with no frame wait.
+;@arg cfg bytes pointer+length of the VSPRITE config struct
+;@ret void
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_SCENE_BEGIN
+;@brief Begin a vsprite scene: restore old backgrounds for the descriptor list.
+;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
+;@ret void
+;@effect Self-waits for the blits to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_SCENE_COMMIT
+;@brief Commit a vsprite scene: save then draw all descriptors.
+;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
+;@ret void
+;@effect Self-waits for the blits to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_SCENE_DRAW
+;@brief Draw all vsprite scene descriptors (draw only, no save).
+;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
+;@ret void
+;@effect Self-waits for the blits to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_VS_SCENE_COMMIT_ATOMIC
+;@brief Atomically commit a vsprite scene via an off-screen work buffer.
+;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene+work)
+;@ret void
+;@effect Self-waits for the blits to finish before returning.
+;@status LERR_OK, LERR_VSPRITE_FAIL
+;
+;@fn GFN_MS_SPAWN
+;@brief Spawn a meta-sprite object from a visual descriptor.
+;@arg desc bytes pointer+length of the meta-sprite descriptor (ptr written to MSPRITE_DESC)
+;@ret u8 new object handle ($FF on failure)
+;@effect Returns the object handle in RESULT.
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_DESTROY
+;@brief Destroy a meta-sprite object and free its hardware sprites.
+;@arg handle u8 meta-sprite object handle
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_SHOW
+;@brief Show a meta-sprite object.
+;@arg handle u8 meta-sprite object handle
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_HIDE
+;@brief Hide a meta-sprite object.
+;@arg handle u8 meta-sprite object handle
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_POS
+;@brief Set a meta-sprite object's position (16-bit signed X, byte Y).
+;@arg handle u8 meta-sprite object handle
+;@arg x s16 object x position
+;@arg y u8 object y position
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_FRAME
+;@brief Set a meta-sprite object's animation frame.
+;@arg handle u8 meta-sprite object handle
+;@arg frame u8 frame number
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_ANIM
+;@brief Attach an animation descriptor to a meta-sprite object.
+;@arg handle u8 meta-sprite object handle
+;@arg anim bytes pointer+length of the animation descriptor (ptr to MSPRITE_ANIM)
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_PRIORITY
+;@brief Set a meta-sprite object's render priority.
+;@arg handle u8 meta-sprite object handle
+;@arg pri u8 priority level
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_TRANSCOLOR
+;@brief Set a meta-sprite object's transparent colour.
+;@arg handle u8 meta-sprite object handle
+;@arg color u8 transparent palette index
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MS_TICK
+;@brief Advance all meta-sprite animation timers by one tick (engine-wide).
+;@ret void
+;@status LERR_OK
+;
+;@fn GFN_MS_COMMIT
+;@brief Write all dirty visible meta-sprite objects to the hardware sprites.
+;@ret void
+;@status LERR_OK
+;
+;@fn GFN_MS_COMMIT_ONE
+;@brief Write one meta-sprite object to its hardware sprites.
+;@arg handle u8 meta-sprite object handle
+;@ret void
+;@status LERR_OK, LERR_MSPRITE_FAIL
+;
+;@fn GFN_MEMREAD
+;@brief Read one byte from a VGC memory space (reporter).
+;@arg space u8 VGC plane / space id
+;@arg addr u16 16-bit address within the space
+;@ret u8 byte read
+;@effect Returns the byte in RESULT.
+;
+;@fn GFN_MEMWRITE
+;@brief Write one byte to a VGC memory space.
+;@arg space u8 VGC plane / space id
+;@arg addr u16 16-bit address within the space
+;@arg value u8 byte to write
+;@ret void
+;
+;@fn GFN_VPEEK
+;@brief Read one byte from the gfx plane (reporter).
+;@arg offset u16 gfx-plane offset
+;@ret u8 gfx byte
+;@effect Returns the byte in RESULT.
+;
+;@fn GFN_VPOKE
+;@brief Write one byte to the gfx plane.
+;@arg offset u16 gfx-plane offset
+;@arg value u8 byte to write
+;@ret void
+;
+;@fn GFN_GSAVE
+;@brief Save a VGC memory space to a .gfx file on disk.
+;@arg space u8 VGC plane / space id
+;@arg addr u16 16-bit start address
+;@arg len u16 length in bytes
+;@arg name bytes pointer+length of the filename
+;@ret void
+;@status LERR_OK, LERR_FILE_FAIL
+;
+;@fn GFN_GLOAD
+;@brief Load a .gfx file from disk into a VGC memory space.
+;@arg space u8 VGC plane / space id
+;@arg addr u16 16-bit destination address
+;@arg len u16 length in bytes
+;@arg name bytes pointer+length of the filename
+;@ret void
+;@status LERR_OK, LERR_FILE_FAIL
+;
+;@fn GFN_NVGLOAD
+;@brief Load an NVG image into the gfx plane at offset 0.
+;@arg name bytes pointer+length of the filename
+;@ret void
+;@status LERR_OK, LERR_IMAGE_FAIL
+;
+;@fn GFN_NVGLOAD_AT
+;@brief Load an NVG image into the gfx plane at a destination offset.
+;@arg name bytes pointer+length of the filename
+;@arg dest u16 gfx-plane destination offset
+;@ret void
+;@status LERR_OK, LERR_IMAGE_FAIL
+;
+;@fn GFN_NVGLOAD_NAMED
+;@brief Load an NVG image into the gfx plane via the named-arg filename path.
+;@arg name bytes pointer+length of the filename
+;@ret void
+;@status LERR_OK, LERR_IMAGE_FAIL
+;
+;@fn GFN_NVGLOAD_NAMED_AT
+;@brief Load an NVG image (named-arg path) into the gfx plane at a destination offset.
+;@arg name bytes pointer+length of the filename
+;@arg dest u16 gfx-plane destination offset
+;@ret void
+;@status LERR_OK, LERR_IMAGE_FAIL
+;
+;@fn GFN_TURTLE_INIT
+;@brief Install the built-in turtle icon into the module source buffer and reset bg bookkeeping.
+;@ret void
+;
+;@fn GFN_TURTLE_DRAW
+;@brief Erase the old turtle, save the background, then rotate-and-keyed-blit the turtle at a new centre.
+;@arg x s16 turtle centre x
+;@arg y s16 turtle centre y
+;@arg angle u8 pre-computed rotation angle byte
+;@ret void
+;@effect PUMPED: frame-waits inside the rotate-blit — the caller must pump the bus.
+;
+;@fn GFN_TURTLE_ERASE
+;@brief Restore the saved background, erasing the turtle.
+;@ret void
+;
+;@fn GFN_TURTLE_OP
+;@brief NovaLogo turtle command engine (op-dispatched: ARG2 byte0 = a turtle command id; value args in ARG0/ARG1 as Logo 16.8).
+;@arg op u8 turtle command id (TOP_*)
+;@arg arg0 fix16.8 first value argument (Logo 16.8 fixed-point)
+;@arg arg1 fix16.8 second value argument (Logo 16.8 fixed-point)
+;@ret fix16.8 reporter result for XCOR/YCOR/HEADING/PENDOWN?/SHOWN?/TOWARDS (void for command ops)
+;@effect PUMPED: turtle DRAW move ops frame-wait — pump the bus.
+;
+;@fn GFN_ANIM_INIT
+;@brief Initialise the sprite-animation engine (clear all tracks).
+;@ret void
+;@status LERR_OK
+;
+;@fn GFN_ANIM_START
+;@brief Start an animation track from a descriptor against a target.
+;@arg desc bytes pointer+length of the animation descriptor (ptr to ANIM_DESC)
+;@arg target u8 target index
+;@arg type u8 target type
+;@ret u8 new track handle ($FF on failure)
+;@effect Returns the track handle in RESULT.
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_ANIM_STOP
+;@brief Stop an animation track.
+;@arg handle u8 animation track handle
+;@ret void
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_ANIM_TICK
+;@brief Advance all animation tracks by one tick (engine-wide).
+;@ret void
+;@status LERR_OK
+;
+;@fn GFN_ANIM_TICK_ONE
+;@brief Advance one animation track by one tick.
+;@arg handle u8 animation track handle
+;@ret void
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_ANIM_SET_FRAME
+;@brief Set an animation track's current frame.
+;@arg handle u8 animation track handle
+;@arg frame u8 frame number
+;@ret void
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_ANIM_LOAD_XRAM
+;@brief Load animation shape frames from XRAM.
+;@arg shape u8 shape slot
+;@arg count u8 number of frames
+;@arg xaddr24 u32 24-bit XRAM source address
+;@ret void
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_ANIM_LOAD_DISK
+;@brief Load animation shape frames from a disk file.
+;@arg shape u8 shape slot
+;@arg count u8 number of frames
+;@arg file24 u32 24-bit file offset
+;@arg name bytes pointer+length of the filename
+;@ret void
+;@status LERR_OK, LERR_ANIM_FAIL
+;
+;@fn GFN_TWEEN_BEGIN
+;@brief Begin a tween between two values over a duration (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames (0 snaps to end)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_EVAL
+;@brief Evaluate a tween at a frame with a selectable easing mode (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg durmode u16 byte0 = duration, byte1 = ease mode (0 lin/1 in/2 out/3 in-out)
+;@arg frame u8 current frame
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_EVAL_LINEAR
+;@brief Evaluate a linear tween at a frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_EVAL_EASE_IN
+;@brief Evaluate an ease-in tween at a frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_EVAL_EASE_OUT
+;@brief Evaluate an ease-out tween at a frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_EVAL_EASE_IN_OUT
+;@brief Evaluate an ease-in-out tween at a frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_STEP
+;@brief Step a tween forward one frame with a selectable easing mode (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg durmode u16 byte0 = duration, byte1 = ease mode (0 lin/1 in/2 out/3 in-out)
+;@arg frame u8 current frame (incremented by the step)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_STEP_LINEAR
+;@brief Step a linear tween forward one frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame (incremented by the step)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_STEP_EASE_IN
+;@brief Step an ease-in tween forward one frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame (incremented by the step)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_STEP_EASE_OUT
+;@brief Step an ease-out tween forward one frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame (incremented by the step)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
+;
+;@fn GFN_TWEEN_STEP_EASE_IN_OUT
+;@brief Step an ease-in-out tween forward one frame (reporter).
+;@arg start s16 start value
+;@arg end s16 end value
+;@arg duration u8 frames
+;@arg frame u8 current frame (incremented by the step)
+;@ret u16 computed value (RESULT also carries done + progress bytes)
+;@status LERR_OK
 
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
 ;
