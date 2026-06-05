@@ -53,6 +53,7 @@ return verb switch
     "asset"      => DoAsset(args[1..], remoteHost),
     "runtime"    => DoRuntime(args[1..], remoteHost),
     "webserver" or "web" => DoWebServer(args[1..], remoteHost),
+    "module"     => DoModule(args[1..], remoteHost),
     _            => UnknownVerb(verb),
 };
 
@@ -118,6 +119,216 @@ static int RunManagement(string host, string operation,
         Console.Error.WriteLine($"{operation}: {ex.Message}");
         return 1;
     }
+}
+
+// ===========================================================================
+// module — inspect / validate / manage .nmod paged-library modules
+// (NovaModule lives in e6502.Storage; shared with the web UI)
+// ===========================================================================
+
+static int DoModule(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintModuleUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string cmd = args[0].ToLowerInvariant();
+    string[] rest = args[1..];
+    return cmd switch
+    {
+        "info"              => DoModuleInfo(rest, host),
+        "ls" or "list"      => DoModuleLs(host),
+        "validate"          => DoModuleValidate(rest),
+        "put" or "upload"   => DoModulePut(rest, host),
+        "get" or "download" => DoModuleGet(rest, host),
+        "rm" or "delete"    => DoModuleRm(rest, host),
+        _                   => UnknownModuleCommand(cmd),
+    };
+}
+
+static int UnknownModuleCommand(string cmd)
+{
+    Console.Error.WriteLine($"Unknown module command: {cmd}");
+    PrintModuleUsage();
+    return 1;
+}
+
+static void PrintModuleUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova module info <file|name> [--remote <host>]");
+    Console.Error.WriteLine("  nova module ls --remote <host>");
+    Console.Error.WriteLine("  nova module validate <file>");
+    Console.Error.WriteLine("  nova module put <file> [name] --remote <host>");
+    Console.Error.WriteLine("  nova module get <name> [local] --remote <host>");
+    Console.Error.WriteLine("  nova module rm <name> --remote <host>");
+}
+
+// Read a module's bytes from a local file (if it exists), else from the board's /lib.
+static byte[]? ReadModuleBytes(string arg, string? host, out string source)
+{
+    source = arg;
+    if (File.Exists(arg))
+        return File.ReadAllBytes(arg);
+
+    if (host is not null)
+    {
+        string remote = arg.Contains('/') ? NormalizeSdRelativePath(arg)
+                                           : JoinRemotePath("lib", arg);
+        source = "/" + remote;
+        byte[]? data = null;
+        int rc = RunManagement(host, "module read", async (m, t) =>
+        {
+            data = await m.ReadFileAsync(remote, t);
+            return 0;
+        });
+        return rc == 0 ? data : null;
+    }
+
+    Console.Error.WriteLine($"not found locally and no --remote given: {arg}");
+    return null;
+}
+
+static int DoModuleInfo(string[] args, string? host)
+{
+    if (args.Length < 1) { PrintModuleUsage(); return 1; }
+    byte[]? bytes = ReadModuleBytes(args[0], host, out string source);
+    if (bytes is null) return 1;
+    NovaModule mod = NovaModule.Parse(bytes);
+    PrintModule(source, mod);
+    return mod.Valid ? 0 : 1;
+}
+
+static void PrintModule(string source, NovaModule mod)
+{
+    if (!mod.Valid)
+    {
+        Console.Error.WriteLine($"{source}: INVALID — {mod.Error}");
+        return;
+    }
+
+    if (mod is { HasDoc: true, Doc: not null })
+    {
+        NovaModuleMeta meta = mod.Doc.Module;
+        Console.WriteLine($"Module: {meta.Name}  id=${meta.Id:X2}  abi={meta.AbiVersion}  " +
+                          $"version={meta.Version ?? "?"}");
+        if (!string.IsNullOrEmpty(meta.Brief)) Console.WriteLine($"  {meta.Brief}");
+        if (!string.IsNullOrEmpty(meta.AbiNote)) Console.WriteLine($"  ({meta.AbiNote})");
+        Console.WriteLine($"Functions ({mod.Doc.Functions.Count}):");
+        foreach (NovaFn fn in mod.Doc.Functions)
+        {
+            Console.WriteLine($"  {fn.IdHex} {fn.Signature()}");
+            if (!string.IsNullOrEmpty(fn.Brief)) Console.WriteLine($"       {fn.Brief}");
+            if (!string.IsNullOrEmpty(fn.Effect)) Console.WriteLine($"       effect: {fn.Effect}");
+            if (fn.Status.Count > 0) Console.WriteLine($"       status: {string.Join(", ", fn.Status)}");
+        }
+    }
+    else
+    {
+        Console.WriteLine($"Module: id=${mod.Id:X2}  abi={mod.AbiVersion}  " +
+                          $"fnCount={mod.FnCount}  (no NDOC documentation)");
+    }
+}
+
+static int DoModuleValidate(string[] args)
+{
+    if (args.Length < 1) { PrintModuleUsage(); return 1; }
+    string path = args[0];
+    if (!File.Exists(path)) { Console.Error.WriteLine($"file not found: {path}"); return 1; }
+
+    NovaModule mod = NovaModule.Parse(File.ReadAllBytes(path));
+    if (!mod.Valid) { Console.Error.WriteLine($"{path}: INVALID — {mod.Error}"); return 1; }
+    if (mod is { HasDoc: true, Doc: not null } && mod.Doc.Functions.Count != mod.FnCount)
+    {
+        Console.Error.WriteLine($"{path}: doc/header drift — doc lists {mod.Doc.Functions.Count} " +
+                                $"functions, header says {mod.FnCount}");
+        return 1;
+    }
+
+    string docNote = mod.HasDoc ? $"{mod.Doc!.Functions.Count} documented functions"
+                                : "no NDOC doc";
+    Console.WriteLine($"{path}: OK — id=${mod.Id:X2} abi={mod.AbiVersion} " +
+                      $"fnCount={mod.FnCount} ({docNote})");
+    return 0;
+}
+
+static int DoModulePut(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) { PrintModuleUsage(); return 1; }
+    string local = args[0];
+    if (!File.Exists(local)) { Console.Error.WriteLine($"local file not found: {local}"); return 1; }
+
+    NovaModule mod = NovaModule.Parse(File.ReadAllBytes(local));
+    if (!mod.Valid)
+    {
+        Console.Error.WriteLine($"refusing to stage invalid module {local}: {mod.Error}");
+        return 1;
+    }
+
+    string name = args.Length > 1 ? args[1] : Path.GetFileName(local);
+    return PutFile(local, JoinRemotePath("lib", name), host);
+}
+
+static int DoModuleGet(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) { PrintModuleUsage(); return 1; }
+    string remote = JoinRemotePath("lib", args[0]);
+    string[] getArgs = args.Length > 1 ? new[] { remote, args[1] } : new[] { remote };
+    return DoGet(getArgs, host);
+}
+
+static int DoModuleRm(string[] args, string? host)
+{
+    if (host is null || args.Length < 1) { PrintModuleUsage(); return 1; }
+    return DoRm(new[] { JoinRemotePath("lib", args[0]) }, host);
+}
+
+static int DoModuleLs(string? host)
+{
+    if (host is null) { PrintModuleUsage(); return 1; }
+
+    JsonNode? config = ReadBootConfig(host);
+    var staged = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+    if (config?["libraries"] is JsonArray libs)
+    {
+        foreach (JsonNode? lib in libs)
+        {
+            string baseName = Path.GetFileName((string?)lib?["path"] ?? "");
+            if (baseName.Length > 0)
+                staged[baseName] = (int?)lib?["id"] ?? -1;
+        }
+    }
+
+    return RunManagement(host, "module ls", async (m, t) =>
+    {
+        JsonArray rows = await m.ListDirectoryAsync("lib/", t);
+        Console.WriteLine($"{"Name",-22} {"Id",-5} {"Ver",-6} {"Fns",-4} {"Valid",-6} {"Staged",-7} Notes");
+        Console.WriteLine(new string('-', 78));
+        foreach (JsonNode? node in rows)
+        {
+            var entry = node as JsonObject;
+            string name = entry?["name"]?.GetValue<string>() ?? "?";
+            bool isDir = entry?["dir"]?.GetValue<bool>() == true;
+            if (isDir || (!name.EndsWith(".mod") && !name.EndsWith(".nmod")))
+                continue;
+
+            NovaModule mod = NovaModule.Parse(await m.ReadFileAsync($"lib/{name}", t));
+            bool isStaged = staged.TryGetValue(name, out int stagedId);
+            string ver = mod.Doc?.Module.Version ?? "-";
+            string note = "";
+            if (isStaged && mod.Valid && stagedId != mod.Id)
+                note = $"! id boot.json=${stagedId:X2} != binary=${mod.Id:X2}";
+
+            Console.WriteLine(
+                $"{name,-22} {(mod.Valid ? $"${mod.Id:X2}" : "?"),-5} {ver,-6} " +
+                $"{(mod.Valid ? mod.FnCount.ToString() : "-"),-4} " +
+                $"{(mod.Valid ? "yes" : "NO"),-6} {(isStaged ? "yes" : "no"),-7} {note}");
+        }
+        return 0;
+    }, TimeSpan.FromSeconds(30));
 }
 
 static void PrintJson(JsonNode? node)
