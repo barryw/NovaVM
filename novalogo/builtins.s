@@ -1996,36 +1996,24 @@ degrees_to_u8:
 ; do_sin — SIN degrees: return sin as signed byte (-128..+127)
 ; ---------------------------------------------------------------------
 do_sin:
-      JSR   eval_expr
-      BCS   @err
       JSR   degrees_to_u8
       STA   MATH_SINCOS_ANGLE
       LDA   MATH_RES0              ; sin result (signed 1.7)
       JMP   return_signed_byte
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_cos — COS degrees: return cos as signed byte (-128..+127)
 ; ---------------------------------------------------------------------
 do_cos:
-      JSR   eval_expr
-      BCS   @err
       JSR   degrees_to_u8
       STA   MATH_SINCOS_ANGLE
       LDA   MATH_RES1              ; cos result (signed 1.7)
       JMP   return_signed_byte
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_abs — ABS n: return absolute value
 ; ---------------------------------------------------------------------
 do_abs:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_val_hi
       BPL   @done                  ; already positive
       ; Negate 24-bit value
@@ -2045,29 +2033,19 @@ do_abs:
 @done:
       STZ   eval_type
       JMP   eval_continue
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_int — INT n: truncate fractional part
 ; ---------------------------------------------------------------------
 do_int:
-      JSR   eval_expr
-      BCS   @err
       STZ   eval_val_frac
       STZ   eval_type
       JMP   eval_continue
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_round — ROUND n: round to nearest integer
 ; ---------------------------------------------------------------------
 do_round:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_val_frac
       CMP   #128
       BCC   @trunc
@@ -2084,17 +2062,12 @@ do_round:
       STZ   eval_val_frac
       STZ   eval_type
       JMP   eval_continue
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_random — RANDOM n: return random number 0..n-1
 ;   Uses math coprocessor RNG + MUL16 to scale
 ; ---------------------------------------------------------------------
 do_random:
-      JSR   eval_expr
-      BCS   @err
       ; RNG byte * n / 256 gives 0..n-1
       LDA   MATH_RNG
       STA   MATH_MUL16_A_LO
@@ -2107,16 +2080,11 @@ do_random:
       STA   eval_val_lo
       STZ   eval_val_hi
       JMP   return_number
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_sqrt — SQRT n: approximate sqrt via DIST_APPROX(n, 0)
 ; ---------------------------------------------------------------------
 do_sqrt:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_val_lo
       STA   MATH_DIST_DX_LO
       LDA   eval_val_hi
@@ -2128,9 +2096,6 @@ do_sqrt:
       LDA   MATH_RES1
       STA   eval_val_hi
       JMP   return_number
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_remainder — REMAINDER a b: return a mod b via DIV coprocessor
@@ -2191,8 +2156,6 @@ do_remainder:
 ; do_not — NOT expr: return 1 if expr is 0, else 0
 ; ---------------------------------------------------------------------
 do_not:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_val_lo
       ORA   eval_val_hi
       ; If zero, set result to 1. If nonzero, set to 0.
@@ -2205,9 +2168,6 @@ do_not:
 @done:
       STZ   eval_val_hi
       JMP   return_number
-@err:
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; do_and — AND a b: return 1 if both nonzero, else 0
@@ -2265,34 +2225,19 @@ do_or:
 ; Type predicates — NUMBER?, WORD?, LIST?
 ; ---------------------------------------------------------------------
 do_numberp:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_type
       CMP   #VAL_NUMBER
       JMP   predicate_result
-@err:
-      SEC
-      RTS
 
 do_wordp:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_type
       CMP   #VAL_WORD
       JMP   predicate_result
-@err:
-      SEC
-      RTS
 
 do_listp:
-      JSR   eval_expr
-      BCS   @err
       LDA   eval_type
       CMP   #VAL_LIST
       JMP   predicate_result
-@err:
-      SEC
-      RTS
 
 ; =====================================================================
 ; RODATA — builtin table and name strings
@@ -2537,31 +2482,31 @@ builtin_table:
 
       .word str_sin_name
       .word do_sin
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_cos_name
       .word do_cos
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_abs_name
       .word do_abs
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_int_name
       .word do_int
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_round_name
       .word do_round
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_random_name
       .word do_random
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_sqrt_name
       .word do_sqrt
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_remainder_name
       .word do_remainder
@@ -2569,7 +2514,7 @@ builtin_table:
 
       .word str_not_name
       .word do_not
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_and_name
       .word do_and
@@ -2581,15 +2526,15 @@ builtin_table:
 
       .word str_numberp_name
       .word do_numberp
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_wordp_name
       .word do_wordp
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_listp_name
       .word do_listp
-      .byte 0
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the arg
 
       .word str_po_name
       .word do_po

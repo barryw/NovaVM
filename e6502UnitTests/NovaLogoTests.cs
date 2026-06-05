@@ -261,21 +261,30 @@ public class NovaLogoTests
     }
 
     [TestMethod]
-    public void ReporterSinComputesAndUnderSupplyIsSilent()
+    public void ReporterSinComputesAndUnderSupplyRoutesGeneric()
     {
-        // With an argument: SIN reports a value (PRINT SIN 90 -> 127).
+        // With an argument: SIN reports a value (PRINT SIN 90 -> 127). This is
+        // the byte-identical path before/after the arity flip — the realistic
+        // use of a reporter is in expression position with its argument.
         string ok = RunLogoLines("PRINT SIN 90");
         Assert.IsTrue(ok.Contains("127", StringComparison.Ordinal),
             $"Expected SIN 90 -> 127.\n{ok}");
         Assert.IsFalse(ok.Contains("NOT ENOUGH", StringComparison.Ordinal),
             $"SIN 90 should not error.\n{ok}");
 
-        // Bare SIN as a command with no argument: today this terminates the
-        // line silently (handler's SEC/RTS), printing NO command-specific
-        // "NOT ENOUGH INPUTS TO SIN" message. A following good line still runs.
+        // Bare SIN as a command with no argument (degenerate: a reporter used
+        // as a statement). After the R1 flip, SIN is arity 1, so this routes
+        // through the dispatcher's GENERIC missing-arg path — the same path a
+        // bare PRINT takes — yielding the generic "NOT ENOUGH INPUTS" (NOT a
+        // command-specific message), and the REPL recovers so the next line
+        // runs. This makes reporters consistent with every other arity-1
+        // builtin (before the flip a bare reporter silently swallowed the
+        // line with no diagnostic).
         string bare = RunLogoLines("SIN", "PRINT \"AOK");
+        Assert.IsTrue(bare.Contains("NOT ENOUGH INPUTS", StringComparison.Ordinal),
+            $"Bare SIN should route through the generic NOT ENOUGH INPUTS path.\n{bare}");
         Assert.IsFalse(bare.Contains("NOT ENOUGH INPUTS TO SIN", StringComparison.Ordinal),
-            $"Bare SIN must not print a command-specific NOT ENOUGH message.\n{bare}");
+            $"Bare SIN must use the generic (un-named) NOT ENOUGH message.\n{bare}");
         Assert.IsTrue(bare.Contains("AOK", StringComparison.Ordinal),
             $"A line after bare SIN should still execute.\n{bare}");
     }
@@ -297,21 +306,24 @@ public class NovaLogoTests
     }
 
     [TestMethod]
-    public void ReporterNotComputesAndUnderSupplyIsSilent()
+    public void ReporterNotComputesAndUnderSupplyRoutesGeneric()
     {
-        // NOT 0 -> 1, NOT 1 -> 0.
+        // NOT 0 -> 1.
         string ok = RunLogoLines("PRINT NOT 0");
         Assert.IsTrue(ok.Contains("1", StringComparison.Ordinal),
             $"Expected NOT 0 -> 1.\n{ok}");
         string ok2 = RunLogoLines("PRINT NOT 5");
-        // NOT of a nonzero value is 0.
+        // NOT of a nonzero value is 0 (and must not error).
         Assert.IsFalse(ok2.Contains("NOT ENOUGH", StringComparison.Ordinal),
             $"NOT 5 should not error.\n{ok2}");
 
-        // Bare NOT with no argument: silent (SEC/RTS), no specific message.
+        // Bare NOT with no argument: after the flip, generic missing-arg path
+        // (un-named "NOT ENOUGH INPUTS"), REPL recovers. Same as bare SIN.
         string bare = RunLogoLines("NOT", "PRINT \"AOK");
+        Assert.IsTrue(bare.Contains("NOT ENOUGH INPUTS", StringComparison.Ordinal),
+            $"Bare NOT should route through the generic NOT ENOUGH INPUTS path.\n{bare}");
         Assert.IsFalse(bare.Contains("NOT ENOUGH INPUTS TO NOT", StringComparison.Ordinal),
-            $"Bare NOT must not print a command-specific NOT ENOUGH message.\n{bare}");
+            $"Bare NOT must use the generic (un-named) NOT ENOUGH message.\n{bare}");
         Assert.IsTrue(bare.Contains("AOK", StringComparison.Ordinal),
             $"A line after bare NOT should still execute.\n{bare}");
     }
