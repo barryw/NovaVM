@@ -87,6 +87,14 @@ SHELF_BASE_L     = $00
 SHELF_BASE_M     = $00
 SHELF_BASE_H     = $06            ; $060000
 SHELF_SLOT_WORDS = $2000          ; 8192 words = 16KB per slot
+SHELF_N          = 4              ; physical shelf slots (cache lines)
+; Dynamic shelf directory (RAM, in the resident loader band $0320-$041F, packed
+; against the top edge so the loader can grow to $0417). slot i base is computed:
+; SHELF_BASE + i*$4000. shelf_tag[i] = resident module id ($00 = empty).
+; shelf_lru[i] = slot indices, MRU(front) -> LRU(back). Seeded by the host
+; (firmware) at boot / by the test harness in the emulator.
+SHELF_TAG        = $0418          ; SHELF_N bytes: $0418-$041B
+SHELF_LRU        = $041C          ; SHELF_N bytes: $041C-$041F
 
 ; --- Host-extension re-page (4c.0c: coexistence of legacy ext + paged modules) ---
 ; LIB_RESIDENT marker meaning "the active runtime's OWN extension is in bank 1"
