@@ -37,8 +37,13 @@ LIBSYSTEM_INC = 1
 ;        LIB_STATUS    = LERR_OK
 SYS_FN_EDIT   = $00
 
+; --- timing (moved from the NovaLogo extension ROM in Phase B) ---
+SYS_FN_WAIT     = $01   ; (n:ARG0 frames)  -> busy-wait N video frames
+SYS_FN_WAITVBL  = $02   ; ()               -> wait for the next vertical blank
+SYS_FN_TIMER    = $03   ; ()  reporter     -> RESULT = VGC frame counter (8-bit)
+
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $01
+SYS_FN_COUNT  = $04
 
 .endif

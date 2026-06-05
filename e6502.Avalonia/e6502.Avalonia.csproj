@@ -66,8 +66,10 @@
              CompositeBusDevice pre-stages them into the XRAM shelf at boot. -->
         <Exec Command="make -C $(ProjectDir)../modules/graphics" />
         <Exec Command="make -C $(ProjectDir)../modules/system" />
+        <Exec Command="make -C $(ProjectDir)../modules/sound" />
         <Copy SourceFiles="$(ProjectDir)../modules/graphics/graphics.bin" DestinationFiles="$(ProjectDir)Resources/graphics.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/system/system.bin" DestinationFiles="$(ProjectDir)Resources/system.bin" />
+        <Copy SourceFiles="$(ProjectDir)../modules/sound/sound.bin" DestinationFiles="$(ProjectDir)Resources/sound.bin" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
@@ -97,10 +99,10 @@
         <Copy SourceFiles="Resources/ehbasic.bin" DestinationFolder="$(OutputPath)Resources" />
         <Copy SourceFiles="Resources/extension.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/extension.bin')" />
         <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
-        <Copy SourceFiles="Resources/novalogo_ext.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo_ext.bin')" />
         <Copy SourceFiles="Resources/libcall.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/libcall.bin')" />
         <Copy SourceFiles="Resources/graphics.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/graphics.bin')" />
         <Copy SourceFiles="Resources/system.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/system.bin')" />
+        <Copy SourceFiles="Resources/sound.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/sound.bin')" />
     </Target>
 
     <ItemGroup>
@@ -129,9 +131,6 @@
         <None Update="Resources\novalogo.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
-        <None Update="Resources\novalogo_ext.bin">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
         <None Update="Resources\libcall.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
@@ -139,6 +138,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\system.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\sound.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>

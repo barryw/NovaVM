@@ -27,7 +27,6 @@
     },
     "novalogo": {
       "rom": "/roms/novalogo.bin",
-      "extensionRom": "/roms/novalogo_ext.bin",
       "autoboot": false,
       "theme": {
         "background": 0,
@@ -45,7 +44,8 @@
   },
   "libraries": [
     { "name": "graphics", "id": 1, "path": "/lib/graphics.nmod", "base": 393216, "size": 16384 },
-    { "name": "system", "id": 3, "path": "/lib/system.nmod", "base": 409600, "size": 16384 }
+    { "name": "system", "id": 3, "path": "/lib/system.nmod", "base": 409600, "size": 16384 },
+    { "name": "sound", "id": 2, "path": "/lib/sound.nmod", "base": 425984, "size": 16384 }
   ],
   "network": {
     "gameServer": {

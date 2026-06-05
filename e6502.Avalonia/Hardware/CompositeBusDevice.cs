@@ -36,7 +36,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly byte[] _nccRom;
     private byte[]? _extRom;
     private readonly byte[]? _logoRom;
-    private readonly byte[]? _logoExtRom;
 
     // Paged-library loader state (Stage 4c.0b) — faithful to the FPGA's single bank-1
     // ext_rom BRAM + page_in_ctrl ($BA76-$BA7C) + resident lib_call at $0320.
@@ -223,14 +222,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             Array.Copy(logoData, _logoRom, Math.Min(logoData.Length, 16384));
         }
 
-        // Load Logo extension ROM if available.
-        string logoExtPath = Path.Combine(AppContext.BaseDirectory, "Resources", "novalogo_ext.bin");
-        if (File.Exists(logoExtPath))
-        {
-            _logoExtRom = new byte[16384];
-            byte[] logoExtData = File.ReadAllBytes(logoExtPath);
-            Array.Copy(logoExtData, _logoExtRom, Math.Min(logoExtData.Length, 16384));
-        }
+        // NovaLogo has no extension ROM (deleted in Phase B): every hardware command
+        // routes through a paged module (SYSTEM/SOUND/GRAPHICS), staged into the shelf
+        // by StageConfiguredModules below.
 
         // Load the resident paged-library loader (lib_call, ORG $0320) if available.
         string libcallPath = Path.Combine(AppContext.BaseDirectory, "Resources", "libcall.bin");
@@ -268,9 +262,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     {
         byte[]? ext = primary switch
         {
-            ActiveRom.Logo  => _logoExtRom,
-            ActiveRom.Basic => _extRom,
-            _ => null,                      // Ncc / Extension: no static ext to load
+            ActiveRom.Basic => _extRom,     // BASIC keeps its own static extension ROM
+            _ => null,                      // Logo (modules-only) / Ncc: no static ext
         };
         if (ext != null)
         {
@@ -369,16 +362,18 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     // Boot-time shelf staging, the emulator's stand-in for the firmware reading
     // boot.json libraries[] and streaming each module from SD into a shelf slot.
     // Slot assignment matches boot.json array order: graphics (id $01) -> slot 0,
-    // system (id $03, the shared text editor) -> slot 1. Modules absent from
-    // Resources/ are silently skipped — a runtime that never lib_calls them is
-    // unaffected, and the build copies the .bin images in alongside the ROMs.
+    // system (id $03, editor + timing) -> slot 1, sound (id $02, tone/noise/volume)
+    // -> slot 2. Modules absent from Resources/ are silently skipped — a runtime that
+    // never lib_calls them is unaffected, and the build copies the .bin images in
+    // alongside the ROMs.
     private void StageConfiguredModules()
     {
         // Seed the LRU to identity [0,1,2,3] up front (firmware does this at boot),
-        // so staging only slot 1 still leaves the directory well-formed.
+        // so staging a subset of slots still leaves the directory well-formed.
         for (int i = 0; i < ShelfN; i++) _ram[ShelfLru + i] = (byte)i;
         StageModuleFromResources("graphics.bin", slot: 0, id: 0x01);
         StageModuleFromResources("system.bin",   slot: 1, id: 0x03);
+        StageModuleFromResources("sound.bin",    slot: 2, id: 0x02);
     }
 
     private void StageModuleFromResources(string fileName, int slot, byte id)

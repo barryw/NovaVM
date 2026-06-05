@@ -47,6 +47,22 @@ EDITOR_FGCOL      = $01                ; white text
 ;@effect Snapshots and restores the caller's full VGC display state; owns the
 ;@effect whole 80x25 text screen while running. Blocks until the user exits.
 ;@status LERR_OK
+;
+;@fn SYS_FN_WAIT
+;@brief Busy-wait a number of video frames.
+;@arg n u16 frame count (ARG0)
+;@ret void
+;@status LERR_OK
+;
+;@fn SYS_FN_WAITVBL
+;@brief Wait for the next vertical blank (one frame edge).
+;@ret void
+;@status LERR_OK
+;
+;@fn SYS_FN_TIMER
+;@brief Read the VGC frame counter.
+;@ret u8 current frame counter (RESULT byte0)
+;@status LERR_OK
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
@@ -70,6 +86,9 @@ dispatch:
 
 sys_jtable:
       .word   sys_edit-1               ; $00 SYS_FN_EDIT
+      .word   sys_wait-1               ; $01 SYS_FN_WAIT
+      .word   sys_waitvbl-1            ; $02 SYS_FN_WAITVBL
+      .word   sys_timer-1              ; $03 SYS_FN_TIMER
 
 ; ===========================================================================
 ; SYS_FN_EDIT — port of the extension's ext_edit, reading the canonical lib_call
@@ -214,6 +233,53 @@ sys_edit_save_hook:
       LDA   #1
       STA   se_saved_flag
       LDA   #EDITBUF_SAVE_OK
+      RTS
+
+; ===========================================================================
+; Timing services (ported from the NovaLogo extension ROM in Phase B). SID/VGC
+; MMIO survives the bank swap, so these run entirely within one lib_call.
+; ===========================================================================
+
+; --- $01 SYS_FN_WAIT: ARG0 = n frames ---
+sys_wait:
+      LDA   LIB_ARG0+0
+      JSR   sys_wait_frames
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+; --- $02 SYS_FN_WAITVBL: wait for the next vertical blank ---
+sys_waitvbl:
+      LDA   VGC_FRAME
+@w:   CMP   VGC_FRAME
+      BEQ   @w
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+; --- $03 SYS_FN_TIMER: reporter -> RESULT = VGC frame counter (8-bit) ---
+sys_timer:
+      LDA   VGC_FRAME
+      STA   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+; --- sys_wait_frames — busy-wait A video frames on the VGC frame counter ---
+sys_wait_frames:
+      TAX
+      BEQ   @done
+      LDA   VGC_FRAME
+@wait:
+      CMP   VGC_FRAME
+      BEQ   @wait
+      LDA   VGC_FRAME
+      DEX
+      BNE   @wait
+@done:
       RTS
 
       .segment "BSS"

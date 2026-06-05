@@ -1472,39 +1472,6 @@ ext_eval_args:
       SEC
       RTS
 
-; ---------------------------------------------------------------------
-; ensure_ext_resident — guarantee the active runtime's OWN extension is mapped
-;   in bank 1 before a legacy EXT_TRAMPOLINE (JSR $C000) call. A prior
-;   lib_call(MODULE) page-in physically overwrote bank 1 with the module; this
-;   re-pages the host ext (staged in XRAM at $07C000) back into bank 1 on demand.
-;
-;   At boot the host ext IS in bank 1 (cold_start seeds LIB_RESIDENT=$FF), so the
-;   common case is a cheap HIT (no page-in, no behaviour change for legacy cmds).
-;
-;   No PGD_STATUS poll — matches lib_call, which relies on the page-in completing
-;   synchronously / CPU stall. Clobbers A. Caller has no live A/X/Y across this.
-; ---------------------------------------------------------------------
-ensure_ext_resident:
-      LDA   LIB_RESIDENT
-      CMP   #LIB_RESIDENT_HOSTEXT
-      BEQ   @done                 ; ext already in bank 1 -> nothing to do (HIT)
-      LDA   #HOST_EXT_XRAM_L
-      STA   PGD_SRCL
-      LDA   #HOST_EXT_XRAM_M
-      STA   PGD_SRCM
-      LDA   #HOST_EXT_XRAM_H
-      STA   PGD_SRCH
-      LDA   #<SHELF_SLOT_WORDS
-      STA   PGD_WORDSL
-      LDA   #>SHELF_SLOT_WORDS
-      STA   PGD_WORDSH
-      LDA   #PGD_START
-      STA   PGD_CMD               ; DMA host ext -> bank 1 (CPU stalls on HW; sync on emu)
-      LDA   #LIB_RESIDENT_HOSTEXT
-      STA   LIB_RESIDENT
-@done:
-      RTS
-
 ; --- Logo-foundation adapter sentinel (4c.1-3) ---
 ; A pseudo-module-id used in ext_cmd_table for Logo commands that do NOT 1:1-map
 ; to a single GFN. ext_invoke recognizes it and runs a local adapter routine that
@@ -1538,36 +1505,22 @@ TADP_SPLIT_TEXT_HEIGHT = 10       ; rows 40..49 = the bottom text band
 ;          EXT_CMD = fn_id, ext_mod_id = module_id.
 ;
 ;   Branches on ext_mod_id:
-;     MODULE_ID_NONE       -> legacy RAM trampoline (JSR EXT_TRAMPOLINE).
+;     MODULE_ID_TURTLE     -> Logo turtle adapter (FRAC-preserving marshal).
 ;     MODULE_ID_GFXADAPTER -> Logo-foundation adapter (multi-call composite).
-;     other non-zero       -> canonical paged-library lib_call mailbox.
+;     real module id       -> canonical paged-library lib_call mailbox.
 ;
 ;   The arg cells are converted to LIB_ARGn FIRST (so both the single-lib_call
 ;   path and the adapters share the same converted cells), then we branch.
+;   (The legacy MODULE_ID_NONE RAM-trampoline path was removed in Phase B when the
+;   NovaLogo extension ROM was deleted — every command now routes to a module.)
 ;
 ;   Clobbers: A, X, Y. May JMP err_idk_word on a lib error (no return).
 ; ---------------------------------------------------------------------
 ext_invoke:
       LDA   ext_mod_id
-      BEQ   @legacy               ; MODULE_ID_NONE ($00) -> legacy RAM trampoline
       CMP   #MODULE_ID_TURTLE
-      BNE   @convert_args         ; other non-zero module id -> paged-library / adapter path
+      BNE   @convert_args         ; real module id -> paged-library / adapter path
       JMP   logo_adapt_turtle     ; turtle: FRAC-preserving marshal (SKIP s16 @convert_args)
-
-@legacy:
-
-; --- Legacy path: RAM trampoline to extension ROM ---
-      JSR   ensure_ext_resident   ; re-page host ext into bank 1 if a module clobbered it
-      JSR   EXT_TRAMPOLINE
-      LDA   EXT_RESULT_TYPE
-      STA   eval_type
-      LDA   EXT_RESULT_HI
-      STA   eval_val_hi
-      LDA   EXT_RESULT_LO
-      STA   eval_val_lo
-      LDA   EXT_RESULT_FRAC
-      STA   eval_val_frac
-      RTS
 
 ; --- lib_call / adapter path: convert args, then branch on module id ---
 @convert_args:
@@ -1922,14 +1875,9 @@ logo_turtle_textwin:
       .segment "RODATA"
 
 ; Extension command table: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
-; module_id is MODULE_ID_NONE for every entry (legacy RAM-trampoline path);
-; 4c.1-2 will set it per-command to route through the paged-library lib_call.
-; Terminated by $0000 sentinel.
+; module_id routes each command: a real module id ($01-$7F) -> lib_call(module);
+; MODULE_ID_TURTLE/GFXADAPTER -> foundation adapters. Terminated by $0000 sentinel.
 ext_cmd_table:
-      .word str_ext_test_name
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_TEST
-      .byte 1                    ; arity: 1 argument
       ; --- Turtle commands+reporters (4c.2-3-ii: routed to GFN_TURTLE_OP via the
       ;     MODULE_ID_TURTLE adapter; fn_id stays the EXT_CMD op id, arity unchanged) ---
       .word str_ext_fd
@@ -2171,36 +2119,34 @@ ext_cmd_table:
       .byte MODULE_ID_GFXADAPTER
       .byte GADAPT_SPRCOLLP
       .byte 1                    ; arity: 1 (n) — reporter, COLL_MASK + bit-test adapter
-      ; --- Sound commands ---
+      ; --- Sound commands (Phase B: SOUND module $02) ---
       .word str_ext_tone
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_TONE
+      .byte MODULE_ID_SOUND
+      .byte SND_TONE
       .byte 2                    ; arity: 2 (freq, dur)
       .word str_ext_noise
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_NOISE
+      .byte MODULE_ID_SOUND
+      .byte SND_NOISE
       .byte 1                    ; arity: 1 (dur)
       .word str_ext_volume
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_VOLUME
+      .byte MODULE_ID_SOUND
+      .byte SND_VOLUME
       .byte 1                    ; arity: 1 (vol)
-      ; --- Timing commands ---
+      ; --- Timing commands (Phase B: SYSTEM module $03) ---
       .word str_ext_wait
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_WAIT
+      .byte MODULE_ID_SYSTEM
+      .byte SYS_FN_WAIT
       .byte 1                    ; arity: 1 (n)
       .word str_ext_waitvbl
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_WAITVBL
+      .byte MODULE_ID_SYSTEM
+      .byte SYS_FN_WAITVBL
       .byte 0                    ; arity: 0
       .word str_ext_timer
-      .byte MODULE_ID_NONE
-      .byte EXT_CMD_TIMER
+      .byte MODULE_ID_SYSTEM
+      .byte SYS_FN_TIMER
       .byte 0                    ; arity: 0 — reporter
       .word $0000               ; end sentinel
 
-str_ext_test_name:
-      .byte 8, "EXT.TEST"
 str_ext_fd:
       .byte 2, "FD"
 str_ext_forward:

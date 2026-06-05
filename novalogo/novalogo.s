@@ -4,7 +4,8 @@
       .include "nova.inc"
       .include "libabi.inc"
       .include "libgraphics.inc"   ; GFN_* ids for lib_call(GRAPHICS) routing (self-guards + re-includes libabi.inc)
-      .include "libsystem.inc"     ; SYS_FN_* ids for lib_call(SYSTEM) routing (the editor)
+      .include "libsystem.inc"     ; SYS_FN_* ids for lib_call(SYSTEM) routing (editor + timing)
+      .include "libsound.inc"      ; SND_* ids for lib_call(SOUND) routing (tone/noise/volume)
       .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"
@@ -36,23 +37,16 @@ input_buf:    .res 128        ; input line buffer
       .segment "CODE"
 
 cold_start:
-      ; Copy extension ROM trampoline to RAM
-      LDX   #EXT_TRAMP_SIZE-1
-@copy_tramp:
-      LDA   ext_tramp_src,X
-      STA   EXT_TRAMPOLINE,X
-      DEX
-      BPL   @copy_tramp
-
       ; Tell the resident paged-library loader which ROM bank to restore after
       ; a module call returns (lib_call swaps back to LIB_HOME_BANK).
       LDA   #ROMSWAP_LOGO
       STA   LIB_HOME_BANK
 
-      ; At boot the runtime's own extension IS in bank 1 (loaded by NovaHost /
-      ; the emulator). Seed LIB_RESIDENT=$FF so legacy ext commands take the cheap
-      ; HIT path in ensure_ext_resident until a lib_call(MODULE) clobbers bank 1.
-      LDA   #LIB_RESIDENT_HOSTEXT
+      ; NovaLogo has no extension ROM any more (Phase B): every hardware command
+      ; routes through a paged module. Seed LIB_RESIDENT=MODULE_ID_NONE so the
+      ; first lib_call to each module MISSES and pages it in; bank 1 holds nothing
+      ; runtime-owned at boot.
+      LDA   #MODULE_ID_NONE
       STA   LIB_RESIDENT
 
       ; Zero NovaLogo turtle/graphics state ($9F00..$9F1F) so each session starts
@@ -325,16 +319,6 @@ print_banner:
 ; RODATA segment — string constants
 ; =====================================================================
       .segment "RODATA"
-
-; Extension ROM trampoline — copied to RAM at $0270 during cold_start.
-; Swaps to extension ROM, calls entry, swaps back to Logo ROM.
-ext_tramp_src:
-      .byte $A9, ROMSWAP_EXTENSION  ; LDA #ROMSWAP_EXTENSION
-      .byte $8D, <REG_ROMSWAP, >REG_ROMSWAP  ; STA REG_ROMSWAP
-      .byte $20, $00, $C0          ; JSR $C000
-      .byte $A9, ROMSWAP_LOGO      ; LDA #ROMSWAP_LOGO
-      .byte $8D, <REG_ROMSWAP, >REG_ROMSWAP  ; STA REG_ROMSWAP
-      .byte $60                     ; RTS
 
 ; =====================================================================
 ; MONITOR segment — reset handler at $FFD7

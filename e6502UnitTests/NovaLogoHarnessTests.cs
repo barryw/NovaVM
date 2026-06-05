@@ -51,14 +51,13 @@ public class NovaLogoHarnessTests
     private static IEnumerable<LogoHarnessCase> HarnessCases()
     {
         yield return new LogoHarnessCase(
-            "core expressions, math, predicates, and extension reporter",
+            "core expressions, math, and predicates",
             [
                 Line("PRINT 3 + 4"),
                 Line("TYPE \"A"),
                 Line("PRINT \"B"),
                 Line("MAKE \"N 21"),
                 Line("PRINT :N * 2"),
-                Line("PRINT EXT.TEST 41"),
                 Line("PRINT ABS -5"),
                 Line("PRINT INT 3"),
                 Line("PRINT ROUND 3"),
@@ -79,7 +78,7 @@ public class NovaLogoHarnessTests
             ],
             "CORE_DONE",
             [
-                "PRINT", "TYPE", "MAKE", "EXT.TEST", "ABS", "INT", "ROUND", "SQRT", "REMAINDER",
+                "PRINT", "TYPE", "MAKE", "ABS", "INT", "ROUND", "SQRT", "REMAINDER",
                 "SIN", "COS", "NOT", "AND", "OR", "NUMBER?", "WORD?", "LIST?", "CHAR", "ASCII", "RANDOM"
             ],
             screen =>
