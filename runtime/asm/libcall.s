@@ -74,28 +74,33 @@ lcv_ver:   lda #LERR_BAD_VER
       sec
       rts
 
-; modtab_lookup — A = module id in; program PGD_SRC*/PGD_WORDS*; C=1 if unknown.
-; 3b: single TEST module at shelf slot 0. Phase 1/B replaces with directory lookup.
-;
-; XRAM library shelf (option A, fixed): SHELF_BASE=$060000, slot i = +i*$4000 (16KB).
-; The compile-time map below IS the contract — NovaHost's boot manifest MUST stage each
-; module to the same slot base (single source of truth). See docs/help/guides/library-shelf.md.
-;   id  $7F TEST     -> slot 0  $060000   (3b proof; real modules will reclaim slot 0)
-;   id  $01 GRAPHICS -> slot 0  $060000   (Phase 4)   ] add a cmp/bne row per module,
-;   id  $02 SOUND    -> slot 1  $064000   (Phase 5)   ] or a table walk, when these land.
-;   id  $03 SYSTEM   -> slot 2  $068000   (Phase 5)   ]
-; Phase 1/System-B replaces this with an XRAM-directory lookup by name (modtab filled at
-; boot); lib_call is unchanged — modtab is the abstraction that hides constants-vs-directory.
+; modtab_lookup — A = module id. Scan shelf_tag[] for a resident slot.
+; HIT : program PGD_SRC = SHELF_BASE + slot*$4000, PGD_WORDS = SHELF_SLOT_WORDS,
+;       bump the slot to MRU in shelf_lru[], return C=0.
+; MISS: return C=1 (caller -> LERR_BAD_MODULE). Phase B adds the SD load handshake.
+; The compile-time map is gone: slot is assigned by the host (firmware/test harness),
+; which seeds shelf_tag[]/shelf_lru[]. See docs/plans/2026-06-05-dynamic-module-shelf-design.md.
 modtab_lookup:
-      cmp     #MODULE_ID_TEST          ; $7F TEST     -> slot 0 $060000
-      beq     mt_slot0
-      cmp     #MODULE_ID_GRAPHICS      ; $01 GRAPHICS -> slot 0 $060000 (shares the slot)
-      beq     mt_slot0
-      bne     mt_unknown
-mt_slot0:
+      ldx     #0
+mt_scan:
+      cmp     SHELF_TAG,x
+      beq     mt_hit
+      inx
+      cpx     #SHELF_N
+      bne     mt_scan
+      sec                              ; not resident
+      rts
+mt_hit:
+      stx     LIB_SCRATCH              ; save slot index for the LRU touch
       lda     #SHELF_BASE_L
       sta     PGD_SRCL
-      lda     #SHELF_BASE_M
+      txa                              ; slot index -> mid byte = slot*$40 (slot<<6)
+      asl
+      asl
+      asl
+      asl
+      asl
+      asl
       sta     PGD_SRCM
       lda     #SHELF_BASE_H
       sta     PGD_SRCH
@@ -103,8 +108,31 @@ mt_slot0:
       sta     PGD_WORDSL
       lda     #>SHELF_SLOT_WORDS
       sta     PGD_WORDSH
+      jsr     shelf_touch
       clc
       rts
-mt_unknown:
-      sec
+
+; shelf_touch — make slot (in LIB_SCRATCH) the MRU entry of shelf_lru[].
+; Finds it, shifts the preceding entries down one, writes it at [0].
+shelf_touch:
+      ldx     #0
+st_find:
+      lda     SHELF_LRU,x
+      cmp     LIB_SCRATCH
+      beq     st_found
+      inx
+      cpx     #SHELF_N
+      bne     st_find
+      rts                              ; not present (shouldn't happen) — leave as-is
+st_found:
+      txa
+      beq     st_done                  ; already MRU (position 0)
+st_shift:
+      lda     SHELF_LRU-1,x
+      sta     SHELF_LRU,x
+      dex
+      bne     st_shift
+      lda     LIB_SCRATCH
+      sta     SHELF_LRU                ; [0] = slot
+st_done:
       rts

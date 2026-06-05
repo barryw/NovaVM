@@ -174,7 +174,8 @@ namespace e6502UnitTests
         {
             var bus = new LibLoaderBus();
             bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
-            bus.LoadXram(ShelfBase, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")));
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+                                 MODULE_ID_GRAPHICS);
             bus.PokeRam(HOME_BANK, RsBasic);
             bus.PokeRam(RESIDENT, 0x00);
             return (bus, LibCallEntry);

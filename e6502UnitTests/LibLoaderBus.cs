@@ -59,6 +59,22 @@ namespace e6502UnitTests
             PageInCount++;
         }
 
+        // Dynamic module shelf (libabi.inc): N=4 cache slots at SHELF_BASE + i*$4000;
+        // the directory (slot->id tags + LRU order) lives in the resident loader band.
+        private const int    ShelfBaseAddr = 0x060000, ShelfSlotBytes = 0x4000, ShelfN = 4;
+        private const ushort ShelfTag = 0x0418, ShelfLru = 0x041C;   // SHELF_N bytes each
+
+        // Mirror the firmware/CompositeBusDevice boot path: stage a module image into XRAM
+        // shelf slot and seed the directory so the resident loader's scan finds it.
+        // Seeds shelf_lru to identity [0,1,2,3] on the slot-0 stage.
+        public void StageShelfModule(int slot, byte[] image, byte id)
+        {
+            LoadXram(ShelfBaseAddr + slot * ShelfSlotBytes, image);
+            _ram[ShelfTag + slot] = id;
+            if (slot == 0)
+                for (int i = 0; i < ShelfN; i++) _ram[ShelfLru + i] = (byte)i;
+        }
+
         public void LoadRam(ushort at, byte[] b)  => Array.Copy(b, 0, _ram,  at, b.Length);
         public void LoadXram(int at, byte[] b)    => Array.Copy(b, 0, _xram, at, b.Length);
         public void LoadExtFromXram(int src)      => Array.Copy(_xram, src, _ext, 0, _ext.Length); // HIT-path helper

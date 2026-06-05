@@ -36,7 +36,7 @@ namespace e6502UnitTests
         {
             var bus = new LibLoaderBus();
             bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
-            bus.LoadXram(ShelfBase, File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")));
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")), 0x7F);
             bus.PokeRam(HOME_BANK, RsBasic);   // runtime's home ROMSWAP value
             bus.PokeRam(RESIDENT, 0x00);       // nothing resident yet
             return (bus, LibCallEntry);

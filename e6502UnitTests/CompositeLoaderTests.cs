@@ -31,6 +31,7 @@ namespace e6502UnitTests
         private const byte   MODULE_ID_GRAPHICS = 0x01;
         private const byte   GFN_GCLS = 0x00, GFN_GCOLOR = 0x01, GFN_PLOT = 0x02;
         private const byte   LERR_OK = 0x00;
+        private const byte   LERR_BAD_MODULE = 0x81;  // libabi.inc LERR_BAD_MODULE
         private const int    ShelfBase = 0x060000;    // XRAM shelf slot 0 (matches libabi.inc SHELF_BASE)
         private const ushort Sentinel = 0xFFF9;       // loader's final RTS lands here; loop stops
 
@@ -44,7 +45,8 @@ namespace e6502UnitTests
             var cpu = new Cpu(bus, E6502Type.Cmos);
             cpu.Boot();
 
-            bus.LoadXram(ShelfBase, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")));
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+                                 MODULE_ID_GRAPHICS);
             bus.WriteRam(RESIDENT, 0x00);
             bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);   // loader restores the Logo bank
             return bus;
@@ -85,6 +87,51 @@ namespace e6502UnitTests
             Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, idx, out byte v),
                 $"failed to read gfx pixel ({x},{y})");
             return v;
+        }
+
+        [TestMethod]
+        public void Gcls_ModuleAtNonZeroSlot_DispatchesViaDirectory()
+        {
+            var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+            var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
+            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+                                 MODULE_ID_GRAPHICS);
+            bus.WriteRam(RESIDENT, 0x00);
+            bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);
+
+            CallLib(bus, MODULE_ID_GRAPHICS, GFN_GCLS);
+
+            Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), "must dispatch from slot 2 via the directory");
+            Assert.AreEqual(MODULE_ID_GRAPHICS, bus.ReadRam(RESIDENT));
+            Assert.AreEqual(1, bus.PageInCount);
+        }
+
+        [TestMethod]
+        public void LibCall_UnknownId_ReturnsBadModule()
+        {
+            using var bus = SetupLoaderBus();       // only GRAPHICS (id 1) staged at slot 0
+            CallLib(bus, 0x42, 0x00);               // id $42 is not in the directory
+            Assert.AreEqual(LERR_BAD_MODULE, bus.ReadRam(STATUS));
+        }
+
+        [TestMethod]
+        public void LibCall_Hit_MovesSlotToFrontOfLru()
+        {
+            var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+            var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
+            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+                                 MODULE_ID_GRAPHICS);
+            // Force a known LRU order where slot 2 is at the back.
+            bus.WriteRam(0x041C, 0); bus.WriteRam(0x041D, 1); bus.WriteRam(0x041E, 3); bus.WriteRam(0x041F, 2);
+            bus.WriteRam(RESIDENT, 0x00);
+            bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);
+
+            CallLib(bus, MODULE_ID_GRAPHICS, GFN_GCLS);
+
+            Assert.AreEqual(2, bus.ReadRam(0x041C), "hit slot must move to LRU front");
+            Assert.AreEqual(0, bus.ReadRam(0x041D));
+            Assert.AreEqual(1, bus.ReadRam(0x041E));
+            Assert.AreEqual(3, bus.ReadRam(0x041F));
         }
 
         [TestMethod]

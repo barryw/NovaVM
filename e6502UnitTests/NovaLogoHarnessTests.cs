@@ -379,8 +379,9 @@ public class NovaLogoHarnessTests
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
         cpu.Boot();
-        bus.LoadXram(GraphicsShelfBase,
-            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")));
+        bus.StageShelfModule(0,
+            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")),
+            0x01);   // MODULE_ID_GRAPHICS — seed the shelf directory so lib_call scan hits
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000, testCase.Name);
