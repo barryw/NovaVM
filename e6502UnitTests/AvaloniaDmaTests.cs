@@ -87,9 +87,29 @@ public class AvaloniaDmaTests
         Assert.AreEqual(0x33, bus.Read(0x0702));
         Assert.AreEqual(0x44, bus.Read(0x0703));
 
-        int usedPages = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+        // Page accounting: a RAM->XRAM DMA marks exactly the page(s) it writes.
+        // The boot baseline is nonzero — the active runtime's 16 KB extension ROM is
+        // staged into XRAM at $07C000 (the re-page-on-demand shelf, 4c.0c), occupying
+        // 64 pages — so assert the INCREMENT, not an absolute count. The round-trip
+        // above touched page $12; a second DMA to a different fresh page must mark
+        // exactly one more page used. (Reads are taken after a DMA, which refreshes
+        // the XMC stats registers.)
+        int usedAfterRoundTrip = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
             | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
-        Assert.AreEqual(1, usedPages);
+
+        StartDma(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceXram,
+            srcAddr: 0x000600,
+            dstAddr: 0x009000,             // page $90 — distinct from the round-trip's $12
+            length: 4);
+        AssertDmaOk(bus, expectedCount: 4);
+
+        int usedAfterSecond = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+            | (bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8);
+        Assert.AreEqual(usedAfterRoundTrip + 1, usedAfterSecond,
+            "a RAM->XRAM DMA to a fresh page must mark exactly one new XRAM page used");
     }
 
     [TestMethod]
