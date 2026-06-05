@@ -1,14 +1,14 @@
 Modules list:
 -------------
 libcall.o:
-    CODE              Offs=000000  Size=0000D3  Align=00001  Fill=0000
+    CODE              Offs=000000  Size=0000F8  Align=00001  Fill=0000
 
 
 Segment list:
 -------------
 Name                   Start     End    Size  Align
 ----------------------------------------------------
-CODE                  000320  0003F2  0000D3  00001
+CODE                  000320  000417  0000F8  00001
 
 
 Exports list by name:

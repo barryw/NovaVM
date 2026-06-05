@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using KDS.e6502;
 
 namespace e6502UnitTests
@@ -32,6 +33,17 @@ namespace e6502UnitTests
                               PGD_SRCL = 0xBA78, PGD_SRCM = 0xBA79, PGD_SRCH = 0xBA7A,
                               PGD_WORDSL = 0xBA7B, PGD_WORDSH = 0xBA7C;
 
+        // FIO demand-load handshake (libabi.inc Phase B): the loader writes the module
+        // id to FIO_SRC_LO + dest slot to FIO_END_LO, clears FIO_STATUS, then writes
+        // FIO_CMD_LOAD_MODULE to FIO_CMD. The host streams the image SD->XRAM slot and
+        // sets FIO_STATUS = OK/ERR. Synchronous model, mirroring FileIoController.DoLoadModule.
+        private const ushort FIO_CMD = 0xB9A0, FIO_STATUS = 0xB9A1,
+                             FIO_SRC_LO = 0xB9A4, FIO_END_LO = 0xB9A6;
+        private const byte   FIO_CMD_LOAD_MODULE = 0x2C, FIO_ST_OK = 0x02, FIO_ST_ERR = 0x03;
+        // Host module store (SD analogue): module id -> 16KB image. Empty by default, so an
+        // unknown id demand-loads to ERR (the loader then returns LERR_BAD_MODULE).
+        private readonly Dictionary<byte, byte[]> _moduleStore = new();
+
         public byte Read(ushort a)
         {
             if (a == PGD_STATUS) return PGD_DONE;                 // synchronous model: always done/ok
@@ -43,9 +55,31 @@ namespace e6502UnitTests
         public void Write(ushort a, byte d)
         {
             if (a == REG_ROMSWAP) { _romswap = d; return; }      // write flips the overlay
-            _ram[a] = d;                                         // SRC/WORDS land in RAM for readback
+            _ram[a] = d;                                         // SRC/WORDS/FIO params land in RAM for readback
             if (a == PGD_CMD && (d & 1) != 0) DoPageIn();
+            else if (a == FIO_CMD && d == FIO_CMD_LOAD_MODULE) DoLoadModule();
         }
+
+        // Demand-load a module image from the host store into its XRAM shelf slot.
+        // id = FIO_SRC_LO, dest slot = FIO_END_LO; sets FIO_STATUS OK/ERR. The host
+        // only streams bytes — it never touches the shelf directory (the 6502 owns it).
+        private void DoLoadModule()
+        {
+            byte id   = _ram[FIO_SRC_LO];
+            int  slot = _ram[FIO_END_LO];
+            if (slot < 0 || slot >= ShelfN ||
+                !_moduleStore.TryGetValue(id, out byte[]? image) ||
+                image is null || image.Length != ShelfSlotBytes)
+            {
+                _ram[FIO_STATUS] = FIO_ST_ERR;
+                return;
+            }
+            LoadXram(ShelfBaseAddr + slot * ShelfSlotBytes, image);
+            _ram[FIO_STATUS] = FIO_ST_OK;
+        }
+
+        // Register a host-side module image so a miss can demand-load it (id -> 16KB image).
+        public void SetModuleStore(byte id, byte[] image) => _moduleStore[id] = image;
 
         private void DoPageIn()
         {

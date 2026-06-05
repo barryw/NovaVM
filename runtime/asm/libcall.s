@@ -5,6 +5,10 @@
       .include "libabi.inc"
       .include "nova.inc"                 ; REG_ROMSWAP, ROMSWAP_EXTENSION
 
+      ; stz-based PGD programming below assumes these low bytes are $00.
+      .assert SHELF_BASE_L = $00, error, "SHELF_BASE_L must be $00 for stz PGD_SRCL"
+      .assert (<SHELF_SLOT_WORDS) = $00, error, "SHELF_SLOT_WORDS low byte must be $00 for stz PGD_WORDSL"
+
       .segment "CODE"
 lib_call:
       lda     LIB_MOD_ID
@@ -79,26 +83,60 @@ lcv_ver:   lda #LERR_BAD_VER
 ; modtab_lookup — A = module id. Scan shelf_tag[] for a resident slot.
 ; HIT : program PGD_SRC = SHELF_BASE + slot*$4000, PGD_WORDS = SHELF_SLOT_WORDS,
 ;       bump the slot to MRU in shelf_lru[], return C=0.
-; MISS: return C=1 (caller -> LERR_BAD_MODULE). Phase B adds the SD load handshake.
+; MISS (Phase B): demand-load from SD via the FIO controller into a victim slot
+;       (empty-first, else LRU back), record the tag, then page in (C=0). On host
+;       load error the victim tag is cleared and we return C=1 (-> LERR_BAD_MODULE).
 ; The compile-time map is gone: slot is assigned by the host (firmware/test harness),
 ; which seeds shelf_tag[]/shelf_lru[]. See docs/plans/2026-06-05-dynamic-module-shelf-design.md.
+; id $00 ("none") can never reach here: the sole caller (lib_call) rejects it
+; before the JSR, so no explicit MODULE_ID_NONE guard is needed.
 modtab_lookup:
-      cmp     #MODULE_ID_NONE          ; id $00 is never a module (empty-slot tag)
-      beq     mt_miss
-      ldx     #0
+      ldx     #SHELF_N-1               ; match search is order-independent: count down
 mt_scan:
       cmp     SHELF_TAG,x
       beq     mt_hit
+      dex
+      bpl     mt_scan
+; MISS — demand-load. A = wanted id. Pick a victim slot (empty-first, else LRU
+; back), ask the host to stream it from SD into that slot via the FIO controller,
+; poll for completion, record the tag, then fall into the shared page-in tail.
+; On host error: leave the victim tag $00 (untrusted) and return C=1.
+mt_miss:
+      ldx     #0                       ; --- find an empty slot ---
+mv_scan:
+      ldy     SHELF_TAG,x
+      beq     mv_have                  ; tag==0 -> empty slot X
       inx
       cpx     #SHELF_N
-      bne     mt_scan
-mt_miss:
-      sec                              ; not resident
+      bne     mv_scan
+      ldx     SHELF_LRU+SHELF_N-1      ; none empty -> evict LRU back (a slot index)
+mv_have:
+      ; X = victim slot, held in X across the whole FIO call (nothing below
+      ; touches X). Stash the id in LIB_SCRATCH so it survives the FIO writes.
+      sta     LIB_SCRATCH              ; id
+      sta     FIO_SRC_LO               ; param: module id
+      stx     FIO_END_LO               ; param: dest slot
+      stz     FIO_STATUS               ; clear before trigger (no stale read)
+      lda     #FIO_CMD_LOAD_MODULE
+      sta     FIO_CMD                  ; fire; host streams SD->slot (CPU stalls)
+ml_poll:
+      lda     FIO_STATUS
+      beq     ml_poll                  ; 0 = busy
+      ; STATUS is now OK ($02) or ERR ($03). lsr: OK->C=0, ERR (or any odd)->C=1.
+      lsr     a
+      bcc     ml_ok
+      stz     SHELF_TAG,x              ; host error: leave victim empty/untrusted
+      sec
       rts
+ml_ok:
+      lda     LIB_SCRATCH              ; success: record id in the victim slot tag
+      sta     SHELF_TAG,x              ; X still = victim slot; fall into page-in tail
+
 mt_hit:
-      stx     LIB_SCRATCH              ; save slot index for the LRU touch
-      lda     #SHELF_BASE_L
-      sta     PGD_SRCL
+      ; X = slot index (from the scan). Fall into the shared page-in tail.
+mt_program_pgd:
+      stx     LIB_SCRATCH              ; shelf_touch reads the slot from LIB_SCRATCH
+      stz     PGD_SRCL                 ; SHELF_BASE_L = $00
       txa                              ; slot index -> mid byte = slot*$40 (slot<<6)
       asl
       asl
@@ -109,8 +147,7 @@ mt_hit:
       sta     PGD_SRCM
       lda     #SHELF_BASE_H
       sta     PGD_SRCH
-      lda     #<SHELF_SLOT_WORDS
-      sta     PGD_WORDSL
+      stz     PGD_WORDSL               ; <SHELF_SLOT_WORDS = $00
       lda     #>SHELF_SLOT_WORDS
       sta     PGD_WORDSH
       jsr     shelf_touch
@@ -120,14 +157,13 @@ mt_hit:
 ; shelf_touch — make slot (in LIB_SCRATCH) the MRU entry of shelf_lru[].
 ; Finds it, shifts the preceding entries up one index, writes it at [0].
 shelf_touch:
-      ldx     #0
+      ldx     #SHELF_N-1               ; locating the slot is order-independent: count down
 st_find:
       lda     SHELF_LRU,x
       cmp     LIB_SCRATCH
       beq     st_found
-      inx
-      cpx     #SHELF_N
-      bne     st_find
+      dex
+      bpl     st_find
       rts                              ; not present (shouldn't happen) — leave as-is
 st_found:
       txa

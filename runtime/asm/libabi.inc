@@ -96,6 +96,19 @@ SHELF_N          = 4              ; physical shelf slots (cache lines)
 SHELF_TAG        = $0418          ; SHELF_N bytes: $0418-$041B
 SHELF_LRU        = $041C          ; SHELF_N bytes: $041C-$041F
 
+; --- FIO demand-load handshake (Phase B miss handler) ---
+; 6502 writes module id to FIO_SRC_LO + dest slot to FIO_END_LO, clears
+; FIO_STATUS, then writes FIO_CMD_LOAD_MODULE to FIO_CMD. Host streams 16KB
+; SD->XRAM at SHELF_BASE+slot*$4000 and sets FIO_STATUS = OK/ERR (it does NOT
+; touch the shelf directory — the 6502 owns shelf_tag[]/shelf_lru[]).
+FIO_CMD             = $B9A0
+FIO_STATUS          = $B9A1
+FIO_SRC_LO          = $B9A4
+FIO_END_LO          = $B9A6
+FIO_CMD_LOAD_MODULE = $2C
+FIO_ST_OK           = $02
+FIO_ST_ERR          = $03
+
 ; --- Host-extension re-page (4c.0c: coexistence of legacy ext + paged modules) ---
 ; LIB_RESIDENT marker meaning "the active runtime's OWN extension is in bank 1"
 ; (distinct from every module id $01-$7F and from $00=none). A legacy ext command
