@@ -278,6 +278,19 @@ sealed class LocalNovaWebServer
                 return;
             }
 
+            if (method == "GET" && path == "/api/modules")
+            {
+                await SendJsonAsync(context.Response, await BuildModulesListAsync(token), token);
+                return;
+            }
+
+            if (method == "GET" && path.StartsWith("/api/modules/", StringComparison.Ordinal))
+            {
+                string modName = Uri.UnescapeDataString(path["/api/modules/".Length..]);
+                await SendJsonAsync(context.Response, await GetModuleDetailAsync(modName, token), token);
+                return;
+            }
+
             await SendErrorAsync(context.Response, 404, "not found", token);
         }
         catch (Exception ex)
@@ -405,6 +418,116 @@ sealed class LocalNovaWebServer
             ? 0
             : (long)Math.Max(0, (DateTimeOffset.UtcNow - _inventoryCacheAt).TotalMilliseconds);
         return clone;
+    }
+
+    // -- Modules: parse each /lib *.mod/*.nmod via the shared NovaModule parser,
+    //    cross-referenced with boot.json's libraries[] (staged? id-mismatch?). --
+
+    private async Task<Dictionary<string, int>> StagedLibMapAsync(CancellationToken token)
+    {
+        var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            JsonObject cfg = await ReadBootConfigAsync(token);
+            if (cfg["libraries"] is JsonArray libs)
+            {
+                foreach (JsonNode? lib in libs)
+                {
+                    string baseName = Path.GetFileName(lib?["path"]?.GetValue<string>() ?? "");
+                    if (baseName.Length > 0)
+                        map[baseName] = lib?["id"]?.GetValue<int>() ?? -1;
+                }
+            }
+        }
+        catch
+        {
+        }
+        return map;
+    }
+
+    private async Task<JsonObject> BuildModulesListAsync(CancellationToken token)
+    {
+        var modules = new JsonArray();
+        Dictionary<string, int> staged = await StagedLibMapAsync(token);
+        JsonArray rows = await _management.ListDirectoryAsync(EnsureAbsolutePath("lib"), token);
+
+        foreach (JsonNode? row in rows)
+        {
+            if (row?["dir"]?.GetValue<bool>() == true)
+                continue;
+            string name = row?["name"]?.GetValue<string>() ?? "";
+            if (!name.EndsWith(".mod", StringComparison.OrdinalIgnoreCase)
+                && !name.EndsWith(".nmod", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            byte[] bytes = await _management.ReadFileAsync(EnsureAbsolutePath($"lib/{name}"), token);
+            NovaModule mod = NovaModule.Parse(bytes);
+            bool isStaged = staged.TryGetValue(name, out int sid);
+            modules.Add(ModuleSummaryJson(name, mod, isStaged, sid));
+        }
+        return new JsonObject { ["modules"] = modules };
+    }
+
+    private static JsonObject ModuleSummaryJson(string name, NovaModule mod, bool staged, int stagedId)
+    {
+        var o = new JsonObject
+        {
+            ["name"] = name,
+            ["valid"] = mod.Valid,
+            ["staged"] = staged,
+        };
+        if (!mod.Valid)
+        {
+            o["error"] = mod.Error;
+            return o;
+        }
+        o["id"] = mod.Id;
+        o["idHex"] = $"${mod.Id:X2}";
+        o["abiVersion"] = mod.AbiVersion;
+        o["fnCount"] = mod.FnCount;
+        o["hasDoc"] = mod.HasDoc;
+        o["idMismatch"] = staged && stagedId != mod.Id;
+        o["moduleName"] = mod.Doc?.Module.Name;
+        o["version"] = mod.Doc?.Module.Version;
+        o["brief"] = mod.Doc?.Module.Brief;
+        o["docCount"] = mod.Doc?.Functions.Count ?? 0;
+        return o;
+    }
+
+    private async Task<JsonObject> GetModuleDetailAsync(string name, CancellationToken token)
+    {
+        byte[] bytes = await _management.ReadFileAsync(EnsureAbsolutePath($"lib/{name}"), token);
+        NovaModule mod = NovaModule.Parse(bytes);
+        JsonObject o = ModuleSummaryJson(name, mod, false, -1);
+
+        if (mod.Doc is not null)
+        {
+            o["abiNote"] = mod.Doc.Module.AbiNote;
+            var fns = new JsonArray();
+            foreach (NovaFn fn in mod.Doc.Functions)
+            {
+                var fo = new JsonObject
+                {
+                    ["id"] = fn.Id,
+                    ["idHex"] = fn.IdHex,
+                    ["name"] = fn.Name,
+                    ["signature"] = fn.Signature(),
+                    ["brief"] = fn.Brief,
+                };
+                if (!string.IsNullOrEmpty(fn.Effect))
+                    fo["effect"] = fn.Effect;
+                if (fn.Status.Count > 0)
+                {
+                    var st = new JsonArray();
+                    foreach (string s in fn.Status)
+                        st.Add(s);
+                    fo["status"] = st;
+                }
+                fns.Add(fo);
+            }
+            o["functions"] = fns;
+        }
+        return o;
     }
 
     private async Task<JsonArray> BuildDiskListAsync(CancellationToken token)
@@ -706,6 +829,8 @@ sealed class LocalNovaWebServer
             merged["mounts"] = mounts.DeepClone();
         if (config["network"] is JsonObject network)
             merged["network"] = network.DeepClone();
+        if (config["libraries"] is JsonArray libraries)
+            merged["libraries"] = libraries.DeepClone();
 
         JsonObject mergedLanguages = merged["languages"]!.AsObject();
         if (config["languages"] is JsonObject languages)
@@ -1227,6 +1352,22 @@ h1{font-size:19px;letter-spacing:0;margin:0}
 .slot-name{font-size:18px;font-weight:850;letter-spacing:.02em}
 .badge{border:1px solid var(--line);border-radius:999px;padding:3px 8px;color:var(--muted);font-size:12px}
 .badge.mounted,.badge.active{color:#061009;background:var(--ok);border-color:transparent}
+.badge.warn{color:#1a1206;background:var(--amber);border-color:transparent}
+.badge.bad{color:#fff;background:var(--red);border-color:transparent}
+.mod-detail{margin:8px 0 2px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:rgba(0,0,0,.12)}
+.mod-fn{padding:5px 0;border-bottom:1px solid var(--line)}
+.mod-fn:last-child{border-bottom:0}
+.mod-fn code{color:var(--ink);font-size:12.5px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px}
+.modal-overlay[hidden]{display:none}
+.modal{background:var(--deck);border:1px solid var(--line);border-radius:12px;width:min(640px,100%);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.5)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.modal-head h3{margin:0;font-size:15px;color:var(--ink)}
+.modal-close{background:transparent;border:0;color:var(--muted);font-size:16px;cursor:pointer}
+.modal #fnSearch{margin:12px 16px 6px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--inset);color:var(--ink)}
+.modal-body{overflow:auto;padding:2px 16px 8px;flex:1}
+.modal-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-top:1px solid var(--line)}
+.modal-foot button:disabled{opacity:.4;cursor:default}
 .path{
   margin:11px 0 10px;
   min-height:38px;
@@ -1434,14 +1575,44 @@ h1{font-size:19px;letter-spacing:0;margin:0}
           <div id="libraryList"></div>
         </div>
       </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Modules</h2>
+          <span class="meta" id="moduleCount">...</span>
+        </div>
+        <div class="panel-body">
+          <div class="library-controls">
+            <input type="file" id="moduleFile" accept=".mod,.nmod">
+            <button class="primary" id="moduleUploadBtn">Upload to /lib</button>
+          </div>
+          <div id="moduleList"></div>
+        </div>
+      </section>
     </div>
   </main>
+</div>
+<div class="modal-overlay" id="fnModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="fnModalTitle">Functions</h3>
+      <button class="modal-close" id="fnModalClose" aria-label="Close">&#10005;</button>
+    </div>
+    <input type="search" id="fnSearch" placeholder="Search functions by name, signature, or description...">
+    <div class="modal-body" id="fnModalList"></div>
+    <div class="modal-foot">
+      <button id="fnPrev">&lsaquo; Prev</button>
+      <span class="meta" id="fnPageInfo"></span>
+      <button id="fnNext">Next &rsaquo;</button>
+    </div>
+  </div>
 </div>
 <script>
 const slots = ["fd0","fd1","fd2","fd3","hd0","hd1"];
 const libraryDirs = {roms:"roms",soundfonts:"soundfonts",music:"music",boot:"assets/boot",sid:"assets/sid"};
 let state = {};
 let selected = "";
+let fnModal = { name:"", title:"", fns:[], filtered:[], page:0, pageSize:8 };
 
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]));
@@ -1660,6 +1831,104 @@ function renderLibrary(){
   if (!rows.length) list.innerHTML = `<div class="meta">No files.</div>`;
 }
 
+function renderModules(){
+  const list = $("moduleList");
+  const mods = Array.isArray(state.modules) ? state.modules : [];
+  $("moduleCount").textContent = mods.length ? `${mods.length} in /lib` : "none";
+  list.innerHTML = "";
+  if (!mods.length){ list.innerHTML = `<div class="meta">No modules in /lib.</div>`; return; }
+  for (const m of mods){
+    const wrap = document.createElement("div");
+    const badges = [];
+    if (!m.valid) badges.push(`<span class="badge bad">INVALID</span>`);
+    else {
+      badges.push(`<span class="badge ${m.staged?'active':''}">${m.staged?'staged':'not staged'}</span>`);
+      if (m.idMismatch) badges.push(`<span class="badge warn">id mismatch</span>`);
+      if (!m.hasDoc) badges.push(`<span class="badge">no doc</span>`);
+    }
+    const meta = m.valid
+      ? `${esc(m.idHex)} · v${esc(m.version||'?')} · ${m.docCount}/${m.fnCount} fns`
+      : esc(m.error||'invalid');
+    wrap.innerHTML = `
+      <div class="row">
+        <div>
+          <div class="name">${esc(m.moduleName||m.name)} <span class="meta">${esc(m.name)}</span></div>
+          <div class="meta">${meta} ${badges.join(' ')}</div>
+          ${m.brief?`<div class="meta">${esc(m.brief)}</div>`:''}
+        </div>
+        <div class="row-actions">
+          ${m.valid&&m.hasDoc?`<button data-modfns="${esc(m.name)}">Functions</button>`:''}
+          <button class="danger" data-delete="/lib/${esc(m.name)}">Delete</button>
+        </div>
+      </div>
+      `;
+    list.appendChild(wrap);
+  }
+}
+
+async function openFnModal(name){
+  fnModal = { name, title:name, fns:[], filtered:[], page:0, pageSize:8 };
+  $("fnModalTitle").textContent = name;
+  $("fnSearch").value = "";
+  $("fnModalList").innerHTML = `<div class="meta">Loading...</div>`;
+  $("fnPageInfo").textContent = "";
+  $("fnModal").hidden = false;
+  $("fnSearch").focus();
+  try{
+    const d = await api("/api/modules/" + encodeURIComponent(name));
+    if (fnModal.name !== name) return;          // a different module was opened meanwhile
+    fnModal.title = `${esc(d.moduleName||name)} · ${esc(d.idHex||"")}${d.version?(" · v"+esc(d.version)):""}`;
+    $("fnModalTitle").innerHTML = fnModal.title;
+    fnModal.fns = Array.isArray(d.functions) ? d.functions : [];
+    fnModal.filtered = fnModal.fns;
+    renderFnModal();
+  }catch(e){ $("fnModalList").innerHTML = `<div class="meta">${esc(e.message)}</div>`; }
+}
+
+function renderFnModal(){
+  const s = fnModal;
+  const total = s.filtered.length;
+  const pages = Math.max(1, Math.ceil(total / s.pageSize));
+  s.page = Math.min(Math.max(0, s.page), pages-1);
+  const slice = s.filtered.slice(s.page*s.pageSize, s.page*s.pageSize + s.pageSize);
+  let html = "";
+  for (const f of slice){
+    html += `<div class="mod-fn"><code>${esc(f.idHex)} ${esc(f.signature)}</code>` +
+            (f.brief?`<div class="meta">${esc(f.brief)}</div>`:"") +
+            (f.effect?`<div class="meta">effect: ${esc(f.effect)}</div>`:"") +
+            (f.status&&f.status.length?`<div class="meta">status: ${esc(f.status.join(', '))}</div>`:"") +
+            `</div>`;
+  }
+  $("fnModalList").innerHTML = html || `<div class="meta">No matching functions.</div>`;
+  $("fnPageInfo").textContent = total ? `${total} fn${total===1?'':'s'} · page ${s.page+1}/${pages}` : "no functions";
+  $("fnPrev").disabled = s.page <= 0;
+  $("fnNext").disabled = s.page >= pages-1;
+}
+
+function filterFnModal(){
+  const q = $("fnSearch").value.trim().toLowerCase();
+  fnModal.filtered = q ? fnModal.fns.filter(f =>
+    (f.name||"").toLowerCase().includes(q) ||
+    (f.signature||"").toLowerCase().includes(q) ||
+    (f.brief||"").toLowerCase().includes(q) ||
+    (f.idHex||"").toLowerCase().includes(q)) : fnModal.fns;
+  fnModal.page = 0;
+  renderFnModal();
+}
+
+function closeFnModal(){ $("fnModal").hidden = true; }
+
+async function uploadModule(){
+  const file = $("moduleFile").files[0];
+  if (!file) return toast("Choose a .mod or .nmod file.", true);
+  if (!/\.(mod|nmod)$/i.test(file.name)) return toast(".mod / .nmod only.", true);
+  const path = "/lib/" + safeName(file.name);
+  toast("Uploading " + file.name + "...");
+  await uploadTo(path, file);
+  toast("Uploaded " + file.name);
+  await refresh(true);
+}
+
 async function refresh(loadInventory=false){
   toast("");
   state = {...state, ...(await api("/api/status"))};
@@ -1667,11 +1936,16 @@ async function refresh(loadInventory=false){
     const inventory = await api("/api/inventory");
     state = {...state, ...inventory};
   }
+  if (loadInventory || !Array.isArray(state.modules)){
+    try { state.modules = (await api("/api/modules")).modules || []; }
+    catch { state.modules = Array.isArray(state.modules) ? state.modules : []; }
+  }
   renderStatus();
   renderDrives();
   renderDisks();
   renderRuntime();
   renderLibrary();
+  renderModules();
 }
 
 async function mount(slot, path){
@@ -1770,6 +2044,7 @@ document.addEventListener("click", async ev => {
     if (t.dataset.unmount) await unmount(t.dataset.unmount);
     if (t.dataset.delete) await deleteRemote(t.dataset.delete);
     if (t.dataset.removeRuntime) await removeRuntime(t.dataset.removeRuntime);
+    if (t.dataset.modfns) await openFnModal(t.dataset.modfns);
   }catch(e){ toast(e.message, true); }
 });
 $("refreshBtn").addEventListener("click", () => refresh(true).catch(e => toast(e.message, true)));
@@ -1780,6 +2055,13 @@ $("setRuntimeBtn").addEventListener("click", () => setRuntime().catch(e => toast
 $("deployRuntimeBtn").addEventListener("click", () => deployRuntime().catch(e => toast(e.message, true)));
 $("libraryUploadBtn").addEventListener("click", () => uploadLibrary().catch(e => toast(e.message, true)));
 $("libraryKind").addEventListener("change", renderLibrary);
+$("moduleUploadBtn").addEventListener("click", () => uploadModule().catch(e => toast(e.message, true)));
+$("fnSearch").addEventListener("input", filterFnModal);
+$("fnPrev").addEventListener("click", () => { fnModal.page--; renderFnModal(); });
+$("fnNext").addEventListener("click", () => { fnModal.page++; renderFnModal(); });
+$("fnModalClose").addEventListener("click", closeFnModal);
+$("fnModal").addEventListener("click", ev => { if (ev.target === $("fnModal")) closeFnModal(); });
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeFnModal(); });
 refresh(true).catch(e => toast(e.message, true));
 connectEvents();
 setInterval(() => refresh(false).catch(() => {}), 15000);
