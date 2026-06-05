@@ -280,6 +280,7 @@ __pycache__/
 
 # Local agent/editor state
 .claude/scheduled_tasks.lock
+.claude/settings.local.json
 
 # macOS/Swift local build artifacts
 .DS_Store
