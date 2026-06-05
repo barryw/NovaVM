@@ -305,3 +305,28 @@ examples/novaz/dist/collection/
 *.z7
 *.z8
 *.blb
+
+# --- Build artifacts that should never be committed (added 2026-06-05 cleanup) ---
+# cc65 / ld65 / assembler outputs. The .bin images ARE the tracked source of
+# truth (ROMs, graphics.bin, libcall.bin, etc.), so *.bin is NOT ignored.
+*.o
+*.lst
+*.map
+*.lbl
+# Reference disassembly listings shipped alongside the 6502 test ROMs are kept.
+!e6502UnitTests/Resources/*.lst
+# Packed self-documenting module artifact (the .bin image is tracked, .nmod is built).
+*.nmod
+# Static libraries / Verilator object trees.
+*.a
+e6502.FPGA/**/obj_copper/
+e6502.FPGA/**/obj_dir*/
+# .NET upgrade-assistant log.
+*.clef
+# Chrome DevTools / Playwright MCP scratch.
+.playwright-mcp/
+# Compiled (extensionless) NovaHost host-test binaries — keep the .cpp/.h/.py sources.
+e6502.ESP32/novahost/test/test_*
+!e6502.ESP32/novahost/test/test_*.*
+# Stray scratch screenshots in the repo root.
+/*.png
