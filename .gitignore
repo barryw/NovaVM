@@ -325,8 +325,7 @@ e6502.FPGA/**/obj_dir*/
 *.clef
 # Chrome DevTools / Playwright MCP scratch.
 .playwright-mcp/
-# Compiled (extensionless) NovaHost host-test binaries — keep the .cpp/.h/.py sources.
-e6502.ESP32/novahost/test/test_*
-!e6502.ESP32/novahost/test/test_*.*
+# Compiled NovaHost host-test binary (joins the explicit list above; *.dSYM/ ignored there).
+e6502.ESP32/novahost/test/test_shelf_alloc
 # Stray scratch screenshots in the repo root.
 /*.png
