@@ -331,11 +331,21 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     // Dynamic module shelf (libabi.inc): N=4 cache slots at SHELF_BASE + i*$4000;
     // the directory (slot->id tags + LRU order) lives in the loader band.
-    internal const int ShelfBaseAddr = 0x060000;
-    internal const int ShelfSlotBytes = 0x4000;
-    internal const int ShelfN = 4;
+    internal const int ShelfBaseAddr = VgcConstants.ShelfBaseAddr;
+    internal const int ShelfSlotBytes = VgcConstants.ShelfSlotBytes;
+    internal const int ShelfN = VgcConstants.ShelfN;
     internal const ushort ShelfTag = 0x0418;   // SHELF_N bytes
     internal const ushort ShelfLru = 0x041C;   // SHELF_N bytes
+
+    /// <summary>
+    /// Test/firmware hook: hand the FIO controller the demand-load module store (id -> 16K
+    /// image) so a CMD_LOAD_MODULE ($B9A0=0x2C, id in $B9A4, slot in $B9A6) streams the image
+    /// into XRAM shelf slot <c>slot</c>. Lets the 6502 miss-handler be unit-tested without SD.
+    /// </summary>
+    internal void SetShelfModuleStore(IDictionary<byte, byte[]> store) => _fio.SetModuleStore(store);
+
+    /// <summary>Read a byte from the linear XRAM shelf (mirror of <see cref="LoadXram"/>).</summary>
+    internal byte ReadXram(int at) => _xmc.TryReadLinear(at, out byte value) ? value : (byte)0;
 
     /// <summary>
     /// Test hook mirroring the firmware boot path: stage a 16K module image into

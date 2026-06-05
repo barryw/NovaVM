@@ -110,6 +110,13 @@ public static class VgcConstants
     public const byte FioCmdXPage      = 0x29;     // disk file slice -> XRAM
     public const byte FioCmdRng        = 0x2A;     // host-backed 32-bit random value
     public const byte FioCmdNvgLoad    = 0x2B;     // .nvg file -> graphics bitmap
+    public const byte FioCmdLoadModule = 0x2C;     // demand-load module image -> XRAM shelf slot
+
+    // Dynamic module shelf geometry (libabi.inc): SHELF_N cache slots at
+    // ShelfBaseAddr + i*ShelfSlotBytes in linear XRAM.
+    public const int ShelfBaseAddr  = 0x060000;
+    public const int ShelfSlotBytes = 0x4000;
+    public const int ShelfN         = 4;
     public const byte FioPageTargetXram = 0x00;    // XPAGE target: flat XRAM
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory

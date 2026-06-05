@@ -30,6 +30,10 @@ public sealed partial class FileIoController
     private readonly string _saveDir;
     private readonly DeviceManager? _deviceManager;
     private readonly ZSoundController? _zsound;
+    // Demand-load module store (Phase B): id -> 16K module image. Set by the host
+    // (CompositeBusDevice.SetShelfModuleStore) so CMD_LOAD_MODULE can stream an image
+    // into an XRAM shelf slot, mirroring the real FIO LOAD_MODULE the ESP32 services.
+    private IDictionary<byte, byte[]>? _moduleStore;
     private List<FileInfo>? _dirFiles;
     private List<StorageDirEntry>? _dirEntries;
     private IStorageDevice? _dirDevice;
@@ -123,6 +127,13 @@ public sealed partial class FileIoController
         _dirFiltered = false;
     }
 
+    /// <summary>
+    /// Provides the demand-load module store consulted by CMD_LOAD_MODULE: maps a module
+    /// id to its 16K image. Mirrors the SD-backed module library the ESP32 streams from on
+    /// real hardware. Persists across Reset() (the library is part of the firmware, not state).
+    /// </summary>
+    internal void SetModuleStore(IDictionary<byte, byte[]>? store) => _moduleStore = store;
+
     public void Write(ushort address, byte data)
     {
         _regs[address - VgcConstants.FioBase] = data;
@@ -170,6 +181,9 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdNvgLoad:
                 DoNvgLoad();
+                break;
+            case VgcConstants.FioCmdLoadModule:
+                DoLoadModule();
                 break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
@@ -1086,6 +1100,53 @@ public sealed partial class FileIoController
         }
 
         return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Demand-load module (Phase B): stream a module image from the host store into
+    // an XRAM shelf slot. The CPU's miss-handler writes id (OFF_SRC_LO) + dest slot
+    // (OFF_END_LO) then triggers CMD_LOAD_MODULE; the host streams 16K into the slot
+    // and sets STATUS. Emulator analogue of the FIO LOAD_MODULE the ESP32 services.
+    // -------------------------------------------------------------------------
+
+    private void DoLoadModule()
+    {
+        if (_xramWrite is null || _moduleStore is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        byte id = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        int slot = _regs[VgcConstants.FioEndL - VgcConstants.FioBase];
+
+        if (slot < 0 || slot >= VgcConstants.ShelfN)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        if (!_moduleStore.TryGetValue(id, out byte[]? image) ||
+            image is null ||
+            image.Length != VgcConstants.ShelfSlotBytes)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int dest = VgcConstants.ShelfBaseAddr + slot * VgcConstants.ShelfSlotBytes;
+        for (int i = 0; i < image.Length; i++)
+        {
+            if (!_xramWrite(dest + i, image[i]))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+        }
+
+        _xramRefreshStats?.Invoke();
+        SetTransferSize(image.Length);
+        SetOk();
     }
 
     // -------------------------------------------------------------------------
