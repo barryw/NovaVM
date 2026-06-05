@@ -34,11 +34,11 @@
 ; the blit/dma domain $50-$5B is live (batch 4b.6); the vsprite domain $60-$71 is
 ; live (batch 4b.7); the msprite/meta-sprite domain $80-$8B is live (batch 4b.8);
 ; the image/mem domain $A0-$A9 is live (batch 4b.9); the anim domain $C0-$C7 and
-; the tween domain $D0-$DA are live (batch 4b.11). The $B0-$BF turtle-render range
-; is DEFERRED (co-designed with Phase 4c), so $AA-$BF stay gaps.
+; the tween domain $D0-$DA are live (batch 4b.11). The $B0-$B2 turtle-render fns
+; (INIT/DRAW/ERASE) are live (batch 4c.2-2); $B3-$BF stay reserved.
 ; The jtable is dense from $00..GFX_FN_COUNT-1: implemented ids point at their
 ; wrapper, every gap id ($0A-$0F, $19 CLSWIN, $1C-$1F, $2E-$2F, $3C-$3F, $4A-$4F,
-; $5C-$5F, $72-$7F, $8C-$9F, $AA-$BF, $C8-$CF, $DB) points at gfn_unimpl so it
+; $5C-$5F, $72-$7F, $8C-$9F, $AA-$AF, $B3-$BF, $C8-$CF, $DB) points at gfn_unimpl so it
 ; resolves to LERR_NO_FN. ids >= GFX_FN_COUNT ($DB+) resolve to LERR_NO_FN via the
 ; dispatch bounds-check.
 GFX_FN_COUNT = $DB
@@ -264,22 +264,22 @@ gfx_jtable:
       .word   gfn_unimpl-1             ; $AD gap
       .word   gfn_unimpl-1             ; $AE gap
       .word   gfn_unimpl-1             ; $AF gap
-      .word   gfn_unimpl-1             ; $B0 turtle-render (DEFERRED to Phase 4c)
-      .word   gfn_unimpl-1             ; $B1 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B2 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B3 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B4 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B5 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B6 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B7 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B8 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $B9 turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BA turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BB turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BC turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BD turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BE turtle-render (DEFERRED)
-      .word   gfn_unimpl-1             ; $BF turtle-render (DEFERRED)
+      .word   gfn_turtle_init-1        ; $B0 TURTLE_INIT  (batch 4c.2-2)
+      .word   gfn_turtle_draw-1        ; $B1 TURTLE_DRAW  (batch 4c.2-2)
+      .word   gfn_turtle_erase-1       ; $B2 TURTLE_ERASE (batch 4c.2-2)
+      .word   gfn_unimpl-1             ; $B3 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B4 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B5 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B6 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B7 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B8 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $B9 turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BA turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BB turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BC turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BD turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BE turtle-render (reserved)
+      .word   gfn_unimpl-1             ; $BF turtle-render (reserved)
       .word   gfn_anim_init-1          ; $C0 ANIM_INIT
       .word   gfn_anim_start-1         ; $C1 ANIM_START
       .word   gfn_anim_stop-1          ; $C2 ANIM_STOP
@@ -1862,6 +1862,237 @@ gfn_tween_step_ease_in_out:
       jsr     tween_load_args
       jsr     tween_step_ease_in_out
       jmp     finish_tween
+
+; =====================================================================
+; $B0-$B2  turtle-render domain (batch 4c.2-2). The turtle is a 16x16
+; color-keyed virtual sprite (an upward triangle icon) drawn on the gfx plane
+; with Amiga-BOB save/restore of the background. The module owns the source/
+; rotated/saved-bg buffers + bg bookkeeping in its BSS (declared below). This is
+; a faithful port of draw_turtle_sprite / erase_turtle_sprite / the init shape
+; copy from novalogo/extension.s, but the buffers live in the module's own BSS
+; band and DRAW reads the center from the mailbox (ARG0=x, ARG1=y, ARG2=angle)
+; instead of the resident TURTLE_* cells. The vsprite driver helpers
+; (vsprite_gfx_save_bg/restore_bg/rotate_blit_keyed) are linked from vsprite.s
+; (included below). All loop/temp state is RAM (module BSS) — the module runs
+; from write-protected ROM.
+TURTLE_SPR_HALF = 8
+TURTLE_MAX_X    = 304            ; 320 - 16
+TURTLE_MAX_Y    = 184            ; 200 - 16
+TURTLE_COL_WHITE = 1             ; Nova palette white index
+
+; cfg_turtle_vsprite — configure the VSPRITE_* cells for the 16x16 turtle.
+; ORIG/ROT/BG all point at the module-BSS buffers (all CPU RAM, bank-independent
+; — the PROVEN path). Mirrors configure_turtle_vsprite (extension.s:666-705).
+cfg_turtle_vsprite:
+      lda     #16
+      sta     VSPRITE_WIDTHL
+      stz     VSPRITE_WIDTHH
+      sta     VSPRITE_HEIGHTL
+      stz     VSPRITE_HEIGHTH
+      sta     VSPRITE_ORIGSTRL
+      stz     VSPRITE_ORIGSTRH
+      sta     VSPRITE_ROTSTRL
+      stz     VSPRITE_ROTSTRH
+      sta     VSPRITE_BGSTRL
+      stz     VSPRITE_BGSTRH
+
+      lda     #BLT_SPACE_CPU
+      sta     VSPRITE_ORIGSPACE
+      sta     VSPRITE_ROTSPACE
+      sta     VSPRITE_BGSPACE
+
+      lda     #<turtle_source_shape
+      sta     VSPRITE_ORIGADDRL
+      lda     #>turtle_source_shape
+      sta     VSPRITE_ORIGADDRM
+      stz     VSPRITE_ORIGADDRH
+
+      lda     #<turtle_rotated_shape
+      sta     VSPRITE_ROTADDRL
+      lda     #>turtle_rotated_shape
+      sta     VSPRITE_ROTADDRM
+      stz     VSPRITE_ROTADDRH
+
+      lda     #<turtle_saved_bg
+      sta     VSPRITE_BGADDRL
+      lda     #>turtle_saved_bg
+      sta     VSPRITE_BGADDRM
+      stz     VSPRITE_BGADDRH
+
+      stz     VSPRITE_COLORKEY
+      lda     #VSPRITE_FLAG_COLORKEY
+      sta     VSPRITE_FLAGS
+      rts
+
+; set_turtle_pos — center the 16x16 stamp on (x,y) read from ARG0/ARG1 and clamp
+; to the plane. Verbatim port of set_turtle_vsprite_pos (extension.s:710-764)
+; with the center taken from the mailbox (LIB_ARG0 = x lo/hi, LIB_ARG1 = y lo/hi)
+; and the clamp scratch (tmp0/tmp1) in module BSS. Result -> VSPRITE_XL/XH/Y.
+set_turtle_pos:
+      sec
+      lda     LIB_ARG0                 ; x low
+      sbc     #TURTLE_SPR_HALF
+      sta     turtle_tmp0
+      lda     LIB_ARG0+1               ; x high
+      sbc     #0
+      sta     turtle_tmp1
+      bmi     @x_zero
+      cmp     #>TURTLE_MAX_X
+      bcc     @x_ok
+      bne     @x_max
+      lda     turtle_tmp0
+      cmp     #<TURTLE_MAX_X
+      bcc     @x_ok
+      beq     @x_ok
+@x_max:
+      lda     #<TURTLE_MAX_X
+      sta     VSPRITE_XL
+      lda     #>TURTLE_MAX_X
+      sta     VSPRITE_XH
+      bra     @y
+@x_zero:
+      stz     VSPRITE_XL
+      stz     VSPRITE_XH
+      bra     @y
+@x_ok:
+      lda     turtle_tmp0
+      sta     VSPRITE_XL
+      lda     turtle_tmp1
+      sta     VSPRITE_XH
+@y:
+      ; Y max (184) is single-byte, so the high borrow stays in A and is tested
+      ; in place (bmi/bne) rather than stashed like the two-byte X clamp above.
+      sec
+      lda     LIB_ARG1                 ; y low
+      sbc     #TURTLE_SPR_HALF
+      sta     turtle_tmp0
+      lda     LIB_ARG1+1               ; y high
+      sbc     #0
+      bmi     @y_zero
+      bne     @y_max
+      lda     turtle_tmp0
+      cmp     #(TURTLE_MAX_Y + 1)
+      bcc     @y_ok
+@y_max:
+      lda     #TURTLE_MAX_Y
+      sta     VSPRITE_Y
+      rts
+@y_zero:
+      stz     VSPRITE_Y
+      rts
+@y_ok:
+      lda     turtle_tmp0
+      sta     VSPRITE_Y
+      rts
+
+; turtle_do_erase — restore the saved background if one is pending, then clear
+; the flag. Shared by ERASE and the erase-old step of DRAW. Mirrors
+; erase_turtle_sprite (extension.s:788-801).
+turtle_do_erase:
+      lda     turtle_bg_saved
+      beq     @done
+      jsr     cfg_turtle_vsprite
+      lda     turtle_bg_x_lo
+      sta     VSPRITE_XL
+      lda     turtle_bg_x_hi
+      sta     VSPRITE_XH
+      lda     turtle_bg_y
+      sta     VSPRITE_Y
+      jsr     vsprite_gfx_restore_bg
+      stz     turtle_bg_saved
+@done:
+      rts
+
+; --- $B0 TURTLE_INIT: install the built-in icon + reset bg bookkeeping. ---
+; Copies the 256-byte turtle_icon ROM constant into turtle_source_shape and zeros
+; turtle_bg_saved (so a stale saved-background is never restored onto a freshly
+; cleared plane). One-time setup AND the CLEARSCREEN re-init hook. Always OK.
+gfn_turtle_init:
+      ldx     #0
+@copy:
+      lda     turtle_icon,x
+      sta     turtle_source_shape,x
+      inx
+      bne     @copy                    ; exactly 256 bytes
+      stz     turtle_bg_saved
+      jmp     finish_ok_nowait
+
+; --- $B1 TURTLE_DRAW: erase-old + save-bg + rotate-blit-keyed. ---
+; x:ARG0 s16 center, y:ARG1 s16 center, angle:ARG2 byte0 u8. Faithful port of
+; draw_turtle_sprite (extension.s:806-827): restore any pending bg, configure the
+; vsprite cells, center+clamp the stamp, record the stamp position, save the new
+; bg (bail to finish_vs on failure — no blit, no bg_saved), then stamp the angle
+; and rotate-blit-keyed. PUMPED on the test side (rotate-blit waits on VGC_FRAME).
+gfn_turtle_draw:
+      jsr     turtle_do_erase          ; restore previously-saved bg (if any)
+      jsr     cfg_turtle_vsprite
+      jsr     set_turtle_pos           ; center+clamp -> VSPRITE_XL/XH/Y
+      lda     VSPRITE_XL
+      sta     turtle_bg_x_lo
+      lda     VSPRITE_XH
+      sta     turtle_bg_x_hi
+      lda     VSPRITE_Y
+      sta     turtle_bg_y
+      jsr     vsprite_gfx_save_bg
+      cmp     #VSPRITE_RESULT_OK
+      beq     @saved                   ; save-bg ok -> stamp the turtle
+      jmp     finish_vs                ; save-bg failed: publish A, don't blit
+@saved:
+      lda     #$01
+      sta     turtle_bg_saved
+      lda     LIB_ARG2                 ; angle byte 0
+      sta     VSPRITE_ROTANGLE
+      jsr     vsprite_gfx_rotate_blit_keyed
+      jmp     finish_vs
+
+; --- $B2 TURTLE_ERASE: restore the saved bg (no-op if nothing saved). ---
+; Always OK (if nothing to erase, still OK). Port of erase_turtle_sprite.
+gfn_turtle_erase:
+      jsr     turtle_do_erase
+      jmp     finish_ok_nowait
+
+; turtle_icon — the built-in 16x16 upward-triangle turtle, one color (white).
+; Replicated verbatim from novalogo/extension.s turtle_shape_data. ROM constant
+; (CODE segment); GFN_TURTLE_INIT copies these 256 bytes into the BSS source
+; buffer at runtime (the module reads/blits from RAM, not ROM).
+turtle_icon:
+.repeat 16, yy
+  .repeat 16, xx
+    .if yy < 1
+      .byte 0
+    .elseif yy > 14
+      .byte 0
+    .elseif yy >= 13
+      .if xx >= (8 - ((((yy - 1) * 7) + 6) / 13)) && xx <= (8 + ((((yy - 1) * 6) + 6) / 13))
+        .byte TURTLE_COL_WHITE
+      .else
+        .byte 0
+      .endif
+    .elseif xx = (8 - ((((yy - 1) * 7) + 6) / 13))
+      .byte TURTLE_COL_WHITE
+    .elseif xx = (8 + ((((yy - 1) * 6) + 6) / 13))
+      .byte TURTLE_COL_WHITE
+    .else
+      .byte 0
+    .endif
+  .endrepeat
+.endrepeat
+
+; Module-BSS turtle-render state (batch 4c.2-2). Lives in the MODBSS band
+; ($0420-$08FF) carved by 4c.2-1; graphics.cfg grows MODBSS size to fit. The 3
+; 256-byte buffers (source/rotated/saved-bg) dominate; the bg bookkeeping +
+; clamp scratch are single bytes.
+      .segment "BSS"
+turtle_source_shape:  .res 256       ; built-in icon, installed by TURTLE_INIT
+turtle_rotated_shape: .res 256       ; blitter rotate output
+turtle_saved_bg:      .res 256       ; Amiga-BOB saved background under the stamp
+turtle_bg_x_lo:       .res 1         ; stamp top-left X (for the matching erase)
+turtle_bg_x_hi:       .res 1
+turtle_bg_y:          .res 1         ; stamp top-left Y
+turtle_bg_saved:      .res 1         ; nonzero when turtle_saved_bg holds a region
+turtle_tmp0:          .res 1         ; set_turtle_pos clamp scratch (tmp0)
+turtle_tmp1:          .res 1         ; set_turtle_pos clamp scratch (tmp1)
+      .segment "CODE"
 
 ; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
 ; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.

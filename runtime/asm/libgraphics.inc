@@ -464,9 +464,18 @@ GFN_NVGLOAD_NAMED_AT = $A9  ; (BYTES name:ARG0, dest:ARG1)       -> nvg_load_nam
 ;             $AA-$AF reserved
 
 ; =====================================================================
-; $B0-$BF  turtle-render  (the rendering ops the resident turtle calls in 4c)
-;   draw-line / draw+rotate turtle-icon sprite / erase-icon / ensure-gfx-mode
-; (constants filled in batch 4b.10)
+; $B0-$BF  turtle-render  (the rendering ops the resident turtle calls in 4c —
+;   batch 4c.2-2). The turtle is a 16x16 color-keyed virtual sprite (an upward
+;   triangle icon) drawn on the gfx plane with Amiga-BOB-style save/restore of
+;   the background, so it can move without corrupting the drawing. The module
+;   owns the source/rotated/saved-bg buffers + the bg bookkeeping in its BSS; the
+;   resident turtle passes only center position + a pre-computed rotation-angle
+;   byte. Pen lines reuse GFN_GCOLOR+GFN_LINE; split-screen/mode reuse the copper/
+;   mode ops; heading/move math stays resident — so this is the minimal 3-fn set.
+GFN_TURTLE_INIT  = $B0  ; () install built-in icon into module BSS source buffer; reset bg bookkeeping
+GFN_TURTLE_DRAW  = $B1  ; (x:ARG0 s16 center, y:ARG1 s16 center, angle:ARG2 u8) erase-old + save-bg + rotate-blit-keyed
+GFN_TURTLE_ERASE = $B2  ; () restore saved bg
+;                 $B3-$BF reserved
 
 ; =====================================================================
 ; $C0-$CF  anim  (driver: runtime/asm/anim.s — batch 4b.11) — superset

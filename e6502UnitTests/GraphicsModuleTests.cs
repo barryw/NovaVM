@@ -90,6 +90,10 @@ namespace e6502UnitTests
                           VS_OFF_XL = 38, VS_OFF_XH = 39, VS_OFF_Y = 40,
                           VS_OFF_SCENE_ADDRL = 41, VS_OFF_SCENE_ADDRH = 42, VS_OFF_SCENE_COUNT = 43;
         private const byte LERR_VSPRITE_FAIL = 0x84;
+        // Turtle-render-domain fn-ids ($B0-$B2), batch 4c.2-2.
+        private const byte   GFN_TURTLE_INIT = 0xB0, GFN_TURTLE_DRAW = 0xB1,
+                             GFN_TURTLE_ERASE = 0xB2;
+        private const byte   TURTLE_COL_WHITE = 0x01;
         // Msprite/meta-sprite-domain fn-ids ($80-$8B), batch 4b.8.
         private const byte   GFN_MS_SPAWN = 0x80, GFN_MS_DESTROY = 0x81,
                              GFN_MS_SHOW = 0x82, GFN_MS_HIDE = 0x83,
@@ -1506,12 +1510,15 @@ namespace e6502UnitTests
         // =====================================================================
 
         // Layout of a CPU-RAM scratch arena for vsprite tests, all clear of the
-        // mailbox ($0300-$031F), the module BSS ($0320-$035B) and the stack.
-        private const ushort VS_CFG    = 0x0700;   // config struct
-        private const ushort VS_SRC    = 0x0600;   // source rectangle
-        private const ushort VS_ORIG   = 0x0600;   // immutable rotate source
-        private const ushort VS_ROT    = 0x0680;   // rotated output buffer
-        private const ushort VS_BG     = 0x0800;   // saved-background buffer
+        // mailbox ($0300-$031F), the resident loader band ($0320-$041F), the
+        // module-BSS band ($0420-$08FF, owned by the paged module and fully
+        // populated as of batch 4c.2-2 — the 3x256 B turtle buffers fill it), and
+        // the stack. So the arena sits ABOVE the band at $0D00+.
+        private const ushort VS_CFG    = 0x0F00;   // config struct
+        private const ushort VS_SRC    = 0x0D00;   // source rectangle
+        private const ushort VS_ORIG   = 0x0D00;   // immutable rotate source
+        private const ushort VS_ROT    = 0x0D80;   // rotated output buffer
+        private const ushort VS_BG     = 0x0E00;   // saved-background buffer
 
         // Point ARG0 at a config struct of `len` bytes at `addr` (BYTES arg:
         // ptr16 low word, len16 high word).
@@ -2785,16 +2792,299 @@ namespace e6502UnitTests
                 "GRAPHICS module must be resident after the page-in");
         }
 
-        // --- Dispatch density: a deferred turtle-render id ($B0) returns LERR_NO_FN. ---
+        // =====================================================================
+        // Turtle-render domain ($B0-$B2), batch 4c.2-2. The turtle is a 16x16
+        // color-keyed virtual sprite (an upward triangle icon) drawn on the gfx
+        // plane with Amiga-BOB save/restore-bg. INIT installs the built-in icon
+        // into the module BSS source buffer + clears bg bookkeeping; DRAW erases
+        // the old stamp, saves the new background, then rotate-blits the icon at
+        // the rotation angle; ERASE restores the saved background.
+        //
+        // DRAW frame-waits on VGC_FRAME inside vsprite_gfx_rotate_blit_keyed, so
+        // it MUST be driven via RunFnPumped (advances the frame counter). INIT/
+        // ERASE are synchronous (RunFn).
+        // =====================================================================
+
+        // The 16x16 turtle icon (replicates the ca65 .repeat formula in
+        // graphics.s / extension.s exactly — integer division truncates toward
+        // zero; all operands here are non-negative so it is floor division).
+        // icon[row,col] = COL_WHITE for the upward triangle, else 0.
+        private static byte TurtleIcon(int col, int row)
+        {
+            if (row < 1) return 0;
+            if (row > 14) return 0;
+            if (row >= 13)
+            {
+                int lo = 8 - (((row - 1) * 7 + 6) / 13);
+                int hi = 8 + (((row - 1) * 6 + 6) / 13);
+                return (byte)((col >= lo && col <= hi) ? TURTLE_COL_WHITE : 0);
+            }
+            if (col == 8 - (((row - 1) * 7 + 6) / 13)) return TURTLE_COL_WHITE;
+            if (col == 8 + (((row - 1) * 6 + 6) / 13)) return TURTLE_COL_WHITE;
+            return 0;
+        }
+
+        // The stamp top-left for a center (cx,cy) is (cx-8, cy-8) once clamped.
+        private const int TURTLE_HALF = 8;
+
+        // --- $B0 TURTLE_INIT: dispatches OK (id wired, not gfn_unimpl). ---
+        [TestMethod]
+        public void Axis2_TurtleInit_DispatchesOk()
+        {
+            using var bus = MakeAxis2Bus();
+            RunFn(bus, GFN_TURTLE_INIT);   // RunFn asserts RTS + STATUS == LERR_OK
+        }
+
+        // --- $B0 then $B1: INIT installs the icon, DRAW stamps its white pixels
+        // on the gfx plane (color-keyed: transparent icon cells stay background). ---
+        [TestMethod]
+        public void Axis2_TurtleInitThenDraw_StampsIconPixels()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_GCLS);          // clear the gfx plane to 0
+            RunFn(bus, GFN_TURTLE_INIT);   // install the built-in icon
+
+            const int cx = 160, cy = 80;
+            SetArg(bus, ARG0, cx);
+            SetArg(bus, ARG1, cy);
+            SetArg(bus, ARG2, 0);          // angle 0 -> upright icon
+            RunFnPumped(bus, GFN_TURTLE_DRAW);
+
+            int tlx = cx - TURTLE_HALF, tly = cy - TURTLE_HALF;   // stamp top-left
+
+            // Probe several KNOWN icon white cells (the apex + base bar) and
+            // several KNOWN transparent cells; assert each maps to the right gfx
+            // pixel value. This is specific to the icon geometry, not "something
+            // changed".
+            (int col, int row)[] whites =
+            {
+                (8, 1),   // apex
+                (7, 2), (8, 2),
+                (2, 13), (8, 13), (14, 13),  // base bar
+                (1, 14), (8, 14), (14, 14),  // base bar bottom row
+            };
+            foreach (var (col, row) in whites)
+            {
+                Assert.AreEqual(TURTLE_COL_WHITE, TurtleIcon(col, row),
+                    $"test fixture: icon ({col},{row}) should be white");
+                Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, tlx + col, tly + row),
+                    $"TURTLE_DRAW must stamp icon white cell ({col},{row}) onto the gfx plane");
+            }
+
+            // Transparent icon cells must remain background (0) — color-key blit.
+            (int col, int row)[] clears =
+            {
+                (0, 0),   // corner, above the icon
+                (0, 8),   // left edge, transparent
+                (8, 8),   // interior of the triangle, transparent
+                (15, 7),  // right edge, transparent
+            };
+            foreach (var (col, row) in clears)
+            {
+                Assert.AreEqual(0, TurtleIcon(col, row),
+                    $"test fixture: icon ({col},{row}) should be transparent");
+                Assert.AreEqual(0, GfxPixel(bus, tlx + col, tly + row),
+                    $"color-key blit must leave transparent icon cell ({col},{row}) as background");
+            }
+
+            // A pixel OUTSIDE the 16x16 stamp box must be untouched (bounded blit).
+            Assert.AreEqual(0, GfxPixel(bus, tlx + 16, tly),
+                "TURTLE_DRAW must not write past the 16px stamp width");
+            Assert.AreEqual(0, GfxPixel(bus, tlx, tly + 16),
+                "TURTLE_DRAW must not write past the 16px stamp height");
+        }
+
+        // --- $B1 then $B2: DRAW saves the background, ERASE restores it exactly. ---
+        [TestMethod]
+        public void Axis2_TurtleDrawThenErase_RestoresBackground()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_GCLS);
+
+            const int cx = 160, cy = 80;
+            int tlx = cx - TURTLE_HALF, tly = cy - TURTLE_HALF;
+
+            // Paint a distinct, non-uniform background under the whole 16x16 stamp
+            // so the round-trip is a real test (not just "all zero").
+            byte[,] bg = new byte[16, 16];
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                {
+                    byte v = (byte)(((row * 3 + col + 1) & 0x0F));   // 0..15, mostly nonzero
+                    bg[row, col] = v;
+                    Assert.IsTrue(bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx,
+                        (tly + row) * VgcConstants.GfxWidth + (tlx + col), v), "bg setup write");
+                }
+
+            RunFn(bus, GFN_TURTLE_INIT);
+
+            SetArg(bus, ARG0, cx);
+            SetArg(bus, ARG1, cy);
+            SetArg(bus, ARG2, 0);
+            RunFnPumped(bus, GFN_TURTLE_DRAW);   // saves bg, stamps icon
+
+            // The icon must have overwritten at least the apex cell (sanity: the
+            // draw really happened before we erase).
+            Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, tlx + 8, tly + 1),
+                "DRAW should have stamped the apex before ERASE");
+
+            RunFn(bus, GFN_TURTLE_ERASE);        // restore the saved background
+
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                    Assert.AreEqual(bg[row, col], GfxPixel(bus, tlx + col, tly + row),
+                        $"ERASE must restore the saved background at ({col},{row})");
+        }
+
+        // --- $B0 resets bg_saved: INIT after a DRAW makes a following ERASE a
+        // no-op (proves INIT clears the bookkeeping so a stale bg is never
+        // restored onto a freshly cleared plane). ---
+        [TestMethod]
+        public void Axis2_TurtleInit_ResetsBgSaved_MakesEraseNoop()
+        {
+            using var bus = MakeAxis2Bus();
+
+            RunFn(bus, GFN_GCLS);
+            RunFn(bus, GFN_TURTLE_INIT);
+
+            const int cx = 100, cy = 90;
+            SetArg(bus, ARG0, cx);
+            SetArg(bus, ARG1, cy);
+            SetArg(bus, ARG2, 0);
+            RunFnPumped(bus, GFN_TURTLE_DRAW);   // bg_saved := 1, icon stamped
+
+            // INIT again -> bg_saved := 0 (the CLEARSCREEN re-init hook).
+            RunFn(bus, GFN_TURTLE_INIT);
+
+            // Snapshot the whole gfx plane region around the stamp.
+            int tlx = cx - TURTLE_HALF, tly = cy - TURTLE_HALF;
+            byte[,] before = new byte[16, 16];
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                    before[row, col] = GfxPixel(bus, tlx + col, tly + row);
+
+            RunFn(bus, GFN_TURTLE_ERASE);        // must be a no-op (bg_saved == 0)
+
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                    Assert.AreEqual(before[row, col], GfxPixel(bus, tlx + col, tly + row),
+                        $"ERASE after INIT must NOT touch the plane at ({col},{row}) (bg_saved cleared)");
+        }
+
+        // --- $B1 honors VSPRITE_ROTANGLE: angle 0 vs angle 64 (90deg) produce
+        // different white-pixel patterns on the plane. ---
+        [TestMethod]
+        public void Axis2_TurtleDraw_Rotated_DiffersFromUnrotated()
+        {
+            const int cx = 160, cy = 100;
+            int tlx = cx - TURTLE_HALF, tly = cy - TURTLE_HALF;
+
+            // Capture the 16x16 stamp white-mask for a given angle on a fresh bus.
+            bool[,] DrawAndCapture(byte angle)
+            {
+                using var bus = MakeAxis2Bus();
+                RunFn(bus, GFN_GCLS);
+                RunFn(bus, GFN_TURTLE_INIT);
+                SetArg(bus, ARG0, cx);
+                SetArg(bus, ARG1, cy);
+                SetArg(bus, ARG2, angle);
+                RunFnPumped(bus, GFN_TURTLE_DRAW);
+                var mask = new bool[16, 16];
+                for (int row = 0; row < 16; row++)
+                    for (int col = 0; col < 16; col++)
+                        mask[row, col] = GfxPixel(bus, tlx + col, tly + row) == TURTLE_COL_WHITE;
+                return mask;
+            }
+
+            bool[,] up = DrawAndCapture(0);
+            bool[,] rot = DrawAndCapture(64);   // 90 degrees
+
+            // The two patterns must differ somewhere (rotation honored).
+            bool differs = false;
+            for (int row = 0; row < 16 && !differs; row++)
+                for (int col = 0; col < 16; col++)
+                    if (up[row, col] != rot[row, col]) { differs = true; break; }
+            Assert.IsTrue(differs,
+                "angle 64 (90deg) must produce a different stamp than angle 0 (VSPRITE_ROTANGLE honored)");
+
+            // And each pattern must actually have white pixels (the draw landed).
+            int upCount = 0, rotCount = 0;
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                {
+                    if (up[row, col]) upCount++;
+                    if (rot[row, col]) rotCount++;
+                }
+            Assert.IsTrue(upCount > 0, "angle-0 stamp must have white pixels");
+            Assert.IsTrue(rotCount > 0, "angle-64 stamp must have white pixels");
+        }
+
+        // --- $B1 center clamp: a turtle near a corner clamps its 16x16 stamp to
+        // the plane (set_turtle_pos @x_zero/@x_max/@y_zero/@y_max branches). Each
+        // probe is white ONLY at the clamped top-left — an unclamped (naive cx-8)
+        // stamp would put that exact gfx pixel off-plane or on a transparent cell,
+        // so a white reading proves the clamp engaged. ---
+        [TestMethod]
+        public void Axis2_TurtleDraw_ClampsStampToPlaneEdges()
+        {
+            // Top-left corner: center (2,2) -> naive TL (-6,-6) clamps to (0,0).
+            using (var bus = MakeAxis2Bus())
+            {
+                RunFn(bus, GFN_GCLS);
+                RunFn(bus, GFN_TURTLE_INIT);
+                SetArg(bus, ARG0, 2);
+                SetArg(bus, ARG1, 2);
+                SetArg(bus, ARG2, 0);
+                RunFnPumped(bus, GFN_TURTLE_DRAW);
+
+                // Stamp clamped to TL (0,0): apex icon(8,1) -> gfx(8,1);
+                // base-bar icon(1,14) -> gfx(1,14). At the naive TL (-6,-6) the
+                // (1,14) probe would be icon(7,20) = off-icon = transparent.
+                Assert.AreEqual(TURTLE_COL_WHITE, TurtleIcon(8, 1), "fixture: icon(8,1) white");
+                Assert.AreEqual(TURTLE_COL_WHITE, TurtleIcon(1, 14), "fixture: icon(1,14) white");
+                Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, 8, 1),
+                    "low-corner draw must clamp stamp top-left to (0,0): apex at gfx(8,1)");
+                Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, 1, 14),
+                    "low-corner draw must clamp to (0,0): base-bar pixel at gfx(1,14) (off-plane if unclamped)");
+            }
+
+            // Bottom-right corner: center (318,198) -> naive TL (310,190) clamps to
+            // (TURTLE_MAX_X=304, TURTLE_MAX_Y=184) so the 16x16 stamp fits exactly.
+            using (var bus = MakeAxis2Bus())
+            {
+                RunFn(bus, GFN_GCLS);
+                RunFn(bus, GFN_TURTLE_INIT);
+                SetArg(bus, ARG0, 318);
+                SetArg(bus, ARG1, 198);
+                SetArg(bus, ARG2, 0);
+                RunFnPumped(bus, GFN_TURTLE_DRAW);
+
+                // Stamp clamped to TL (304,184): apex icon(8,1) -> gfx(312,185);
+                // base corner icon(14,14) -> gfx(318,198). At the naive TL (310,190)
+                // gfx(318,198) would be icon(8,8) = transparent, so white proves clamp.
+                Assert.AreEqual(TURTLE_COL_WHITE, TurtleIcon(14, 14), "fixture: icon(14,14) white");
+                Assert.AreEqual(0, TurtleIcon(8, 8), "fixture: icon(8,8) transparent (the unclamped probe)");
+                Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, 312, 185),
+                    "high-corner draw must clamp stamp top-left to (304,184): apex at gfx(312,185)");
+                Assert.AreEqual(TURTLE_COL_WHITE, GfxPixel(bus, 318, 198),
+                    "high-corner draw must clamp to (304,184): base corner at gfx(318,198) (transparent if unclamped)");
+            }
+        }
+
+        // --- Dispatch density: a still-reserved turtle-render id ($B3) returns
+        // LERR_NO_FN. ($B0-$B2 are now live turtle-render fns, batch 4c.2-2;
+        // $B3-$BF stay reserved -> gfn_unimpl.) ---
         [TestMethod]
         public void Axis2_TurtleRenderRangeGap_ReturnsNoFn()
         {
             using var bus = MakeAxis2Bus();
 
             bus.WriteRam(STATUS, 0x00);   // poison opposite to expected non-OK
-            RunFnRaw(bus, 0xB0);          // $B0-$BF are reserved for Phase 4c
+            RunFnRaw(bus, 0xB3);          // $B3-$BF are reserved
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
-                "id $B0 (deferred turtle-render gap) must report LERR_NO_FN");
+                "id $B3 (reserved turtle-render gap) must report LERR_NO_FN");
         }
 
         // --- Dispatch bounds: an id at/above GFX_FN_COUNT ($DB) returns LERR_NO_FN. ---
