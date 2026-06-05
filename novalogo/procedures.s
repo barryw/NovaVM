@@ -382,10 +382,61 @@ proc_edit_run:
       ; Strip line 1 + the END line -> proc_body_src/proc_body_len = body only.
       JSR   proc_extract_body
       JSR   proc_build_record
+      ; Re-establish the turtle split BEFORE returning carry (the helper clobbers
+      ; A/X/Y/eval state but does not touch proc_body_* / EXT_RESULT). proc_build_
+      ; record reads only proc_body_*, so it is safe to run it first.
+      JSR   proc_edit_restore_split
       SEC
       RTS
 @abandoned:
+      JSR   proc_edit_restore_split
       CLC
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_edit_restore_split — after EDIT returns, re-establish the turtle split-
+;   screen if it was active before EDIT. ext_edit tore down the copper split
+;   (copper_off + full 80x25 text window) for full-screen editing and, on exit,
+;   restored ee_saved_mode/colors/cursor + a full text window — but it can NO
+;   LONGER rebuild the split (setup_copper/prepare_split_text moved into the
+;   GRAPHICS module and were deleted from the extension). ext_edit also leaves
+;   the module's TURTLE_GFX_VISIBLE flag ($9F11) stale = 1, so the next turtle
+;   op short-circuits ensure_gfx_mode (no copper split) and logo_turtle_textwin
+;   sees no 0->1 transition (no bottom band) — the REPL is left in a broken
+;   full-screen display. The fix MUST live here in the FOUNDATION: ext_edit runs
+;   in the extension (bank 1) and cannot lib_call (a lib_call returns to the
+;   home/foundation bank, mis-mapping bank-1 code), and the split-setup helper no
+;   longer exists in the extension. The foundation CAN lib_call the module.
+;
+;   When $9F11 != 0 (ext_edit preserves the pre-EDIT flag), synthesize a
+;   SPLITSCREEN (SS) turtle op so the split + bottom text band come back exactly
+;   as a normal SS would, with the user's drawing intact:
+;     1. STZ $9F11 so turtle_enter_split is re-entered (ensure_gfx_mode /
+;        logo_turtle_textwin do not short-circuit on a stale-visible flag).
+;     2. EXT_CMD=SS, EXT_ARGC=0, ext_mod_id=MODULE_ID_TURTLE, JSR
+;        logo_adapt_turtle: lib_calls GFN_TURTLE_OP[SS] -> t_ss ->
+;        turtle_enter_split (copper split + $9F11=1, does NOT clear gfx), then
+;        logo_turtle_textwin (SS always re-applies: form-feed clears the TEXT
+;        plane only, carves the bottom band, parks the cursor). The gfx plane —
+;        the user's picture and the turtle stamp — survives.
+;   No-op when no split was active before EDIT.
+;   Clobbers A/X/Y + eval_val/eval_type (proc_edit does not need them after).
+; ---------------------------------------------------------------------
+; TURTLE_GFX_VISIBLE ($9F11) — the GRAPHICS module's turtle-state flag at
+; TURTLE_STATE_BASE+17 ($9F00+17 = $9F11): 1 = split/full gfx display active.
+; Equated in eval.s (same translation unit), so it is visible here.
+proc_edit_restore_split:
+      LDA   TURTLE_GFX_VISIBLE
+      BEQ   @no_split             ; no gfx/split active before EDIT -> nothing to do
+      STZ   TURTLE_GFX_VISIBLE    ; clear stale flag so SS re-enters turtle_enter_split
+      STZ   EXT_ARGC              ; SS takes no value args
+      LDA   #EXT_CMD_SS
+      STA   EXT_CMD
+      LDA   #MODULE_ID_TURTLE
+      STA   ext_mod_id
+      JMP   logo_adapt_turtle     ; marshal op->ARG2, lib_call GFN_TURTLE_OP[SS],
+                                  ; then logo_turtle_textwin re-carves the band; RTS
+@no_split:
       RTS
 
 ; ---------------------------------------------------------------------

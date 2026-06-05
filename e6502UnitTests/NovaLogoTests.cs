@@ -588,6 +588,76 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void ProcedureEditorSaveQuitRestoresSplitWithoutAnotherTurtleOp()
+    {
+        // Regression: the turtle render engine moved into the GRAPHICS module and
+        // the turtle drivers (incl. the split-screen setup) were deleted from the
+        // extension. ext_edit tears down the copper split for full-screen editing
+        // and, on exit, can no longer rebuild it; it also leaves the module's
+        // TURTLE_GFX_VISIBLE flag ($9F11) stale = 1, so a *later* turtle op would
+        // short-circuit ensure_gfx_mode (no copper split) and logo_turtle_textwin
+        // (no bottom band). The foundation (proc_edit_run) now re-synthesizes a
+        // SPLITSCREEN op after EDIT returns, so the split + bottom text band + the
+        // user's drawing are restored IMMEDIATELY on EDIT exit — with NO need for
+        // a subsequent turtle op. These assertions read the real VGC split state
+        // (no turtle command is issued after the editor closes).
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        StageGraphicsModule(bus);
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        // Enter split-screen with a real drawing: CS inits + enters the split +
+        // shows the turtle; FD draws a pen-down line across the gfx plane.
+        QueueLine(editor, "CS");
+        RunSteps(cpu, bus, 5_000_000);
+        QueueLine(editor, "FD 50");
+        RunSteps(cpu, bus, 5_000_000);
+
+        Assert.IsTrue(bus.Vgc.IsCopperEnabled,
+            "Precondition: CS+FD should be drawing under an active copper split.");
+        byte modeBefore = bus.Vgc.GetMode();
+        // The FD 50 pen line runs straight up from the center; sample a tall band
+        // above the turtle so we measure line pixels, not just the turtle stamp.
+        int drawingPixelsBefore = CountNonzeroPixels(bus, 152, 24, 168, 88);
+        Assert.IsTrue(drawingPixelsBefore > 0, "Precondition: FD 50 should have drawn a visible line.");
+
+        // Define a procedure through the editor (Ctrl-S save, Ctrl-Q quit). The
+        // editor goes full-screen (copper off) and returns here.
+        QueueProcedureDefinition(cpu, bus, editor, "TO FART", "PRINT 4242");
+        RunSteps(cpu, bus, 8_000_000);
+
+        // === Load-bearing: the split must be restored WITHOUT any later turtle op. ===
+        // 1. The copper split is active again (gfx top / text bottom).
+        Assert.IsTrue(bus.Vgc.IsCopperEnabled,
+            "Save+Quit from EDIT must re-establish the copper split immediately (no later turtle op).");
+        // 2. The bottom text-window band is re-carved (TEXTWIN_TOP=$B9F3 == 40),
+        //    not the full-screen window ext_edit left behind (top 0).
+        Assert.AreEqual(40, bus.ReadRam(0xB9F3),
+            "Save+Quit from EDIT must re-carve the bottom split text band (TEXTWIN_TOP=40).");
+        // 3. The prompt/cursor sits in the bottom band, not row 0.
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"After EDIT the Logo prompt must be in the bottom split band, not the editor's " +
+            $"full-screen row 0. cursorY={bus.Vgc.GetCursorY()}\n{SnapshotScreen(bus.Vgc)}");
+        // 4. The display mode that was active before EDIT is back (gfx visible).
+        Assert.AreEqual(modeBefore, bus.Vgc.GetMode(),
+            "Exiting the procedure editor should restore the pre-EDIT display mode (gfx visible).");
+        // 5. The user's drawing survived (only the text plane was cleared).
+        Assert.IsTrue(CountNonzeroPixels(bus, 152, 24, 168, 88) >= drawingPixelsBefore,
+            "Restoring the split must NOT clear the gfx plane — the drawing must survive EDIT.");
+
+        // The saved procedure still works (proc_edit_run's EDIT result handling
+        // was not corrupted by the split-restore).
+        QueueLine(editor, "FART");
+        RunSteps(cpu, bus, 5_000_000);
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("4242", StringComparison.Ordinal),
+            $"Saved FART procedure should still run after the split-restore.\n{screen}");
+    }
+
+    [TestMethod]
     public void ProcedureEditorCtrlQWithoutSaveAbandonsDefinition()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
