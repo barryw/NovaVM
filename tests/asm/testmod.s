@@ -5,6 +5,10 @@
       .segment "CODE"
       lib_module_header MODULE_ID_TEST, LIB_ABI_VERSION, 3
 
+;@module TESTMOD
+;@version 1.0
+;@brief Minimal paged library for loader proofs (echo / add / sum-bytes).
+
 dispatch:
       lda     LIB_FN_ID
       cmp     #3
@@ -27,6 +31,11 @@ jtable:
       .word   fn_sum-1                ; FN 2: SUM
 
 ; FN 0 ECHO: RESULT = ARG0 (32-bit copy)
+;@fn ECHO 0
+;@brief Copy ARG0 to RESULT verbatim (32-bit).
+;@arg value s32 the value to echo back
+;@ret s32 the same value
+;@status LERR_OK
 fn_echo:
       ldx     #3
 @c:   lda     LIB_ARG0,x
@@ -40,6 +49,12 @@ fn_echo:
 ; FN 1 ADD: RESULT = ARG0 + ARG1 (32-bit LE)
 ; Y counts the bytes down (DEY touches only N/Z, never C) so the inter-byte
 ; carry survives to the next ADC; CPX would have cleared it.
+;@fn ADD 1
+;@brief 32-bit add: RESULT = ARG0 + ARG1.
+;@arg a s32 first addend
+;@arg b s32 second addend
+;@ret s32 the 32-bit little-endian sum
+;@status LERR_OK
 fn_add:
       clc
       ldx     #0
@@ -56,6 +71,12 @@ fn_add:
 
 ; FN 2 SUM: ARG0 is BYTES(ptr16,len16) — LIB_ARG0/+1=ptr, LIB_ARG0+2/+3=len.
 ; RESULT (32-bit LE INT) = sum of those `len` main-RAM bytes. Walks (LIB_ZP),Y.
+;@fn SUM 2
+;@brief Sum a run of main-RAM bytes.
+;@arg buf bytes ptr16 in ARG0 low word, len16 in ARG0 high word
+;@ret s32 the 32-bit sum of the len bytes
+;@effect Reads `len` bytes of main RAM via (LIB_ZP),Y.
+;@status LERR_OK
 ; 16-bit length: LIB_SCRATCH/+1 is a down-counter; @loop exits the moment it hits
 ; zero (correct for len=0, <256, and >256). Each byte is folded into the 32-bit
 ; accumulator BEFORE the pointer/counter are touched, so the carry chain that
