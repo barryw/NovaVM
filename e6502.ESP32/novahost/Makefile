@@ -27,13 +27,15 @@ ESPOTA   ?= $(shell find "$$HOME/Library/Arduino15/packages/esp32/hardware/esp32
 REPO_ROOT := $(abspath ../..)
 EHBASIC   := $(REPO_ROOT)/ehbasic
 NOVALOGO  := $(REPO_ROOT)/novalogo
+MODGFX    := $(REPO_ROOT)/modules/graphics
+RTASM     := $(REPO_ROOT)/runtime/asm
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
 HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
 SD_ASSETS := build/sd
 
 COMPACT_BUILD ?= build/compact
 
-.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo
+.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo graphics libcall
 
 all: upload
 
@@ -43,13 +45,21 @@ ehbasic:
 novalogo:
 	@$(MAKE) --no-print-directory -C $(NOVALOGO)
 
+graphics:
+	@$(MAKE) --no-print-directory -C $(MODGFX)
+
+# Resident lib_call loader (157 B, ORG $0320). NovaHost pokes it into RAM $0320
+# at boot so module lib_calls work (see stageResidentLoader in novahost.ino).
+libcall:
+	@$(MAKE) --no-print-directory -C $(RTASM)
+
 # 6581 filter curve — 4096 × 16-bit entries. Streamed to SDRAM at boot so
 # the FPGA's sid_curve_reader can fetch Fc→f0 lookups.
 build/f6581_curve.bin: $(FPGA_ROM)/f6581_curve.hex
 	@mkdir -p build
 	@$(HEX16TOBIN) $< $@
 
-sd-assets: ehbasic novalogo build/f6581_curve.bin
+sd-assets: ehbasic novalogo graphics libcall build/f6581_curve.bin
 	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid $(SD_ASSETS)/assets/boot $(SD_ASSETS)/config $(SD_ASSETS)/lib
 	@cp $(EHBASIC)/basic.bin $(SD_ASSETS)/roms/novabasic.bin
 	@cp $(EHBASIC)/extension.bin $(SD_ASSETS)/roms/extension.bin
@@ -59,6 +69,8 @@ sd-assets: ehbasic novalogo build/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json
 	@cp $(REPO_ROOT)/tests/asm/testmod.bin $(SD_ASSETS)/lib/testmod.mod
+	@cp $(MODGFX)/graphics.bin $(SD_ASSETS)/lib/graphics.mod
+	@cp $(RTASM)/libcall.bin $(SD_ASSETS)/roms/libcall.bin
 	@rm -f $(SD_ASSETS)/soundfonts/GeneralUser_GS.nsfb
 	@echo "SD assets staged under $(CURDIR)/$(SD_ASSETS)"
 	@find $(SD_ASSETS) -type f -print

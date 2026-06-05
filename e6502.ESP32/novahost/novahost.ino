@@ -487,6 +487,16 @@ void novaHostFioActivityFinished(bool ok) {
 static const size_t BOOT_ROM_LEN       = 16 * 1024;
 static const size_t SID_CURVE_ROM_LEN  = 8 * 1024;
 static const uint32_t SID_CURVE_BASE   = 0x080000;
+// Re-page shelf: where the active runtime's extension ROM is mirrored in XRAM so
+// the 6502 loader's ensure_ext_resident can restore it into the bank-1 overlay
+// after a lib_call(MODULE) page-in clobbers $C000. Must match the runtime ABI
+// HOST_EXT_XRAM_L/M/H = $07C000 (runtime/asm/libabi.inc) and the emulator's
+// CompositeBusDevice.LoadExtBankStatic staging.
+static const uint32_t HOST_EXT_XRAM_BASE = 0x07C000;
+// CPU RAM address of the resident lib_call loader band (runtime/asm/libabi.inc
+// LIB_LOADER_BAND). lib_call == `JSR $0320`; the loader must live here or the
+// first module call runs BRK (=$00) and warm-starts the runtime.
+static const uint16_t LIB_LOADER_BAND = 0x0320;
 static const size_t BOOT_LOGO_GFX_LEN  = 320UL * 200UL;
 static const size_t VGC_TEXT_LEN       = 80UL * 50UL;
 
@@ -516,6 +526,13 @@ static const char* const BASIC_ROM_PATHS[] = {
 static const char* const EXTENSION_ROM_PATHS[] = {
     "/roms/extension.bin",
     "/roms/ext.bin"
+};
+
+// Resident lib_call loader: the canonical 157-byte position-dependent blob
+// (runtime/asm/libcall.bin, built at ORG $0320) that every runtime's lib_call
+// enters via `JSR $0320`. Runtime-agnostic (one image for all runtimes).
+static const char* const LIBCALL_PATHS[] = {
+    "/roms/libcall.bin"
 };
 
 static const char* const SID_CURVE_PATHS[] = {
@@ -892,6 +909,52 @@ int stageConfiguredLibraries() {
 
     logLn("Boot libraries staged: %d", staged);
     return staged;
+}
+
+// Stage the resident lib_call loader into CPU RAM at $0320 (LIB_LOADER_BAND).
+// Every runtime issues a paged-library call as `JSR $0320`; the 157-byte
+// position-dependent loader (runtime/asm/libcall.bin, ORG $0320) MUST be resident
+// in main RAM or that JSR runs BRK (=$00) and the ROM warm-starts (turtle/graphics
+// silently do nothing + the banner reprints). The emulator pokes it via
+// CompositeBusDevice.PokeResidentLoader; on hardware NovaHost is the host that
+// must install it. Written via a single CMD_POKE_BLOCK (main_ram, port-A debug
+// poke) while the CPU is held in reset — no contention with cold_start's RAM init,
+// and main_ram is a plain dpram (no reset) so it survives the system-reset pulse
+// before CPU release. cold_start never touches the reserved $0320-$041F band.
+// Best-effort (WARN-and-continue): a missing loader only breaks module lib_calls.
+bool stageResidentLoader() {
+    const char* path = nullptr;
+    File f = openFirstAsset("resident lib_call loader", LIBCALL_PATHS,
+                            sizeof(LIBCALL_PATHS) / sizeof(LIBCALL_PATHS[0]), path);
+    if (!f) return false;
+
+    size_t actual = f.size();
+    // CMD_POKE_BLOCK caps at 256 bytes; the loader is 157. Reject anything that
+    // would not fit one block (a larger file means the wrong artifact).
+    if (actual == 0 || actual > 256) {
+        logLn("Boot asset wrong size: lib_call loader at %s is %u bytes (expected 1..256)",
+              path, (unsigned)actual);
+        f.close();
+        return false;
+    }
+
+    uint8_t buf[256];
+    size_t got = f.read(buf, actual);
+    f.close();
+    if (got != actual) {
+        logLn("lib_call loader read failed (%u/%u bytes)", (unsigned)got, (unsigned)actual);
+        return false;
+    }
+
+    if (!fpgaBridge.pokeBlock(LIB_LOADER_BAND, buf, (uint16_t)actual)) {
+        logLn("lib_call loader poke failed (CMD_POKE_BLOCK @ $%04X)",
+              (unsigned)LIB_LOADER_BAND);
+        return false;
+    }
+
+    logLn("Resident lib_call loader staged (%u bytes @ RAM $%04X)",
+          (unsigned)actual, (unsigned)LIB_LOADER_BAND);
+    return true;
 }
 
 bool holdFpgaResetForBoot(const char* label) {
@@ -1521,11 +1584,38 @@ bool loadRomsToFPGA() {
                   (unsigned)SID_CURVE_ROM_LEN, (unsigned)SID_CURVE_BASE);
         }
 
+        // 4c.0c re-page shelf: mirror the active runtime's extension ROM into XRAM
+        // at $07C000 so the 6502 ensure_ext_resident can page it back into bank 1
+        // after a lib_call(MODULE) clobbers the $C000 overlay. Without it the
+        // turtle/graphics still draw, but the legacy ext path (EDIT, sound, timing)
+        // re-pages garbage the first time it runs after a graphics lib_call.
+        // Best-effort (WARN-and-continue) like the SID curve above; only matters
+        // when a runtime with an extension ROM also pages in a module.
+        if (haveExt) {
+            if (!streamSdramAsset(HOST_EXT_XRAM_BASE, "host ext (re-page shelf)",
+                                  extPaths, extPathCount, BOOT_ROM_LEN)) {
+                logLn("WARN: host ext not staged at XRAM $%06X; legacy ext re-page "
+                      "(EDIT/sound/timing after graphics) will be unavailable",
+                      (unsigned)HOST_EXT_XRAM_BASE);
+            } else {
+                logLn("Host ext staged for re-page (%u bytes @ XRAM $%06X)",
+                      (unsigned)BOOT_ROM_LEN, (unsigned)HOST_EXT_XRAM_BASE);
+            }
+        }
+
         // Stage paged-library modules (optional; WARN-and-continue like the SID
         // curve). Done under the same CPU-only reset hold so bridge-owned SDRAM
         // writes are still available. Never early-returns: the loader is
         // best-effort and must not block the reset-release below.
         stageConfiguredLibraries();
+
+        // Install the resident lib_call loader into RAM $0320 (still under
+        // CPU-only reset, so no contention with cold_start's RAM init). Without
+        // it every module lib_call runs BRK and warm-starts the runtime. Survives
+        // the system-reset pulse below (main_ram has no reset). Best-effort.
+        if (!stageResidentLoader())
+            logLn("WARN: resident lib_call loader not staged; module lib_calls "
+                  "(graphics/turtle) will warm-start the runtime");
 
         // ROM/SDRAM streaming happens under CPU-only reset so bridge-owned
         // SDRAM writes remain available. Right before releasing the CPU, pulse
