@@ -28,6 +28,7 @@
 #include "management_server.h"
 #include "nova_wifi.h"
 #include "boot_config_parser.h"
+#include "shelf_alloc.h"
 // Boot ROMs and bulky assets live on the SD card. The FPGA bitstream still
 // carries fallback ROM init data, but NovaHost no longer embeds those blobs.
 
@@ -497,6 +498,7 @@ static const uint32_t HOST_EXT_XRAM_BASE = 0x07C000;
 // LIB_LOADER_BAND). lib_call == `JSR $0320`; the loader must live here or the
 // first module call runs BRK (=$00) and warm-starts the runtime.
 static const uint16_t LIB_LOADER_BAND = 0x0320;
+static const uint16_t SHELF_DIR_BASE = 0x0418;   // SHELF_TAG; SHELF_LRU follows at $041C
 static const size_t BOOT_LOGO_GFX_LEN  = 320UL * 200UL;
 static const size_t VGC_TEXT_LEN       = 80UL * 50UL;
 
@@ -884,33 +886,37 @@ int stageConfiguredLibraries() {
         return 0;
     }
 
+    ShelfPlan plan;
+    shelf_plan_reset(&plan);
     int staged = 0;
     for (JsonObject lib : libs) {
         const char* name = lib["name"] | "";
         const char* path = lib["path"] | "";
-        // id is part of the design contract (must match modtab_lookup) but is
-        // only meaningful to the runtime/loader; the firmware just stages bytes.
-        int       id   = lib["id"]   | -1;
-        uint32_t  base = lib["base"] | 0UL;
-        uint32_t  size = lib["size"] | 0UL;
-
-        if (path[0] == '\0' || size == 0) {
-            logLn("WARN: boot library entry '%s' has no path/size; skipped",
-                  name[0] ? name : "?");
+        int      id   = lib["id"] | -1;
+        uint32_t size = lib["size"] | (uint32_t)BOOT_ROM_LEN;   // .nmod image is 16K
+        if (path[0] == '\0' || id < 0) {
+            logLn("WARN: boot library '%s' missing path/id; skipped", name[0] ? name : "?");
             continue;
         }
-
-        if (!streamSdramAsset(base, name[0] ? name : path, &path, 1,
-                              (size_t)size)) {
-            logLn("WARN: boot library '%s' (%s) not staged; continuing",
-                  name[0] ? name : "?", path);
+        int slot = shelf_plan_add(&plan, (uint8_t)id);
+        if (slot < 0) { logLn("WARN: shelf full (%d slots); '%s' skipped", SHELF_N, name); continue; }
+        uint32_t base = plan.base[slot];
+        if (!streamSdramAsset(base, name[0] ? name : path, &path, 1, (size_t)size)) {
+            logLn("WARN: boot library '%s' (%s) not staged; continuing", name[0] ? name : "?", path);
+            plan.count--; plan.tag[slot] = 0;   // roll back the failed slot
             continue;
         }
-
-        logLn("Boot library staged: %s id=%d (%u bytes @ XRAM $%06X)",
-              name[0] ? name : path, id, (unsigned)size, (unsigned)base);
+        logLn("Boot library staged: %s id=%d slot=%d (%u bytes @ XRAM $%06X)",
+              name[0] ? name : path, id, slot, (unsigned)size, (unsigned)base);
         staged++;
     }
+
+    uint8_t dir[SHELF_N * 2];
+    shelf_plan_dir(&plan, dir);
+    if (!fpgaBridge.pokeBlock(SHELF_DIR_BASE, dir, sizeof(dir)))
+        logLn("WARN: shelf directory poke failed @ $%04X", (unsigned)SHELF_DIR_BASE);
+    else
+        logLn("Shelf directory seeded: %d module(s) @ RAM $%04X", staged, (unsigned)SHELF_DIR_BASE);
 
     logLn("Boot libraries staged: %d", staged);
     return staged;
