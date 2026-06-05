@@ -241,11 +241,18 @@ static int DoModuleValidate(string[] args)
 
     NovaModule mod = NovaModule.Parse(File.ReadAllBytes(path));
     if (!mod.Valid) { Console.Error.WriteLine($"{path}: INVALID — {mod.Error}"); return 1; }
-    if (mod is { HasDoc: true, Doc: not null } && mod.Doc.Functions.Count != mod.FnCount)
+    if (mod is { HasDoc: true, Doc: not null })
     {
-        Console.Error.WriteLine($"{path}: doc/header drift — doc lists {mod.Doc.Functions.Count} " +
-                                $"functions, header says {mod.FnCount}");
-        return 1;
+        // fnCount is the dispatch-table span; documented ids must fall within it
+        // (a subset is fine — sparse-dispatch modules like graphics document only
+        // their implemented ids).
+        NovaFn? bad = mod.Doc.Functions.FirstOrDefault(f => f.Id < 0 || f.Id >= mod.FnCount);
+        if (bad is not null)
+        {
+            Console.Error.WriteLine($"{path}: doc id ${bad.Id:X2} ({bad.Name}) " +
+                                    $"out of dispatch range [0, {mod.FnCount})");
+            return 1;
+        }
     }
 
     string docNote = mod.HasDoc ? $"{mod.Doc!.Functions.Count} documented functions"

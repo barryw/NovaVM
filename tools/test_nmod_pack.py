@@ -77,10 +77,11 @@ def test_validate_ok_returns_header():
     assert hdr == {"id": 0x7F, "abiVersion": 1, "fnCount": 3}
 
 
-def test_validate_fn_count_mismatch_raises():
-    import pytest
-    with pytest.raises(ValueError):
-        nmod_pack.validate(_doc(1), _make_bin(0x7F, 1, 3))
+def test_validate_allows_fewer_functions_than_fncount():
+    # Sparse-dispatch modules (e.g. graphics: fnCount = jump-table span) annotate
+    # only a subset of ids; validate must NOT require count == fnCount.
+    hdr = nmod_pack.validate(_doc(2), _make_bin(0x01, 1, 219))
+    assert hdr["fnCount"] == 219
 
 
 def test_validate_bad_magic_raises():
@@ -152,13 +153,67 @@ def test_build_doc_omits_empty_optional_fields():
         "functions": [{
             "name": "F", "idspec": "$10", "brief": None,
             "args": [], "ret": None, "effect": None, "status": []}]}
-    doc = nmod_pack.build_doc(parsed, {"id": 1, "abiVersion": 1, "fnCount": 1}, {})
+    doc = nmod_pack.build_doc(parsed, {"id": 1, "abiVersion": 1, "fnCount": 0x20}, {})
     fn = doc["functions"][0]
     assert fn["id"] == 0x10
     assert fn["idHex"] == "$10"
     assert fn["ret"] == {"type": "void", "desc": ""}   # defaulted
     assert "effect" not in fn
     assert "status" not in fn
+
+
+def _fn(name, idspec):
+    return {"name": name, "idspec": idspec, "brief": None,
+            "args": [], "ret": None, "effect": None, "status": []}
+
+
+def test_build_doc_id_out_of_range_raises():
+    import pytest
+    parsed = {"module": {"name": "M", "version": None, "brief": None, "id": None},
+              "functions": [_fn("F", "5")]}
+    with pytest.raises(ValueError):                       # id 5 >= fnCount 3
+        nmod_pack.build_doc(parsed, {"id": 1, "abiVersion": 1, "fnCount": 3}, {})
+
+
+def test_build_doc_duplicate_id_raises():
+    import pytest
+    parsed = {"module": {"name": "M", "version": None, "brief": None, "id": None},
+              "functions": [_fn("A", "1"), _fn("B", "1")]}
+    with pytest.raises(ValueError):
+        nmod_pack.build_doc(parsed, {"id": 1, "abiVersion": 1, "fnCount": 10}, {})
+
+
+def test_build_doc_subset_ok():
+    # 2 functions with in-range ids against a 219-span header is fine.
+    parsed = {"module": {"name": "M", "version": "1.0", "brief": None, "id": None},
+              "functions": [_fn("A", "$04"), _fn("B", "$50")]}
+    doc = nmod_pack.build_doc(parsed, {"id": 1, "abiVersion": 1, "fnCount": 219}, {})
+    assert [f["id"] for f in doc["functions"]] == [0x04, 0x50]
+
+
+def test_load_symbols_parses_inc_constants():
+    inc = ("GFN_GCLS      = $00   ; ()\n"
+           "GFN_LINE      = $04\n"
+           "MODULE_ID_GRAPHICS = $01\n"
+           "EXPR = GFN_LINE+1\n")
+    syms = nmod_pack.load_symbols(inc)
+    assert syms["GFN_GCLS"] == 0x00
+    assert syms["GFN_LINE"] == 0x04
+    assert syms["MODULE_ID_GRAPHICS"] == 0x01
+    assert "EXPR" not in syms          # non-numeric RHS skipped
+
+
+def test_build_nmod_resolves_symbolic_ids():
+    import json
+    import struct
+    src = (";@module GFX\n;@version 2.0\n"
+           ";@fn GFN_LINE\n;@brief draw a line\n;@arg x0 s16 sx\n;@ret void\n")
+    out = nmod_pack.build_nmod(src, _make_bin(0x01, 1, 219), {"GFN_LINE": 0x04})
+    length = struct.unpack("<I", out[16388:16392])[0]
+    doc = json.loads(out[16392:16392 + length].decode("utf-8"))
+    assert doc["functions"][0]["id"] == 0x04
+    assert doc["functions"][0]["idHex"] == "$04"
+    assert doc["functions"][0]["name"] == "GFN_LINE"
 
 
 def test_build_nmod_end_to_end():
@@ -188,11 +243,12 @@ def test_build_nmod_end_to_end():
     assert doc["functions"][0]["idHex"] == "$00"
 
 
-def test_build_nmod_drift_fails():
-    # header says 1 function, source annotates 0 → build must fail loudly
+def test_build_nmod_id_out_of_range_fails():
+    # an annotated id outside the dispatch-table span must fail loudly
     import pytest
+    src = ";@module X\n;@fn F 5\n;@brief b\n"
     with pytest.raises(ValueError):
-        nmod_pack.build_nmod(";@module X\n", _make_bin(0x7F, 1, 1), symbols={})
+        nmod_pack.build_nmod(src, _make_bin(0x7F, 1, 3), symbols={})  # id 5 >= 3
 
 
 def test_main_writes_nmod(tmp_path):
@@ -211,11 +267,32 @@ def test_main_writes_nmod(tmp_path):
 
 def test_main_drift_returns_nonzero_and_writes_nothing(tmp_path):
     src = tmp_path / "m.s"
-    src.write_text(";@module M\n")               # 0 functions annotated
+    src.write_text(";@module M\n;@fn F 5\n;@brief b\n")   # id 5
     binf = tmp_path / "m.bin"
-    binf.write_bytes(_make_bin(0xAB, 1, 1))      # header says 1
+    binf.write_bytes(_make_bin(0xAB, 1, 3))              # span 3 → 5 out of range
     out = tmp_path / "m.nmod"
 
     rc = nmod_pack.main(["--src", str(src), "--bin", str(binf), "--out", str(out)])
     assert rc != 0
     assert not out.exists()
+
+
+def test_main_with_syms_resolves_symbolic_ids(tmp_path):
+    import json
+    import struct
+    src = tmp_path / "g.s"
+    src.write_text(";@module GFX\n;@version 1.0\n;@fn GFN_LINE\n;@brief draw\n;@ret void\n")
+    inc = tmp_path / "g.inc"
+    inc.write_text("GFN_GCLS = $00\nGFN_LINE = $04\n")
+    binf = tmp_path / "g.bin"
+    binf.write_bytes(_make_bin(0x01, 1, 219))
+    out = tmp_path / "g.nmod"
+
+    rc = nmod_pack.main(["--src", str(src), "--bin", str(binf),
+                         "--out", str(out), "--syms", str(inc)])
+    assert rc == 0
+    data = out.read_bytes()
+    length = struct.unpack("<I", data[16388:16392])[0]
+    doc = json.loads(data[16392:16392 + length].decode("utf-8"))
+    assert doc["functions"][0]["id"] == 0x04
+    assert doc["functions"][0]["name"] == "GFN_LINE"

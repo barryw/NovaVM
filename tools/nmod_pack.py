@@ -10,6 +10,7 @@ The JSON (the "NDOC" doc) is generated from `;@` doc-comments in the module's
 docs/plans/2026-06-05-nmod-self-documenting-modules-design.md.
 """
 import json
+import re
 import struct
 
 
@@ -88,6 +89,29 @@ def resolve_id(idspec, symbols):
     raise ValueError(f"unknown id spec / symbol: {idspec!r}")
 
 
+_SYM_RE = re.compile(
+    r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\$[0-9A-Fa-f]+|0[xX][0-9A-Fa-f]+|\d+)\b")
+
+
+def load_symbols(text):
+    """Parse `NAME = $HH` / `= 0xHH` / `= NN` constant definitions (e.g. the GFN_*
+    ids in libgraphics.inc) into {name: int}. Lines whose right-hand side is not a
+    plain numeric literal (expressions, other symbols) are skipped."""
+    syms = {}
+    for line in text.splitlines():
+        m = _SYM_RE.match(line)
+        if not m:
+            continue
+        name, val = m.group(1), m.group(2)
+        if val.startswith("$"):
+            syms[name] = int(val[1:], 16)
+        elif val.lower().startswith("0x"):
+            syms[name] = int(val, 16)
+        else:
+            syms[name] = int(val, 10)
+    return syms
+
+
 MODULE_SIZE = 16384
 MOD_MAGIC = b"NL"          # libabi.inc MOD_MAGIC0/1 = $4E $4C, at image offset +3
 
@@ -104,13 +128,11 @@ def validate(doc, image):
     if image[3:5] != MOD_MAGIC:
         raise ValueError(
             f"bad module magic at +3: expected {MOD_MAGIC!r}, got {image[3:5]!r}")
-    header = {"id": image[5], "abiVersion": image[6], "fnCount": image[7]}
-    n = len(doc["functions"])
-    if n != header["fnCount"]:
-        raise ValueError(
-            f"annotated function count {n} != binary header fn_count "
-            f"{header['fnCount']}")
-    return header
+    # Header fn_count is the dispatch-table SPAN (max id + 1), not a dense count:
+    # sparse-dispatch modules (graphics) annotate only a subset of in-range ids.
+    # Per-function id-range / duplicate checks happen in build_doc once ids are
+    # resolved. validate only confirms the image is a structurally valid module.
+    return {"id": image[5], "abiVersion": image[6], "fnCount": image[7]}
 
 
 NDOC_MAGIC = b"NDOC"
@@ -143,8 +165,18 @@ def build_doc(parsed, header, symbols):
         "abiNote": ABI_NOTE,
     }
     functions = []
+    seen = set()
+    span = header["fnCount"]
     for f in parsed["functions"]:
         fid = resolve_id(f["idspec"], symbols)
+        if fid < 0 or fid >= span:
+            raise ValueError(
+                "function %r id %d ($%02X) out of dispatch range [0, %d)"
+                % (f["name"], fid, fid, span))
+        if fid in seen:
+            raise ValueError(
+                "duplicate function id %d ($%02X) at %r" % (fid, fid, f["name"]))
+        seen.add(fid)
         entry = {
             "id": fid,
             "idHex": "$%02X" % fid,
@@ -182,6 +214,9 @@ def main(argv=None):
     p.add_argument("--bin", required=True, dest="binpath",
                    help="16384-byte module image")
     p.add_argument("--out", required=True, help="output .nmod path")
+    p.add_argument("--syms", action="append", default=[],
+                   help="symbol source(s) for symbolic function ids "
+                        "(e.g. libgraphics.inc); may be repeated")
     args = p.parse_args(argv)
 
     with open(args.src, "r", encoding="utf-8") as f:
@@ -189,8 +224,13 @@ def main(argv=None):
     with open(args.binpath, "rb") as f:
         image = f.read()
 
+    symbols = {}
+    for spath in args.syms:
+        with open(spath, "r", encoding="utf-8") as f:
+            symbols.update(load_symbols(f.read()))
+
     try:
-        out = build_nmod(src_text, image, symbols={})
+        out = build_nmod(src_text, image, symbols)
     except ValueError as e:
         print(f"nmod_pack: {args.src}: {e}", file=sys.stderr)
         return 1
