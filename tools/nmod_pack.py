@@ -47,8 +47,13 @@ def parse_annotations(text):
             name = fp[0]
             idspec = fp[1].strip() if len(fp) > 1 else name
             current = {"name": name, "idspec": idspec, "brief": None,
-                       "args": [], "ret": None, "effect": None, "status": []}
+                       "ndk": None, "args": [], "ret": None,
+                       "effect": None, "status": []}
             functions.append(current)
+        elif tag == "ndk":
+            # Machine-readable map to the wrapped NDK routine (source of truth for
+            # the summary). Only meaningful inside a function block.
+            current["ndk"] = rest.split(None, 1)[0] if rest else None
         elif tag == "arg":
             ap = rest.split(None, 2)
             current["args"].append({
@@ -152,9 +157,16 @@ ABI_NOTE = ("All calls clobber A/X/Y; communicate via the mailbox "
 NDOC_VERSION = 1
 
 
-def build_doc(parsed, header, symbols):
+def build_doc(parsed, header, symbols, ndk_index=None):
     """Assemble the NDOC dict: resolve function ids, merge the binary header,
-    index args, and drop optional fields that are absent."""
+    index args, and drop optional fields that are absent.
+
+    `ndk_index` (optional) maps NDK `@symbol` -> the NDK routine's doc entry. When
+    a function carries a `;@ndk <symbol>` mapping the summary is single-sourced
+    from the NDK (`feedback-ndk-source-of-truth`): if the function has no local
+    `;@brief`, its brief is pulled from the NDK routine's `@summary`. An `;@ndk`
+    symbol absent from the index raises (build fails loudly on a stale mapping).
+    A `None` index embeds the mapping but performs no pull or validation."""
     m = parsed["module"]
     module = {
         "name": m["name"],
@@ -177,15 +189,28 @@ def build_doc(parsed, header, symbols):
             raise ValueError(
                 "duplicate function id %d ($%02X) at %r" % (fid, fid, f["name"]))
         seen.add(fid)
+
+        ndk_sym = f.get("ndk")
+        brief = f.get("brief")
+        if ndk_sym and ndk_index is not None:
+            if ndk_sym not in ndk_index:
+                raise ValueError(
+                    "function %r maps to unknown NDK symbol %r (not found in the "
+                    "NDK sources)" % (f["name"], ndk_sym))
+            if not brief:
+                brief = ndk_index[ndk_sym].get("summary")
+
         entry = {
             "id": fid,
             "idHex": "$%02X" % fid,
             "name": f["name"],
-            "brief": f.get("brief"),
+            "brief": brief,
             "args": [{"i": i, "name": a["name"], "type": a["type"],
                       "desc": a["desc"]} for i, a in enumerate(f["args"])],
             "ret": f.get("ret") or {"type": "void", "desc": ""},
         }
+        if ndk_sym:
+            entry["ndk"] = ndk_sym
         if f.get("effect"):
             entry["effect"] = f["effect"]
         if f.get("status"):
@@ -194,17 +219,101 @@ def build_doc(parsed, header, symbols):
     return {"ndocVersion": NDOC_VERSION, "module": module, "functions": functions}
 
 
-def build_nmod(src_text, image, symbols=None):
+_JTABLE_RE = re.compile(r"^\s*\.word\s+([A-Za-z_]\w*)\s*-\s*1\b")
+_LABEL_RE = re.compile(r"^([A-Za-z_]\w*):")
+_HELPER_JSRS = frozenset({"copy_args_to_p", "vgc_wait_cmd"})
+
+
+def parse_jtable(src_text):
+    """Return the module dispatch jtable's wrapper labels in fn-id order.
+
+    The jtable is the maximal run of consecutive `.word <label>-1` lines (blank
+    and comment lines do not break the run). Used to map a function id to the
+    label of the wrapper that implements it — the `;@fn` name does NOT reliably
+    lowercase to the label (e.g. SYS_FN_EDIT -> sys_edit)."""
+    runs = []
+    current = []
+    for line in src_text.splitlines():
+        m = _JTABLE_RE.match(line)
+        if m:
+            current.append(m.group(1))
+            continue
+        stripped = line.strip()
+        if stripped == "" or stripped.startswith(";"):
+            continue
+        if current:
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    return max(runs, key=len) if runs else []
+
+
+def verify_wrapper_calls(src_text, parsed, symbols, jtable_labels):
+    """Drift guard: every function with a `;@ndk <symbol>` mapping must have a
+    wrapper body that actually `JSR`s that symbol. Raises ValueError otherwise so
+    a lying or stale mapping cannot produce a .nmod. Helper JSRs (copy_args_to_p,
+    vgc_wait_cmd) are not the mapped routine but are harmless to ignore."""
+    lines = src_text.splitlines()
+    label_line = {}
+    for i, line in enumerate(lines):
+        lm = _LABEL_RE.match(line)
+        if lm:
+            label_line.setdefault(lm.group(1), i)
+
+    for f in parsed["functions"]:
+        sym = f.get("ndk")
+        if not sym:
+            continue
+        fid = resolve_id(f["idspec"], symbols)
+        if fid >= len(jtable_labels):
+            raise ValueError(
+                "function %r id %d has no jtable entry (jtable has %d)"
+                % (f["name"], fid, len(jtable_labels)))
+        label = jtable_labels[fid]
+        start = label_line.get(label)
+        if start is None:
+            raise ValueError(
+                "wrapper label %r for function %r not found" % (label, f["name"]))
+        end = len(lines)
+        for j in range(start + 1, len(lines)):
+            if _LABEL_RE.match(lines[j]):
+                end = j
+                break
+        body = "\n".join(lines[start:end])
+        jsr_re = re.compile(r"\bjsr\s+" + re.escape(sym) + r"\b", re.IGNORECASE)
+        if not jsr_re.search(body):
+            raise ValueError(
+                "wrapper %r (function %r) does not JSR its mapped NDK routine %r"
+                % (label, f["name"], sym))
+
+
+def load_ndk_index(paths):
+    """Build {symbol: entry} from NDK annotation sources, reusing the canonical
+    parser. `entry` carries `summary` (and the other @-tags) for that routine."""
+    from pathlib import Path
+    from gen_runtime_abi_docs import parse_tagged_sources
+    entries = parse_tagged_sources([Path(p) for p in paths])
+    return {e["symbol"]: e for e in entries if e.get("symbol")}
+
+
+def build_nmod(src_text, image, symbols=None, ndk_index=None):
     """Full pipeline: parse `;@` doc-comments, cross-check against the binary
-    header (raises on drift), build the NDOC doc, and return the .nmod bytes."""
+    header (raises on drift), build the NDOC doc, and return the .nmod bytes.
+
+    When `ndk_index` is given, also verify each `;@ndk` mapping is real: the
+    wrapper must JSR the routine it maps to (raises on drift)."""
     parsed = parse_annotations(src_text)
     header = validate(parsed, image)
-    doc = build_doc(parsed, header, symbols or {})
+    if ndk_index is not None:
+        verify_wrapper_calls(src_text, parsed, symbols or {}, parse_jtable(src_text))
+    doc = build_doc(parsed, header, symbols or {}, ndk_index)
     return pack(image, doc)
 
 
 def main(argv=None):
     import argparse
+    import os
     import sys
 
     p = argparse.ArgumentParser(
@@ -217,6 +326,11 @@ def main(argv=None):
     p.add_argument("--syms", action="append", default=[],
                    help="symbol source(s) for symbolic function ids "
                         "(e.g. libgraphics.inc); may be repeated")
+    p.add_argument("--ndk-dir", action="append", default=[], dest="ndk_dir",
+                   help="NDK source dir(s) (e.g. runtime/asm); the wrapped "
+                        "routine's @summary is single-sourced for each ;@ndk "
+                        "mapping, and the wrapper-calls-NDK drift guard is "
+                        "enforced. May be repeated.")
     args = p.parse_args(argv)
 
     with open(args.src, "r", encoding="utf-8") as f:
@@ -229,8 +343,17 @@ def main(argv=None):
         with open(spath, "r", encoding="utf-8") as f:
             symbols.update(load_symbols(f.read()))
 
+    ndk_index = None
+    if args.ndk_dir:
+        import glob
+        ndk_paths = []
+        for d in args.ndk_dir:
+            ndk_paths.extend(sorted(glob.glob(os.path.join(d, "*.inc"))))
+            ndk_paths.extend(sorted(glob.glob(os.path.join(d, "*.s"))))
+        ndk_index = load_ndk_index(ndk_paths)
+
     try:
-        out = build_nmod(src_text, image, symbols)
+        out = build_nmod(src_text, image, symbols, ndk_index)
     except ValueError as e:
         print(f"nmod_pack: {args.src}: {e}", file=sys.stderr)
         return 1

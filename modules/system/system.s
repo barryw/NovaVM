@@ -49,13 +49,15 @@ EDITOR_FGCOL      = $01                ; white text
 ;@status LERR_OK
 ;
 ;@fn SYS_FN_WAIT
+;@ndk vgc_wait_frames
 ;@brief Busy-wait a number of video frames.
 ;@arg n u16 frame count (ARG0)
 ;@ret void
 ;@status LERR_OK
+; (local @brief override: NDK vgc_wait_frames summary names the A register.)
 ;
 ;@fn SYS_FN_WAITVBL
-;@brief Wait for the next vertical blank (one frame edge).
+;@ndk vgc_vsync
 ;@ret void
 ;@status LERR_OK
 ;
@@ -63,6 +65,7 @@ EDITOR_FGCOL      = $01                ; white text
 ;@brief Read the VGC frame counter.
 ;@ret u8 current frame counter (RESULT byte0)
 ;@status LERR_OK
+; (no ;@ndk: reads VGC_FRAME directly; not a wrapped NDK routine.)
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.

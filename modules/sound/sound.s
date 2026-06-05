@@ -18,27 +18,31 @@
 ;@version 1.0
 ;@brief Shared audio services: SID tone/noise/volume (thin wrappers over NDK audio.s).
 ;
+; Each ;@ndk line maps the fn to the NDK routine it wraps; the human summary is
+; single-sourced from that routine (feedback-ndk-source-of-truth). Mailbox @arg
+; bindings stay here — they are this wrapper's marshalling, not duplicated prose.
+;
 ;@fn SND_TONE
-;@brief Play a sawtooth tone on SID voice 0 for a number of frames.
+;@ndk audio_tone
 ;@arg freq u16 SID frequency word (ARG0)
 ;@arg dur u16 duration in video frames (ARG1)
 ;@ret void
-;@effect Wraps the NDK audio_tone routine.
 ;@status LERR_OK
 ;
 ;@fn SND_NOISE
-;@brief Play a noise burst on SID voice 0 for a number of frames.
+;@ndk audio_noise
 ;@arg dur u16 duration in video frames (ARG0)
 ;@ret void
-;@effect Wraps the NDK audio_noise routine.
 ;@status LERR_OK
 ;
 ;@fn SND_VOLUME
+;@ndk audio_volume
 ;@brief Set the SID master volume.
 ;@arg vol u8 volume 0-15 (ARG0, clamped by the NDK)
 ;@ret void
-;@effect Wraps the NDK audio_volume routine (AUDIO_VOICE=0 -> master).
 ;@status LERR_OK
+; (local @brief override: the wrapper hardwires AUDIO_VOICE=0, so this fn is
+;  master-only — narrower than the NDK audio_volume "master or per-voice" summary.)
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router (RTS-trick). SND_FN_COUNT is small so fn*2 < 256.

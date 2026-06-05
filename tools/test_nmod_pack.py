@@ -296,3 +296,122 @@ def test_main_with_syms_resolves_symbolic_ids(tmp_path):
     doc = json.loads(data[16392:16392 + length].decode("utf-8"))
     assert doc["functions"][0]["id"] == 0x04
     assert doc["functions"][0]["name"] == "GFN_LINE"
+
+
+# ---------------------------------------------------------------------------
+# docs-from-NDK: ;@ndk mapping, summary pull, and wrapper-calls-NDK drift guard.
+# ---------------------------------------------------------------------------
+
+def test_parse_annotations_reads_ndk_tag():
+    src = (";@module M\n;@fn SND_TONE\n;@ndk audio_tone\n"
+           ";@arg freq u16 freq word (ARG0)\nsnd_tone:\n      rts\n")
+    doc = nmod_pack.parse_annotations(src)
+    fn = doc["functions"][0]
+    assert fn["ndk"] == "audio_tone"
+    # mailbox arg bindings stay in the module — not pulled from the NDK
+    assert fn["args"] == [{"name": "freq", "type": "u16", "desc": "freq word (ARG0)"}]
+
+
+def test_build_doc_pulls_brief_from_ndk_summary_when_absent():
+    parsed = {"module": {"name": "S", "version": "1.0", "brief": None, "id": None},
+              "functions": [{"name": "SND_TONE", "idspec": "0", "brief": None,
+                             "ndk": "audio_tone", "args": [], "ret": None,
+                             "effect": None, "status": []}]}
+    ndk = {"audio_tone": {"summary": "Play a sawtooth tone for a number of frames."}}
+    doc = nmod_pack.build_doc(parsed, {"id": 2, "abiVersion": 1, "fnCount": 3},
+                              symbols={}, ndk_index=ndk)
+    fn = doc["functions"][0]
+    assert fn["brief"] == "Play a sawtooth tone for a number of frames."
+    assert fn["ndk"] == "audio_tone"          # provenance embedded
+
+
+def test_build_doc_local_brief_overrides_ndk_summary():
+    parsed = {"module": {"name": "S", "version": "1.0", "brief": None, "id": None},
+              "functions": [{"name": "F", "idspec": "0", "brief": "Local override.",
+                             "ndk": "audio_tone", "args": [], "ret": None,
+                             "effect": None, "status": []}]}
+    ndk = {"audio_tone": {"summary": "NDK summary."}}
+    doc = nmod_pack.build_doc(parsed, {"id": 2, "abiVersion": 1, "fnCount": 3},
+                              symbols={}, ndk_index=ndk)
+    fn = doc["functions"][0]
+    assert fn["brief"] == "Local override."
+    assert fn["ndk"] == "audio_tone"
+
+
+def test_build_doc_unknown_ndk_symbol_raises():
+    import pytest
+    parsed = {"module": {"name": "S", "version": None, "brief": None, "id": None},
+              "functions": [{"name": "F", "idspec": "0", "brief": None,
+                             "ndk": "audio_missing", "args": [], "ret": None,
+                             "effect": None, "status": []}]}
+    with pytest.raises(ValueError):
+        nmod_pack.build_doc(parsed, {"id": 2, "abiVersion": 1, "fnCount": 3},
+                            symbols={}, ndk_index={"audio_tone": {"summary": "x"}})
+
+
+def test_build_doc_without_ndk_index_embeds_mapping_but_does_not_pull():
+    parsed = {"module": {"name": "S", "version": None, "brief": None, "id": None},
+              "functions": [{"name": "F", "idspec": "0", "brief": None,
+                             "ndk": "audio_tone", "args": [], "ret": None,
+                             "effect": None, "status": []}]}
+    doc = nmod_pack.build_doc(parsed, {"id": 2, "abiVersion": 1, "fnCount": 3},
+                              symbols={})                      # ndk_index defaults None
+    fn = doc["functions"][0]
+    assert fn["ndk"] == "audio_tone"
+    assert fn["brief"] is None                                 # no NDK to pull from
+
+
+def test_parse_jtable_returns_labels_in_fnid_order():
+    src = ("dispatch:\n      rts\n"
+           "snd_jtable:\n"
+           "      .word   snd_tone-1      ; $00\n"
+           "      .word   snd_noise-1     ; $01\n"
+           "      .word   snd_volume-1    ; $02\n"
+           "snd_tone:\n      rts\n")
+    assert nmod_pack.parse_jtable(src) == ["snd_tone", "snd_noise", "snd_volume"]
+
+
+def test_verify_wrapper_calls_passes_when_wrapper_jsrs_symbol():
+    src = ("snd_jtable:\n      .word snd_tone-1\n"
+           "snd_tone:\n      LDA LIB_ARG0\n      JSR audio_tone\n      RTS\n")
+    parsed = nmod_pack.parse_annotations(";@fn SND_TONE 0\n;@ndk audio_tone\n")
+    jtable = nmod_pack.parse_jtable(src)
+    nmod_pack.verify_wrapper_calls(src, parsed, symbols={}, jtable_labels=jtable)
+
+
+def test_verify_wrapper_calls_raises_when_wrapper_missing_jsr():
+    import pytest
+    # wrapper JSRs a DIFFERENT routine than the one it claims to map to
+    src = ("snd_jtable:\n      .word snd_tone-1\n"
+           "snd_tone:\n      JSR audio_noise\n      RTS\n")
+    parsed = nmod_pack.parse_annotations(";@fn SND_TONE 0\n;@ndk audio_tone\n")
+    jtable = nmod_pack.parse_jtable(src)
+    with pytest.raises(ValueError):
+        nmod_pack.verify_wrapper_calls(src, parsed, symbols={}, jtable_labels=jtable)
+
+
+def test_build_nmod_with_ndk_index_pulls_summary_and_verifies_jsr():
+    import json
+    import struct
+    src = (";@module SND\n;@version 1.0\n"
+           ";@fn SND_TONE 0\n;@ndk audio_tone\n;@arg freq u16 f (ARG0)\n"
+           "snd_jtable:\n      .word snd_tone-1\n"
+           "snd_tone:\n      JSR audio_tone\n      RTS\n")
+    ndk = {"audio_tone": {"summary": "Play a tone."}}
+    out = nmod_pack.build_nmod(src, _make_bin(0x02, 1, 1), symbols={}, ndk_index=ndk)
+    length = struct.unpack("<I", out[16388:16392])[0]
+    doc = json.loads(out[16392:16392 + length].decode("utf-8"))
+    assert doc["functions"][0]["brief"] == "Play a tone."
+    assert doc["functions"][0]["ndk"] == "audio_tone"
+
+
+def test_build_nmod_with_ndk_index_raises_on_lying_mapping():
+    import pytest
+    src = (";@module SND\n;@version 1.0\n"
+           ";@fn SND_TONE 0\n;@ndk audio_tone\n"
+           "snd_jtable:\n      .word snd_tone-1\n"
+           "snd_tone:\n      JSR audio_noise\n      RTS\n")   # body calls audio_noise
+    ndk = {"audio_tone": {"summary": "Play a tone."},
+           "audio_noise": {"summary": "Noise."}}
+    with pytest.raises(ValueError):
+        nmod_pack.build_nmod(src, _make_bin(0x02, 1, 1), symbols={}, ndk_index=ndk)

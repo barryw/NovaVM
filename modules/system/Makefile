@@ -19,10 +19,12 @@ system.bin: system.o system.cfg
 	$(LD65) -C system.cfg -m system.map -o system.bin system.o
 
 # Self-documenting module: image + NDOC doc (from system.s ;@ comments, ids
-# resolved from libsystem.inc) -> system.nmod.
-system.nmod: system.bin system.s ../../tools/nmod_pack.py $(NOVA_ASM)/libsystem.inc
+# resolved from libsystem.inc) -> system.nmod. --ndk-dir single-sources each ;@ndk
+# fn's summary from the NDK routine and enforces the wrapper-calls-NDK drift guard.
+system.nmod: system.bin system.s ../../tools/nmod_pack.py ../../tools/gen_runtime_abi_docs.py \
+            $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/vgc.s
 	python3 ../../tools/nmod_pack.py --src system.s --bin system.bin \
-	        --out system.nmod --syms $(NOVA_ASM)/libsystem.inc
+	        --out system.nmod --syms $(NOVA_ASM)/libsystem.inc --ndk-dir $(NOVA_ASM)
 
 # Copy the raw 16K image into the Avalonia Resources dir, where CompositeBusDevice
 # pre-stages it into the XRAM shelf at boot (mirrors firmware boot.json staging).

@@ -58,6 +58,108 @@ public class ModuleNdkContractTests
         }
     }
 
+    /// <summary>
+    /// docs-from-NDK drift guard (CI mirror of nmod_pack's build-time check): every
+    /// module fn that carries a <c>;@ndk &lt;symbol&gt;</c> mapping (the single source
+    /// of its doc summary) must (1) map to a routine that actually exists in the NDK
+    /// sources, and (2) have a wrapper body that really JSRs that routine. A stale or
+    /// lying mapping fails here even if the committed .nmod was not rebuilt.
+    /// </summary>
+    [TestMethod]
+    public void Module_NdkMappings_Exist_AndWrappersCallThem()
+    {
+        var ndkSymbols = NdkRoutineLabels();
+        Assert.IsTrue(ndkSymbols.Contains("vgc_vsync"),
+            "sanity: NDK routine label scan found nothing — check runtime/asm path.");
+
+        foreach (var (name, jtable) in Modules)
+        {
+            string src = File.ReadAllText(RepoPath("modules", name, name + ".s"));
+            var ids = ParseIncIds(File.ReadAllText(RepoPath("runtime", "asm", "lib" + name + ".inc")));
+            string[] labels = JtableLabels(src, jtable);
+
+            foreach (var (fn, ndk) in NdkMappings(src))
+            {
+                Assert.IsTrue(ids.ContainsKey(fn),
+                    $"{name}.s: ;@fn {fn} has no id in lib{name}.inc.");
+                int id = ids[fn];
+                Assert.IsTrue(id < labels.Length,
+                    $"{name}.s: {fn} id ${id:X2} beyond {jtable} ({labels.Length} entries).");
+                Assert.IsTrue(ndkSymbols.Contains(ndk),
+                    $"{name}.s: {fn} maps to NDK routine '{ndk}' which is not defined in runtime/asm/*.s.");
+                string body = WrapperBody(src, labels[id]);
+                StringAssert.Matches(body, new Regex(@"\b[jJ][sS][rR]\s+" + Regex.Escape(ndk) + @"\b"),
+                    $"{name}.s: wrapper '{labels[id]}' ({fn}) does not JSR its mapped NDK routine '{ndk}'.");
+            }
+        }
+    }
+
+    // (;@fn NAME, ;@ndk symbol) pairs — a fn's mapping is the ;@ndk line before the
+    // next ;@fn (fns without a ;@ndk are skipped: composite/non-routine wrappers).
+    private static System.Collections.Generic.IEnumerable<(string Fn, string Ndk)> NdkMappings(string src)
+    {
+        string? fn = null;
+        foreach (string raw in src.Split('\n'))
+        {
+            string line = raw.Trim();
+            var mf = Regex.Match(line, @"^;@fn\s+(\S+)");
+            if (mf.Success) { fn = mf.Groups[1].Value; continue; }
+            var mn = Regex.Match(line, @"^;@ndk\s+(\S+)");
+            if (mn.Success && fn != null) yield return (fn, mn.Groups[1].Value);
+        }
+    }
+
+    // NAME = $HH constant ids from a lib*.inc.
+    private static System.Collections.Generic.Dictionary<string, int> ParseIncIds(string inc)
+    {
+        var ids = new System.Collections.Generic.Dictionary<string, int>();
+        foreach (Match m in Regex.Matches(inc, @"(?m)^\s*([A-Za-z_]\w*)\s*=\s*\$([0-9A-Fa-f]+)\b"))
+            ids[m.Groups[1].Value] = Convert.ToInt32(m.Groups[2].Value, 16);
+        return ids;
+    }
+
+    // Dispatch jtable wrapper labels in fn-id order (.word label-1 entries).
+    private static string[] JtableLabels(string src, string label)
+    {
+        string[] lines = src.Split('\n');
+        int start = Array.FindIndex(lines, l => l.TrimStart().StartsWith(label + ":", StringComparison.Ordinal));
+        Assert.IsTrue(start >= 0, $"jtable label '{label}' not found");
+        var labels = new System.Collections.Generic.List<string>();
+        for (int j = start + 1; j < lines.Length; j++)
+        {
+            string t = lines[j].Trim();
+            var m = Regex.Match(t, @"^\.word\s+([A-Za-z_]\w*)\s*-\s*1\b");
+            if (m.Success) labels.Add(m.Groups[1].Value);
+            else if (t.Length > 0 && !t.StartsWith(";", StringComparison.Ordinal)) break;
+        }
+        return labels.ToArray();
+    }
+
+    // A wrapper's body = from its `label:` definition to the next top-level label.
+    private static string WrapperBody(string src, string label)
+    {
+        string[] lines = src.Split('\n');
+        int start = Array.FindIndex(lines, l => Regex.IsMatch(l, @"^" + Regex.Escape(label) + @":"));
+        Assert.IsTrue(start >= 0, $"wrapper label '{label}' not found");
+        var sb = new StringBuilder();
+        for (int j = start; j < lines.Length; j++)
+        {
+            if (j > start && Regex.IsMatch(lines[j], @"^[A-Za-z_]\w*:")) break;
+            sb.Append(lines[j]).Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    // All NDK routine labels (`symbol:` at column 0) across runtime/asm/*.s.
+    private static System.Collections.Generic.HashSet<string> NdkRoutineLabels()
+    {
+        var set = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+        foreach (string path in Directory.GetFiles(RepoPath("runtime", "asm"), "*.s"))
+            foreach (Match m in Regex.Matches(File.ReadAllText(path), @"(?m)^([A-Za-z_]\w*):"))
+                set.Add(m.Groups[1].Value);
+        return set;
+    }
+
     // A module's own code = everything before it .includes the first NDK driver body.
     private static string ModuleOwnCode(string src)
     {
