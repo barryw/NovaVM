@@ -211,6 +211,8 @@ public static class VgcConstants
     public const byte WtsCmdEventStart   = 0x04;
     public const byte WtsCmdEventStop    = 0x05;
 
+    // The runtime miss-handler (runtime/asm/libcall.s) decodes STATUS by parity via lsr:
+    // OK must stay EVEN, ERR ODD. Don't add an even non-zero status code (would read as OK).
     public const byte FioStatusIdle    = 0x00;
     public const byte FioStatusOk      = 0x02;
     public const byte FioStatusError   = 0x03;

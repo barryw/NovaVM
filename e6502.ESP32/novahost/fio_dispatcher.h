@@ -83,7 +83,8 @@ private:
     static constexpr int OFF_DIRTYPE   = 0x0F;
     static constexpr int OFF_NAME      = 0x10;   // 64-byte filename buffer
 
-    // Status values.
+    // Status values. The 6502 miss-handler (runtime/asm/libcall.s) decodes STATUS by
+    // parity via lsr: OK must stay EVEN, ERR ODD. Don't add an even non-zero status code.
     static constexpr uint8_t ST_IDLE = 0;
     static constexpr uint8_t ST_OK   = 2;
     static constexpr uint8_t ST_ERR  = 3;

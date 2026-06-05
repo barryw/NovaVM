@@ -177,3 +177,12 @@ st_shift:
       sta     SHELF_LRU                ; [0] = slot
 st_done:
       rts
+
+; The resident loader shares its band with the shelf directory: in the canonical
+; $0320 image (libcall_resident.cfg) the code must end below SHELF_TAG ($0418) or a
+; POKE of this image would clobber shelf_tag[]/shelf_lru[]. This is currently EXACTLY
+; full (248 bytes; resident code ends at $0417). The check is on byte length, not
+; absolute PC, so it holds for the $9C00 harness blob (tests/asm/libcall_blob.cfg)
+; too. If you need more loader bytes, relocate the 8-byte directory (SHELF_TAG/
+; SHELF_LRU) into the module-BSS band ($0420-$08FF) and free the full $0320-$041F.
+.assert (* - lib_call) <= (SHELF_TAG - LIB_LOADER_BAND), error, "libcall loader overruns the shelf directory at $0418"

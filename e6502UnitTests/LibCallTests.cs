@@ -67,6 +67,33 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void Miss_FromHostStore_LoadsThenDispatches()
+        {
+            // True demand-load miss through LibLoaderBus: empty shelf (no StageShelfModule),
+            // host store provides the image. Exercises SetModuleStore + DoLoadModule (the FIO
+            // mirror) plus the loader's miss → page-in → validate → dispatch tail.
+            var bus = new LibLoaderBus();
+            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
+            bus.PokeRam(HOME_BANK, RsBasic);
+            bus.PokeRam(RESIDENT, 0x00);
+            // shelf_tag[] all empty (default RAM=0); shelf_lru[] identity so shelf_touch resolves.
+            for (int i = 0; i < 4; i++) bus.PokeRam((ushort)(0x041C + i), (byte)i);
+            // host store has the TEST module under id $7F; NOT staged into any slot.
+            bus.SetModuleStore(0x7F, File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")));
+
+            var r = CallLib(bus, LibCallEntry, 0x7F, fn: 1, arg0: 1000, arg1: 337);
+
+            CollectionAssert.AreEqual(BitConverter.GetBytes(1337), r, "module must dispatch after demand-load");
+            Assert.AreEqual(1, bus.PageInCount, "miss must page in exactly once");
+            Assert.AreEqual(0x7F, bus.PeekRam(RESIDENT), "loaded module must be cached resident");
+            Assert.AreEqual(0x00, bus.PeekRam(STATUS), "status must be OK");
+            // demand-loaded id must be recorded in some shelf_tag slot ($0418-$041B).
+            bool tagged = false;
+            for (int i = 0; i < 4; i++) if (bus.PeekRam((ushort)(0x0418 + i)) == 0x7F) tagged = true;
+            Assert.IsTrue(tagged, "demand-loaded id must be recorded in shelf_tag[]");
+        }
+
+        [TestMethod]
         public void Echo_Hit_ReturnsArg0_NoPageIn()
         {
             var (bus, entry) = Setup();
