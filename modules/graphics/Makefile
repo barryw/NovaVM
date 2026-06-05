@@ -25,10 +25,13 @@ graphics.bin: graphics.o graphics.cfg
 	$(LD65) -C graphics.cfg -m graphics.map -o graphics.bin graphics.o
 
 # Self-documenting module: image + NDOC doc (from graphics.s ;@ comments, ids
-# resolved from libgraphics.inc) -> graphics.nmod.
-graphics.nmod: graphics.bin graphics.s ../../tools/nmod_pack.py $(NOVA_ASM)/libgraphics.inc
+# resolved from libgraphics.inc) -> graphics.nmod. --ndk-dir single-sources each
+# ;@ndk fn's summary from the wrapped NDK routine and enforces the drift guard
+# (wrapper must JSR the routine it maps to).
+graphics.nmod: graphics.bin graphics.s ../../tools/nmod_pack.py ../../tools/gen_runtime_abi_docs.py \
+            $(NOVA_ASM)/libgraphics.inc $(wildcard $(NOVA_ASM)/*.s)
 	python3 ../../tools/nmod_pack.py --src graphics.s --bin graphics.bin \
-	        --out graphics.nmod --syms $(NOVA_ASM)/libgraphics.inc
+	        --out graphics.nmod --syms $(NOVA_ASM)/libgraphics.inc --ndk-dir $(NOVA_ASM)
 
 # Copy the raw 16K image into the Avalonia Resources dir, where CompositeBusDevice
 # pre-stages it into the XRAM shelf at boot (mirrors firmware boot.json staging).

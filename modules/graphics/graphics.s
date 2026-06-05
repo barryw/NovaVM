@@ -62,28 +62,33 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@brief Nova virtual graphics controller: drawing, text, sprites, copper, blitter, vsprites, meta-sprites, images, animation, tweening, turtle.
 ;
 ;@fn GFN_GCLS
+;@ndk vgc_gcls
 ;@brief Clear the graphics plane to the background colour.
 ;@ret void
 ;
 ;@fn GFN_GCOLOR
+;@ndk vgc_gcolor
 ;@brief Set the current draw colour for subsequent primitives.
 ;@arg color u8 palette index (0-15)
 ;@ret void
 ;@effect Persists as the pen colour used by later primitives.
 ;
 ;@fn GFN_PLOT
+;@ndk vgc_plot
 ;@brief Plot a single pixel in the current colour.
 ;@arg x s16 x coordinate
 ;@arg y s16 y coordinate
 ;@ret void
 ;
 ;@fn GFN_UNPLOT
+;@ndk vgc_unplot
 ;@brief Clear a single pixel to the background colour.
 ;@arg x s16 x coordinate
 ;@arg y s16 y coordinate
 ;@ret void
 ;
 ;@fn GFN_LINE
+;@ndk vgc_line
 ;@brief Draw a line in the current colour.
 ;@arg x0 s16 start x
 ;@arg y0 s16 start y
@@ -92,6 +97,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_CIRCLE
+;@ndk vgc_circle
 ;@brief Draw a circle (or ellipse) outline in the current colour.
 ;@arg cx s16 centre x
 ;@arg cy s16 centre y
@@ -100,6 +106,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_RECT
+;@ndk vgc_rect
 ;@brief Draw a rectangle outline in the current colour.
 ;@arg x0 s16 left
 ;@arg y0 s16 top
@@ -108,6 +115,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_FILL
+;@ndk vgc_fill
 ;@brief Draw a filled rectangle in the current colour.
 ;@arg x0 s16 left
 ;@arg y0 s16 top
@@ -116,12 +124,14 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_PAINT
+;@ndk vgc_paint
 ;@brief Flood-fill the connected region at (x,y) with the current colour.
 ;@arg x s16 seed x
 ;@arg y s16 seed y
 ;@ret void
 ;
 ;@fn GFN_GTEXT
+;@ndk vgc_gtext
 ;@brief Draw a text string at a pixel position in the current colour.
 ;@arg x s16 x coordinate
 ;@arg y s16 y coordinate
@@ -136,50 +146,53 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_FONT
-;@brief Select the active text font slot.
+;@ndk vgc_set_font
 ;@arg slot u8 font slot index
 ;@ret void
 ;
 ;@fn GFN_MODE
-;@brief Set the graphics/text display mode.
+;@ndk vgc_set_mode
 ;@arg mode u8 VGC mode value
 ;@ret void
 ;
 ;@fn GFN_REVERSE
-;@brief Enable reverse-video text using the current fg/bg.
+;@ndk vgc_reverse_default
 ;@ret void
 ;
 ;@fn GFN_REVERSEOFF
-;@brief Disable reverse-video text.
+;@ndk vgc_reverse_off
 ;@ret void
 ;
 ;@fn GFN_FLASH
-;@brief Enable flashing text.
+;@ndk vgc_flash_on
 ;@ret void
 ;
 ;@fn GFN_FLASHOFF
-;@brief Disable flashing text.
+;@ndk vgc_flash_off
 ;@ret void
 ;
 ;@fn GFN_LOCATE
+;@ndk vgc_locate
 ;@brief Move the text cursor to a column/row.
 ;@arg col u8 cursor column
 ;@arg row u8 cursor row
 ;@ret void
 ;
 ;@fn GFN_CLS
+;@ndk vgc_cls
 ;@brief Clear the text screen.
 ;@ret void
 ;
 ;@fn GFN_DISPLAYON
-;@brief Restore full display brightness (VGC_DIMMER = $0F).
+;@ndk vgc_display_on
 ;@ret void
 ;
 ;@fn GFN_DISPLAYOFF
-;@brief Blank the display output while keeping timing (VGC_DIMMER = $00).
+;@ndk vgc_display_off
 ;@ret void
 ;
 ;@fn GFN_SPR_DEFINE
+;@ndk sprite_command
 ;@brief Set one shape pixel of a sprite to a colour.
 ;@arg idx u8 sprite index (0-15)
 ;@arg x u8 pixel x within the 16x16 shape (0-15)
@@ -188,6 +201,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_SPR_ROW
+;@ndk sprite_row
 ;@brief Write one 16-pixel sprite shape row (8 nibble-packed bytes).
 ;@arg idx u8 sprite index
 ;@arg row u8 shape row (0-15)
@@ -196,17 +210,20 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_SPR_CLEAR
+;@ndk sprite_clear
 ;@brief Clear a sprite's shape data.
 ;@arg idx u8 sprite index
 ;@ret void
 ;
 ;@fn GFN_SPR_COPY
+;@ndk sprite_copy
 ;@brief Copy shape data from one sprite to another.
 ;@arg src u8 source sprite index
 ;@arg dst u8 destination sprite index
 ;@ret void
 ;
 ;@fn GFN_SPR_POS
+;@ndk sprite_pos
 ;@brief Move a sprite to a position (16-bit signed X, byte Y).
 ;@arg idx u8 sprite index
 ;@arg x s16 sprite x position
@@ -214,36 +231,40 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_SPR_ENABLE
+;@ndk sprite_enable
 ;@brief Enable (show) a sprite.
 ;@arg idx u8 sprite index
 ;@ret void
 ;
 ;@fn GFN_SPR_DISABLE
+;@ndk sprite_disable
 ;@brief Disable (hide) a sprite.
 ;@arg idx u8 sprite index
 ;@ret void
 ;
 ;@fn GFN_SPR_FLIP
+;@ndk sprite_flip
 ;@brief Set a sprite's horizontal/vertical flip flags.
 ;@arg idx u8 sprite index
 ;@arg flags u8 flip flags
 ;@ret void
 ;
 ;@fn GFN_SPR_PRIORITY
+;@ndk sprite_priority
 ;@brief Set a sprite's render priority.
 ;@arg idx u8 sprite index
 ;@arg pri u8 priority level
 ;@ret void
 ;
 ;@fn GFN_SPR_SHAPE
-;@brief Set a sprite's shape-slot index (attribute register write).
+;@ndk sprite_set_shape
 ;@arg idx u8 sprite index
 ;@arg shape u8 shape slot index
 ;@ret void
 ;@effect Writes the VGC_SPR_SHAPE attribute register directly (no command issued).
 ;
 ;@fn GFN_SPR_SETREG
-;@brief Write one 8-bit sprite attribute field.
+;@ndk sprite_set_reg8
 ;@arg idx u8 sprite index
 ;@arg field u8 attribute field offset
 ;@arg val u8 value
@@ -251,7 +272,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Writes the $A040 sprite attribute block directly (no command issued).
 ;
 ;@fn GFN_SPR_SETREG16
-;@brief Write one 16-bit sprite attribute field.
+;@ndk sprite_set_reg16
 ;@arg idx u8 sprite index
 ;@arg field u8 attribute field offset
 ;@arg val16 u16 16-bit value
@@ -259,78 +280,82 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Writes the $A040 sprite attribute block directly (no command issued).
 ;
 ;@fn GFN_SPR_GETX
-;@brief Read a sprite's 16-bit X position (reporter).
+;@ndk sprite_get_x
 ;@arg idx u8 sprite index
 ;@ret u16 sprite X position
 ;@effect Returns the X position in RESULT.
 ;
 ;@fn GFN_SPR_GETY
-;@brief Read a sprite's Y byte (reporter).
+;@ndk sprite_get_y
 ;@arg idx u8 sprite index
 ;@ret u8 sprite Y position
 ;@effect Returns the Y byte in RESULT.
 ;
 ;@fn GFN_SPR_COLL_STATUS
+;@ndk sprite_collision_status
 ;@brief Read the sprite-sprite collision status low byte (reporter).
 ;@ret u8 collision status byte
 ;@effect Returns the status byte in RESULT.
 ;
 ;@fn GFN_SPR_COLL_MASK
-;@brief Read the 16-bit sprite-sprite collision mask (reporter).
+;@ndk sprite_collision_mask
 ;@ret u16 collision mask (one bit per sprite)
 ;@effect Returns the mask in RESULT.
 ;
 ;@fn GFN_SPR_COLL_CLEAR
-;@brief Clear the sprite-sprite collision mask and acknowledge its IRQ.
+;@ndk sprite_collision_clear
 ;@ret void
 ;
 ;@fn GFN_SPR_COLL_READCLEAR
-;@brief Read the 16-bit sprite-sprite collision mask, then clear it (reporter).
+;@ndk sprite_collision_read_clear
 ;@ret u16 collision mask before clearing
 ;@effect Returns the mask in RESULT and clears it.
 ;
 ;@fn GFN_SPR_COLL_IRQON
-;@brief Enable the sprite-sprite collision IRQ (and CLI).
+;@ndk sprite_collision_irq_enable
 ;@ret void
 ;
 ;@fn GFN_SPR_COLL_IRQOFF
-;@brief Disable the sprite-sprite collision IRQ.
+;@ndk sprite_collision_irq_disable
 ;@ret void
 ;
 ;@fn GFN_SPR_BG_STATUS
+;@ndk sprite_background_collision_status
 ;@brief Read the sprite-background collision status low byte (reporter).
 ;@ret u8 collision status byte
 ;@effect Returns the status byte in RESULT.
 ;
 ;@fn GFN_SPR_BG_MASK
-;@brief Read the 16-bit sprite-background collision mask (reporter).
+;@ndk sprite_background_collision_mask
 ;@ret u16 collision mask (one bit per sprite)
 ;@effect Returns the mask in RESULT.
 ;
 ;@fn GFN_SPR_BG_CLEAR
-;@brief Clear the sprite-background collision mask and acknowledge its IRQ.
+;@ndk sprite_background_clear
 ;@ret void
 ;
 ;@fn GFN_SPR_BG_READCLEAR
-;@brief Read the 16-bit sprite-background collision mask, then clear it (reporter).
+;@ndk sprite_background_read_clear
 ;@ret u16 collision mask before clearing
 ;@effect Returns the mask in RESULT and clears it.
 ;
 ;@fn GFN_SPR_BG_IRQON
-;@brief Enable the sprite-background collision IRQ (and CLI).
+;@ndk sprite_background_irq_enable
 ;@ret void
 ;
 ;@fn GFN_SPR_BG_IRQOFF
-;@brief Disable the sprite-background collision IRQ.
+;@ndk sprite_background_irq_disable
 ;@ret void
 ;
 ;@fn GFN_COPPER_LIST
+;@ndk copper_list
 ;@brief Select the copper list that ADD/CLEAR will edit.
 ;@arg idx u8 copper list index (0-127)
 ;@ret void
 ;@effect Sets state read by later COPPER_ADD/COPPER_CLEAR.
 ;
 ;@fn GFN_COPPER_ADD
+;@ndk copper_add
 ;@brief Add a register-write event to the target copper list.
 ;@arg x s16 column (raster x position)
 ;@arg y u8 scanline (raster y position)
@@ -339,28 +364,29 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_COPPER_CLEAR
-;@brief Empty the target copper list.
+;@ndk copper_clear
 ;@ret void
 ;
 ;@fn GFN_COPPER_ON
-;@brief Enable copper execution.
+;@ndk copper_on
 ;@ret void
 ;
 ;@fn GFN_COPPER_OFF
-;@brief Disable copper execution.
+;@ndk copper_off
 ;@ret void
 ;
 ;@fn GFN_COPPER_USE
+;@ndk copper_use
 ;@brief Make a copper list active at the next vblank.
 ;@arg idx u8 copper list index
 ;@ret void
 ;
 ;@fn GFN_COPPER_END
-;@brief Finish editing the current list (target becomes the active list).
+;@ndk copper_list_end
 ;@ret void
 ;
 ;@fn GFN_COPPER_SPLIT
-;@brief Build a split-screen copper list with two VGC_MODE rules at a scanline.
+;@ndk copper_split_mode
 ;@arg idx u8 copper list index
 ;@arg splitY u8 scanline of the mode split
 ;@arg mode0 u8 VGC mode above the split
@@ -385,6 +411,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_BLITCOPY
+;@ndk blitter_copy
 ;@brief 2-D rectangular copy between memory spaces (tightly packed, stride = width).
 ;@arg spaces u8 byte0 = srcSpace, byte1 = dstSpace
 ;@arg src u32 source offset (24-bit)
@@ -394,6 +421,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Self-waits for the blit to finish before returning.
 ;
 ;@fn GFN_BLITFILL
+;@ndk blitter_fill
 ;@brief Fill a tightly-packed rectangle with a byte value.
 ;@arg spacefill u8 byte1 = dstSpace, byte2 = fill value
 ;@arg dst u32 destination offset (24-bit)
@@ -402,16 +430,19 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Self-waits for the blit to finish before returning.
 ;
 ;@fn GFN_BLIT_START
+;@ndk blitter_start_copy
 ;@brief Issue a blit copy on caller-preloaded BLT_* registers, then wait.
 ;@ret void
 ;@effect Self-waits for the blit to finish before returning.
 ;
 ;@fn GFN_BLIT_WAIT
+;@ndk blitter_wait
 ;@brief Poll BLT_STATUS to completion for a caller-issued blit.
 ;@ret void
 ;@effect Self-waits for the blit to finish before returning.
 ;
 ;@fn GFN_DMACOPY
+;@ndk dma_copy
 ;@brief 1-D bulk copy between memory spaces.
 ;@arg spaces u8 byte0 = srcSpace, byte1 = dstSpace
 ;@arg src u32 source offset (24-bit)
@@ -421,6 +452,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Self-waits for the DMA to finish before returning.
 ;
 ;@fn GFN_DMAFILL
+;@ndk dma_fill
 ;@brief Fill a DMA range with a byte value.
 ;@arg spacefill u8 byte1 = dstSpace, byte2 = fill value
 ;@arg dst u32 destination offset (24-bit)
@@ -459,19 +491,20 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Returns the count in RESULT.
 ;
 ;@fn GFN_VS_BLIT
-;@brief Virtual-sprite rectangular copy (self-waits).
+;@ndk vsprite_blit
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@effect Self-waits for the blit to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_BLIT_START
-;@brief Virtual-sprite rectangular copy, issue only (no wait).
+;@ndk vsprite_blit_start
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_FILL
+;@ndk vsprite_fill
 ;@brief Virtual-sprite rectangular fill (self-waits).
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -479,6 +512,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_USE_ORIGINAL
+;@ndk vsprite_use_original
 ;@brief Point the vsprite source at its original (unrotated) buffer.
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -486,6 +520,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_USE_ROTATED
+;@ndk vsprite_use_rotated
 ;@brief Point the vsprite source at its rotated buffer.
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -493,26 +528,27 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_ROTATE
-;@brief Rotate the vsprite original buffer into its rotated buffer (self-waits).
+;@ndk vsprite_rotate
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@effect Self-waits for the blit to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_BLIT
-;@brief Blit the vsprite onto the gfx plane at its X/Y (self-waits).
+;@ndk vsprite_gfx_blit
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@effect Self-waits for the blit to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_BLIT_START
-;@brief Blit the vsprite onto the gfx plane, issue only (no wait).
+;@ndk vsprite_gfx_blit_start
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_FILL
+;@ndk vsprite_gfx_fill
 ;@brief Fill a region of the gfx plane at the vsprite X/Y (self-waits).
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -520,6 +556,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_SAVE_BG
+;@ndk vsprite_gfx_save_bg
 ;@brief Save the gfx-plane background under the vsprite into its BG buffer (self-waits).
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -527,6 +564,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_RESTORE_BG
+;@ndk vsprite_gfx_restore_bg
 ;@brief Restore the saved background back onto the gfx plane (self-waits).
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -534,13 +572,14 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_ROTATE_BLIT
-;@brief Rotate then frame-wait then blit the vsprite onto the gfx plane.
+;@ndk vsprite_gfx_rotate_blit
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@effect PUMPED: frame-waits on VGC_FRAME — the caller must pump the bus.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_ROTATE_BLIT_KEYED
+;@ndk vsprite_gfx_rotate_blit_keyed
 ;@brief Rotate, frame-wait, then colour-keyed blit the vsprite onto the gfx plane.
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
@@ -548,40 +587,42 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_GFX_ROTATE_BLIT_NOWAIT
+;@ndk vsprite_gfx_rotate_blit_nowait
 ;@brief Rotate then blit the vsprite onto the gfx plane with no frame wait.
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
 ;@ret void
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_SCENE_BEGIN
-;@brief Begin a vsprite scene: restore old backgrounds for the descriptor list.
+;@ndk vsprite_scene_begin
 ;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
 ;@ret void
 ;@effect Self-waits for the blits to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_SCENE_COMMIT
-;@brief Commit a vsprite scene: save then draw all descriptors.
+;@ndk vsprite_scene_commit
 ;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
 ;@ret void
 ;@effect Self-waits for the blits to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_SCENE_DRAW
-;@brief Draw all vsprite scene descriptors (draw only, no save).
+;@ndk vsprite_scene_draw
 ;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene table)
 ;@ret void
 ;@effect Self-waits for the blits to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_VS_SCENE_COMMIT_ATOMIC
-;@brief Atomically commit a vsprite scene via an off-screen work buffer.
+;@ndk vsprite_scene_commit_atomic
 ;@arg cfg bytes pointer+length of the VSPRITE config struct (incl scene+work)
 ;@ret void
 ;@effect Self-waits for the blits to finish before returning.
 ;@status LERR_OK, LERR_VSPRITE_FAIL
 ;
 ;@fn GFN_MS_SPAWN
+;@ndk msprite_spawn
 ;@brief Spawn a meta-sprite object from a visual descriptor.
 ;@arg desc bytes pointer+length of the meta-sprite descriptor (ptr written to MSPRITE_DESC)
 ;@ret u8 new object handle ($FF on failure)
@@ -589,25 +630,25 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_DESTROY
-;@brief Destroy a meta-sprite object and free its hardware sprites.
+;@ndk msprite_destroy
 ;@arg handle u8 meta-sprite object handle
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_SHOW
-;@brief Show a meta-sprite object.
+;@ndk msprite_show
 ;@arg handle u8 meta-sprite object handle
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_HIDE
-;@brief Hide a meta-sprite object.
+;@ndk msprite_hide
 ;@arg handle u8 meta-sprite object handle
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_POS
-;@brief Set a meta-sprite object's position (16-bit signed X, byte Y).
+;@ndk msprite_set_pos
 ;@arg handle u8 meta-sprite object handle
 ;@arg x s16 object x position
 ;@arg y u8 object y position
@@ -615,39 +656,40 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_FRAME
-;@brief Set a meta-sprite object's animation frame.
+;@ndk msprite_set_frame
 ;@arg handle u8 meta-sprite object handle
 ;@arg frame u8 frame number
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_ANIM
-;@brief Attach an animation descriptor to a meta-sprite object.
+;@ndk msprite_set_anim
 ;@arg handle u8 meta-sprite object handle
 ;@arg anim bytes pointer+length of the animation descriptor (ptr to MSPRITE_ANIM)
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_PRIORITY
-;@brief Set a meta-sprite object's render priority.
+;@ndk msprite_set_priority
 ;@arg handle u8 meta-sprite object handle
 ;@arg pri u8 priority level
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_TRANSCOLOR
-;@brief Set a meta-sprite object's transparent colour.
+;@ndk msprite_set_transcolor
 ;@arg handle u8 meta-sprite object handle
 ;@arg color u8 transparent palette index
 ;@ret void
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MS_TICK
-;@brief Advance all meta-sprite animation timers by one tick (engine-wide).
+;@ndk msprite_tick
 ;@ret void
 ;@status LERR_OK
 ;
 ;@fn GFN_MS_COMMIT
+;@ndk msprite_commit
 ;@brief Write all dirty visible meta-sprite objects to the hardware sprites.
 ;@ret void
 ;@status LERR_OK
@@ -659,6 +701,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_MSPRITE_FAIL
 ;
 ;@fn GFN_MEMREAD
+;@ndk vgc_mem_read
 ;@brief Read one byte from a VGC memory space (reporter).
 ;@arg space u8 VGC plane / space id
 ;@arg addr u16 16-bit address within the space
@@ -666,6 +709,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect Returns the byte in RESULT.
 ;
 ;@fn GFN_MEMWRITE
+;@ndk vgc_mem_write
 ;@brief Write one byte to a VGC memory space.
 ;@arg space u8 VGC plane / space id
 ;@arg addr u16 16-bit address within the space
@@ -673,18 +717,21 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret void
 ;
 ;@fn GFN_VPEEK
+;@ndk vgc_mem_read
 ;@brief Read one byte from the gfx plane (reporter).
 ;@arg offset u16 gfx-plane offset
 ;@ret u8 gfx byte
 ;@effect Returns the byte in RESULT.
 ;
 ;@fn GFN_VPOKE
+;@ndk vgc_mem_write
 ;@brief Write one byte to the gfx plane.
 ;@arg offset u16 gfx-plane offset
 ;@arg value u8 byte to write
 ;@ret void
 ;
 ;@fn GFN_GSAVE
+;@ndk fio_gsave
 ;@brief Save a VGC memory space to a .gfx file on disk.
 ;@arg space u8 VGC plane / space id
 ;@arg addr u16 16-bit start address
@@ -694,6 +741,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_FILE_FAIL
 ;
 ;@fn GFN_GLOAD
+;@ndk fio_gload
 ;@brief Load a .gfx file from disk into a VGC memory space.
 ;@arg space u8 VGC plane / space id
 ;@arg addr u16 16-bit destination address
@@ -703,12 +751,14 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_FILE_FAIL
 ;
 ;@fn GFN_NVGLOAD
+;@ndk nvg_load
 ;@brief Load an NVG image into the gfx plane at offset 0.
 ;@arg name bytes pointer+length of the filename
 ;@ret void
 ;@status LERR_OK, LERR_IMAGE_FAIL
 ;
 ;@fn GFN_NVGLOAD_AT
+;@ndk nvg_load_at
 ;@brief Load an NVG image into the gfx plane at a destination offset.
 ;@arg name bytes pointer+length of the filename
 ;@arg dest u16 gfx-plane destination offset
@@ -716,12 +766,14 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_IMAGE_FAIL
 ;
 ;@fn GFN_NVGLOAD_NAMED
+;@ndk nvg_load_named
 ;@brief Load an NVG image into the gfx plane via the named-arg filename path.
 ;@arg name bytes pointer+length of the filename
 ;@ret void
 ;@status LERR_OK, LERR_IMAGE_FAIL
 ;
 ;@fn GFN_NVGLOAD_NAMED_AT
+;@ndk nvg_load_named_at
 ;@brief Load an NVG image (named-arg path) into the gfx plane at a destination offset.
 ;@arg name bytes pointer+length of the filename
 ;@arg dest u16 gfx-plane destination offset
@@ -753,11 +805,12 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@effect PUMPED: turtle DRAW move ops frame-wait — pump the bus.
 ;
 ;@fn GFN_ANIM_INIT
-;@brief Initialise the sprite-animation engine (clear all tracks).
+;@ndk anim_init
 ;@ret void
 ;@status LERR_OK
 ;
 ;@fn GFN_ANIM_START
+;@ndk anim_start
 ;@brief Start an animation track from a descriptor against a target.
 ;@arg desc bytes pointer+length of the animation descriptor (ptr to ANIM_DESC)
 ;@arg target u8 target index
@@ -767,30 +820,31 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_ANIM_STOP
-;@brief Stop an animation track.
+;@ndk anim_stop
 ;@arg handle u8 animation track handle
 ;@ret void
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_ANIM_TICK
-;@brief Advance all animation tracks by one tick (engine-wide).
+;@ndk anim_tick
 ;@ret void
 ;@status LERR_OK
 ;
 ;@fn GFN_ANIM_TICK_ONE
-;@brief Advance one animation track by one tick.
+;@ndk anim_tick_one
 ;@arg handle u8 animation track handle
 ;@ret void
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_ANIM_SET_FRAME
-;@brief Set an animation track's current frame.
+;@ndk anim_set_frame
 ;@arg handle u8 animation track handle
 ;@arg frame u8 frame number
 ;@ret void
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_ANIM_LOAD_XRAM
+;@ndk anim_load_xram_shapes
 ;@brief Load animation shape frames from XRAM.
 ;@arg shape u8 shape slot
 ;@arg count u8 number of frames
@@ -799,6 +853,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_ANIM_LOAD_DISK
+;@ndk anim_load_disk_shapes
 ;@brief Load animation shape frames from a disk file.
 ;@arg shape u8 shape slot
 ;@arg count u8 number of frames
@@ -808,6 +863,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK, LERR_ANIM_FAIL
 ;
 ;@fn GFN_TWEEN_BEGIN
+;@ndk tween_begin
 ;@brief Begin a tween between two values over a duration (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -816,6 +872,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_EVAL
+;@ndk tween_eval
 ;@brief Evaluate a tween at a frame with a selectable easing mode (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -825,7 +882,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_EVAL_LINEAR
-;@brief Evaluate a linear tween at a frame (reporter).
+;@ndk tween_eval_linear
 ;@arg start s16 start value
 ;@arg end s16 end value
 ;@arg duration u8 frames
@@ -834,7 +891,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_EVAL_EASE_IN
-;@brief Evaluate an ease-in tween at a frame (reporter).
+;@ndk tween_eval_ease_in
 ;@arg start s16 start value
 ;@arg end s16 end value
 ;@arg duration u8 frames
@@ -843,7 +900,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_EVAL_EASE_OUT
-;@brief Evaluate an ease-out tween at a frame (reporter).
+;@ndk tween_eval_ease_out
 ;@arg start s16 start value
 ;@arg end s16 end value
 ;@arg duration u8 frames
@@ -852,7 +909,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_EVAL_EASE_IN_OUT
-;@brief Evaluate an ease-in-out tween at a frame (reporter).
+;@ndk tween_eval_ease_in_out
 ;@arg start s16 start value
 ;@arg end s16 end value
 ;@arg duration u8 frames
@@ -861,6 +918,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_STEP
+;@ndk tween_step
 ;@brief Step a tween forward one frame with a selectable easing mode (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -870,6 +928,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_STEP_LINEAR
+;@ndk tween_step_linear
 ;@brief Step a linear tween forward one frame (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -879,6 +938,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_STEP_EASE_IN
+;@ndk tween_step_ease_in
 ;@brief Step an ease-in tween forward one frame (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -888,6 +948,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_STEP_EASE_OUT
+;@ndk tween_step_ease_out
 ;@brief Step an ease-out tween forward one frame (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
@@ -897,6 +958,7 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@status LERR_OK
 ;
 ;@fn GFN_TWEEN_STEP_EASE_IN_OUT
+;@ndk tween_step_ease_in_out
 ;@brief Step an ease-in-out tween forward one frame (reporter).
 ;@arg start s16 start value
 ;@arg end s16 end value
