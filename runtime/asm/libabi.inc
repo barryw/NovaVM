@@ -104,13 +104,30 @@ SHELF_LRU        = $041C          ; SHELF_N bytes: $041C-$041F
 ; FIO_STATUS, then writes FIO_CMD_LOAD_MODULE to FIO_CMD. Host streams 16KB
 ; SD->XRAM at SHELF_BASE+slot*$4000 and sets FIO_STATUS = OK/ERR (it does NOT
 ; touch the shelf directory — the 6502 owns shelf_tag[]/shelf_lru[]).
+; Guarded (.ifndef) so this composes with nova.inc, which also defines the FIO
+; register addresses — runtimes include both (in either order); modules/loader
+; include only libabi.inc. Values must match nova.inc where they overlap.
+.ifndef FIO_CMD
 FIO_CMD             = $B9A0
+.endif
+.ifndef FIO_STATUS
 FIO_STATUS          = $B9A1
+.endif
+.ifndef FIO_SRC_LO
 FIO_SRC_LO          = $B9A4
+.endif
+.ifndef FIO_END_LO
 FIO_END_LO          = $B9A6
+.endif
+.ifndef FIO_CMD_LOAD_MODULE
 FIO_CMD_LOAD_MODULE = $2C
+.endif
+.ifndef FIO_ST_OK
 FIO_ST_OK           = $02
+.endif
+.ifndef FIO_ST_ERR
 FIO_ST_ERR          = $03
+.endif
 
 ; --- Host-extension re-page (4c.0c: coexistence of legacy ext + paged modules) ---
 ; LIB_RESIDENT marker meaning "the active runtime's OWN extension is in bank 1"
