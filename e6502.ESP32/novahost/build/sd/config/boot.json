@@ -43,6 +43,9 @@
     "fd0": "",
     "hd0": ""
   },
+  "libraries": [
+    { "name": "graphics", "id": 1, "path": "/lib/graphics.mod", "base": 393216, "size": 16384 }
+  ],
   "network": {
     "gameServer": {
       "host": "192.168.1.93",
