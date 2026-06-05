@@ -151,12 +151,16 @@ namespace e6502UnitTests
         //      novalogo_ext in XRAM at $07C000, _extBank = novalogo_ext.
         //   2. Clobber bank 1 with the GRAPHICS module via a routed PGD page-in (no CPU),
         //      and poke LIB_RESIDENT=GRAPHICS to mimic the loader's cached state.
-        //   3. Run a legacy turtle command (SETXY) through the normal Logo input path.
+        //   3. Run a STILL-LEGACY ext command (TIMER, the frame-counter reporter in
+        //      extension.s ext_timer) through the normal Logo input path. NOTE: turtle/
+        //      graphics commands now route to the GRAPHICS module via lib_call (4c.2-3)
+        //      and would NOT take the legacy re-page path — so SETXY can no longer prove
+        //      this; TIMER stays MODULE_ID_NONE / legacy.
         //      ext_invoke's legacy branch -> ensure_ext_resident (RESIDENT != $FF ->
         //      re-page novalogo_ext, PageInCount++, RESIDENT -> $FF) -> EXT_TRAMPOLINE
-        //      -> the REAL novalogo_ext SETXY handler.
-        //   4. Assert turtle X==100, Y==50 (would be garbage if SETXY ran module bytes),
-        //      RESIDENT==$FF, and PageInCount increased (the re-page happened).
+        //      -> the REAL novalogo_ext TIMER handler.
+        //   4. Assert the line ran with no "I DON'T KNOW" (TIMER ran the real re-paged
+        //      handler, not clobbered module bytes), RESIDENT==$FF, and PageInCount rose.
         // ---------------------------------------------------------------------
         [TestMethod]
         public void LegacyExtCommand_AfterModuleClobbersBank1_RepagesHostExtAndRuns()
@@ -184,11 +188,11 @@ namespace e6502UnitTests
             bus.WriteRam(RESIDENT, MODULE_ID_GRAPHICS); // mimic the loader's cached state
             int pageInsBeforeLegacy = bus.PageInCount;
 
-            // 3. Run a legacy turtle command through the normal Logo path, then PRINT a
-            //    unique marker so we can detect the line fully evaluated and returned.
-            foreach (char ch in "SETXY 100 50\rPRINT \"DONE4C0C\r")
+            // 3. Run a still-legacy ext command (TIMER) through the normal Logo path,
+            //    then PRINT a unique marker so we can detect the line fully evaluated.
+            foreach (char ch in "PRINT TIMER\rPRINT \"DONE4C0C\r")
                 editor.QueueInput((byte)ch);
-            RunUntilScreenContains(cpu, bus, "DONE4C0C", 80_000_000, "SETXY after clobber");
+            RunUntilScreenContains(cpu, bus, "DONE4C0C", 80_000_000, "TIMER after clobber");
             // settle so the line fully evaluates and returns to the prompt
             for (int i = 0; i < 1_000_000; i++)
             {
@@ -199,13 +203,10 @@ namespace e6502UnitTests
 
             string screen = SnapshotScreen(bus.Vgc);
             Assert.IsFalse(screen.Contains("I DON'T KNOW HOW TO", StringComparison.Ordinal),
-                $"SETXY must not fall through to the unknown-word path after re-page.\n{screen}");
+                $"TIMER must not fall through to the unknown-word path after re-page.\n{screen}");
 
-            // 4. The real novalogo_ext SETXY handler ran -> turtle is at (100,50).
-            Assert.AreEqual(100, bus.ReadRam(TurtleXLo) | (bus.ReadRam(TurtleXHi) << 8),
-                "SETXY 100 50 must set turtle X=100 via the re-paged host ext handler");
-            Assert.AreEqual(50, bus.ReadRam(TurtleYLo) | (bus.ReadRam(TurtleYHi) << 8),
-                "SETXY 100 50 must set turtle Y=50 via the re-paged host ext handler");
+            // 4. The real novalogo_ext TIMER handler ran (the line completed to the
+            //    marker without an unknown-word error) via the re-paged host ext.
             Assert.AreEqual(0xFF, bus.ReadRam(RESIDENT),
                 "ensure_ext_resident must mark the host ext resident (LIB_RESIDENT=$FF) after re-page");
             Assert.IsTrue(bus.PageInCount > pageInsBeforeLegacy,
