@@ -331,12 +331,17 @@ hist_save:
 
 ; hist_up: recall an older entry (toward the oldest). At the live line, stash it
 ;   first so hist_down can restore it.
+; Every up/down ALWAYS ends in hist_show, even at a boundary (oldest / live line).
+; The GUI moves the VGC cursor on the arrow key before the 6502 sees it, so a
+; no-op return would leave the cursor displaced — repainting resets it to the line
+; origin every time. Up stops at the oldest entry; Down stops at the (possibly
+; empty) live line.
 hist_up:
-      LDA   HIST_NAV
-      CMP   HIST_COUNT
-      BCS   @hu_done           ; NAV >= COUNT: nothing older
       LDA   buf_idx            ; current on-screen length -> blank count for redraw
       STA   HIST_OLDLEN
+      LDA   HIST_NAV
+      CMP   HIST_COUNT
+      BCS   @hu_repaint        ; NAV >= COUNT: at the oldest -> repaint in place
       LDA   HIST_NAV
       BNE   @hu_step           ; leaving the live line? save it once
       ; save the in-progress line into HIST_LIVE
@@ -351,16 +356,15 @@ hist_up:
       STA   HIST_K
       JSR   hist_slot_ptr      ; ptr -> k-th newest entry
       JSR   hist_copy_in
+@hu_repaint:
       JMP   hist_show
-@hu_done:
-      RTS
 
 ; hist_down: recall a newer entry, or return to the live in-progress line.
 hist_down:
-      LDA   HIST_NAV
-      BEQ   @hd_done           ; already at the live line
       LDA   buf_idx            ; current on-screen length -> blank count for redraw
       STA   HIST_OLDLEN
+      LDA   HIST_NAV
+      BEQ   @hd_repaint        ; already at the live line -> repaint in place
       DEC   HIST_NAV
       LDA   HIST_NAV
       BEQ   @hd_live           ; back at the live line -> restore it
@@ -374,9 +378,8 @@ hist_down:
       LDA   #>HIST_LIVE
       STA   ptr_hi
       JSR   hist_copy_in
+@hd_repaint:
       JMP   hist_show
-@hd_done:
-      RTS
 
 ; hist_show: repaint the prompt line. Park the cursor at the saved input origin,
 ;   blank the previously-shown text, then re-echo input_buf; cursor ends at the end.
