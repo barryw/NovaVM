@@ -108,8 +108,7 @@ eval_list:
       INY
       LDA   (ptr_lo),Y
       STA   eval_val_frac
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       JSR   eval_advance
       JMP   @alloc_cell
 
@@ -198,26 +197,7 @@ eval_list:
       LDX   #ATYPE_CONS
       JSR   heap_alloc
       BCS   @oom
-      LDY   #CONS_TAG
-      LDA   #CONS_PAIR
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_TYPE
-      LDA   eval_type
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_HI
-      LDA   eval_val_hi
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_LO
-      LDA   eval_val_lo
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_FRAC
-      LDA   eval_val_frac
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_LO
-      LDA   #0
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_HI
-      STA   (ptr_lo),Y
+      JSR   fill_cons_from_eval
 
       ; Link into list
       LDA   list_head_lo
@@ -538,8 +518,7 @@ do_count:
       BRA   @walk
 
 @walk_done:
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       LDA   list_count_hi
       STA   eval_val_hi
       LDA   list_count_lo
@@ -577,8 +556,7 @@ do_emptyp:
       BNE   @not_empty
 
       ; Empty list
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       LDA   #1
       STA   eval_val_lo
       STZ   eval_val_hi
@@ -586,8 +564,7 @@ do_emptyp:
       JMP   eval_continue
 
 @not_empty:
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       STZ   eval_val_lo
       STZ   eval_val_hi
       STZ   eval_val_frac
@@ -1021,8 +998,7 @@ do_memberp:
       PLA
       PLA
       PLA
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       LDA   #1
       STA   eval_val_lo
       STZ   eval_val_hi
@@ -1048,8 +1024,7 @@ do_memberp:
       PLA
       PLA
       PLA
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       STZ   eval_val_lo
       STZ   eval_val_hi
       STZ   eval_val_frac
@@ -1302,26 +1277,7 @@ do_lput:
       STA   eval_type
 
       ; Fill the new tail cell
-      LDY   #CONS_TAG
-      LDA   #CONS_PAIR
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_TYPE
-      LDA   eval_type
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_HI
-      LDA   eval_val_hi
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_LO
-      LDA   eval_val_lo
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_FRAC
-      LDA   eval_val_frac
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_LO
-      LDA   #0
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_HI
-      STA   (ptr_lo),Y
+      JSR   fill_cons_from_eval
 
       ; Save new cell pointer
       LDA   ptr_lo

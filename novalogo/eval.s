@@ -1590,15 +1590,10 @@ ext_invoke:
 
 ; --- plain single lib_call: drive the canonical mailbox at $0300 ---
 @lib_call:
-      ; Populate module/function selectors and call the resident loader.
+      ; Populate selectors and call the resident loader via the shared helper.
       LDA   ext_mod_id
-      STA   LIB_MOD_ID
-      LDA   EXT_CMD
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND       ; == JSR $0320 (resident lib_call)
-
-      ; A non-zero status aborts the line.
-      LDA   LIB_STATUS
+      LDX   EXT_CMD
+      JSR   do_lib_call
       BNE   @lib_err
 
       ; Copy LIB_RESULT low word into eval_val as a Logo integer.
@@ -1607,8 +1602,7 @@ ext_invoke:
       LDA   LIB_RESULT+1
       STA   eval_val_hi
       STZ   eval_val_frac
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       RTS
 
 @lib_err:
@@ -1642,27 +1636,61 @@ ext_invoke:
 ;   Command (no value): leaves eval_type=VAL_NUMBER, eval_val=0.
 ;   Clobbers A, X, Y. May JMP err_idk_word on a lib error (no return).
 ; ---------------------------------------------------------------------
+; ---------------------------------------------------------------------
+; do_lib_call — issue a resident lib_call. A = module id, X = function id.
+;   STAs the selectors, calls the resident loader band, returns A = LIB_STATUS
+;   (Z set when OK). The band call clobbers A/X/Y; callers BNE to their own error.
+; ---------------------------------------------------------------------
+do_lib_call:
+      STA   LIB_MOD_ID
+      STX   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+; ---------------------------------------------------------------------
+; fill_cons_from_eval — fill a freshly-allocated cons cell (ptr_lo/hi) with
+;   TAG = CONS_PAIR, CAR = eval_type/eval_val_hi/lo/frac, CDR = nil. Clobbers A/Y
+;   (callers already treat A/Y as dead after the fill). The alloc + OOM handling
+;   stays at each call site (they differ in stack depth / error target).
+; ---------------------------------------------------------------------
+fill_cons_from_eval:
+      LDY   #CONS_TAG
+      LDA   #CONS_PAIR
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_TYPE
+      LDA   eval_type
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_HI
+      LDA   eval_val_hi
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_LO
+      LDA   eval_val_lo
+      STA   (ptr_lo),Y
+      LDY   #CONS_CAR_FRAC
+      LDA   eval_val_frac
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_LO
+      LDA   #0
+      STA   (ptr_lo),Y
+      LDY   #CONS_CDR_HI
+      STA   (ptr_lo),Y
+      RTS
+
 logo_adapt_sprite:
       LDA   #MODULE_ID_GRAPHICS
-      STA   LIB_MOD_ID
-      LDA   #GFN_SPR_POS
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #GFN_SPR_POS
+      JSR   do_lib_call
       BNE   @adapt_err
-      ; re-arm selectors (LIB_MOD_ID may be clobbered across the call) and enable
+      ; re-arm selectors and enable
       LDA   #MODULE_ID_GRAPHICS
-      STA   LIB_MOD_ID
-      LDA   #GFN_SPR_ENABLE
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #GFN_SPR_ENABLE
+      JSR   do_lib_call
       BNE   @adapt_err
       STZ   eval_val_lo
       STZ   eval_val_hi
       STZ   eval_val_frac
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       RTS
 @adapt_err:
       JMP   err_idk_word
@@ -1677,11 +1705,8 @@ logo_adapt_sprite:
 ; ---------------------------------------------------------------------
 logo_adapt_sprcollp:
       LDA   #MODULE_ID_GRAPHICS
-      STA   LIB_MOD_ID
-      LDA   #GFN_SPR_COLL_MASK
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #GFN_SPR_COLL_MASK
+      JSR   do_lib_call
       BNE   @adapt_err
       ; Select the mask byte holding sprite n, and the bit index within it.
       LDA   EXT_ARG0_LO           ; sprite index n
@@ -1709,8 +1734,7 @@ logo_adapt_sprcollp:
       STA   eval_val_lo
       STZ   eval_val_hi
       STZ   eval_val_frac
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       RTS
 @adapt_err:
       JMP   err_idk_word
@@ -1814,8 +1838,7 @@ logo_adapt_turtle:
       STA   eval_val_lo
       LDA   LIB_RESULT+2
       STA   eval_val_hi
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       RTS
 @turtle_err:
       JMP   err_idk_word

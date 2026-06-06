@@ -373,10 +373,8 @@ proc_edit_run:
       STA   LIB_ARG3+1
 
       LDA   #MODULE_ID_SYSTEM
-      STA   LIB_MOD_ID
-      LDA   #SYS_FN_EDIT
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND           ; page in SYSTEM, run editor, restore host bank
+      LDX   #SYS_FN_EDIT
+      JSR   do_lib_call               ; page in SYSTEM, run editor, restore host bank
 
       ; editor returns the final buffer length in ARG1, save flag in RESULT byte1
       LDA   LIB_ARG1+0

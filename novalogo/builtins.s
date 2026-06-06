@@ -1695,8 +1695,7 @@ do_readlist:
       INY
       LDA   (ptr_lo),Y
       STA   eval_val_frac
-      LDA   #VAL_NUMBER
-      STA   eval_type
+      STZ   eval_type
       JSR   eval_advance
       JMP   @rl_alloc_cell
 
@@ -1781,26 +1780,7 @@ do_readlist:
       BCC   @rl_alloc_ok
       JMP   @rl_oom
 @rl_alloc_ok:
-      LDY   #CONS_TAG
-      LDA   #CONS_PAIR
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_TYPE
-      LDA   eval_type
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_HI
-      LDA   eval_val_hi
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_LO
-      LDA   eval_val_lo
-      STA   (ptr_lo),Y
-      LDY   #CONS_CAR_FRAC
-      LDA   eval_val_frac
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_LO
-      LDA   #0
-      STA   (ptr_lo),Y
-      LDY   #CONS_CDR_HI
-      STA   (ptr_lo),Y
+      JSR   fill_cons_from_eval
 
       ; Link into list
       LDA   z:list_head_lo
