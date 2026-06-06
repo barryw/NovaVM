@@ -48,7 +48,8 @@
     { "name": "sound", "id": 2, "path": "/lib/sound.nmod", "base": 425984, "size": 16384 },
     { "name": "files", "id": 4, "path": "/lib/files.nmod", "base": 442368, "size": 16384 },
     { "name": "memory", "id": 5, "path": "/lib/memory.nmod", "base": 458752, "size": 16384 },
-    { "name": "net", "id": 6, "path": "/lib/net.nmod", "base": 475136, "size": 16384 }
+    { "name": "net", "id": 6, "path": "/lib/net.nmod", "base": 475136, "size": 16384 },
+    { "name": "turtle", "id": 7, "path": "/lib/turtle.nmod", "base": 491520, "size": 16384 }
   ],
   "network": {
     "gameServer": {

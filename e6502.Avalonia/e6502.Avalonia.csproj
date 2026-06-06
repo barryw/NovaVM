@@ -70,12 +70,14 @@
         <Exec Command="make -C $(ProjectDir)../modules/files" />
         <Exec Command="make -C $(ProjectDir)../modules/memory" />
         <Exec Command="make -C $(ProjectDir)../modules/net" />
+        <Exec Command="make -C $(ProjectDir)../modules/turtle" />
         <Copy SourceFiles="$(ProjectDir)../modules/graphics/graphics.bin" DestinationFiles="$(ProjectDir)Resources/graphics.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/system/system.bin" DestinationFiles="$(ProjectDir)Resources/system.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/sound/sound.bin" DestinationFiles="$(ProjectDir)Resources/sound.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/files/files.bin" DestinationFiles="$(ProjectDir)Resources/files.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/memory/memory.bin" DestinationFiles="$(ProjectDir)Resources/memory.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/net/net.bin" DestinationFiles="$(ProjectDir)Resources/net.bin" />
+        <Copy SourceFiles="$(ProjectDir)../modules/turtle/turtle.bin" DestinationFiles="$(ProjectDir)Resources/turtle.bin" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
@@ -112,6 +114,7 @@
         <Copy SourceFiles="Resources/files.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/files.bin')" />
         <Copy SourceFiles="Resources/memory.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/memory.bin')" />
         <Copy SourceFiles="Resources/net.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/net.bin')" />
+        <Copy SourceFiles="Resources/turtle.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/turtle.bin')" />
     </Target>
 
     <ItemGroup>
@@ -159,6 +162,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\net.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\turtle.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>

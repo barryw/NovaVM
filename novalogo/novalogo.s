@@ -6,6 +6,7 @@
       .include "libgraphics.inc"   ; GFN_* ids for lib_call(GRAPHICS) routing (self-guards + re-includes libabi.inc)
       .include "libsystem.inc"     ; SYS_FN_* ids for lib_call(SYSTEM) routing (editor + timing)
       .include "libsound.inc"      ; SND_* ids for lib_call(SOUND) routing (tone/noise/volume)
+      .include "libturtle.inc"     ; MODULE_ID_TURTLE ($07) + TUR_OP/TOP_* for the turtle adapter
       .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"

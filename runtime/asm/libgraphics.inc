@@ -464,61 +464,11 @@ GFN_NVGLOAD_NAMED_AT = $A9  ; (BYTES name:ARG0, dest:ARG1)       -> nvg_load_nam
 ;             $AA-$AF reserved
 
 ; =====================================================================
-; $B0-$BF  turtle-render  (the rendering ops the resident turtle calls in 4c —
-;   batch 4c.2-2). The turtle is a 16x16 color-keyed virtual sprite (an upward
-;   triangle icon) drawn on the gfx plane with Amiga-BOB-style save/restore of
-;   the background, so it can move without corrupting the drawing. The module
-;   owns the source/rotated/saved-bg buffers + the bg bookkeeping in its BSS; the
-;   resident turtle passes only center position + a pre-computed rotation-angle
-;   byte. Pen lines reuse GFN_GCOLOR+GFN_LINE; split-screen/mode reuse the copper/
-;   mode ops; heading/move math stays resident — so this is the minimal 3-fn set.
-GFN_TURTLE_INIT  = $B0  ; () install built-in icon into module BSS source buffer; reset bg bookkeeping
-GFN_TURTLE_DRAW  = $B1  ; (x:ARG0 s16 center, y:ARG1 s16 center, angle:ARG2 u8) erase-old + save-bg + rotate-blit-keyed
-GFN_TURTLE_ERASE = $B2  ; () restore saved bg
-
-; GFN_TURTLE_OP — the whole NovaLogo turtle command engine, moved INTO the module
-;   (batch 4c.2-3). One op-dispatched fn: ARG2 byte0 = a turtle command id
-;   (TOP_* below, == the legacy EXT_CMD values). Value args ride in ARG0/ARG1 as
-;   Logo 16.8 fixed-point: cell byte0 = FRAC, byte1 = LO, byte2 = HI. Move-math
-;   (sincos / 16x16 mul / 24-bit accumulate) updates the turtle state at $9F00 and
-;   renders DIRECTLY through the module's own vgc.s + $B0/$B1/$B2 render subs (no
-;   nested lib_call). Commands set LIB_STATUS = LERR_OK. Reporters (XCOR/YCOR/
-;   HEADING/PENDOWN?/SHOWN?/TOWARDS) write a Logo 16.8 value to LIB_RESULT low word
-;   and set OK. SETPC/SETBG read the color from ARG0 byte0; SETPOS reads ARG0 as a
-;   16-bit pointer to a Logo cons-cell list [x y] in heap RAM.
-;
-;   DRAW move ops frame-wait inside the rotate-blit, so the caller (or test) must
-;   PUMP the bus while the fn runs.
-GFN_TURTLE_OP    = $B3  ; (op:ARG2 byte0, args:ARG0/ARG1 Logo 16.8) turtle command engine
-;                 $B4-$BF reserved
-
-; Turtle op-codes carried in ARG2 byte0 (mirror novalogo/ext_iface.inc EXT_CMD_*).
-TOP_FD       = $10   ; FD distance
-TOP_BK       = $11   ; BK distance
-TOP_RT       = $12   ; RT degrees
-TOP_LT       = $13   ; LT degrees
-TOP_CS       = $14   ; CLEARSCREEN / DRAW
-TOP_PU       = $15   ; PENUP
-TOP_PD       = $16   ; PENDOWN
-TOP_ST       = $17   ; SHOWTURTLE
-TOP_HT       = $18   ; HIDETURTLE
-TOP_HOME     = $19   ; HOME
-TOP_TS       = $1A   ; TEXTSCREEN
-TOP_SS       = $1B   ; SPLITSCREEN
-TOP_FS       = $1C   ; FULLSCREEN
-TOP_SETXY    = $1D   ; SETXY x y
-TOP_SETX     = $1E   ; SETX x
-TOP_SETY     = $1F   ; SETY y
-TOP_SETH     = $20   ; SETHEADING degrees
-TOP_XCOR     = $21   ; XCOR (reporter)
-TOP_YCOR     = $22   ; YCOR (reporter)
-TOP_HEADING  = $23   ; HEADING (reporter)
-TOP_PENDOWNP = $24   ; PENDOWN? (reporter)
-TOP_SHOWNP   = $25   ; SHOWN? (reporter)
-TOP_SETPC    = $26   ; SETPENCOLOR color
-TOP_SETBG    = $27   ; SETBACKGROUND color
-TOP_TOWARDS  = $28   ; TOWARDS x y (reporter)
-TOP_SETPOS   = $29   ; SETPOS [x y]
+; $B0-$BF  turtle — EXTRACTED. The whole turtle (render + command engine) was
+;   lifted out of the GRAPHICS module into the dedicated TURTLE module
+;   (MODULE_ID_TURTLE = $07). The fn ids (TUR_INIT/DRAW/ERASE/OP) and the TOP_*
+;   op-codes now live in runtime/asm/libturtle.inc. This range is reserved here.
+; =====================================================================
 
 ; =====================================================================
 ; $C0-$CF  anim  (driver: runtime/asm/anim.s — batch 4b.11) — superset

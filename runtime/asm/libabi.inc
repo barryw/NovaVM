@@ -86,6 +86,7 @@ MODULE_ID_SYSTEM   = $03
 MODULE_ID_FILES    = $04   ; fio + pager  (file I/O, directory, pager)
 MODULE_ID_MEMORY   = $05   ; xram + xmc   (expansion RAM + memory controller)
 MODULE_ID_NET      = $06   ; nic + gameserver (networking)
+MODULE_ID_TURTLE   = $07   ; turtle graphics (FD/RT/pen/heading + rotate-blit render)
 MODULE_ID_TEST     = $7F
 
 ; --- XRAM library shelf (option A: fixed, unmanaged high 256KB) ---
