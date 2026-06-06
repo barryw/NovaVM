@@ -1802,19 +1802,81 @@ logo_adapt_turtle:
       LDA   EXT_CMD
       STA   LIB_ARG2+0
 
-      ; SETPC/SETBG/SETPOS read ARG0 as an UNshifted low word (byte0=lo,byte1=hi);
-      ; rewrite ARG0 byte0/byte1 with EXT_ARG0_LO/HI for those three ops.
+      ; SETPOS [x y] is a Logo-list op the module does NOT understand (the module
+      ; is 100% numeric). Unpack the [x y] cons list HERE with Logo's own cons
+      ; accessors and drive the module's generic SETXY op instead (x->ARG0,
+      ; y->ARG1 as Logo 16.8). See @setpos below.
+      CMP   #EXT_CMD_SETPOS
+      BEQ   @setpos
+
+      ; SETPC/SETBG read ARG0 as an UNshifted low word (byte0=lo,byte1=hi);
+      ; rewrite ARG0 byte0/byte1 with EXT_ARG0_LO/HI for those two ops.
       CMP   #EXT_CMD_SETPC
       BEQ   @arg0_unshifted
       CMP   #EXT_CMD_SETBG
-      BEQ   @arg0_unshifted
-      CMP   #EXT_CMD_SETPOS
       BNE   @call
 @arg0_unshifted:
       LDA   EXT_ARG0_LO
       STA   LIB_ARG0+0
       LDA   EXT_ARG0_HI
       STA   LIB_ARG0+1
+      BRA   @call
+
+      ; --- SETPOS [x y]: unpack the Logo cons list into ARG0=x, ARG1=y (16.8) and
+      ;     rewrite the op to the module's generic SETXY ($1D). The module never
+      ;     sees a Logo data type. EXT_ARG0_LO/HI = the list head cons-pair ptr. ---
+@setpos:
+      ; ptr_lo:ptr_hi = list head; nil/empty list -> "DOESN'T LIKE THIS INPUT".
+      LDA   EXT_ARG0_LO
+      STA   ptr_lo
+      LDA   EXT_ARG0_HI
+      STA   ptr_hi
+      ORA   ptr_lo
+      BEQ   @setpos_bad           ; nil list (no X)
+      ; first element -> ARG0 (must be a number)
+      LDY   #CONS_CAR_TYPE
+      LDA   (ptr_lo),Y
+      CMP   #VAL_NUMBER
+      BNE   @setpos_bad
+      LDY   #CONS_CAR_FRAC
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG0+0            ; X frac
+      LDY   #CONS_CAR_LO
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG0+1            ; X lo
+      LDY   #CONS_CAR_HI
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG0+2            ; X hi
+      ; cdr -> second cell
+      LDY   #CONS_CDR_LO
+      LDA   (ptr_lo),Y
+      TAX                         ; cdr lo
+      LDY   #CONS_CDR_HI
+      LDA   (ptr_lo),Y            ; cdr hi
+      STA   ptr_hi
+      STX   ptr_lo
+      ORA   ptr_lo
+      BEQ   @setpos_bad           ; no second element (no Y)
+      ; second element -> ARG1 (must be a number)
+      LDY   #CONS_CAR_TYPE
+      LDA   (ptr_lo),Y
+      CMP   #VAL_NUMBER
+      BNE   @setpos_bad
+      LDY   #CONS_CAR_FRAC
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG1+0            ; Y frac
+      LDY   #CONS_CAR_LO
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG1+1            ; Y lo
+      LDY   #CONS_CAR_HI
+      LDA   (ptr_lo),Y
+      STA   LIB_ARG1+2            ; Y hi
+      ; drive the module's generic SETXY op instead of SETPOS
+      LDA   #EXT_CMD_SETXY
+      STA   LIB_ARG2+0
+      BRA   @call
+@setpos_bad:
+      JMP   err_dl_this           ; "<name> DOESN'T LIKE THIS INPUT" (Logo bad-list path)
 
 @call:
       ; Snapshot the module's gfx-visible flag so we can detect a text->split

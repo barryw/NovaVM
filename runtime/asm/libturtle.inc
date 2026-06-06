@@ -67,6 +67,8 @@ TOP_SHOWNP   = $25   ; SHOWN? (reporter)
 TOP_SETPC    = $26   ; SETPENCOLOR color
 TOP_SETBG    = $27   ; SETBACKGROUND color
 TOP_TOWARDS  = $28   ; TOWARDS x y (reporter)
-TOP_SETPOS   = $29   ; SETPOS [x y]
+; $29 was SETPOS [x y]. The module is 100% numeric ops now; the [x y] cons-list
+; unpack moved to the Logo adapter (novalogo/eval.s logo_adapt_turtle @setpos),
+; which drives the generic SETXY ($1D) op. The module no longer implements $29.
 
 .endif

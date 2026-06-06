@@ -339,16 +339,6 @@ TURTLE_SPLIT_Y     = 160         ; copper split: gfx rows 0-159, text below
 TURTLE_MODE_GFXSPR = 3           ; VGC mode: graphics + sprites
 TURTLE_MODE_TEXT   = 0           ; VGC mode: text only
 
-; --- Logo value-type + cons-cell offsets, for SETPOS [x y]. ---
-;     (novalogo/ext_iface.inc isn't pulled into the module — define locally.)
-TVAL_LIST          = $02
-TVAL_NUMBER        = $00
-TCONS_CAR_TYPE     = 1
-TCONS_CAR_HI       = 2
-TCONS_CAR_LO       = 3
-TCONS_CDR_LO       = 5
-TCONS_CDR_HI       = 6
-
 ; --- ARG cell sub-byte aliases (Logo 16.8: [0]=FRAC, [1]=LO, [2]=HI). ---
 TA0_FRAC = LIB_ARG0+0
 TA0_LO   = LIB_ARG0+1
@@ -358,8 +348,8 @@ TA1_LO   = LIB_ARG1+1
 TA1_HI   = LIB_ARG1+2
 
 ; --- $03 dispatcher: read op from ARG2 byte0, route via an internal RTS-trick
-;     jump table to the per-op handler. Op ids are EXT_CMD values ($10..$29); we
-;     subtract $10 to index a dense 26-entry table. Out-of-range op -> OK no-op
+;     jump table to the per-op handler. Op ids are EXT_CMD values ($10..$28); we
+;     subtract $10 to index a dense 25-entry table. Out-of-range op -> OK no-op
 ;     (commands always OK; an unknown op is a harmless no-op). ---
 gfn_turtle_op:
       cld                              ; turtle math is binary, never BCD (ext_entry)
@@ -405,7 +395,6 @@ top_table:
       .word   t_setpc-1                ; $26 SETPC
       .word   t_setbg-1                ; $27 SETBG
       .word   t_towards-1              ; $28 TOWARDS (reporter)
-      .word   t_setpos-1               ; $29 SETPOS
 top_table_end:
 
 ; =====================================================================
@@ -866,67 +855,6 @@ t_setxy:
       stz     TURTLE_Y_FRAC
       jmp     render_then_ok
 
-; =====================================================================
-; read_car_num — validate (LIB_ZP) car as a number and read its 16-bit value.
-;   On a NUMBER cell: X = CAR_LO, A = CAR_HI, carry SET. Otherwise carry CLEAR
-;   (X/A undefined). Shared by SETPOS's two coordinate reads. (item 7 dedup)
-; =====================================================================
-read_car_num:
-      ldy     #TCONS_CAR_TYPE
-      lda     (LIB_ZP),y
-      cmp     #TVAL_NUMBER
-      bne     @bad
-      ldy     #TCONS_CAR_LO
-      lda     (LIB_ZP),y
-      tax                              ; value lo
-      ldy     #TCONS_CAR_HI
-      lda     (LIB_ZP),y               ; value hi
-      sec                              ; ok
-      rts
-@bad:
-      clc                              ; not a number
-      rts
-
-; t_setpos — SETPOS [x y]: walk the cons list (ARG0 = list ptr), load x/y into
-;   ARG0/ARG1 low words, then JMP setxy. (turtle.s:507 / extension.s:1108)
-;   The cons cells live in heap RAM, deref'd via the module ZP pointer LIB_ZP.
-; =====================================================================
-t_setpos:
-      jsr     ensure_gfx_mode
-      lda     LIB_ARG0+0               ; list ptr low
-      sta     LIB_ZP
-      lda     LIB_ARG0+1               ; list ptr high
-      sta     LIB_ZP+1
-      ora     LIB_ZP
-      beq     @ok                      ; nil list -> no-op OK
-      ; first element -> X
-      jsr     read_car_num
-      bcc     @ok                      ; not a number -> bail (still OK)
-      stx     TA0_LO
-      sta     TA0_HI
-      stz     TA0_FRAC
-      ; cdr -> second cell
-      ldy     #TCONS_CDR_LO
-      lda     (LIB_ZP),y
-      sta     t_tmp2
-      ldy     #TCONS_CDR_HI
-      lda     (LIB_ZP),y
-      sta     t_tmp3
-      ora     t_tmp2
-      beq     @ok                      ; no second element -> bail (still OK)
-      lda     t_tmp2
-      sta     LIB_ZP
-      lda     t_tmp3
-      sta     LIB_ZP+1
-      jsr     read_car_num
-      bcc     @ok                      ; not a number -> bail (still OK)
-      stx     TA1_LO
-      sta     TA1_HI
-      stz     TA1_FRAC
-      jmp     t_setxy                  ; reuse SETXY (tail; sets STATUS)
-@ok:
-      jmp     finish_ok_nowait
-
 ; t_setx — SETX x: set X only, draw line if pen down. (turtle.s:562)
 ; ensure_gfx_mode already inits when needed, so the old INITED re-check (formerly
 ; t_set_axis_init) is dead — just save the old position. (item 8)
@@ -1181,9 +1109,6 @@ turtle_tmp1:          .res 1         ; set_turtle_pos clamp scratch (tmp1)
 ; --- Turtle command-engine move-math scratch. Module BSS, not ZP: the render runs
 ;     inline (no lib_call), so plain RAM scratch is safe. old_x/y are the pre-move
 ;     integer position the post-move pen line reads. ---
-t_tmp1:               .res 1         ; raw_dy frac / SETPOS cdr scratch
-t_tmp2:               .res 1         ; raw_dy lo  / SETPOS cdr ptr lo
-t_tmp3:               .res 1         ; raw_dy hi  / SETPOS cdr ptr hi
 t_dx_frac:            .res 1
 t_dx_lo:              .res 1
 t_dx_hi:              .res 1

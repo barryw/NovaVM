@@ -43,7 +43,9 @@ namespace e6502UnitTests
                              TOP_FS = 0x1C, TOP_SETXY = 0x1D, TOP_SETX = 0x1E, TOP_SETY = 0x1F,
                              TOP_SETH = 0x20, TOP_XCOR = 0x21, TOP_YCOR = 0x22, TOP_HEADING = 0x23,
                              TOP_PENDOWNP = 0x24, TOP_SHOWNP = 0x25, TOP_SETPC = 0x26,
-                             TOP_SETBG = 0x27, TOP_TOWARDS = 0x28, TOP_SETPOS = 0x29;
+                             TOP_SETBG = 0x27, TOP_TOWARDS = 0x28;
+        // $29 (SETPOS [x y]) is intentionally absent: the module is 100% numeric;
+        // SETPOS's list-unpack moved to the Logo adapter, which drives SETXY.
         // Turtle state cells at $9F00 (shared RAM — unchanged by the extraction).
         private const ushort TS_X_FRAC = 0x9F00, TS_X_LO = 0x9F01, TS_X_HI = 0x9F02,
                              TS_Y_FRAC = 0x9F03, TS_Y_LO = 0x9F04, TS_Y_HI = 0x9F05,
@@ -787,35 +789,23 @@ namespace e6502UnitTests
             Assert.IsTrue(north >= 88 && north <= 92, $"TOWARDS due north must be ~90deg (got {north})");
         }
 
-        // --- SETPOS [x y]: ARG0 points at a Logo cons-cell list in heap RAM. ---
+        // --- SETXY x y: generic numeric move (the module's only positioning op).
+        //     SETPOS [x y]'s former list-unpack now lives in the Logo adapter
+        //     (it parses the cons list and drives THIS op); the module itself is
+        //     100% numeric and no longer understands a Logo list — so this asserts
+        //     the numeric SETXY contract that SETPOS routes through. ---
         [TestMethod]
-        public void Axis2_TurtleSetpos_FollowsConsList()
+        public void Axis2_TurtleSetxy_MovesToCoords()
         {
             using var bus = MakeAxis2Bus();
             RunTurtleOp(bus, TOP_CS);
 
-            // Build two cons cells in heap RAM (above the module BSS band).
-            //   cell layout: [+0 ?][+1 CAR_TYPE][+2 CAR_HI][+3 CAR_LO][+4 ?][+5 CDR_LO][+6 CDR_HI]
-            const ushort cell0 = 0x2000, cell1 = 0x2010;
-            // cell0: CAR = number 137, CDR -> cell1
-            bus.WriteRam((ushort)(cell0 + 1), 0x00);            // CAR_TYPE = VAL_NUMBER
-            bus.WriteRam((ushort)(cell0 + 2), 0x00);            // CAR_HI
-            bus.WriteRam((ushort)(cell0 + 3), 137);             // CAR_LO = x = 137
-            bus.WriteRam((ushort)(cell0 + 5), cell1 & 0xFF);    // CDR_LO
-            bus.WriteRam((ushort)(cell0 + 6), cell1 >> 8);      // CDR_HI
-            // cell1: CAR = number 64, CDR -> nil
-            bus.WriteRam((ushort)(cell1 + 1), 0x00);            // CAR_TYPE = VAL_NUMBER
-            bus.WriteRam((ushort)(cell1 + 2), 0x00);            // CAR_HI
-            bus.WriteRam((ushort)(cell1 + 3), 64);              // CAR_LO = y = 64
-            bus.WriteRam((ushort)(cell1 + 5), 0x00);            // CDR_LO = nil
-            bus.WriteRam((ushort)(cell1 + 6), 0x00);            // CDR_HI
+            SetTurtleArg(bus, ARG0, 137);   // x = 137 (Logo 16.8, frac=0)
+            SetTurtleArg(bus, ARG1, 64);    // y = 64
+            RunTurtleOp(bus, TOP_SETXY);
 
-            // ARG0 = list pointer (16-bit, byte0=lo, byte1=hi); type byte not needed.
-            SetArg(bus, ARG0, cell0);
-            RunTurtleOp(bus, TOP_SETPOS);
-
-            Assert.AreEqual(137, Read16(bus, TS_X_LO), "SETPOS must set X from the list head");
-            Assert.AreEqual(64, Read16(bus, TS_Y_LO), "SETPOS must set Y from the list tail");
+            Assert.AreEqual(137, Read16(bus, TS_X_LO), "SETXY must set X from ARG0");
+            Assert.AreEqual(64, Read16(bus, TS_Y_LO), "SETXY must set Y from ARG1");
         }
 
         // --- ST after HT re-shows the turtle (TURTLE_SHOWN toggles). ---
