@@ -262,7 +262,52 @@ gfn_turtle_init:
       inx
       bne     @copy                    ; exactly 256 bytes
       stz     turtle_bg_saved
+      ; Arm the BSS canary: the icon + BOB buffers now hold valid data. This word
+      ; lets a later op detect that the (volatile, shared) module BSS was clobbered
+      ; by another paged module — see turtle_ensure_bss.
+      lda     #TURTLE_BSS_MAGIC0
+      sta     turtle_bss_magic
+      lda     #TURTLE_BSS_MAGIC1
+      sta     turtle_bss_magic+1
       jmp     finish_ok_nowait
+
+; =====================================================================
+; turtle_ensure_bss — re-install the volatile BSS state if it was clobbered.
+; The icon buffer, BOB save/restore buffers, and bg bookkeeping live in the module
+; BSS band ($0420+), which the paged-library loader REUSES for whichever module is
+; resident. TURTLE_INITED lives in surviving RAM ($9F00), so after another module
+; (e.g. the editor) runs between turtle ops, INITED still reads 1 but the icon
+; buffer is garbage. The canary word in BSS only survives while the turtle stays
+; resident; a mismatch means we were paged out -> re-install the icon (gfn_turtle_init
+; also clears bg_saved, so no stale background is restored). Called at the top of
+; every turtle command so the next op after a page-in always blits a clean icon.
+; =====================================================================
+TURTLE_BSS_MAGIC0 = $5A
+TURTLE_BSS_MAGIC1 = $A5
+turtle_ensure_bss:
+      lda     turtle_bss_magic
+      cmp     #TURTLE_BSS_MAGIC0
+      bne     @reinstall
+      lda     turtle_bss_magic+1
+      cmp     #TURTLE_BSS_MAGIC1
+      bne     @reinstall
+      rts                              ; canary intact -> BSS valid
+@reinstall:
+      ; Re-copy the icon into the (clobbered) source buffer and re-arm the canary.
+      ; NOTE: we do NOT clear turtle_bg_saved here — the BOB save/restore bookkeeping
+      ; must stay intact so the next move still erases the previous stamp (clearing
+      ; it strands the pre-page-out stamp as a ghost).
+      ldx     #0
+@copy:
+      lda     turtle_icon,x
+      sta     turtle_source_shape,x
+      inx
+      bne     @copy
+      lda     #TURTLE_BSS_MAGIC0
+      sta     turtle_bss_magic
+      lda     #TURTLE_BSS_MAGIC1
+      sta     turtle_bss_magic+1
+      rts
 
 ; --- $01 TUR_DRAW: erase-old + save-bg + rotate-blit-keyed. ---
 ; x:ARG0 s16 center, y:ARG1 s16 center, angle:ARG2 byte0 u8. Faithful port of
@@ -359,6 +404,7 @@ TA1_HI   = LIB_ARG1+2
 ;     (commands always OK; an unknown op is a harmless no-op). ---
 gfn_turtle_op:
       cld                              ; turtle math is binary, never BCD (ext_entry)
+      jsr     turtle_ensure_bss        ; re-install icon/bg if the module BSS was paged out
       lda     LIB_ARG2                 ; op id (byte 0)
       sec
       sbc     #$10                     ; TOP_FD ($10) -> index 0
@@ -1386,6 +1432,13 @@ turtle_icon:
 ; 256-byte buffers (source/rotated/saved-bg) dominate; the bg bookkeeping + clamp
 ; scratch + move-math + arg-snapshot scratch are single bytes.
       .segment "BSS"
+; BSS canary (turtle_ensure_bss): MUST be the FIRST thing in the band ($0420). The
+; paged-library loader reuses this band for whichever module is resident, and every
+; module's BSS starts at $0420 — so any other module that runs (e.g. the editor)
+; is guaranteed to overwrite this word. A later turtle op sees the mismatch and
+; re-installs the volatile icon/BOB buffers. (A canary placed LATER in the band can
+; be missed when the clobbering module's BSS is shorter than the turtle's.)
+turtle_bss_magic:     .res 2
 turtle_source_shape:  .res 256       ; built-in icon, installed by TUR_INIT
 turtle_rotated_shape: .res 256       ; blitter rotate output
 turtle_saved_bg:      .res 256       ; Amiga-BOB saved background under the stamp

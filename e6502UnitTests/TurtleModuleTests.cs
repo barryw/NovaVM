@@ -344,6 +344,39 @@ namespace e6502UnitTests
                         $"ERASE after INIT must NOT touch the plane at ({col},{row}) (bg_saved cleared)");
         }
 
+        // --- The turtle's icon buffer + BOB background buffers live in the SHARED
+        // paged-module BSS band ($0420+), which is reused by whatever module is
+        // resident. If another module (e.g. the editor) runs between turtle ops it
+        // clobbers them, while TURTLE_INITED (in surviving $9F00 RAM) still says
+        // "inited". The module must detect the stale BSS and re-install the icon on
+        // the next op, or it blits garbage (the reported "screwed up" turtle). ---
+        [TestMethod]
+        public void Axis2_TurtleBssClobbered_ReinstallsIconOnNextOp()
+        {
+            using var bus = MakeAxis2Bus();
+            RunFn(bus, TUR_INIT);            // install icon + arm the BSS canary
+
+            // Simulate another paged module reusing the module-BSS band: fill it
+            // with garbage (clobbers the icon buffer AND the canary).
+            for (int a = 0x0420; a <= 0x07FF; a++)
+                bus.WriteRam((ushort)a, 0xAB);
+
+            // Any turtle op must notice the stale BSS and re-install the icon.
+            // XCOR is a synchronous reporter (no frame-wait) routed through the same
+            // dispatch, so it exercises the re-install guard without a blit.
+            SetArg(bus, ARG2, TOP_XCOR);
+            RunFn(bus, TUR_OP);
+
+            // The icon buffer (16x16 row-major) must be the clean built-in triangle
+            // again — not the 0xAB garbage. It sits at $0422: the module BSS opens
+            // with the 2-byte turtle_bss_magic canary at $0420, then the icon buffer.
+            const ushort SRC = 0x0422;
+            for (int row = 0; row < 16; row++)
+                for (int col = 0; col < 16; col++)
+                    Assert.AreEqual(TurtleIcon(col, row), bus.ReadRam((ushort)(SRC + row * 16 + col)),
+                        $"icon cell ({col},{row}) must be re-installed after a module page-in clobbered the BSS");
+        }
+
         // --- $B1 honors VSPRITE_ROTANGLE: angle 0 vs angle 64 (90deg) produce
         // different white-pixel patterns on the plane. ---
         [TestMethod]
