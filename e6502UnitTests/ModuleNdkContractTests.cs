@@ -30,6 +30,7 @@ public class ModuleNdkContractTests
         ("system",   "sys_jtable"),
         ("sound",    "snd_jtable"),
         ("files",    "file_jtable"),
+        ("memory",   "mem_jtable"),
     };
 
     [TestMethod]
@@ -165,7 +166,7 @@ public class ModuleNdkContractTests
     private static string ModuleOwnCode(string src)
     {
         var ndkInclude = new Regex(
-            @"\.include\s+""(audio|vgc|sprite|vsprite|msprite|blitter|copper|copper_split|dma|nvg|anim|tween|editui|editbuf|vtext|fio|pager)\.s""");
+            @"\.include\s+""(audio|vgc|sprite|vsprite|msprite|blitter|copper|copper_split|dma|nvg|anim|tween|editui|editbuf|vtext|fio|pager|xram|xmc)\.s""");
         var sb = new StringBuilder();
         foreach (string line in src.Split('\n'))
         {
