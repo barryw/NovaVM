@@ -1621,7 +1621,7 @@ do_readword:
 ; ---------------------------------------------------------------------
 ; do_readlist — READLIST: read a line, return as a list
 ;   Arity 0, no arguments. Reporter.
-;   Calls read_line, tokenize_line, then walks tokens building a list.
+;   Calls repl_read_line, tokenize_line, then walks tokens building a list.
 ; ---------------------------------------------------------------------
 do_readlist:
       ; Save tokenizer state (we'll overwrite tok_head/tok_tail)
@@ -1639,7 +1639,7 @@ do_readlist:
       PHA
 
       ; Read a line from keyboard into input_buf
-      JSR   read_line
+      JSR   repl_read_line
       ; Tokenize it
       JSR   tokenize_line
 
