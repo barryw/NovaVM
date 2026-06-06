@@ -24,6 +24,13 @@ LIBSYSTEM_INC = 1
 
 .include "libabi.inc"            ; MODULE_ID_SYSTEM, LIB_* mailbox cells, LERR_*
 
+; --- Status code returned when a wrapped fallible NDK routine reports failure ---
+; The rng_* / nui_* / overlay_* NDK routines return A=0 on success / A!=0 on error
+; (and leave detail in their own result cell — RNG in A only, NUI in NUI_RESULT,
+; OVERLAY in OVL_RESULT). The wrapper maps A!=0 -> LIB_STATUS = LERR_SYS_FAIL,
+; A==0 -> LERR_OK. Reporters publish their value/keycode to LIB_RESULT with OK.
+LERR_SYS_FAIL  = $8D   ; rng_*/nui_*/overlay_* NDK routine returned A!=0
+
 ; =====================================================================
 ; $00  editor
 ; =====================================================================
@@ -42,8 +49,44 @@ SYS_FN_WAIT     = $01   ; (n:ARG0 frames)  -> busy-wait N video frames
 SYS_FN_WAITVBL  = $02   ; ()               -> wait for the next vertical blank
 SYS_FN_TIMER    = $03   ; ()  reporter     -> RESULT = VGC frame counter (8-bit)
 
+; =====================================================================
+; Host random-number service (rng.s, host-backed entropy via FIO.CMD_RNG).
+; All three reporters share one host call; they differ only in how many of the
+; returned bytes the wrapper publishes to LIB_RESULT. A=0 success / A=1 error.
+; =====================================================================
+SYS_RNG8        = $04   ; ()  reporter     -> RESULT b0       = 8 random bits
+SYS_RNG16       = $05   ; ()  reporter     -> RESULT b0..1    = 16 random bits
+SYS_RNG32       = $06   ; ()  reporter     -> RESULT b0..3    = 32 random bits
+
+; =====================================================================
+; Modal application UI (nui.s). Dialog geometry + title/message/footer string
+; pointers ride in the mailbox; the wrapper stages them into the NUI_* BSS the
+; NDK reads. A=0 (NUI_OK) success / A=1 (NUI_ERR) error, except WAIT_KEY which
+; returns the pressed key byte in A (always LERR_OK).
+;   ARG0 b0/b1 = title  ptr   ARG1 b0/b1 = message ptr   ARG2 b0/b1 = footer ptr
+;   ARG3 b0=left b1=top b2=width b3=height (all-zero => keep current geometry)
+; =====================================================================
+SYS_DIALOG_DEFAULTS = $07 ; ()                          -> set the centered default dialog geometry
+SYS_DIALOG          = $08 ; (title,msg,footer,geom)     -> draw the modal dialog, no wait
+SYS_DIALOG_WAIT     = $09 ; (title,msg,footer,geom)     -> draw the modal dialog, then wait one key
+SYS_DIALOG_ERROR    = $0A ; (title,msg,footer,geom)     -> draw a modal error dialog + wait one key
+SYS_WAIT_KEY        = $0B ; ()  reporter                -> RESULT b0 = the pressed key byte
+
+; =====================================================================
+; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
+; via the pager and calls its ABI entry vectors). A=0 (OVL_OK) success / A=1
+; (OVL_ERR) error; the detail OVL_ERR_* code is published to RESULT b1 on error.
+;   LOAD: ARG0 b0/b1 = name ptr   ARG1 b0 = name len   ARG2 b0/b1 = load address
+;         ARG3 b0/b1 = max slot length (payload + BSS must fit)
+; =====================================================================
+SYS_OVL_LOAD    = $0C   ; (name,len,load,maxlen)       -> load+activate a fixed overlay
+SYS_OVL_UNLOAD  = $0D   ; ()                           -> unload the active overlay
+SYS_OVL_INIT    = $0E   ; ()                           -> call the overlay init entry (optional)
+SYS_OVL_MAIN    = $0F   ; ()                           -> call the overlay main entry (required)
+SYS_OVL_TICK    = $10   ; ()                           -> call the overlay tick entry (optional)
+
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $04
+SYS_FN_COUNT  = $11
 
 .endif

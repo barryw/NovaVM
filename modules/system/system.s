@@ -17,6 +17,9 @@
       .include "vgc.inc"               ; (guarded) VGC command/constant equates
       .include "copper.inc"            ; copper_off .global
       .include "editbuf.inc"           ; EDITBUF_* config + editbuf_run/_reset_state
+      .include "rng.inc"               ; RNG_VALUE0..3 (= FIO_RNG*) + rng_get* .globals
+      .include "nui.inc"               ; NUI_DIALOG_*/NUI_TITLE*/MSG*/FOOTER* + nui_* .globals
+      .include "overlay.inc"           ; OVL_NAMEPTR_*/LOAD*/MAXLEN* + overlay_* .globals
 
 ; Editor display colors. Mirrors the extension's NovaLogo editor styling. The
 ; shared engine no longer dictates the global palette/colors; the caller's prior
@@ -66,10 +69,94 @@ EDITOR_FGCOL      = $01                ; white text
 ;@ret u8 current frame counter (RESULT byte0)
 ;@status LERR_OK
 ; (no ;@ndk: reads VGC_FRAME directly; not a wrapped NDK routine.)
+;
+; --- host random-number service (rng.s) ---
+;@fn SYS_RNG8
+;@ndk rng_get8
+;@ret u8 random value (RESULT byte0)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_RNG16
+;@ndk rng_get16
+;@ret u16 random value (RESULT byte0..1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_RNG32
+;@ndk rng_get32
+;@ret u32 random value (RESULT byte0..3)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+; --- modal application UI (nui.s) ---
+;@fn SYS_DIALOG_DEFAULTS
+;@ndk nui_dialog_defaults
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_DIALOG
+;@ndk nui_show_dialog
+;@arg title u16 NUL title ptr -> NUI_TITLEL/H (ARG0 byte0,1)
+;@arg message u16 NUL message ptr -> NUI_MSGL/H (ARG1 byte0,1)
+;@arg footer u16 NUL footer ptr -> NUI_FOOTERL/H (ARG2 byte0,1)
+;@arg geom u32 left/top/width/height -> NUI_DIALOG_LEFT/TOP/WIDTH/HEIGHT (ARG3 byte0,1,2,3; all-zero keeps current geometry)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_DIALOG_WAIT
+;@ndk nui_show_dialog_wait
+;@arg title u16 NUL title ptr -> NUI_TITLEL/H (ARG0 byte0,1)
+;@arg message u16 NUL message ptr -> NUI_MSGL/H (ARG1 byte0,1)
+;@arg footer u16 NUL footer ptr -> NUI_FOOTERL/H (ARG2 byte0,1)
+;@arg geom u32 left/top/width/height -> NUI_DIALOG_LEFT/TOP/WIDTH/HEIGHT (ARG3 byte0,1,2,3; all-zero keeps current geometry)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_DIALOG_ERROR
+;@ndk nui_show_error
+;@arg title u16 NUL title ptr -> NUI_TITLEL/H (ARG0 byte0,1)
+;@arg message u16 NUL message ptr -> NUI_MSGL/H (ARG1 byte0,1)
+;@arg footer u16 NUL footer ptr -> NUI_FOOTERL/H (ARG2 byte0,1)
+;@arg geom u32 left/top/width/height -> NUI_DIALOG_LEFT/TOP/WIDTH/HEIGHT (ARG3 byte0,1,2,3; all-zero applies the default geometry)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_WAIT_KEY
+;@ndk nui_wait_key
+;@ret u8 pressed key byte (RESULT byte0)
+;@status LERR_OK
+;
+; --- fixed-address overlay manager (overlay.s) ---
+;@fn SYS_OVL_LOAD
+;@ndk overlay_load_fixed
+;@arg nameptr u16 overlay filename ptr -> OVL_NAMEPTR_L/H (ARG0 byte0,1)
+;@arg namelen u8 filename length -> OVL_NAMELEN (ARG1 byte0)
+;@arg load u16 fixed CPU RAM load address -> OVL_LOADL/H (ARG2 byte0,1)
+;@arg maxlen u16 slot capacity (payload+BSS must fit) -> OVL_MAXLENL/H (ARG3 byte0,1)
+;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_OVL_UNLOAD
+;@ndk overlay_unload
+;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_OVL_INIT
+;@ndk overlay_call_init
+;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_OVL_MAIN
+;@ndk overlay_call_main
+;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_OVL_TICK
+;@ndk overlay_call_tick
+;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (1) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (17) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -92,6 +179,19 @@ sys_jtable:
       .word   sys_wait-1               ; $01 SYS_FN_WAIT
       .word   sys_waitvbl-1            ; $02 SYS_FN_WAITVBL
       .word   sys_timer-1              ; $03 SYS_FN_TIMER
+      .word   sys_rng8-1               ; $04 SYS_RNG8
+      .word   sys_rng16-1              ; $05 SYS_RNG16
+      .word   sys_rng32-1              ; $06 SYS_RNG32
+      .word   sys_dialog_defaults-1    ; $07 SYS_DIALOG_DEFAULTS
+      .word   sys_dialog-1             ; $08 SYS_DIALOG
+      .word   sys_dialog_wait-1        ; $09 SYS_DIALOG_WAIT
+      .word   sys_dialog_error-1       ; $0A SYS_DIALOG_ERROR
+      .word   sys_wait_key-1           ; $0B SYS_WAIT_KEY
+      .word   sys_ovl_load-1           ; $0C SYS_OVL_LOAD
+      .word   sys_ovl_unload-1         ; $0D SYS_OVL_UNLOAD
+      .word   sys_ovl_init-1           ; $0E SYS_OVL_INIT
+      .word   sys_ovl_main-1           ; $0F SYS_OVL_MAIN
+      .word   sys_ovl_tick-1           ; $10 SYS_OVL_TICK
 
 ; ===========================================================================
 ; SYS_FN_EDIT — port of the extension's ext_edit, reading the canonical lib_call
@@ -269,6 +369,232 @@ sys_timer:
       STA   LIB_STATUS
       RTS
 
+; ===========================================================================
+; Shared status epilogues for the fallible rng/nui/overlay wrappers. The NDK
+; routine returns A=0 on success / A!=0 on error; sys_finish_status maps that to
+; LIB_STATUS (and clears RESULT). NOT ;@ndk-mapped, so the drift guard's
+; per-wrapper JSR check ignores them.
+; ===========================================================================
+sys_finish_status:
+      CMP   #$00
+      BNE   @fail
+      STZ   LIB_RESULT
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      STZ   LIB_RESULT
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; ===========================================================================
+; Host random-number service. THIN wrappers over the rng NDK (rng.s). All three
+; share one host entropy call and differ only in how many returned bytes the
+; wrapper publishes to LIB_RESULT (RNG_VALUE0..3 = FIO_RNG0..3 hardware regs).
+; ===========================================================================
+
+; --- $04 SYS_RNG8: reporter -> RESULT b0 = 8 random bits -> rng_get8 ---
+sys_rng8:
+      JSR   rng_get8
+      CMP   #$00
+      BNE   @fail
+      LDA   RNG_VALUE0
+      STA   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; --- $05 SYS_RNG16: reporter -> RESULT b0..1 = 16 random bits -> rng_get16 ---
+sys_rng16:
+      JSR   rng_get16
+      CMP   #$00
+      BNE   @fail
+      LDA   RNG_VALUE0
+      STA   LIB_RESULT+0
+      LDA   RNG_VALUE1
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; --- $06 SYS_RNG32: reporter -> RESULT b0..3 = 32 random bits -> rng_get32 ---
+sys_rng32:
+      JSR   rng_get32
+      CMP   #$00
+      BNE   @fail
+      LDA   RNG_VALUE0
+      STA   LIB_RESULT+0
+      LDA   RNG_VALUE1
+      STA   LIB_RESULT+1
+      LDA   RNG_VALUE2
+      STA   LIB_RESULT+2
+      LDA   RNG_VALUE3
+      STA   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; ===========================================================================
+; Modal application UI. THIN wrappers over the nui NDK (nui.s). The wrapper
+; stages the title/message/footer string pointers and (optionally) the dialog
+; geometry into the NUI_* BSS the NDK reads, then JSRs the NDK routine.
+; ===========================================================================
+
+; sys_marshal_nui — ARG0/1/2 b0,b1 -> NUI_TITLE/MSG/FOOTER ptrs; ARG3 bytes ->
+; NUI_DIALOG_LEFT/TOP/WIDTH/HEIGHT only when any ARG3 byte is nonzero (all-zero
+; ARG3 keeps the current/default geometry). NOT ;@ndk-mapped.
+sys_marshal_nui:
+      LDA   LIB_ARG0+0
+      STA   NUI_TITLEL
+      LDA   LIB_ARG0+1
+      STA   NUI_TITLEH
+      LDA   LIB_ARG1+0
+      STA   NUI_MSGL
+      LDA   LIB_ARG1+1
+      STA   NUI_MSGH
+      LDA   LIB_ARG2+0
+      STA   NUI_FOOTERL
+      LDA   LIB_ARG2+1
+      STA   NUI_FOOTERH
+      ; geometry: only override when ARG3 carries one (any byte nonzero)
+      LDA   LIB_ARG3+0
+      ORA   LIB_ARG3+1
+      ORA   LIB_ARG3+2
+      ORA   LIB_ARG3+3
+      BEQ   @keep
+      LDA   LIB_ARG3+0
+      STA   NUI_DIALOG_LEFT
+      LDA   LIB_ARG3+1
+      STA   NUI_DIALOG_TOP
+      LDA   LIB_ARG3+2
+      STA   NUI_DIALOG_WIDTH
+      LDA   LIB_ARG3+3
+      STA   NUI_DIALOG_HEIGHT
+@keep:
+      RTS
+
+; --- $07 SYS_DIALOG_DEFAULTS: () -> nui_dialog_defaults ---
+sys_dialog_defaults:
+      JSR   nui_dialog_defaults
+      JMP   sys_finish_status
+
+; --- $08 SYS_DIALOG: (title,msg,footer,geom) -> nui_show_dialog ---
+sys_dialog:
+      JSR   sys_marshal_nui
+      JSR   nui_show_dialog
+      JMP   sys_finish_status
+
+; --- $09 SYS_DIALOG_WAIT: (title,msg,footer,geom) -> nui_show_dialog_wait ---
+sys_dialog_wait:
+      JSR   sys_marshal_nui
+      JSR   nui_show_dialog_wait
+      JMP   sys_finish_status
+
+; --- $0A SYS_DIALOG_ERROR: (title,msg,footer,geom) -> nui_show_error ---
+sys_dialog_error:
+      JSR   sys_marshal_nui
+      JSR   nui_show_error
+      JMP   sys_finish_status
+
+; --- $0B SYS_WAIT_KEY: reporter -> RESULT b0 = pressed key byte -> nui_wait_key ---
+sys_wait_key:
+      JSR   nui_wait_key            ; A = key byte (not a 0/1 status)
+      STA   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+; ===========================================================================
+; Fixed-address overlay manager. THIN wrappers over the overlay NDK (overlay.s).
+; The OVL_ERR_* detail code (OVL_RESULT) is published to RESULT b1 so the caller
+; can distinguish IO / magic / size / entry failures; A!=0 -> LERR_SYS_FAIL.
+; ===========================================================================
+
+; sys_finish_overlay — map the overlay NDK A result to LIB_STATUS and surface the
+; OVL_RESULT detail in RESULT b1. NOT ;@ndk-mapped.
+sys_finish_overlay:
+      STZ   LIB_RESULT+0
+      LDA   OVL_RESULT
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   OVL_RESULT
+      CMP   #$00
+      BNE   @fail
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; --- $0C SYS_OVL_LOAD: name + load addr + maxlen -> overlay_load_fixed ---
+sys_ovl_load:
+      LDA   LIB_ARG0+0
+      STA   OVL_NAMEPTR_L
+      LDA   LIB_ARG0+1
+      STA   OVL_NAMEPTR_H
+      LDA   LIB_ARG1+0
+      STA   OVL_NAMELEN
+      LDA   LIB_ARG2+0
+      STA   OVL_LOADL
+      LDA   LIB_ARG2+1
+      STA   OVL_LOADH
+      LDA   LIB_ARG3+0
+      STA   OVL_MAXLENL
+      LDA   LIB_ARG3+1
+      STA   OVL_MAXLENH
+      JSR   overlay_load_fixed
+      JMP   sys_finish_overlay
+
+; --- $0D SYS_OVL_UNLOAD: () -> overlay_unload ---
+sys_ovl_unload:
+      JSR   overlay_unload
+      JMP   sys_finish_overlay
+
+; --- $0E SYS_OVL_INIT: () -> overlay_call_init ---
+sys_ovl_init:
+      JSR   overlay_call_init
+      JMP   sys_finish_overlay
+
+; --- $0F SYS_OVL_MAIN: () -> overlay_call_main ---
+sys_ovl_main:
+      JSR   overlay_call_main
+      JMP   sys_finish_overlay
+
+; --- $10 SYS_OVL_TICK: () -> overlay_call_tick ---
+sys_ovl_tick:
+      JSR   overlay_call_tick
+      JMP   sys_finish_overlay
+
       .segment "BSS"
 se_saved_mode:    .res 1
 se_saved_palette: .res 1
@@ -289,6 +615,12 @@ se_saved_flag:    .res 1               ; nonzero once the SAVE hook fires
       .include "editui.s"
       .include "editbuf.s"
       .include "vgc.s"                 ; NDK frame-timing: vgc_vsync / vgc_wait_frames
+      ; --- Phase C: random + UI + overlay NDK bodies (all include-guarded) ---
+      ; rng.s/overlay.s define FIO_EMIT_ALL_RUNTIME then pull fio.s (+pager.s for
+      ; overlay); nui.s pulls vsprite.s + vtext.s (vtext already resident via editui).
+      .include "rng.s"                 ; rng_get8/16/32 (-> fio_rng / fio_exec)
+      .include "nui.s"                 ; nui_dialog_defaults/show_dialog[_wait]/show_error/wait_key
+      .include "overlay.s"             ; overlay_load_fixed/unload/call_init/main/tick (-> pager + fio)
 
       .segment "VECTORS"
       ; Module runs under SEI (the loader masks IRQ across the bank swap); hardware

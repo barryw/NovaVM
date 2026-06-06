@@ -12,7 +12,13 @@ system.o: system.s \
             $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
             $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s \
-            $(NOVA_ASM)/vgc.s
+            $(NOVA_ASM)/vgc.s \
+            $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s \
+            $(NOVA_ASM)/nui.inc $(NOVA_ASM)/nui.s \
+            $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s \
+            $(NOVA_ASM)/overlay.inc $(NOVA_ASM)/overlay.s \
+            $(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s \
+            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s
 	$(CA65) system.s -o system.o
 
 system.bin: system.o system.cfg
@@ -22,7 +28,8 @@ system.bin: system.o system.cfg
 # resolved from libsystem.inc) -> system.nmod. --ndk-dir single-sources each ;@ndk
 # fn's summary from the NDK routine and enforces the wrapper-calls-NDK drift guard.
 system.nmod: system.bin system.s ../../tools/nmod_pack.py ../../tools/gen_runtime_abi_docs.py \
-            $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/vgc.s
+            $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/vgc.s \
+            $(NOVA_ASM)/rng.s $(NOVA_ASM)/nui.s $(NOVA_ASM)/overlay.s
 	python3 ../../tools/nmod_pack.py --src system.s --bin system.bin \
 	        --out system.nmod --syms $(NOVA_ASM)/libsystem.inc --ndk-dir $(NOVA_ASM)
 
