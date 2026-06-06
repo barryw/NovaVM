@@ -40,11 +40,15 @@ addr_ch         = ext_dig3
 addr_hash       = ext_dig4
 
 ; --- RAM addresses ---
-EXT_RESET_VEC   = $0233         ; reset recovery routine in RAM
-EXT_GTBY_VEC    = $0240         ; bridge: extension → BASIC LAB_GTBY → extension
-EXT_GTWRD_VEC   = $024E         ; bridge: extension → BASIC LAB_GTWRD → extension
-EXT_GTSW_VEC    = $025C         ; bridge: extension → BASIC LAB_GTSW → extension
-EXT_SNERR_VEC   = $026A         ; bridge: extension → BASIC LAB_15D9 syntax err
+; RAM landing addresses of the trampolines copied from the LAB_vec block (see
+; min_mon.asm). These MUST match the actual copy targets — re-read from
+; min_mon.lst after any change to the LAB_vec block. EXT_CODE grew by 3 bytes
+; (JSR ensure_ext_resident), shifting every following bridge down by 3.
+EXT_RESET_VEC   = $023B         ; reset recovery routine in RAM
+EXT_GTBY_VEC    = $0243         ; bridge: extension → BASIC LAB_GTBY → extension
+EXT_GTWRD_VEC   = $0251         ; bridge: extension → BASIC LAB_GTWRD → extension
+EXT_GTSW_VEC    = $025F         ; bridge: extension → BASIC LAB_GTSW → extension
+EXT_SNERR_VEC   = $026D         ; bridge: extension → BASIC LAB_15D9 syntax err
 
 ; --- BASIC ZP routines (RAM-resident, callable from extension ROM) ---
 LAB_IGBY        = $BC           ; advance + skip-spaces + return byte (A)

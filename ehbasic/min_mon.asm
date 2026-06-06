@@ -12,7 +12,9 @@
 IRQ_vec     = VEC_SV+2        ; IRQ code vector
 NMI_vec     = IRQ_vec+$0F     ; NMI code vector
 ; EXT_vec defined in basic.asm (= VEC_SV+$1B = $0226)
-EXT_RST     = EXT_vec+$12     ; extension ROM reset recovery in RAM
+EXT_RST     = EXT_vec+$15     ; extension ROM reset recovery in RAM
+                              ; ($15 slot for EXT_CODE: grew $12->$15, +3 bytes
+                              ;  for the JSR ensure_ext_resident re-page guard)
 EXT_GTBY    = EXT_RST+$08     ; bridge: extension → BASIC LAB_GTBY → extension
 EXT_GTWRD   = EXT_GTBY+$0E    ; bridge: extension → BASIC LAB_GTWRD → extension
 EXT_GTSW    = EXT_GTWRD+$0E   ; bridge: extension → BASIC LAB_GTSW → extension
@@ -64,6 +66,7 @@ NMI_CODE
 
 EXT_CODE
       STA   ExtCmdId          ; save command ID to ZP
+      JSR   ensure_ext_resident ; re-page ext ROM if a lib_call displaced it
       LDA   #ROMSWAP_EXTENSION
       STA   REG_ROMSWAP       ; swap to extension ROM
       JSR   $C000             ; call extension entry point
@@ -82,7 +85,7 @@ EXT_RESET_CODE
       STA   REG_ROMSWAP       ; swap to BASIC ROM
       JMP   $FFD7             ; jump to BASIC reset handler (RES_vec)
 
-; Extension → BASIC bridges (run from RAM at $023B, $0249, $0257).
+; Extension → BASIC bridges (run from RAM at $0243, $0251, $025F).
 ; Extension ROM handlers JSR these to invoke BASIC parser helpers
 ; (numeric expression eval, syntax error) without losing access to
 ; the active ROM bank. Each trampoline maps BASIC, calls the helper,

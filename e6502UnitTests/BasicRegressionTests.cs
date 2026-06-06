@@ -673,6 +673,99 @@ public class BasicRegressionTests
             "REVERSEOFF should leave later text/graphics output normal.");
     }
 
+    [TestMethod]
+    public void GraphicsPrimitivesDrawThroughLibCall()
+    {
+        // PLOT / LINE / RECT / FILL / GCOLOR now route through the GRAPHICS module
+        // via lib_call instead of a baked-in vgc.s copy. Confirm they still mutate
+        // the real VGC gfx plane with the right colour.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 GCLS",
+            "20 GCOLOR 3",
+            "30 PLOT 5,5",
+            "40 GCOLOR 7",
+            "50 LINE 0,10,20,10",
+            "60 GCOLOR 9",
+            "70 FILL 30,30,33,33",
+            "80 GCOLOR 4",
+            "90 RECT 40,40,44,44",
+            "100 END",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Graphics primitive program should run without syntax errors.\n{screen}");
+
+        Assert.AreEqual(3, bus.Vgc.GetGfxPixelColor(5, 5),
+            "PLOT should set the pixel to the active GCOLOR through the module.");
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(6, 5),
+            "PLOT must not touch the neighbour pixel.");
+
+        Assert.AreEqual(7, bus.Vgc.GetGfxPixelColor(0, 10),
+            "LINE should draw its left endpoint.");
+        Assert.AreEqual(7, bus.Vgc.GetGfxPixelColor(10, 10),
+            "LINE should draw its midpoint.");
+        Assert.AreEqual(7, bus.Vgc.GetGfxPixelColor(20, 10),
+            "LINE should draw its right endpoint.");
+
+        Assert.AreEqual(9, bus.Vgc.GetGfxPixelColor(31, 31),
+            "FILL should flood the rectangle interior.");
+        Assert.AreEqual(9, bus.Vgc.GetGfxPixelColor(33, 33),
+            "FILL should reach the rectangle corner.");
+
+        Assert.AreEqual(4, bus.Vgc.GetGfxPixelColor(40, 40),
+            "RECT should draw its top-left corner.");
+        Assert.AreEqual(4, bus.Vgc.GetGfxPixelColor(44, 44),
+            "RECT should draw its bottom-right corner.");
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(42, 42),
+            "RECT should leave its interior unfilled.");
+    }
+
+    [TestMethod]
+    public void TextControlKeywordsRouteThroughLibCall()
+    {
+        // COLOR / FONT / MODE / LOCATE now route through the GRAPHICS module.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // COLOR sets fg/bg/border registers directly (readable after the prompt).
+        EnterProgramLines(cpu, bus, editor, ["COLOR 5,2,1"]);
+        Assert.AreEqual(5, bus.Read((ushort)VgcConstants.RegFgCol),
+            "COLOR should set the foreground colour through the module.");
+        Assert.AreEqual(2, bus.Read((ushort)VgcConstants.RegBgCol),
+            "COLOR should set the background colour through the module.");
+        Assert.AreEqual(1, bus.Read((ushort)VgcConstants.RegBorder),
+            "COLOR should set the border colour through the module.");
+
+        // LOCATE positions the text cursor; the BASIC prompt resets the cursor
+        // after a direct line, so prove LOCATE by where a PRINT lands in a program.
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 LOCATE 10,12:PRINT \"Z\"",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"COLOR/LOCATE should run without syntax errors.\n{screen}");
+        Assert.AreEqual((byte)'Z', bus.Vgc.GetScreenChar(10, 12),
+            "LOCATE should position the cursor so the next PRINT lands at col 10, row 12.");
+    }
+
     private static string RunProgram(string[] lines)
     {
         using var bus = new CompositeBusDevice(enableSound: false);

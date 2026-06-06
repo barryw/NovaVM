@@ -48,7 +48,7 @@
       "symbol": "audio_init",
       "abi": "none",
       "summary": "Initialize the SID sound-effect instrument table and scheduler state.",
-      "address": "$EF23"
+      "address": "$EF24"
     },
     {
       "label": "AUDIO.INSTRUMENT",
@@ -85,7 +85,7 @@
       "symbol": "audio_instrument",
       "abi": "pseudo-register",
       "summary": "Define a simple SID sound-effect instrument envelope and waveform.",
-      "address": "$EEDF"
+      "address": "$EEE0"
     },
     {
       "label": "AUDIO.INST_ID",
@@ -322,7 +322,7 @@
       "symbol": "audio_midplay",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EFF7"
+      "address": "$EFF8"
     },
     {
       "label": "AUDIO.MIDPLAY_FILE",
@@ -361,7 +361,7 @@
       "symbol": "audio_midstop",
       "abi": "none",
       "summary": "Stop MIDI file playback.",
-      "address": "$EFFC"
+      "address": "$EFFD"
     },
     {
       "label": "AUDIO.MUSIC_LOOP",
@@ -381,7 +381,7 @@
       "symbol": "audio_music_loop",
       "abi": "pseudo-register",
       "summary": "Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.",
-      "address": "$F01E"
+      "address": "$F01F"
     },
     {
       "label": "AUDIO.MUSIC_NOTE",
@@ -404,7 +404,7 @@
       "symbol": "audio_music_note",
       "abi": "register",
       "summary": "Return the current MIDI note for a music voice.",
-      "address": "$F03C"
+      "address": "$F03D"
     },
     {
       "label": "AUDIO.MUSIC_PLAY",
@@ -422,7 +422,7 @@
       "symbol": "audio_music_play",
       "abi": "none",
       "summary": "Start queued music playback.",
-      "address": "$F00B"
+      "address": "$F00C"
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
@@ -440,7 +440,7 @@
       "symbol": "audio_music_playing",
       "abi": "none",
       "summary": "Return nonzero if music is playing.",
-      "address": "$F032"
+      "address": "$F033"
     },
     {
       "label": "AUDIO.MUSIC_PRIORITY",
@@ -460,7 +460,7 @@
       "symbol": "audio_music_priority",
       "abi": "pseudo-register",
       "summary": "Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.",
-      "address": "$F023"
+      "address": "$F024"
     },
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
@@ -483,7 +483,7 @@
       "symbol": "audio_music_sequence",
       "abi": "pseudo-register",
       "summary": "Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.",
-      "address": "$F006"
+      "address": "$F007"
     },
     {
       "label": "AUDIO.MUSIC_STOP",
@@ -501,7 +501,7 @@
       "symbol": "audio_music_stop",
       "abi": "none",
       "summary": "Stop music playback.",
-      "address": "$F014"
+      "address": "$F015"
     },
     {
       "label": "AUDIO.MUSIC_TEMPO",
@@ -522,7 +522,7 @@
       "symbol": "audio_music_tempo",
       "abi": "pseudo-register",
       "summary": "Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.",
-      "address": "$F019"
+      "address": "$F01A"
     },
     {
       "label": "AUDIO.NOISE",
@@ -582,7 +582,7 @@
       "symbol": "audio_play_sound",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments.",
-      "address": "$EE3C"
+      "address": "$EE3D"
     },
     {
       "label": "AUDIO.RELEASE",
@@ -621,7 +621,7 @@
       "symbol": "audio_set_volume",
       "abi": "register",
       "summary": "Set master or per-voice volume using A/X register arguments.",
-      "address": "$EE47"
+      "address": "$EE48"
     },
     {
       "label": "AUDIO.SFLOAD",
@@ -642,7 +642,7 @@
       "symbol": "audio_sfload",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F001"
+      "address": "$F002"
     },
     {
       "label": "AUDIO.SFLOAD_FILE",
@@ -681,7 +681,7 @@
       "symbol": "audio_sfx_playing",
       "abi": "none",
       "summary": "Return nonzero if the hosted music engine reports a sound effect.",
-      "address": "$F02C"
+      "address": "$F02D"
     },
     {
       "label": "AUDIO.SIDPLAY",
@@ -703,7 +703,7 @@
       "symbol": "audio_sidplay",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.",
-      "address": "$EFE9"
+      "address": "$EFEA"
     },
     {
       "label": "AUDIO.SIDPLAY_FILE",
@@ -743,7 +743,7 @@
       "symbol": "audio_sidstop",
       "abi": "none",
       "summary": "Stop SID file playback.",
-      "address": "$EFF2"
+      "address": "$EFF3"
     },
     {
       "label": "AUDIO.SOUND",
@@ -765,7 +765,7 @@
       "symbol": "audio_sound",
       "abi": "pseudo-register",
       "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.",
-      "address": "$EE4F"
+      "address": "$EE50"
     },
     {
       "label": "AUDIO.STATUS",
@@ -783,7 +783,7 @@
       "symbol": "audio_status",
       "abi": "none",
       "summary": "Return raw music status bits.",
-      "address": "$F028"
+      "address": "$F029"
     },
     {
       "label": "AUDIO.STATUS_LOADING",
@@ -904,7 +904,7 @@
       "symbol": "audio_tick",
       "abi": "none",
       "summary": "Advance fire-and-forget SID sound-effect durations by one frame.",
-      "address": "$EF58"
+      "address": "$EF59"
     },
     {
       "label": "AUDIO.TONE",
@@ -954,7 +954,7 @@
       "symbol": "audio_volume",
       "abi": "pseudo-register",
       "summary": "Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.",
-      "address": "$EEAC"
+      "address": "$EEAD"
     },
     {
       "label": "AUDIO.VOLUME_LEVEL",
@@ -1439,7 +1439,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0CB"
+      "address": "$F0CC"
     },
     {
       "label": "FIO.CHECK",
@@ -1456,7 +1456,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$F04C"
+      "address": "$F04D"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1473,7 +1473,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$F06C"
+      "address": "$F06D"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1542,7 +1542,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$F08B"
+      "address": "$F08C"
     },
     {
       "label": "FIO.DELETE",
@@ -1557,7 +1557,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0BC"
+      "address": "$F0BD"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1569,7 +1569,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$F0B2"
+      "address": "$F0B3"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1581,7 +1581,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$F0B7"
+      "address": "$F0B8"
     },
     {
       "label": "FIO.EXEC",
@@ -1603,7 +1603,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$F059"
+      "address": "$F05A"
     },
     {
       "label": "FIO.GLOAD",
@@ -1623,7 +1623,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$F0C6"
+      "address": "$F0C7"
     },
     {
       "label": "FIO.GSAVE",
@@ -1643,7 +1643,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$F0C1"
+      "address": "$F0C2"
     },
     {
       "label": "FIO.ISSUE",
@@ -1660,7 +1660,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$F048"
+      "address": "$F049"
     },
     {
       "label": "FIO.LOAD",
@@ -1677,7 +1677,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$F0AD"
+      "address": "$F0AE"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1692,7 +1692,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$F0DF"
+      "address": "$F0E0"
     },
     {
       "label": "FIO.MKDIR",
@@ -1707,7 +1707,7 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0D0"
+      "address": "$F0D1"
     },
     {
       "label": "FIO.NAME",
@@ -1763,7 +1763,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$F0DA"
+      "address": "$F0DB"
     },
     {
       "label": "FIO.RMDIR",
@@ -1778,7 +1778,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$F0D5"
+      "address": "$F0D6"
     },
     {
       "label": "FIO.RNG",
@@ -1799,7 +1799,7 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$F0E4"
+      "address": "$F0E5"
     },
     {
       "label": "FIO.RNG0",
@@ -1877,7 +1877,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$F0A8"
+      "address": "$F0A9"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1894,7 +1894,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$F07E"
+      "address": "$F07F"
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
@@ -2442,7 +2442,7 @@
       "kind": "routine",
       "symbol": "nic_command",
       "summary": "Issue a raw NIC command.",
-      "address": "$F0E9"
+      "address": "$F0EA"
     },
     {
       "label": "NIC.CONNECT",
@@ -2459,7 +2459,7 @@
       "kind": "routine",
       "symbol": "nic_connect",
       "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$F10A"
+      "address": "$F10B"
     },
     {
       "label": "NIC.COPY_NAME",
@@ -2480,7 +2480,7 @@
       "kind": "routine",
       "symbol": "nic_copy_name",
       "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$F130"
+      "address": "$F131"
     },
     {
       "label": "NIC.DISCONNECT",
@@ -2494,7 +2494,7 @@
       "kind": "routine",
       "symbol": "nic_disconnect",
       "summary": "Disconnect NIC_SLOT.",
-      "address": "$F10E"
+      "address": "$F10F"
     },
     {
       "label": "NIC.LENGTH",
@@ -2511,7 +2511,7 @@
       "kind": "routine",
       "symbol": "nic_length",
       "summary": "Read the most recent NIC message length.",
-      "address": "$F12C"
+      "address": "$F12D"
     },
     {
       "label": "NIC.LISTEN",
@@ -2544,7 +2544,7 @@
       "kind": "routine",
       "symbol": "nic_ready",
       "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$F122"
+      "address": "$F123"
     },
     {
       "label": "NIC.RECV",
@@ -2560,7 +2560,7 @@
       "kind": "routine",
       "symbol": "nic_recv",
       "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$F116"
+      "address": "$F117"
     },
     {
       "label": "NIC.SEND",
@@ -2577,7 +2577,7 @@
       "kind": "routine",
       "symbol": "nic_send",
       "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$F112"
+      "address": "$F113"
     },
     {
       "label": "NIC.STATUS",
@@ -2599,7 +2599,7 @@
       "kind": "routine",
       "symbol": "nic_status",
       "summary": "Read clamped NIC slot status.",
-      "address": "$F11A"
+      "address": "$F11B"
     },
     {
       "label": "NVG.ADDRH",
@@ -3087,7 +3087,7 @@
       "kind": "routine",
       "symbol": "sprite_background_clear",
       "summary": "Clear the sprite-background collision mask and acknowledge its IRQ source.",
-      "address": "$EADB"
+      "address": "$EA40"
     },
     {
       "label": "SPRITE.BACKGROUND_IRQ_DISABLE",
@@ -3099,7 +3099,7 @@
       "kind": "routine",
       "symbol": "sprite_background_irq_disable",
       "summary": "Disable the VGC sprite-background IRQ source.",
-      "address": "$EAFD"
+      "address": "$EA62"
     },
     {
       "label": "SPRITE.BACKGROUND_IRQ_ENABLE",
@@ -3111,7 +3111,7 @@
       "kind": "routine",
       "symbol": "sprite_background_irq_enable",
       "summary": "Clear stale sprite-background collisions, enable the VGC sprite-background IRQ source, and enable CPU IRQs.",
-      "address": "$EAF0"
+      "address": "$EA55"
     },
     {
       "label": "SPRITE.BACKGROUND_MASK",
@@ -3132,7 +3132,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_mask",
       "summary": "Read the 16-bit sprite-background collision status mask without clearing it.",
-      "address": "$EAD4"
+      "address": "$EA39"
     },
     {
       "label": "SPRITE.BACKGROUND_READ_CLEAR",
@@ -3153,7 +3153,7 @@
       "kind": "routine",
       "symbol": "sprite_background_read_clear",
       "summary": "Read the 16-bit sprite-background collision mask, clear it, and acknowledge its IRQ source.",
-      "address": "$EAE7"
+      "address": "$EA4C"
     },
     {
       "label": "SPRITE.BACKGROUND_STATUS",
@@ -3170,7 +3170,7 @@
       "kind": "routine",
       "symbol": "sprite_background_collision_status",
       "summary": "Read the low byte of the sprite-background collision status register.",
-      "address": "$EAD0"
+      "address": "$EA35"
     },
     {
       "label": "SPRITE.CLEAR",
@@ -3200,7 +3200,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_clear",
       "summary": "Clear the sprite-sprite collision mask and acknowledge its IRQ source.",
-      "address": "$EAA3"
+      "address": "$EA08"
     },
     {
       "label": "SPRITE.COLLISION_IRQ_DISABLE",
@@ -3212,7 +3212,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_irq_disable",
       "summary": "Disable the VGC sprite collision IRQ source.",
-      "address": "$EAC5"
+      "address": "$EA2A"
     },
     {
       "label": "SPRITE.COLLISION_IRQ_ENABLE",
@@ -3224,7 +3224,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_irq_enable",
       "summary": "Clear stale sprite-sprite collisions, enable the VGC sprite collision IRQ source, and enable CPU IRQs.",
-      "address": "$EAB8"
+      "address": "$EA1D"
     },
     {
       "label": "SPRITE.COLLISION_MASK",
@@ -3245,7 +3245,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_mask",
       "summary": "Read the 16-bit sprite-sprite collision status mask without clearing it.",
-      "address": "$EA9C"
+      "address": "$EA01"
     },
     {
       "label": "SPRITE.COLLISION_READ_CLEAR",
@@ -3266,7 +3266,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_read_clear",
       "summary": "Read the 16-bit sprite-sprite collision mask, clear it, and acknowledge its IRQ source.",
-      "address": "$EAAF"
+      "address": "$EA14"
     },
     {
       "label": "SPRITE.COLLISION_STATUS",
@@ -3283,7 +3283,7 @@
       "kind": "routine",
       "symbol": "sprite_collision_status",
       "summary": "Read the low byte of the sprite-sprite collision status register.",
-      "address": "$EA98"
+      "address": "$E9FD"
     },
     {
       "label": "SPRITE.COMMAND",
@@ -3300,7 +3300,7 @@
       "kind": "routine",
       "symbol": "sprite_command",
       "summary": "Issue a raw sprite VGC command without waiting for completion.",
-      "address": "$EA3E"
+      "address": "$E9A3"
     },
     {
       "label": "SPRITE.COPY",
@@ -3328,7 +3328,7 @@
       "kind": "routine",
       "symbol": "sprite_disable",
       "summary": "Disable the sprite in VGC.P0.",
-      "address": "$EA4C"
+      "address": "$E9B1"
     },
     {
       "label": "SPRITE.ENABLE",
@@ -3342,7 +3342,7 @@
       "kind": "routine",
       "symbol": "sprite_enable",
       "summary": "Enable the sprite in VGC.P0.",
-      "address": "$EA47"
+      "address": "$E9AC"
     },
     {
       "label": "SPRITE.FLIP",
@@ -3382,7 +3382,7 @@
       "kind": "routine",
       "symbol": "sprite_get_x",
       "summary": "Read a sprite's 16-bit X coordinate.",
-      "address": "$EA7D"
+      "address": "$E9E2"
     },
     {
       "label": "SPRITE.GET_Y",
@@ -3404,7 +3404,7 @@
       "kind": "routine",
       "symbol": "sprite_get_y",
       "summary": "Read a sprite's Y coordinate.",
-      "address": "$EA8E"
+      "address": "$E9F3"
     },
     {
       "label": "SPRITE.POS",
@@ -3421,7 +3421,7 @@
       "kind": "routine",
       "symbol": "sprite_pos",
       "summary": "Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.",
-      "address": "$EA42"
+      "address": "$E9A7"
     },
     {
       "label": "SPRITE.PRIORITY",
@@ -3461,7 +3461,7 @@
       "kind": "routine",
       "symbol": "sprite_reg_offset",
       "summary": "Compute the VGC sprite attribute block offset for a sprite field.",
-      "address": "$EA56"
+      "address": "$E9BB"
     },
     {
       "label": "SPRITE.ROW",
@@ -3484,7 +3484,7 @@
       "kind": "routine",
       "symbol": "sprite_row",
       "summary": "Write one sprite bitmap row using VGC.P0..VGC.P9.",
-      "address": "$EA51"
+      "address": "$E9B6"
     },
     {
       "label": "SPRITE.SET_REG16",
@@ -3513,7 +3513,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg16",
       "summary": "Write one 16-bit sprite attribute field.",
-      "address": "$EA6E"
+      "address": "$E9D3"
     },
     {
       "label": "SPRITE.SET_REG8",
@@ -3538,7 +3538,7 @@
       "kind": "routine",
       "symbol": "sprite_set_reg8",
       "summary": "Write one 8-bit sprite attribute field.",
-      "address": "$EA63"
+      "address": "$E9C8"
     },
     {
       "label": "SPRITE.SET_SHAPE",
@@ -3559,7 +3559,7 @@
       "kind": "routine",
       "symbol": "sprite_set_shape",
       "summary": "Set a sprite's shape index.",
-      "address": "$EA61"
+      "address": "$E9C6"
     },
     {
       "label": "SYS.REGA",
@@ -4252,8 +4252,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_cls",
-      "summary": "Clear the text screen through the VGC character output register and wait for completion.",
-      "address": "$E9AE"
+      "summary": "Clear the text screen through the VGC character output register and wait for completion."
     },
     {
       "label": "VGC.COMMAND",
@@ -4269,8 +4268,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_cmd",
-      "summary": "Issue a raw VGC command without waiting for completion.",
-      "address": "$E999"
+      "summary": "Issue a raw VGC command without waiting for completion."
     },
     {
       "label": "VGC.DISPLAY_OFF",
@@ -4281,8 +4279,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_off",
-      "summary": "Blank VGC output while keeping video timing active.",
-      "address": "$E9C5"
+      "summary": "Blank VGC output while keeping video timing active."
     },
     {
       "label": "VGC.DISPLAY_ON",
@@ -4293,8 +4290,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_display_on",
-      "summary": "Restore full VGC output brightness.",
-      "address": "$E9BF"
+      "summary": "Restore full VGC output brightness."
     },
     {
       "label": "VGC.EXEC",
@@ -4341,8 +4337,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_off",
-      "summary": "Disable flashing text.",
-      "address": "$EA35"
+      "summary": "Disable flashing text."
     },
     {
       "label": "VGC.FLASH_ON",
@@ -4353,8 +4348,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_flash_on",
-      "summary": "Enable flashing text.",
-      "address": "$EA2C"
+      "summary": "Enable flashing text."
     },
     {
       "label": "VGC.GCLS",
@@ -4426,8 +4420,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_irq_ack",
-      "summary": "Acknowledge pending VGC IRQ source bits.",
-      "address": "$E9E6"
+      "summary": "Acknowledge pending VGC IRQ source bits."
     },
     {
       "label": "VGC.IRQ_DISABLE",
@@ -4443,8 +4436,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_irq_disable",
-      "summary": "Disable one or more VGC IRQ source bits.",
-      "address": "$E9DD"
+      "summary": "Disable one or more VGC IRQ source bits."
     },
     {
       "label": "VGC.IRQ_ENABLE",
@@ -4460,8 +4452,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_irq_enable",
-      "summary": "Enable one or more VGC IRQ source bits and enable maskable CPU IRQs.",
-      "address": "$E9D5"
+      "summary": "Enable one or more VGC IRQ source bits and enable maskable CPU IRQs."
     },
     {
       "label": "VGC.IRQ_INSTALL",
@@ -4481,8 +4472,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_irq_install",
-      "summary": "Install the CPU IRQ vector used when enabled VGC IRQ sources fire.",
-      "address": "$E9CB"
+      "summary": "Install the CPU IRQ vector used when enabled VGC IRQ sources fire."
     },
     {
       "label": "VGC.LINE",
@@ -4522,8 +4512,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_locate",
-      "summary": "Set the text cursor position from VGC.P0/VGC.P1.",
-      "address": "$E9EA"
+      "summary": "Set the text cursor position from VGC.P0/VGC.P1."
     },
     {
       "label": "VGC.MEM_READ",
@@ -4544,8 +4533,7 @@
       ],
       "kind": "routine",
       "symbol": "vgc_mem_read",
-      "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4.",
-      "address": "$E9FF"
+      "summary": "Read one byte from VGC memory using VGC.P0..VGC.P4."
     },
     {
       "label": "VGC.MEM_WRITE",
@@ -4562,8 +4550,7 @@
       ],
       "kind": "routine",
       "symbol": "vgc_mem_write",
-      "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4.",
-      "address": "$EA02"
+      "summary": "Write one byte to VGC memory using VGC.P0..VGC.P4."
     },
     {
       "label": "VGC.PAINT",
@@ -4626,8 +4613,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_default",
-      "summary": "Enable reverse text using the current foreground/background colours.",
-      "address": "$EA0A"
+      "summary": "Enable reverse text using the current foreground/background colours."
     },
     {
       "label": "VGC.REVERSE_EXPLICIT",
@@ -4643,8 +4629,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_explicit",
-      "summary": "Enable reverse text with explicit packed foreground/background colours.",
-      "address": "$EA15"
+      "summary": "Enable reverse text with explicit packed foreground/background colours."
     },
     {
       "label": "VGC.REVERSE_OFF",
@@ -4655,8 +4640,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_reverse_off",
-      "summary": "Disable reverse text.",
-      "address": "$EA23"
+      "summary": "Disable reverse text."
     },
     {
       "label": "VGC.SET_BG",
@@ -4672,8 +4656,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_bg",
-      "summary": "Set the current text background colour.",
-      "address": "$E9B7"
+      "summary": "Set the current text background colour."
     },
     {
       "label": "VGC.SET_BORDER",
@@ -4689,8 +4672,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_border",
-      "summary": "Set the VGC border colour.",
-      "address": "$E9BB"
+      "summary": "Set the VGC border colour."
     },
     {
       "label": "VGC.SET_FG",
@@ -4706,8 +4688,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_fg",
-      "summary": "Set the current text foreground colour.",
-      "address": "$E9B3"
+      "summary": "Set the current text foreground colour."
     },
     {
       "label": "VGC.SET_FONT",
@@ -4723,8 +4704,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_font",
-      "summary": "Select the active text font slot.",
-      "address": "$E9FB"
+      "summary": "Select the active text font slot."
     },
     {
       "label": "VGC.SET_MODE",
@@ -4740,8 +4720,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_mode",
-      "summary": "Set the active VGC graphics/text mode.",
-      "address": "$E9F7"
+      "summary": "Set the active VGC graphics/text mode."
     },
     {
       "label": "VGC.UNPLOT",
@@ -4773,8 +4752,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_vsync",
-      "summary": "Wait until the VGC frame counter advances.",
-      "address": "$E9A5"
+      "summary": "Wait until the VGC frame counter advances."
     },
     {
       "label": "VGC.WAIT_COMMAND",
@@ -4785,8 +4763,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_wait_cmd",
-      "summary": "Wait for the active VGC command to complete.",
-      "address": "$E99D"
+      "summary": "Wait for the active VGC command to complete."
     },
     {
       "label": "VGC.WAIT_FRAMES",

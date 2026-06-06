@@ -60,6 +60,8 @@ Itemph            = Itempl+1  ; temporary integer high byte
 ; end bulk initialize from StrTab at LAB_GMEM
 
       .include "nova.inc"
+      .include "libgraphics.inc"  ; MODULE_ID_GRAPHICS + GFN_* ids (pulls libabi.inc)
+      .include "libsystem.inc"    ; MODULE_ID_SYSTEM + SYS_FN_* ids
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -602,15 +604,22 @@ VEC_SV            = VEC_LD+2  ; save vector
 
 ;Ibuffs            = IRQ_vec+$14
 EXT_vec           = VEC_SV+$1B
-                              ; extension ROM call trampoline in RAM ($0226)
-                              ; Followed by EXT_RESET_CODE ($0238, 8 bytes) and
+                              ; extension ROM call trampoline in RAM ($0226).
+                              ; EXT_CODE now does JSR ensure_ext_resident first
+                              ; (+3 bytes), so the bridges below shifted down 3:
+                              ; Followed by EXT_RESET_CODE ($023B, 8 bytes) and
                               ; the Extension→BASIC bridge trampolines:
-                              ;   EXT_GTBY  ($0240, 14 bytes) — parse byte expr
-                              ;   EXT_GTWRD ($024E, 14 bytes) — parse 16-bit expr
-                              ;   EXT_GTSW  ($025C, 14 bytes) — parse signed expr
-                              ;   EXT_SNERR ($026A,  8 bytes) — syntax error
-Ibuffs            = VEC_SV+$67
-                              ; start of input buffer after IRQ/NMI/ext code
+                              ;   EXT_GTBY  ($0243, 14 bytes) — parse byte expr
+                              ;   EXT_GTWRD ($0251, 14 bytes) — parse 16-bit expr
+                              ;   EXT_GTSW  ($025F, 14 bytes) — parse signed expr
+                              ;   EXT_SNERR ($026D,  8 bytes) — syntax error
+Ibuffs            = VEC_SV+$6A
+                              ; start of input buffer after IRQ/NMI/ext code.
+                              ; Bumped +3 (was +$67) so the input buffer starts
+                              ; AFTER the enlarged LAB_vec trampoline block
+                              ; (EXT_CODE grew 3 bytes for ensure_ext_resident).
+                              ; $0275..$02F4 — stays in page 2, clears the $0300
+                              ; library mailbox.
 Ibuffe            = Ibuffs+$7F; end of input buffer, max length must stay < $80
 
 Ram_base          = $0900     ; start of user RAM ($0300-$031F = cross-runtime library mailbox, libabi.inc LIB_MBOX; $0320-$041F = resident library loader band, libcall.s; $0420-$08FF = cross-runtime module-BSS band, libabi.inc MODULE_BSS_BAND)
@@ -635,6 +644,15 @@ LAB_2D13
       STA   ccflag,Y          ; store in page 2
       DEY                     ; decrement count
       BPL   LAB_2D13          ; loop if not done
+
+; arm the paged-library lib_call ABI (mailbox at $0300): BASIC owns bank-1 home
+; ROMSWAP_BASIC and starts with its extension ROM resident (LIB_RESIDENT_HOSTEXT).
+; A later lib_call page-in clobbers bank 1; ensure_ext_resident re-pages the ext
+; ROM (staged at XRAM $07C000) before any EXT_CODE keyword runs.
+      LDA   #ROMSWAP_BASIC
+      STA   LIB_HOME_BANK
+      LDA   #LIB_RESIDENT_HOSTEXT
+      STA   LIB_RESIDENT
 
       LDX   #$FF              ; set byte
       STX   Clineh            ; set current line high byte (set immediate mode)
@@ -9010,43 +9028,138 @@ LAB_BNR1
 LAB_BNR2
       .byte "Derived from EhBASIC 2.22p5",$00
 
-VGC_NO_EXEC       = 1
-VGC_NO_PRIMITIVES = 1
-VGC_CLS_EXT       = 1
 SPRITE_NO_EXTRA   = 1
-      .include "vgc.s"
       .include "sprite.s"
 
-LAB_VGC_CMD_RTS = vgc_cmd
+; =====================================================================
+; Paged-library (lib_call) plumbing — BASIC graphics/text/timing keywords
+; route through the shared GRAPHICS/SYSTEM modules instead of carrying a private
+; copy of the vgc.s NDK driver. Mirrors NovaLogo's do_lib_call (eval.s).
+; =====================================================================
+
+; basic_lib_call — issue a resident lib_call. A = module id, X = function id.
+;   Caller has already populated LIB_ARG0..3. STAs the selectors, calls the
+;   resident loader band, returns A = LIB_STATUS (Z set when OK). The band call
+;   clobbers A/X/Y. Most VGC ops cannot fail, so callers ignore status; the few
+;   that care BNE to an error after the call.
+basic_lib_call:
+      STA   LIB_MOD_ID
+      STX   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+; basic_gfx_call — GRAPHICS lib_call. X = GFN_* id (caller filled LIB_ARG0..3).
+;   Saves the per-call "LDA #MODULE_ID_GRAPHICS" at every graphics call site.
+basic_gfx_call:
+      LDA   #MODULE_ID_GRAPHICS
+      BRA   basic_lib_call
+
+; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
+;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.
+basic_lib_zargs:
+      LDX   #15
+@bz:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @bz
+      RTS
+
+; basic_lib_arg_word — store the parsed 16-bit value FAC1_3(lo)/FAC1_2(hi) into
+;   the LIB_ARG cell at offset Y, sign-extended into a 32-bit LE cell so the
+;   GRAPHICS module reads it as a signed s16. Y is a caller-supplied INPUT: preload
+;   it with 0/4/8/12 to select ARG0/ARG1/ARG2/ARG3. Clobbers A; preserves X.
+basic_lib_arg_word:
+      LDA   FAC1_3            ; value low byte
+      STA   LIB_ARG0,Y
+      LDA   FAC1_2            ; value high byte
+      STA   LIB_ARG0+1,Y
+      AND   #$80              ; sign-extend high byte into bytes 2/3
+      BEQ   @sxz
+      LDA   #$FF
+@sxz:
+      STA   LIB_ARG0+2,Y
+      STA   LIB_ARG0+3,Y
+      RTS
 
 LAB_VSYNC
-      JSR   vgc_vsync
+      JSR   basic_lib_vsync   ; SYSTEM SYS_FN_WAITVBL (== vgc_vsync)
       JMP   audio_tick
 
-; perform CLS — clear screen, no arguments
+; basic_lib_vsync — wait for the next vertical blank through the SYSTEM module.
+basic_lib_vsync:
+      LDA   #MODULE_ID_SYSTEM
+      LDX   #SYS_FN_WAITVBL
+      JMP   basic_lib_call
+
+; ensure_ext_resident — re-page BASIC's static extension ROM into bank 1 after a
+; lib_call page-in displaced it. BASIC runs with BOTH its ext ROM and lib_call
+; active during the modules migration; any lib_call clobbers bank 1, so every
+; EXT_CODE keyword calls this first. If LIB_RESIDENT is already HOSTEXT ($FF) the
+; ext ROM is resident -> no-op. Otherwise PGD-copy 16KB from XRAM $07C000 (where
+; the host staged the ext ROM) into bank 1; the CPU stalls until the copy
+; completes. Must live in the BASIC ROM (NOT the RAM LAB_vec block / libcall.s).
+; Clobbers A.
+ensure_ext_resident:
+      LDA   LIB_RESIDENT
+      CMP   #LIB_RESIDENT_HOSTEXT  ; $FF = ext already resident -> no-op
+      BEQ   @eer_done
+      LDA   #HOST_EXT_XRAM_L        ; $00
+      STA   PGD_SRCL
+      LDA   #HOST_EXT_XRAM_M        ; $C0
+      STA   PGD_SRCM
+      LDA   #HOST_EXT_XRAM_H        ; $07  -> source $07C000
+      STA   PGD_SRCH
+      LDA   #$00                    ; 16KB = $2000 words
+      STA   PGD_WORDSL
+      LDA   #$20
+      STA   PGD_WORDSH
+      LDA   #PGD_START
+      STA   PGD_CMD                 ; page-in; CPU stalls until copied
+      LDA   #LIB_RESIDENT_HOSTEXT
+      STA   LIB_RESIDENT
+@eer_done:
+      RTS
+
+; perform CLS — clear screen, no arguments.
+; CLS is window-aware (clears only the active text window when a split screen is
+; set), which the GRAPHICS module's GFN_CLS does NOT do. Keep routing to the
+; extension ROM's EXT_CMD_CLS handler, which carries the window-aware logic.
 
 LAB_CLS
-      JMP   vgc_cls
+      LDA   #EXT_CMD_CLS
+      JMP   EXT_vec
 
 ; perform COLOR fg [,bg [,border]]
 
+; GFN_COLOR writes fg/bg/border (ARG0/ARG1/ARG2) unconditionally, but COLOR's
+; bg/border are optional ("omitted = unchanged"). Seed the cells with the CURRENT
+; VGC colours so an omitted arg re-writes the same value, then overwrite ARG0
+; (fg, always present) and ARG1/ARG2 only when their comma is seen.
+
 LAB_COLOR
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      LDA   VGC_BGCOL         ; default bg = current
+      STA   LIB_ARG1
+      LDA   VGC_BORDER        ; default border = current
+      STA   LIB_ARG2
       JSR   LAB_GTBY          ; get fg color byte in X
-      JSR   vgc_set_fg        ; store foreground color
+      STX   LIB_ARG0          ; fg -> ARG0
       JSR   LAB_GBYT          ; peek at current byte
       CMP   #','              ; comma follows?
       BNE   @done             ; no, just fg was given
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; get bg color byte in X
-      JSR   vgc_set_bg        ; store background color
+      STX   LIB_ARG1          ; bg -> ARG1
       JSR   LAB_GBYT          ; peek for optional border color
       CMP   #','              ; second comma follows?
       BNE   @done             ; no, fg/bg only
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; get border color byte in X
-      JSR   vgc_set_border    ; store border color
+      STX   LIB_ARG2          ; border -> ARG2
 @done
-      RTS
+      LDX   #GFN_COLOR
+      JMP   basic_gfx_call
 
 ; perform REVERSE [fg,bg]
 
@@ -9081,126 +9194,142 @@ LAB_VPOKE
 ; perform LOCATE x, y
 
 LAB_LOCATE
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get x in X
-      STX   VGC_P0            ; store cursor X
+      STX   LIB_ARG0          ; col -> ARG0
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get y in X
-      STX   VGC_P1            ; store cursor Y
-      JMP   vgc_locate
+      STX   LIB_ARG1          ; row -> ARG1
+      LDX   #GFN_LOCATE
+      JMP   basic_gfx_call
 
 ; perform MODE n
 
 LAB_GMODE
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get mode byte in X
-      JMP   vgc_set_mode
+      STX   LIB_ARG0          ; mode -> ARG0
+      LDX   #GFN_MODE
+      JMP   basic_gfx_call
 
 ; perform FONT n — select active font slot (0-7)
 
 LAB_FONT
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get font index byte (0-7) in X
-      JMP   vgc_set_font
+      STX   LIB_ARG0          ; slot -> ARG0
+      LDX   #GFN_FONT
+      JMP   basic_gfx_call
 
 ; perform GCLS — clear the graphics bitmap layer
 
 LAB_GCLS
       JSR   LAB_VSYNC         ; BASIC hides visible VGC draw tearing
-      LDA   #VCMD_GCLS        ; GCLS command
-      JMP   LAB_VGC_CMD_RTS
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_GCLS
+      JMP   basic_gfx_call
 
 ; perform GCOLOR c — set graphics draw color (0-15)
 
 LAB_GCOLOR
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get color byte in X
-      STX   VGC_P0             ; color in P0
-      STZ   VGC_P1             ; high byte = 0
-      LDA   #VCMD_GCOLOR      ; GCOLOR command
-      JMP   LAB_VGC_CMD_RTS
+      STX   LIB_ARG0          ; color -> ARG0 low byte
+      LDX   #GFN_GCOLOR
+      JMP   basic_gfx_call
 
-; shared: load x(word),y(byte) into VGC_P0-P3
+; shared: parse x(word),y(byte) into LIB_ARG0 (x s16), LIB_ARG1 (y).
+; Caller must JSR basic_lib_zargs first (so ARG cells start zeroed).
 
 LAB_VGC_XY
-      JSR   LAB_GTWRD         ; get x as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P0             ; x low
-      LDA   FAC1_2
-      STA   VGC_P1             ; x high
+      JSR   LAB_GTWRD         ; get x as 16-bit -> FAC1_3/FAC1_2
+      LDY   #0                ; ARG0
+      JSR   basic_lib_arg_word
       JSR   LAB_1C01          ; require comma
-      JSR   LAB_GTBY          ; get y as byte
-      STX   VGC_P2             ; y low
-      STZ   VGC_P3             ; y high = 0
+      JSR   LAB_GTBY          ; get y as byte -> X
+      STX   LIB_ARG1          ; y low (high bytes already 0 -> positive s16)
       RTS
 
-; shared: load x0,y0,x1,y1 into VGC_P0-P7
+; shared: parse x0,y0,x1,y1 into LIB_ARG0..3.
+; Caller must JSR basic_lib_zargs first.
 
 LAB_VGC_XYXY
-      JSR   LAB_VGC_XY        ; x0,y0 → P0-P3
+      JSR   LAB_VGC_XY        ; x0->ARG0, y0->ARG1
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; x1 as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P4             ; x1 low
-      LDA   FAC1_2
-      STA   VGC_P5             ; x1 high
+      LDY   #8                ; ARG2
+      JSR   basic_lib_arg_word
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; y1
-      STX   VGC_P6             ; y1 low
-      STZ   VGC_P7             ; y1 high = 0
+      JSR   LAB_GTBY          ; y1 byte -> X
+      STX   LIB_ARG3          ; y1 low
       RTS
 
 ; perform PLOT x, y
 
 LAB_PLOT
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XY
       JSR   LAB_VSYNC         ; wait before visible graphics mutation
-      LDA   #VCMD_PLOT        ; PLOT command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_PLOT
+      JMP   basic_gfx_call
 
 ; perform UNPLOT x, y
 
 LAB_UNPLOT
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XY
       JSR   LAB_VSYNC
-      LDA   #VCMD_UNPLOT      ; UNPLOT command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_UNPLOT
+      JMP   basic_gfx_call
 
 ; perform LINE x0, y0, x1, y1
 
 LAB_GLINE
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XYXY
       JSR   LAB_VSYNC
-      LDA   #VCMD_LINE        ; LINE command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_LINE
+      JMP   basic_gfx_call
 
 ; perform CIRCLE cx, cy, rx [, ry]
-; 3 args = circle (rx=ry), 4 args = ellipse
+; 3 args = circle (rx=ry via ARG3=0), 4 args = ellipse
 
 LAB_CIRCLE
-      JSR   LAB_VGC_XY        ; cx,cy → P0-P3
+      JSR   basic_lib_zargs   ; ARG3(ry)=0 -> circle unless overwritten
+      JSR   LAB_VGC_XY        ; cx->ARG0, cy->ARG1
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; rx as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P4             ; rx low
-      LDA   FAC1_2
-      STA   VGC_P5             ; rx high
-      STZ   VGC_P6             ; ry low = 0 (circle)
-      STZ   VGC_P7             ; ry high = 0
+      LDY   #8                ; ARG2 = rx
+      JSR   basic_lib_arg_word
       JSR   LAB_GBYT          ; peek next
       CMP   #','
       BNE   @circ_go
       JSR   LAB_1C01          ; consume comma
       JSR   LAB_GTWRD         ; ry as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P6             ; ry low
-      LDA   FAC1_2
-      STA   VGC_P7             ; ry high
+      LDY   #12               ; ARG3 = ry
+      JSR   basic_lib_arg_word
 @circ_go
       JSR   LAB_VSYNC
-      LDA   #VCMD_CIRCLE      ; CIRCLE command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_CIRCLE
+      JMP   basic_gfx_call
 
 ; perform GTEXT x, y, font, scale, "string"
+; The GRAPHICS module GFN_GTEXT forces font 0 / scale 1, but BASIC's GTEXT takes
+; explicit font and scale args. To preserve them this primitive does NOT route
+; through lib_call/GFN_GTEXT — it drives VGC_CMD directly (the sprite.s pattern),
+; loading the parsed font/scale into VGC_P4/P5. (ARG-cell marshalling for a future
+; font/scale-aware module fn is intentionally NOT done here yet.)
 
 LAB_GTEXT
-      JSR   LAB_VGC_XY        ; x,y → P0-P3
+      JSR   LAB_GTWRD         ; x as 16-bit
+      LDA   FAC1_3
+      STA   VGC_P0             ; x low
+      LDA   FAC1_2
+      STA   VGC_P1             ; x high
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y byte -> X
+      STX   VGC_P2             ; y low
+      STZ   VGC_P3             ; y high = 0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; font (0-7) → X
       STX   VGC_P4             ; P4 = font index
@@ -9211,31 +9340,35 @@ LAB_GTEXT
       JSR   LAB_FIO_GETNAME   ; string → FIO_NAME/FIO_NAMELEN
       JSR   LAB_VSYNC
       LDA   #VCMD_GTEXT
-      JMP   LAB_VGC_CMD_RTS
+      STA   VGC_CMD            ; issue draw (sprite.s-style direct command, no wait)
+      RTS
 
 ; perform RECT x0, y0, x1, y1
 
 LAB_RECT
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XYXY
       JSR   LAB_VSYNC
-      LDA   #VCMD_RECT        ; RECT command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_RECT
+      JMP   basic_gfx_call
 
 ; perform FILL x0, y0, x1, y1
 
 LAB_FILLRECT
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XYXY
       JSR   LAB_VSYNC
-      LDA   #VCMD_FILL        ; FILL command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_FILL
+      JMP   basic_gfx_call
 
 ; perform PAINT x, y
 
 LAB_PAINT
+      JSR   basic_lib_zargs
       JSR   LAB_VGC_XY
       JSR   LAB_VSYNC
-      LDA   #VCMD_PAINT       ; PAINT command
-      JMP   LAB_VGC_CMD_RTS
+      LDX   #GFN_PAINT
+      JMP   basic_gfx_call
 
 ; perform SPRITE n, ON/OFF  or  SPRITE n, x, y
 ; sprite number 0-15, ON/OFF enables/disables, x,y sets position

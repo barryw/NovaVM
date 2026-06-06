@@ -246,11 +246,15 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(0xE7, bus.Read(0x6000), "ADDR(\"SYS.REGA\") low byte mismatch.");
         Assert.AreEqual(0x00, bus.Read(0x6001), "ADDR(\"SYS.REGA\") high byte mismatch.");
 
-        EnterLine(editor, "DOKE 24578,ADDR(\"vgc.cls\")");
+        // VGC text/draw routines moved out of the BASIC ROM into the GRAPHICS
+        // module (BASIC-on-Modules refactor), so vgc.* labels no longer resolve
+        // inside the primary ROM. SPRITE.* still lives in the BASIC ROM (sprite.s
+        // remains included), so use it to prove ADDR resolves a runtime routine.
+        EnterLine(editor, "DOKE 24578,ADDR(\"sprite.enable\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
-        ushort vgcCls = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
-        Assert.IsTrue(vgcCls >= 0xC000 && vgcCls < 0xFFD7,
-            $"ADDR(\"VGC.CLS\") should resolve inside primary ROM, got ${vgcCls:X4}.");
+        ushort sprEnable = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
+        Assert.IsTrue(sprEnable >= 0xC000 && sprEnable < 0xFFD7,
+            $"ADDR(\"SPRITE.ENABLE\") should resolve inside primary ROM, got ${sprEnable:X4}.");
 
         EnterLine(editor, "DOKE 24580,ADDR(\"fio.clear_error\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
