@@ -4873,7 +4873,7 @@
     {
       "label": "VSPRITE.BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 108,
+      "line": 109,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -4911,7 +4911,7 @@
     {
       "label": "VSPRITE.BLIT_START",
       "source": "../runtime/asm/vsprite.s",
-      "line": 125,
+      "line": 126,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -5058,7 +5058,7 @@
     {
       "label": "VSPRITE.FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 182,
+      "line": 183,
       "inputs": [],
       "outputs": [
         {
@@ -5114,7 +5114,7 @@
     {
       "label": "VSPRITE.GFX_ADDR",
       "source": "../runtime/asm/vsprite.s",
-      "line": 313,
+      "line": 314,
       "inputs": [],
       "outputs": [
         {
@@ -5134,7 +5134,7 @@
     {
       "label": "VSPRITE.GFX_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 358,
+      "line": 359,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5164,7 +5164,7 @@
     {
       "label": "VSPRITE.GFX_BLIT_START",
       "source": "../runtime/asm/vsprite.s",
-      "line": 375,
+      "line": 376,
       "inputs": [],
       "outputs": [
         {
@@ -5189,7 +5189,7 @@
     {
       "label": "VSPRITE.GFX_FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 465,
+      "line": 485,
       "inputs": [],
       "outputs": [
         {
@@ -5212,7 +5212,7 @@
     {
       "label": "VSPRITE.GFX_RESTORE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 523,
+      "line": 543,
       "inputs": [],
       "outputs": [
         {
@@ -5237,7 +5237,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 391,
+      "line": 392,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5272,7 +5272,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT_KEYED",
       "source": "../runtime/asm/vsprite.s",
-      "line": 408,
+      "line": 409,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -5297,9 +5297,31 @@
       "summary": "Rotate the configured virtual sprite, wait for the next frame, then blit it with the caller's VSPRITE.FLAGS."
     },
     {
+      "label": "VSPRITE.GFX_ROTATE_BLIT_KEYED_NOWF",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 425,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VSPRITE.X/Y",
+        "VSPRITE.ORIG*",
+        "VSPRITE.ROT*",
+        "VSPRITE.WIDTH/HEIGHT",
+        "VSPRITE.ROTANGLE"
+      ],
+      "kind": "routine",
+      "symbol": "vsprite_gfx_rotate_blit_keyed_nowf",
+      "summary": "Like vsprite_gfx_rotate_blit_keyed but does NOT wait for VGC.FRAME \u2014 it"
+    },
+    {
       "label": "VSPRITE.GFX_ROTATE_BLIT_NOWAIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 424,
+      "line": 444,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5334,7 +5356,7 @@
     {
       "label": "VSPRITE.GFX_SAVE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 481,
+      "line": 501,
       "inputs": [],
       "outputs": [
         {
@@ -5491,7 +5513,7 @@
     {
       "label": "VSPRITE.ROTATE",
       "source": "../runtime/asm/vsprite.s",
-      "line": 257,
+      "line": 258,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5578,7 +5600,7 @@
     {
       "label": "VSPRITE.SCENE_BEGIN",
       "source": "../runtime/asm/vsprite.s",
-      "line": 565,
+      "line": 585,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5594,7 +5616,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 592,
+      "line": 612,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5610,7 +5632,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT_ATOMIC",
       "source": "../runtime/asm/vsprite.s",
-      "line": 624,
+      "line": 644,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5642,7 +5664,7 @@
     {
       "label": "VSPRITE.SCENE_DRAW",
       "source": "../runtime/asm/vsprite.s",
-      "line": 602,
+      "line": 622,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5866,7 +5888,7 @@
     {
       "label": "VSPRITE.USE_ORIGINAL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 213,
+      "line": 214,
       "inputs": [],
       "outputs": [
         {
@@ -5886,7 +5908,7 @@
     {
       "label": "VSPRITE.USE_ROTATED",
       "source": "../runtime/asm/vsprite.s",
-      "line": 235,
+      "line": 236,
       "inputs": [],
       "outputs": [
         {

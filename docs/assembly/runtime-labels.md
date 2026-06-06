@@ -3570,6 +3570,23 @@ Requires:
 - `VSPRITE.WIDTH/HEIGHT`
 - `VSPRITE.ROTANGLE`
 
+## VSPRITE.GFX_ROTATE_BLIT_KEYED_NOWF
+
+Like vsprite_gfx_rotate_blit_keyed but does NOT wait for VGC.FRAME — it
+
+- Kind: `routine`
+- Symbol: `vsprite_gfx_rotate_blit_keyed_nowf`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VSPRITE.X/Y`
+- `VSPRITE.ORIG*`
+- `VSPRITE.ROT*`
+- `VSPRITE.WIDTH/HEIGHT`
+- `VSPRITE.ROTANGLE`
+
 ## VSPRITE.GFX_ROTATE_BLIT_NOWAIT
 
 Rotate the configured virtual sprite offscreen, then start copying the full rotated bounds to graphics memory without waiting for VGC.FRAME or final blit completion.
