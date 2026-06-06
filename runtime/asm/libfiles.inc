@@ -1,0 +1,92 @@
+; libfiles.inc — FILES module (MODULE_ID_FILES = $04) fn-id contract.
+;
+; The shared file-domain module. It is the home of the file-I/O NDK
+; (runtime/asm/fio.s) and the file pager (runtime/asm/pager.s): save/load,
+; directory listing, delete, graphics save/load, directory navigation
+; (cd/mkdir/rmdir/pwd), runtime-ROM load, host RNG, and the file-slice pager.
+; Every fn here is a THIN lib_call wrapper that marshals the mailbox into an
+; NDK routine's inputs (FIO/PAGER pseudo-registers) and JSRs it.
+;
+; Note the prefix: ids use FILE_* (the file-domain library). FIO_* is reserved
+; for the MMIO register block in nova.inc — these are different namespaces.
+;
+; CALLING CONVENTION (caller side, see libabi.inc):
+;   LIB_MOD_ID ($0300) = MODULE_ID_FILES
+;   LIB_FN_ID  ($0301) = one of the FILE_* ids below
+;   LIB_ARG0..3 ($0303/$0307/$030B/$030F) = 32-bit LE arg cells
+;   JSR LIB_LOADER_BAND
+;   -> LIB_RESULT ($0313) = 32-bit LE result (reporters only)
+;   -> LIB_STATUS ($0302) = LERR_OK ($00) or an error code
+;
+; FILENAME CONVENTION: every name-taking fn passes the filename by pointer:
+;   LIB_ARG0 (u16) = pointer to the filename bytes in CPU RAM
+;   LIB_ARG1 byte0 = filename length, 1..63
+; The wrapper copies that into FIO.NAME/FIO.NAMELEN via fio_copy_name before
+; issuing the op (fio_* expect FIO.NAME pre-filled — they never deref a pointer
+; themselves). Extra args (offsets, lengths, targets) ride in ARG2/ARG3.
+; FILE_PAGE is the one exception: it has more inputs than four cells allow with
+; namelen in its own cell, so it packs namelen into ARG0 byte2 (see its @arg).
+;
+; STATUS MAPPING: fallible NDK routines return A=0 on success / A=1 on error;
+;   the wrapper maps A!=0 -> LIB_STATUS = LERR_FILE_FAIL, A==0 -> LERR_OK.
+;   Detailed status remains in the FIO_STATUS/FIO_ERRCODE MMIO registers.
+;   The fio_rng reporter publishes FIO_RNG0..3 to LIB_RESULT (LIB_STATUS=OK).
+
+.ifndef LIBFILES_INC
+LIBFILES_INC = 1
+
+.include "libabi.inc"            ; MODULE_ID_FILES, LIB_* mailbox cells, LERR_*
+
+; --- Status code returned when a wrapped NDK fio_*/pager_* routine reports failure ---
+LERR_FILE_FAIL = $8A   ; fio_*/pager_* NDK routine returned A!=0 (FIO error / bad arg)
+
+; =====================================================================
+; File save / load (fio.s, FIO.NAME + FIO_SRCL/H/FIO_ENDL/H ABI)
+; =====================================================================
+FILE_SAVE      = $00   ; (nameptr:ARG0, namelen:ARG1, src:ARG2 u16, end:ARG3 u16) -> save RAM range
+FILE_LOAD      = $01   ; (nameptr:ARG0, namelen:ARG1, dest:ARG2 u16)              -> load file to RAM
+
+; =====================================================================
+; Directory listing + delete (fio.s)
+; =====================================================================
+FILE_DIR_OPEN  = $02   ; (nameptr:ARG0, namelen:ARG1 optional filter)            -> open directory listing
+FILE_DIR_READ  = $03   ; ()                                                      -> read next dir entry into FIO dir regs
+FILE_DELETE    = $04   ; (nameptr:ARG0, namelen:ARG1)                            -> delete file/program
+
+; =====================================================================
+; Graphics / VGC memory save + load (fio.s, FIO graphics register ABI)
+; =====================================================================
+FILE_GSAVE     = $05   ; (nameptr:ARG0, namelen:ARG1, space:ARG2 b0, gaddr:ARG2 b1.b2 u16, glen:ARG3 u16) -> save VGC memory
+FILE_GLOAD     = $06   ; (nameptr:ARG0, namelen:ARG1, space:ARG2 b0, gaddr:ARG2 b1.b2 u16, glen:ARG3 u16) -> load VGC memory
+
+; =====================================================================
+; Directory navigation (fio.s)
+; =====================================================================
+FILE_CD        = $07   ; (nameptr:ARG0, namelen:ARG1)                            -> change directory
+FILE_MKDIR     = $08   ; (nameptr:ARG0, namelen:ARG1)                            -> create directory
+FILE_RMDIR     = $09   ; (nameptr:ARG0, namelen:ARG1)                            -> remove directory
+FILE_PWD       = $0A   ; ()                                                      -> read CWD into FIO.NAME/FIO.NAMELEN
+
+; =====================================================================
+; Runtime ROM load + compat exec alias (fio.s)
+; =====================================================================
+FILE_LOAD_RUNTIME = $0B ; (nameptr:ARG0, namelen:ARG1)                           -> stream 16K image into primary ROM bank
+FILE_RUN          = $0C ; (cmd:ARG0 b0 FIO command)                              -> issue/wait/check a raw FIO command (fio_run alias)
+
+; =====================================================================
+; Host RNG reporter (fio.s; writes LIB_RESULT bytes 0..3)
+; =====================================================================
+FILE_RNG       = $0D   ; ()              -> RESULT = 32 host-backed random bits (FIO_RNG0..3)
+
+; =====================================================================
+; File pager (pager.s) — stream a file slice into a chosen target
+; =====================================================================
+FILE_PAGE      = $0E   ; (nameptr:ARG0 b0.b1, namelen:ARG0 b2,
+                       ;  offset:ARG1 u24 b0.b1.b2, target:ARG1 b3,
+                       ;  destaddr:ARG2 u24 b0.b1.b2, len:ARG3 u16 b0.b1)
+                       ;  -> stream len bytes of a file slice into the target
+
+; Highest implemented fn-id + 1. Gaps / ids >= FILE_FN_COUNT -> LERR_NO_FN.
+FILE_FN_COUNT  = $0F
+
+.endif
