@@ -334,7 +334,7 @@ gfn_turtle_draw:
       sta     turtle_bg_saved
       lda     LIB_ARG2                 ; angle byte 0
       sta     VSPRITE_ROTANGLE
-      jsr     vsprite_gfx_rotate_blit_keyed
+      jsr     vsprite_gfx_rotate_blit_keyed_nowf
       jmp     finish_vs
 
 ; --- $02 TUR_ERASE: restore the saved bg (no-op if nothing saved). ---
@@ -941,11 +941,20 @@ turtle_heading_u8:
 ;   draw_then_ok:   redraw turtle then STATUS=OK.
 ; These must NOT chain (turtle_render already tail-calls draw_turtle internally;
 ; falling render into draw would double-stamp), so each ends in its own jmp.
+;
+; FRAME PACING: each visible turtle update waits for the next display frame FIRST,
+; then does erase->line->blit as a unit (the blit no longer frame-waits — see
+; vsprite_gfx_rotate_blit_keyed_nowf). This keeps the 60Hz display from ever
+; sampling a half-erased stamp, so a fast REPEAT loop shows the turtle stepping
+; through every position instead of vanishing until the move ends. One wait per
+; command also preserves the old one-move-per-frame pacing.
 ; =====================================================================
 render_then_ok:
+      jsr     vsprite_wait_frame       ; sync to a frame boundary BEFORE erasing
       jsr     turtle_render
       jmp     finish_ok_nowait
 draw_then_ok:
+      jsr     vsprite_wait_frame
       jsr     draw_turtle
       jmp     finish_ok_nowait
 

@@ -93,6 +93,7 @@ VSPRITE_DESC_PTR:       .res 2
       .export vsprite_gfx_blit_start
       .export vsprite_gfx_rotate_blit
       .export vsprite_gfx_rotate_blit_keyed
+      .export vsprite_gfx_rotate_blit_keyed_nowf
       .export vsprite_gfx_rotate_blit_nowait
       .export vsprite_gfx_fill
       .export vsprite_gfx_save_bg
@@ -418,6 +419,25 @@ vsprite_gfx_rotate_blit_keyed:
       BNE   @done
       JSR   vsprite_wait_frame
       JMP   vsprite_gfx_blit
+@done:
+      RTS
+
+; @label VSPRITE.GFX_ROTATE_BLIT_KEYED_NOWF
+; @kind routine
+; @symbol vsprite_gfx_rotate_blit_keyed_nowf
+; @summary Like vsprite_gfx_rotate_blit_keyed but does NOT wait for VGC.FRAME — it
+;   still waits for the blitter to finish, so the graphics plane is consistent on
+;   return. Use this when the CALLER owns frame pacing and wants the erase+blit of a
+;   moving stamp to land within a single inter-frame gap (so the 60Hz display never
+;   samples a half-erased stamp). The turtle's per-move render uses this and does its
+;   own vsprite_wait_frame BEFORE erasing.
+; @requires VSPRITE.X/Y VSPRITE.ORIG* VSPRITE.ROT* VSPRITE.WIDTH/HEIGHT VSPRITE.ROTANGLE
+; @out A: 0 on success, 1 on error.
+vsprite_gfx_rotate_blit_keyed_nowf:
+      JSR   vsprite_rotate
+      CMP   #VSPRITE_RESULT_OK
+      BNE   @done
+      JMP   vsprite_gfx_blit         ; blit (waits for the blitter), but NO frame-wait
 @done:
       RTS
 
