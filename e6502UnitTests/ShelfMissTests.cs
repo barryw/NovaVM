@@ -17,6 +17,8 @@ public class ShelfMissTests
     private const ushort STATUS = 0x0302, HOME_BANK = 0x0317, RESIDENT = 0x0318;
     private const ushort LIB_CALL = 0x0320;       // resident loader entry (libabi.inc LIB_LOADER_BAND)
     private const byte   MODULE_ID_GRAPHICS = 0x01;
+    private const byte   MODULE_ID_FILES = 0x04;  // not pre-staged -> must demand-load
+    private const byte   FILE_RNG = 0x0D;         // libfiles.inc: () -> RESULT = 32 host RNG bits
     private const byte   GFN_GCLS = 0x00;
     private const byte   LERR_OK = 0x00;
     private const byte   LERR_BAD_MODULE = 0x81;  // libabi.inc LERR_BAD_MODULE
@@ -110,6 +112,56 @@ public class ShelfMissTests
         Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS));
         Assert.AreEqual(1, bus.ReadRam(0x041B), "victim should be slot 3 (LRU back): tag[3] now =1");
         Assert.AreEqual(MODULE_ID_GRAPHICS, bus.ReadRam(RESIDENT));
+    }
+
+    // Production demand-load wiring: StageConfiguredModules populates the FIO module
+    // store so a lib_call to a NON-pre-staged module (>4 modules, 4 shelf slots) still
+    // demand-loads. The store is built by scanning the Resources dir for module images
+    // (magic "NL" at +3, id at +5), keyed by module id; non-module .bins are ignored.
+    [TestMethod]
+    public void BuildModuleStore_IndexesModuleImagesById_IgnoringNonModules()
+    {
+        string tmp = Path.Combine(Path.GetTempPath(), "novamodstore_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tmp);
+        try
+        {
+            File.Copy(RepoPath("modules", "graphics", "graphics.bin"), Path.Combine(tmp, "graphics.bin"));
+            File.Copy(RepoPath("modules", "files", "files.bin"), Path.Combine(tmp, "files.bin"));
+            File.WriteAllBytes(Path.Combine(tmp, "ehbasic.bin"), new byte[16384]); // non-module: no "NL" magic
+
+            var store = CompositeBusDevice.BuildModuleStore(tmp);
+
+            Assert.IsTrue(store.ContainsKey(0x01), "graphics (id 1) must be indexed by its header id");
+            Assert.IsTrue(store.ContainsKey(0x04), "files (id 4) must be indexed by its header id");
+            Assert.IsFalse(store.ContainsKey(0x00), "a non-module .bin (no NL magic) must be ignored");
+            Assert.AreEqual(16384, store[0x04].Length, "stored image must be the full 16K module");
+            Assert.AreEqual((byte)'N', store[0x04][3], "image must carry the NL module magic at +3");
+        }
+        finally { Directory.Delete(tmp, true); }
+    }
+
+    // End-to-end: the PRODUCTION ctor (StageConfiguredModules) populates the demand-load
+    // store from Resources — no manual SetShelfModuleStore. A lib_call to FILES (id 4,
+    // never pre-staged) must miss, stream files.bin from that store, dispatch, and RUN the
+    // wrapper: FILE_RNG -> fio_rng -> the FIO RNG -> LERR_OK. First end-to-end execution of
+    // a new module's marshalling (everything else was structural-only).
+    [TestMethod]
+    public void ProductionStore_DemandLoadsAndRunsUnstagedModule_FileRng()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
+        // empty shelf + identity LRU; the store comes from the ctor (NOT set here)
+        for (int i = 0; i < 4; i++) { bus.WriteRam((ushort)(0x0418 + i), 0); bus.WriteRam((ushort)(0x041C + i), (byte)i); }
+        bus.WriteRam(RESIDENT, 0x00);
+        bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);
+
+        CallLib(bus, MODULE_ID_FILES, FILE_RNG);
+
+        Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS),
+            "FILES must demand-load from the production store and FILE_RNG must run to OK");
+        bool tagged = false;
+        for (int i = 0; i < 4; i++) if (bus.ReadRam((ushort)(0x0418 + i)) == MODULE_ID_FILES) tagged = true;
+        Assert.IsTrue(tagged, "demand-loaded FILES id must be recorded in a shelf_tag slot");
     }
 
     [TestMethod]

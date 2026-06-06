@@ -374,6 +374,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         StageModuleFromResources("graphics.bin", slot: 0, id: 0x01);
         StageModuleFromResources("system.bin",   slot: 1, id: 0x03);
         StageModuleFromResources("sound.bin",    slot: 2, id: 0x02);
+        // The shelf holds 4 slots but there are >4 modules (files/memory/net are not
+        // pre-staged). Populate the demand-load store from every module image in
+        // Resources so a lib_call to an unstaged module misses and streams it in.
+        SetShelfModuleStore(BuildModuleStore(Path.Combine(AppContext.BaseDirectory, "Resources")));
     }
 
     private void StageModuleFromResources(string fileName, int slot, byte id)
@@ -382,6 +386,30 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (!File.Exists(path))
             return;
         StageShelfModule(slot, File.ReadAllBytes(path), id);
+    }
+
+    /// <summary>
+    /// Build the demand-load module store: scan <paramref name="resourcesDir"/> for 16K
+    /// paged-library module images (magic "NL" at +3, module id at +5) and map id -&gt;
+    /// image. The shelf is a 4-slot LRU cache; with more than 4 modules, a lib_call to a
+    /// non-pre-staged module misses and CMD_LOAD_MODULE streams its image from this store.
+    /// Non-module .bins (ROMs, fonts) lack the magic and are ignored.
+    /// </summary>
+    internal static IDictionary<byte, byte[]> BuildModuleStore(string resourcesDir)
+    {
+        var store = new Dictionary<byte, byte[]>();
+        if (!Directory.Exists(resourcesDir))
+            return store;
+        foreach (string path in Directory.GetFiles(resourcesDir, "*.bin"))
+        {
+            byte[] img;
+            try { img = File.ReadAllBytes(path); }
+            catch (IOException) { continue; }
+            // paged-library module image: full slot size, magic "NL" at +3, id at +5.
+            if (img.Length == ShelfSlotBytes && img[3] == (byte)'N' && img[4] == (byte)'L')
+                store[img[5]] = img;
+        }
+        return store;
     }
 
     private void LoadPrimaryRuntimeRom(byte[] data)
