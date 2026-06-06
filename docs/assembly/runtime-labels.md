@@ -32,7 +32,7 @@ Initialize the SID sound-effect instrument table and scheduler state.
 
 - Kind: `routine`
 - Symbol: `audio_init`
-- Address: `$EF24`
+- Address: `$EE5B`
 - ABI: `none`
 
 ## AUDIO.INSTRUMENT
@@ -49,7 +49,7 @@ Define a simple SID sound-effect instrument envelope and waveform.
 
 - Kind: `routine`
 - Symbol: `audio_instrument`
-- Address: `$EEE0`
+- Address: `$EE17`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -213,7 +213,7 @@ Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_midplay`
-- Address: `$EFF8`
+- Address: `$EF2F`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -245,7 +245,7 @@ Stop MIDI file playback.
 
 - Kind: `routine`
 - Symbol: `audio_midstop`
-- Address: `$EFFD`
+- Address: `$EF34`
 - ABI: `none`
 
 Outputs:
@@ -257,7 +257,7 @@ Enable or disable music looping. AUDIO.NOTE is 0=off, nonzero=on.
 
 - Kind: `routine`
 - Symbol: `audio_music_loop`
-- Address: `$F01F`
+- Address: `$EF56`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -272,7 +272,7 @@ Return the current MIDI note for a music voice.
 
 - Kind: `routine`
 - Symbol: `audio_music_note`
-- Address: `$F03D`
+- Address: `$EF74`
 - ABI: `register`
 
 Inputs:
@@ -287,7 +287,7 @@ Start queued music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_play`
-- Address: `$F00C`
+- Address: `$EF43`
 - ABI: `none`
 
 Outputs:
@@ -299,7 +299,7 @@ Return nonzero if music is playing.
 
 - Kind: `routine`
 - Symbol: `audio_music_playing`
-- Address: `$F033`
+- Address: `$EF6A`
 - ABI: `none`
 
 Outputs:
@@ -311,7 +311,7 @@ Set hosted MML priority from AUDIO.NOTE and following pseudo-register bytes.
 
 - Kind: `routine`
 - Symbol: `audio_music_priority`
-- Address: `$F024`
+- Address: `$EF5B`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -326,7 +326,7 @@ Queue an MML sequence for AUDIO.VOICE using AUDIO.STRL/H and AUDIO.STRLEN.
 
 - Kind: `routine`
 - Symbol: `audio_music_sequence`
-- Address: `$F007`
+- Address: `$EF3E`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -344,7 +344,7 @@ Stop music playback.
 
 - Kind: `routine`
 - Symbol: `audio_music_stop`
-- Address: `$F015`
+- Address: `$EF4C`
 - ABI: `none`
 
 Outputs:
@@ -356,7 +356,7 @@ Set music tempo from AUDIO.NOTE/AUDIO.DURATION as a 16-bit BPM value.
 
 - Kind: `routine`
 - Symbol: `audio_music_tempo`
-- Address: `$F01A`
+- Address: `$EF51`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -391,7 +391,7 @@ Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_play_sound`
-- Address: `$EE3D`
+- Address: `$ED74`
 - ABI: `register`
 
 Inputs:
@@ -416,7 +416,7 @@ Set master or per-voice volume using A/X register arguments.
 
 - Kind: `routine`
 - Symbol: `audio_set_volume`
-- Address: `$EE48`
+- Address: `$ED7F`
 - ABI: `register`
 
 Inputs:
@@ -432,7 +432,7 @@ Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `audio_sfload`
-- Address: `$F002`
+- Address: `$EF39`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -464,7 +464,7 @@ Return nonzero if the hosted music engine reports a sound effect.
 
 - Kind: `routine`
 - Symbol: `audio_sfx_playing`
-- Address: `$F02D`
+- Address: `$EF64`
 - ABI: `none`
 
 Outputs:
@@ -476,7 +476,7 @@ Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-b
 
 - Kind: `routine`
 - Symbol: `audio_sidplay`
-- Address: `$EFEA`
+- Address: `$EF21`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -510,7 +510,7 @@ Stop SID file playback.
 
 - Kind: `routine`
 - Symbol: `audio_sidstop`
-- Address: `$EFF3`
+- Address: `$EF2A`
 - ABI: `none`
 
 Outputs:
@@ -522,7 +522,7 @@ Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INST
 
 - Kind: `routine`
 - Symbol: `audio_sound`
-- Address: `$EE50`
+- Address: `$ED87`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -539,7 +539,7 @@ Return raw music status bits.
 
 - Kind: `routine`
 - Symbol: `audio_status`
-- Address: `$F029`
+- Address: `$EF60`
 - ABI: `none`
 
 Outputs:
@@ -623,7 +623,7 @@ Advance fire-and-forget SID sound-effect durations by one frame.
 
 - Kind: `routine`
 - Symbol: `audio_tick`
-- Address: `$EF59`
+- Address: `$EE90`
 - ABI: `none`
 
 ## AUDIO.TONE
@@ -651,7 +651,7 @@ Set SID master or per-voice volume from AUDIO.VOLUME_LEVEL and AUDIO.VOICE.
 
 - Kind: `routine`
 - Symbol: `audio_volume`
-- Address: `$EEAD`
+- Address: `$EDE4`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -995,7 +995,7 @@ Change directory to FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_cd`
-- Address: `$F0CC`
+- Address: `$F003`
 
 Requires:
 - `FIO_NAME`
@@ -1007,7 +1007,7 @@ Convert the current FIO status register to the shared A=0/1 result.
 
 - Kind: `routine`
 - Symbol: `fio_check`
-- Address: `$F04D`
+- Address: `$EF84`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -1018,7 +1018,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$F06D`
+- Address: `$EFA4`
 
 Outputs:
 - `A`: 0 on success.
@@ -1061,7 +1061,7 @@ Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_copy_name`
-- Address: `$F08C`
+- Address: `$EFC3`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid name.
@@ -1077,7 +1077,7 @@ Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_delete`
-- Address: `$F0BD`
+- Address: `$EFF4`
 
 Requires:
 - `FIO_NAME`
@@ -1089,7 +1089,7 @@ Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
 
 - Kind: `routine`
 - Symbol: `fio_dir_open`
-- Address: `$F0B3`
+- Address: `$EFEA`
 
 ## FIO.DIR_READ
 
@@ -1097,7 +1097,7 @@ Read the next directory entry into the FIO directory result registers.
 
 - Kind: `routine`
 - Symbol: `fio_dir_read`
-- Address: `$F0B8`
+- Address: `$EFEF`
 
 ## FIO.EXEC
 
@@ -1105,7 +1105,7 @@ Issue an FIO command, wait for completion, and return A=0/1 status.
 
 - Kind: `routine`
 - Symbol: `fio_exec`
-- Address: `$F05A`
+- Address: `$EF91`
 
 Inputs:
 - `A`: FIO command byte.
@@ -1119,7 +1119,7 @@ Load VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gload`
-- Address: `$F0C7`
+- Address: `$EFFE`
 
 Requires:
 - `FIO_NAME`
@@ -1136,7 +1136,7 @@ Save VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gsave`
-- Address: `$F0C2`
+- Address: `$EFF9`
 
 Requires:
 - `FIO_NAME`
@@ -1153,7 +1153,7 @@ Issue a raw FIO command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `fio_issue`
-- Address: `$F049`
+- Address: `$EF80`
 
 Inputs:
 - `A`: FIO command byte.
@@ -1164,7 +1164,7 @@ Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_load`
-- Address: `$F0AE`
+- Address: `$EFE5`
 
 Requires:
 - `FIO_NAME`
@@ -1178,7 +1178,7 @@ Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runt
 
 - Kind: `routine`
 - Symbol: `fio_load_runtime`
-- Address: `$F0E0`
+- Address: `$F017`
 
 Requires:
 - `FIO_NAME`
@@ -1190,7 +1190,7 @@ Create the directory named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_mkdir`
-- Address: `$F0D1`
+- Address: `$F008`
 
 Requires:
 - `FIO_NAME`
@@ -1235,7 +1235,7 @@ Read the current directory into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_pwd`
-- Address: `$F0DB`
+- Address: `$F012`
 
 ## FIO.RMDIR
 
@@ -1243,7 +1243,7 @@ Remove the directory named by FIO.NAME/FIO_NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_rmdir`
-- Address: `$F0D6`
+- Address: `$F00D`
 
 Requires:
 - `FIO_NAME`
@@ -1255,7 +1255,7 @@ Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
 
 - Kind: `routine`
 - Symbol: `fio_rng`
-- Address: `$F0E5`
+- Address: `$F01C`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -1306,7 +1306,7 @@ Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.
 
 - Kind: `routine`
 - Symbol: `fio_save`
-- Address: `$F0A9`
+- Address: `$EFE0`
 
 Requires:
 - `FIO_NAME`
@@ -1322,7 +1322,7 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 - Kind: `routine`
 - Symbol: `fio_set_io_error`
-- Address: `$F07F`
+- Address: `$EFB6`
 
 Outputs:
 - `A`: 1 on error.
@@ -1672,7 +1672,7 @@ Issue a raw NIC command.
 
 - Kind: `routine`
 - Symbol: `nic_command`
-- Address: `$F0EA`
+- Address: `$F021`
 
 Inputs:
 - `A`: NIC command byte.
@@ -1683,7 +1683,7 @@ Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.
 
 - Kind: `routine`
 - Symbol: `nic_connect`
-- Address: `$F10B`
+- Address: `$F042`
 
 Requires:
 - `NIC_SLOT`
@@ -1697,7 +1697,7 @@ Copy a pointer-based host name to NIC_NAMEBUF and append NUL.
 
 - Kind: `routine`
 - Symbol: `nic_copy_name`
-- Address: `$F131`
+- Address: `$F068`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid length.
@@ -1713,7 +1713,7 @@ Disconnect NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_disconnect`
-- Address: `$F10F`
+- Address: `$F046`
 
 Requires:
 - `NIC_SLOT`
@@ -1724,7 +1724,7 @@ Read the most recent NIC message length.
 
 - Kind: `routine`
 - Symbol: `nic_length`
-- Address: `$F12D`
+- Address: `$F064`
 
 Outputs:
 - `A`: Message length byte.
@@ -1742,7 +1742,7 @@ Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.
 
 - Kind: `routine`
 - Symbol: `nic_ready`
-- Address: `$F123`
+- Address: `$F05A`
 
 Inputs:
 - `X`: Slot number.
@@ -1756,7 +1756,7 @@ Receive data for NIC_SLOT into NIC_DMAL/H.
 
 - Kind: `routine`
 - Symbol: `nic_recv`
-- Address: `$F117`
+- Address: `$F04E`
 
 Requires:
 - `NIC_SLOT`
@@ -1769,7 +1769,7 @@ Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.
 
 - Kind: `routine`
 - Symbol: `nic_send`
-- Address: `$F113`
+- Address: `$F04A`
 
 Requires:
 - `NIC_SLOT`
@@ -1783,7 +1783,7 @@ Read clamped NIC slot status.
 
 - Kind: `routine`
 - Symbol: `nic_status`
-- Address: `$F11B`
+- Address: `$F052`
 
 Inputs:
 - `X`: Slot number.
@@ -2116,7 +2116,6 @@ Clear the sprite-background collision mask and acknowledge its IRQ source.
 
 - Kind: `routine`
 - Symbol: `sprite_background_clear`
-- Address: `$EA40`
 
 Outputs:
 - `A`: VGC_IRQ_SPRBG.
@@ -2127,7 +2126,6 @@ Disable the VGC sprite-background IRQ source.
 
 - Kind: `routine`
 - Symbol: `sprite_background_irq_disable`
-- Address: `$EA62`
 
 ## SPRITE.BACKGROUND_IRQ_ENABLE
 
@@ -2135,7 +2133,6 @@ Clear stale sprite-background collisions, enable the VGC sprite-background IRQ s
 
 - Kind: `routine`
 - Symbol: `sprite_background_irq_enable`
-- Address: `$EA55`
 
 ## SPRITE.BACKGROUND_MASK
 
@@ -2143,7 +2140,6 @@ Read the 16-bit sprite-background collision status mask without clearing it.
 
 - Kind: `routine`
 - Symbol: `sprite_background_collision_mask`
-- Address: `$EA39`
 
 Outputs:
 - `A`: Background collision status high byte for sprites 8-15.
@@ -2155,7 +2151,6 @@ Read the 16-bit sprite-background collision mask, clear it, and acknowledge its 
 
 - Kind: `routine`
 - Symbol: `sprite_background_read_clear`
-- Address: `$EA4C`
 
 Outputs:
 - `A`: Background collision status high byte for sprites 8-15.
@@ -2167,7 +2162,6 @@ Read the low byte of the sprite-background collision status register.
 
 - Kind: `routine`
 - Symbol: `sprite_background_collision_status`
-- Address: `$EA35`
 
 Outputs:
 - `A`: Background collision status byte for sprites 0-7.
@@ -2188,7 +2182,6 @@ Clear the sprite-sprite collision mask and acknowledge its IRQ source.
 
 - Kind: `routine`
 - Symbol: `sprite_collision_clear`
-- Address: `$EA08`
 
 Outputs:
 - `A`: VGC_IRQ_SPRCOLL.
@@ -2199,7 +2192,6 @@ Disable the VGC sprite collision IRQ source.
 
 - Kind: `routine`
 - Symbol: `sprite_collision_irq_disable`
-- Address: `$EA2A`
 
 ## SPRITE.COLLISION_IRQ_ENABLE
 
@@ -2207,7 +2199,6 @@ Clear stale sprite-sprite collisions, enable the VGC sprite collision IRQ source
 
 - Kind: `routine`
 - Symbol: `sprite_collision_irq_enable`
-- Address: `$EA1D`
 
 ## SPRITE.COLLISION_MASK
 
@@ -2215,7 +2206,6 @@ Read the 16-bit sprite-sprite collision status mask without clearing it.
 
 - Kind: `routine`
 - Symbol: `sprite_collision_mask`
-- Address: `$EA01`
 
 Outputs:
 - `A`: Collision status high byte for sprites 8-15.
@@ -2227,7 +2217,6 @@ Read the 16-bit sprite-sprite collision mask, clear it, and acknowledge its IRQ 
 
 - Kind: `routine`
 - Symbol: `sprite_collision_read_clear`
-- Address: `$EA14`
 
 Outputs:
 - `A`: Collision status high byte for sprites 8-15.
@@ -2239,7 +2228,6 @@ Read the low byte of the sprite-sprite collision status register.
 
 - Kind: `routine`
 - Symbol: `sprite_collision_status`
-- Address: `$E9FD`
 
 Outputs:
 - `A`: Collision status byte for sprites 0-7.
@@ -2250,7 +2238,6 @@ Issue a raw sprite VGC command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `sprite_command`
-- Address: `$E9A3`
 
 Inputs:
 - `A`: VGC sprite command byte.
@@ -2272,7 +2259,6 @@ Disable the sprite in VGC.P0.
 
 - Kind: `routine`
 - Symbol: `sprite_disable`
-- Address: `$E9B1`
 
 Requires:
 - `VGC_P0`
@@ -2283,7 +2269,6 @@ Enable the sprite in VGC.P0.
 
 - Kind: `routine`
 - Symbol: `sprite_enable`
-- Address: `$E9AC`
 
 Requires:
 - `VGC_P0`
@@ -2305,7 +2290,6 @@ Read a sprite's 16-bit X coordinate.
 
 - Kind: `routine`
 - Symbol: `sprite_get_x`
-- Address: `$E9E2`
 
 Inputs:
 - `X`: Sprite index.
@@ -2320,7 +2304,6 @@ Read a sprite's Y coordinate.
 
 - Kind: `routine`
 - Symbol: `sprite_get_y`
-- Address: `$E9F3`
 
 Inputs:
 - `X`: Sprite index.
@@ -2334,7 +2317,6 @@ Move a sprite using VGC.P0=sprite, VGC.P1/P2=x, VGC.P3=y.
 
 - Kind: `routine`
 - Symbol: `sprite_pos`
-- Address: `$E9A7`
 
 Requires:
 - `VGC_P0`
@@ -2359,7 +2341,6 @@ Compute the VGC sprite attribute block offset for a sprite field.
 
 - Kind: `routine`
 - Symbol: `sprite_reg_offset`
-- Address: `$E9BB`
 
 Inputs:
 - `X`: Sprite index.
@@ -2374,7 +2355,6 @@ Write one sprite bitmap row using VGC.P0..VGC.P9.
 
 - Kind: `routine`
 - Symbol: `sprite_row`
-- Address: `$E9B6`
 
 Requires:
 - `VGC_P0`
@@ -2394,7 +2374,6 @@ Write one 16-bit sprite attribute field.
 
 - Kind: `routine`
 - Symbol: `sprite_set_reg16`
-- Address: `$E9D3`
 
 Inputs:
 - `X`: Sprite index.
@@ -2408,7 +2387,6 @@ Write one 8-bit sprite attribute field.
 
 - Kind: `routine`
 - Symbol: `sprite_set_reg8`
-- Address: `$E9C8`
 
 Inputs:
 - `X`: Sprite index.
@@ -2421,7 +2399,6 @@ Set a sprite's shape index.
 
 - Kind: `routine`
 - Symbol: `sprite_set_shape`
-- Address: `$E9C6`
 
 Inputs:
 - `X`: Sprite index.

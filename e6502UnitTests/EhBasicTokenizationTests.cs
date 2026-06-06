@@ -246,15 +246,16 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(0xE7, bus.Read(0x6000), "ADDR(\"SYS.REGA\") low byte mismatch.");
         Assert.AreEqual(0x00, bus.Read(0x6001), "ADDR(\"SYS.REGA\") high byte mismatch.");
 
-        // VGC text/draw routines moved out of the BASIC ROM into the GRAPHICS
-        // module (BASIC-on-Modules refactor), so vgc.* labels no longer resolve
-        // inside the primary ROM. SPRITE.* still lives in the BASIC ROM (sprite.s
-        // remains included), so use it to prove ADDR resolves a runtime routine.
-        EnterLine(editor, "DOKE 24578,ADDR(\"sprite.enable\")");
+        // VGC text/draw AND sprite routines moved out of the BASIC ROM into the
+        // GRAPHICS module (BASIC-on-Modules refactor Phases 1+2), so neither vgc.*
+        // nor sprite.* labels resolve inside the primary ROM any longer. AUDIO.*
+        // still lives in the BASIC ROM (audio.s remains included), so use it to
+        // prove ADDR resolves a runtime routine.
+        EnterLine(editor, "DOKE 24578,ADDR(\"audio.sound\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
-        ushort sprEnable = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
-        Assert.IsTrue(sprEnable >= 0xC000 && sprEnable < 0xFFD7,
-            $"ADDR(\"SPRITE.ENABLE\") should resolve inside primary ROM, got ${sprEnable:X4}.");
+        ushort audioSound = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
+        Assert.IsTrue(audioSound >= 0xC000 && audioSound < 0xFFD7,
+            $"ADDR(\"AUDIO.SOUND\") should resolve inside primary ROM, got ${audioSound:X4}.");
 
         EnterLine(editor, "DOKE 24580,ADDR(\"fio.clear_error\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);

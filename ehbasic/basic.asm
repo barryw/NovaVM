@@ -9028,8 +9028,9 @@ LAB_BNR1
 LAB_BNR2
       .byte "Derived from EhBASIC 2.22p5",$00
 
-SPRITE_NO_EXTRA   = 1
-      .include "sprite.s"
+; sprite.s is no longer compiled into the BASIC ROM: every SPRITE keyword now
+; routes through the shared GRAPHICS module via lib_call (GFN_SPR_*), exactly as
+; Phase 1 did for the graphics/text primitives (vgc.s).
 
 ; =====================================================================
 ; Paged-library (lib_call) plumbing — BASIC graphics/text/timing keywords
@@ -9080,6 +9081,18 @@ basic_lib_arg_word:
 @sxz:
       STA   LIB_ARG0+2,Y
       STA   LIB_ARG0+3,Y
+      RTS
+
+; basic_lib_result_word — read a reporter fn's 16-bit LIB_RESULT into the AY pair
+;   BASIC's integer-conversion entries expect: Y = result low byte, A = result
+;   high byte (the finish_result16 layout: RESULT+0 = low, RESULT+1 = high). For
+;   byte reporters (finish_result8) RESULT+1 is 0, so A reads back 0 and Y holds
+;   the byte — exactly what LAB_RET_0AY then wants in Y. Clobbers A/Y (and in the
+;   usual idiom the preceding basic_gfx_call already clobbered X, so on return the
+;   full register state is A=hi, Y=lo, X=garbage).
+basic_lib_result_word:
+      LDA   LIB_RESULT+1      ; result high byte -> A
+      LDY   LIB_RESULT        ; result low byte  -> Y
       RTS
 
 LAB_VSYNC
@@ -9371,11 +9384,15 @@ LAB_PAINT
       JMP   basic_gfx_call
 
 ; perform SPRITE n, ON/OFF  or  SPRITE n, x, y
-; sprite number 0-15, ON/OFF enables/disables, x,y sets position
-; Uses command-driven VGC interface:
-;   SPRENA ($15): P0=sprite
-;   SPRDIS ($16): P0=sprite
-;   SPRPOS ($14): P0=sprite, P1=x_low, P2=x_high, P3=y_low, P4 reserved
+; sprite number 0-15, ON/OFF enables/disables, x,y sets position.
+; Routes through lib_call(GRAPHICS): GFN_SPR_POS/ENABLE/DISABLE.
+;   GFN_SPR_POS    (idx:ARG0, x:ARG1 s16, y:ARG2)
+;   GFN_SPR_ENABLE (idx:ARG0)
+;   GFN_SPR_DISABLE(idx:ARG0)
+; SPRITE COLLISION ON/OFF/CLEAR -> GFN_SPR_COLL_IRQON/IRQOFF/CLEAR. The module
+; fns carry the same VGC_IRQ_ENABLE/VGC_COLLST/VGC_IRQ_STATUS effects the direct
+; MMIO used to, plus CLI on IRQON (and clear-on-arm, matching ON SPRITE COLLISION
+; GOSUB). The IRQ_CODE handler in min_mon.asm is unchanged.
 
 LAB_SPRCMD
       JSR   LAB_GBYT          ; peek at sprite number or event keyword
@@ -9390,30 +9407,33 @@ LAB_SPRCMD
       CMP   #TK_OFF           ; is it OFF?
       BEQ   @spr_off
       ; not ON/OFF — parse x, y position
+      JSR   basic_lib_zargs   ; zero ARG0..3
       LDA   Itempl            ; get sprite number
-      STA   VGC_P0             ; P0 = sprite index
-      JSR   LAB_GTWRD         ; get unsigned x as 16-bit
-      LDA   FAC1_3
-      STA   VGC_P1             ; P1 = x low
-      LDA   FAC1_2
-      STA   VGC_P2             ; P2 = x high
+      STA   LIB_ARG0          ; idx -> ARG0
+      JSR   LAB_GTWRD         ; get unsigned x as 16-bit -> FAC1_3/FAC1_2
+      LDY   #4                ; ARG1 = x (s16)
+      JSR   basic_lib_arg_word
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get unsigned y byte
-      STX   VGC_P3             ; P3 = y
-      STZ   VGC_P4             ; P4 reserved
-      JMP   sprite_pos         ; trigger and return
+      STX   LIB_ARG2          ; y -> ARG2
+      LDX   #GFN_SPR_POS
+      JMP   basic_gfx_call
 
 @spr_on
       JSR   LAB_IGBY          ; consume the ON token
+      JSR   basic_lib_zargs   ; zero ARG0..3
       LDA   Itempl            ; get sprite number
-      STA   VGC_P0             ; P0 = sprite index
-      JMP   sprite_enable      ; trigger and return
+      STA   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_SPR_ENABLE
+      JMP   basic_gfx_call
 
 @spr_off
       JSR   LAB_IGBY          ; consume the OFF token
+      JSR   basic_lib_zargs   ; zero ARG0..3
       LDA   Itempl            ; get sprite number
-      STA   VGC_P0             ; P0 = sprite index
-      JMP   sprite_disable     ; trigger and return
+      STA   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_SPR_DISABLE
+      JMP   basic_gfx_call
 
 @spr_collision_cmd
       JSR   LAB_IGBY          ; consume COLLISION token
@@ -9427,38 +9447,34 @@ LAB_SPRCMD
 
 @spr_collision_on
       JSR   LAB_IGBY          ; consume ON token
-      LDA   VGC_IRQ_ENABLE
-      ORA   #VGC_IRQ_SPRCOLL
-      STA   VGC_IRQ_ENABLE
-      CLI
-      RTS
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_SPR_COLL_IRQON
+      JMP   basic_gfx_call    ; enables VGC_IRQ_SPRCOLL + CLI (clears stale first)
 
 @spr_collision_off
       JSR   LAB_IGBY          ; consume OFF token
-      LDA   VGC_IRQ_ENABLE
-      AND   #$DF
-      STA   VGC_IRQ_ENABLE
-      RTS
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_SPR_COLL_IRQOFF
+      JMP   basic_gfx_call    ; clears the VGC_IRQ_SPRCOLL enable bit
 
 @spr_collision_clear
       JSR   LAB_IGBY          ; consume CLEAR token
-      STZ   VGC_COLLST        ; clear collision mask
-      STZ   VGC_COLLST_HI
-      LDA   #VGC_IRQ_SPRCOLL
-      STA   VGC_IRQ_STATUS    ; write-one-clear pending collision IRQ
-      RTS
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_SPR_COLL_CLEAR
+      JMP   basic_gfx_call    ; clears mask + write-one-clears pending IRQ
 
 ; perform SPRITESHAPE n, shape
 ; Writes shape index to sprite register VGC_SPR_SHAPE + n*8
 
 LAB_SPRSHAPE
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      STX   Itempl
+      STX   LIB_ARG0          ; idx -> ARG0
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get shape index in X
-      TXA
-      LDX   Itempl
-      JMP   sprite_set_shape
+      STX   LIB_ARG1          ; shape -> ARG1
+      LDX   #GFN_SPR_SHAPE
+      JMP   basic_gfx_call
 
 ; perform SPRITESET sprite, field, value — set sprite register
 ; Field 0 (X) accepts an unsigned word and writes lo+hi bytes.
@@ -9466,97 +9482,92 @@ LAB_SPRSHAPE
 ; Hardware vblank-buffers sprite attribute writes; software writes immediately.
 
 LAB_SPRCOLOR
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      STX   Itempl            ; save sprite number
+      STX   LIB_ARG0          ; idx -> ARG0
       JSR   LAB_1C01          ; require comma
       JSR   LAB_GTBY          ; get field (0-7) in X
-      STX   Itemph            ; save field number
+      STX   LIB_ARG1          ; field -> ARG1
+      STX   Itemph            ; remember field to pick byte vs word form
       JSR   LAB_1C01          ; require comma
       LDA   Itemph            ; check field number
       BEQ   @word_val
       ; --- byte field: parse byte value ---
       JSR   LAB_GTBY          ; get value (0-255) in X
-      TXA                     ; A = value
-      LDX   Itempl            ; X = sprite number
-      LDY   Itemph            ; Y = field
-      JMP   sprite_set_reg8
+      STX   LIB_ARG2          ; val -> ARG2 low byte
+      LDX   #GFN_SPR_SETREG
+      JMP   basic_gfx_call
 @word_val
       ; --- word field: parse unsigned word, write lo+hi ---
       JSR   LAB_GTWRD         ; get unsigned 16-bit value, lo in FAC1_3, hi in FAC1_2
       LDA   FAC1_3
-      STA   NVR0L
+      STA   LIB_ARG2          ; val16 low  -> ARG2[0]
       LDA   FAC1_2
-      STA   NVR0H
-      LDX   Itempl            ; X = sprite number
-      LDY   Itemph            ; Y = field
-      JMP   sprite_set_reg16
+      STA   LIB_ARG2+1        ; val16 high -> ARG2[1]
+      LDX   #GFN_SPR_SETREG16
+      JMP   basic_gfx_call
 
 ; perform SPRITEDATA sprite, row, b1, b2 [, b3 [, b4 [, b5 [, b6 [, b7 [, b8]]]]]]
-; Uses CmdSprRow ($11): P0=sprite, P1=row, P2-P9=8 bytes of row data.
-; Unprovided bytes are zeroed.
+; Routes through lib_call(GRAPHICS): GFN_SPR_ROW
+;   (idx:ARG0, row:ARG1, bytes0_3:ARG2, bytes4_7:ARG3).
+; The module copies ARG2[0..3] then ARG3[0..3] into VGC_P2..P9, so b1..b4 land in
+; ARG2+0..+3 and b5..b8 in ARG3+0..+3. basic_lib_zargs zeroes unprovided bytes.
 
 LAB_SPRDATA
+      JSR   basic_lib_zargs   ; zero ARG0..3 (unprovided data bytes read 0)
       JSR   LAB_GTBY          ; get sprite number (0-15) in X
-      STX   VGC_P0             ; P0 = sprite index
+      STX   LIB_ARG0          ; idx -> ARG0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; get row (0-15) in X
-      STX   VGC_P1             ; P1 = row
-      ; zero all 8 data bytes first
-      STZ   VGC_P2
-      STZ   VGC_P3
-      STZ   VGC_P4
-      STZ   VGC_P5
-      STZ   VGC_P6
-      STZ   VGC_P7
-      STZ   VGC_P8
-      STZ   VGC_P9
+      STX   LIB_ARG1          ; row -> ARG1
       ; parse b1 (required)
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; b1 → X
-      STX   VGC_P2
+      STX   LIB_ARG2
       ; parse b2 (required)
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; b2 → X
-      STX   VGC_P3
+      STX   LIB_ARG2+1
       ; parse optional b3-b8
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; b3 → X
-      STX   VGC_P4
+      STX   LIB_ARG2+2
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY
       JSR   LAB_GTBY          ; b4 → X
-      STX   VGC_P5
+      STX   LIB_ARG2+3
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY
       JSR   LAB_GTBY          ; b5 → X
-      STX   VGC_P6
+      STX   LIB_ARG3
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY
       JSR   LAB_GTBY          ; b6 → X
-      STX   VGC_P7
+      STX   LIB_ARG3+1
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY
       JSR   LAB_GTBY          ; b7 → X
-      STX   VGC_P8
+      STX   LIB_ARG3+2
       JSR   LAB_GBYT
       CMP   #','
       BNE   @sd_done
       JSR   LAB_IGBY
       JSR   LAB_GTBY          ; b8 → X
-      STX   VGC_P9
+      STX   LIB_ARG3+3
 @sd_done
-      JMP   sprite_row         ; trigger and return
+      LDX   #GFN_SPR_ROW
+      JMP   basic_gfx_call
 
 ; perform SOUND note, duration [, instrument]
 ; SOUND 60, 10          — MIDI note 60, 10 frames, default instrument 0
@@ -9640,31 +9651,43 @@ LAB_WAVE
 
 LAB_SPRITEX
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
-      LDX   Itempl            ; get sprite number
-      JSR   sprite_get_x      ; Y = X low byte, A = X high byte
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      LDA   Itempl            ; get sprite number
+      STA   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_SPR_GETX
+      JSR   basic_gfx_call    ; RESULT = 16-bit X (lo=RESULT+0, hi=RESULT+1)
+      JSR   basic_lib_result_word  ; Y = X low byte, A = X high byte
       JMP   LAB_AYFC          ; return AY as numeric value
 
 ; perform SPRITEY(n) — return Y position of sprite n as unsigned byte
 
 LAB_SPRITEY
       JSR   LAB_F2FX          ; convert FAC1 to integer, low byte in Itempl
-      LDX   Itempl            ; get sprite number
-      JSR   sprite_get_y      ; Y = Y position
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      LDA   Itempl            ; get sprite number
+      STA   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_SPR_GETY
+      JSR   basic_gfx_call    ; RESULT = Y byte (RESULT+0)
+      JSR   basic_lib_result_word  ; Y = Y position byte (A = 0)
       JMP   LAB_RET_0AY       ; return AY as numeric value
 
 ; perform COLLISION(n) — return sprite-sprite collision register
 ; argument already consumed by preprocessor
 
 LAB_COLLISION
-      JSR   sprite_collision_status
-      TAY
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_SPR_COLL_STATUS
+      JSR   basic_gfx_call    ; RESULT = collision status byte (RESULT+0)
+      JSR   basic_lib_result_word  ; Y = status byte
       JMP   LAB_RET_0AY
 
 ; perform BUMPED(n) — return sprite-background collision register
 
 LAB_BUMPED
-      JSR   sprite_background_collision_status
-      TAY
+      JSR   basic_lib_zargs   ; no args
+      LDX   #GFN_SPR_BG_STATUS
+      JSR   basic_gfx_call    ; RESULT = bg collision status byte (RESULT+0)
+      JSR   basic_lib_result_word  ; Y = status byte
       JMP   LAB_RET_0AY
 
 ; --- File I/O command handlers ---

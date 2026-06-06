@@ -297,6 +297,138 @@ public class BasicRegressionTests
         }
     }
 
+    // SPRITE keywords route through lib_call(GRAPHICS) after the Phase 2 refactor
+    // (sprite.s is no longer compiled into the BASIC ROM). This test drives the
+    // BASIC marshalling end-to-end and asserts the observable VGC sprite state,
+    // proving SPRITE n,x,y / n,ON / n,OFF, SPRITESHAPE, SPRITESET (byte+word
+    // field), and SPRITEDATA all marshal their args into the module correctly.
+    [TestMethod]
+    public void SpriteCommandKeywordsRouteThroughLibCall()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 SPRITE 3,200,120",       // GFN_SPR_POS: idx,x(s16),y
+            "20 SPRITE 3,ON",            // GFN_SPR_ENABLE
+            "30 SPRITE 5,ON",            // enable then disable to prove DISABLE
+            "40 SPRITE 5,OFF",           // GFN_SPR_DISABLE
+            "50 SPRITESHAPE 6,9",        // GFN_SPR_SHAPE
+            "60 SPRITESET 7,6,2",        // GFN_SPR_SETREG: field 6 = priority (byte)
+            "70 SPRITESET 8,0,300",      // GFN_SPR_SETREG16: field 0 = X (16-bit word)
+            "80 SPRITEDATA 4,1,1,2,3,4,5,6,7,8",  // GFN_SPR_ROW: 8 bytes into row 1
+        ]);
+
+        QueueLine(editor, "RUN");
+        RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+        var s3 = bus.Vgc.GetSpriteState(3);
+        Assert.AreEqual(200, s3.x, "SPRITE 3,200,120 must set sprite 3 X to 200.");
+        Assert.AreEqual(120, s3.y, "SPRITE 3,200,120 must set sprite 3 Y to 120.");
+        Assert.IsTrue(s3.enabled, "SPRITE 3,ON must enable sprite 3.");
+
+        Assert.IsFalse(bus.Vgc.GetSpriteState(5).enabled,
+            "SPRITE 5,OFF must disable sprite 5 after SPRITE 5,ON.");
+
+        Assert.AreEqual(9, bus.Vgc.GetSpriteShapeIndex(6),
+            "SPRITESHAPE 6,9 must set sprite 6 shape-slot index to 9.");
+
+        Assert.AreEqual(2, bus.Vgc.GetSpriteState(7).priority,
+            "SPRITESET 7,6,2 (byte field 6 = priority) must set sprite 7 priority to 2.");
+
+        Assert.AreEqual(300, bus.Vgc.GetSpriteState(8).x,
+            "SPRITESET 8,0,300 (word field 0 = X) must set sprite 8 X to 300.");
+
+        var shape4 = bus.Vgc.GetSpriteShape(4);
+        const int bytesPerRow = 8;
+        for (int i = 0; i < bytesPerRow; i++)
+        {
+            Assert.AreEqual(i + 1, shape4[bytesPerRow /*row 1*/ + i],
+                $"SPRITEDATA 4,1,... must write byte {i + 1} into row-1 byte {i}.");
+        }
+    }
+
+    // SPRITEX/SPRITEY/COLLISION/BUMPED are reporters: the converted handlers issue
+    // the reporter GFN and read the value back out of the LIB_RESULT mailbox. This
+    // test proves the reporter path returns the right BASIC value for each.
+    [TestMethod]
+    public void SpriteReporterFunctionsReadLibResult()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Seed observable sprite + collision state, then read it back via BASIC.
+        bus.Vgc.SetSpritePosition(2, 300, 175);
+        bus.Vgc.SetCollisionRegisters(0x0007, 0x0005);  // low bytes: SPR=7, BG=5
+
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "PRINT SPRITEX(2)",   // GFN_SPR_GETX -> 16-bit X = 300
+            "PRINT SPRITEY(2)",   // GFN_SPR_GETY -> Y byte = 175
+            "PRINT COLLISION(0)", // GFN_SPR_COLL_STATUS -> low byte = 7
+            "PRINT BUMPED(0)",    // GFN_SPR_BG_STATUS  -> low byte = 5
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains(" 300", StringComparison.Ordinal),
+            $"SPRITEX(2) should read back sprite 2 X=300 from LIB_RESULT.\n{screen}");
+        Assert.IsTrue(screen.Contains(" 175", StringComparison.Ordinal),
+            $"SPRITEY(2) should read back sprite 2 Y=175 from LIB_RESULT.\n{screen}");
+        Assert.IsTrue(screen.Contains(" 7", StringComparison.Ordinal),
+            $"COLLISION(0) should read back the sprite collision status byte 7.\n{screen}");
+        Assert.IsTrue(screen.Contains(" 5", StringComparison.Ordinal),
+            $"BUMPED(0) should read back the sprite-background collision status byte 5.\n{screen}");
+    }
+
+    // SPRITE COLLISION ON/CLEAR route through GFN_SPR_COLL_IRQON/CLEAR. ON must
+    // enable the VGC sprite-collision IRQ source (and the module clears stale
+    // collisions first); CLEAR must zero the latched mask and ack the IRQ source.
+    [TestMethod]
+    public void SpriteCollisionOnAndClearRouteThroughLibCall()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        QueueLine(editor, "SPRITE COLLISION ON");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        Assert.AreEqual(
+            VgcConstants.IrqSpriteCollision,
+            (byte)(bus.Vgc.Read(VgcConstants.RegIrqEnable) & VgcConstants.IrqSpriteCollision),
+            "SPRITE COLLISION ON must enable the VGC sprite-collision IRQ source.");
+
+        // Latch a collision, then prove SPRITE COLLISION CLEAR zeroes + acks it.
+        bus.Vgc.SetCollisionRegisters(0x0102, 0x0000);
+        QueueLine(editor, "SPRITE COLLISION CLEAR");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColSt),
+            "SPRITE COLLISION CLEAR must clear the collision low latch.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegColStHi),
+            "SPRITE COLLISION CLEAR must clear the collision high latch.");
+        Assert.AreEqual(0, bus.Vgc.Read(VgcConstants.RegIrqStatus),
+            "SPRITE COLLISION CLEAR must acknowledge the pending collision IRQ source.");
+
+        QueueLine(editor, "SPRITE COLLISION OFF");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        Assert.AreEqual(0,
+            (byte)(bus.Vgc.Read(VgcConstants.RegIrqEnable) & VgcConstants.IrqSpriteCollision),
+            "SPRITE COLLISION OFF must clear the sprite-collision IRQ enable bit.");
+    }
+
     [TestMethod]
     public void Sid1PokeLandsInSidChip()
     {
