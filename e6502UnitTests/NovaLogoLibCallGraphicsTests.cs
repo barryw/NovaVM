@@ -113,13 +113,13 @@ public class NovaLogoLibCallGraphicsTests
 
         AssertNoError(screen);
 
-        // FD east from the CS center (160,80): X grows by ~30, Y unchanged. The turtle
+        // FD east from the CS center (160,100): X grows by ~30, Y unchanged. The turtle
         // state lives in shared $9F00 RAM written by the MODULE's GFN_TURTLE_OP, so a
         // nonzero eastward delta proves the turtle ran through the paged module.
         int turtleX = bus.ReadRam(TurtleXLo) | (bus.ReadRam(TurtleXHi) << 8);
         Assert.IsTrue(turtleX >= 188 && turtleX <= 191,
             $"FD 30 east must move the module-resident turtle X to ~190 (got {turtleX}).");
-        Assert.IsTrue(CountNonzeroPixels(bus, 160, 80, 190, 80) >= 20,
+        Assert.IsTrue(CountNonzeroPixels(bus, 160, 100, 190, 100) >= 20,
             "FD with pen down must draw the eastward pen line through lib_call(GRAPHICS).");
 
         // The legacy TIMER reporter ran AFTER the module paged in — proving the host

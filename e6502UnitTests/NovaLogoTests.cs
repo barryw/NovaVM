@@ -1672,7 +1672,7 @@ public class NovaLogoTests
         bus.Vgc.SetScreenEditor(editor);
         RunUntilScreenContains(cpu, bus, "?", 10_000_000);
 
-        QueueLine(editor, "CS");                 // turtle to center (160,80), heading 0
+        QueueLine(editor, "CS");                 // turtle to center (160,100), heading 0
         RunSteps(cpu, bus, 5_000_000);
         QueueLine(editor, "RT 30");              // heading 30deg
         RunSteps(cpu, bus, 3_000_000);
@@ -1791,7 +1791,7 @@ public class NovaLogoTests
             $"Expected prompt at start of visible split text band.\n{screen}");
 
         int turtlePixels = 0;
-        for (int y = 72; y < 88; y++)
+        for (int y = 92; y < 108; y++)        // icon is 16x16 centered on screen (160,100)
         {
             for (int x = 152; x < 168; x++)
             {
@@ -1903,8 +1903,8 @@ public class NovaLogoTests
 
         Assert.AreEqual(160, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
             "Heading 0 FD should not drift horizontally.");
-        Assert.AreEqual(60, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
-            "Heading 0 FD 20 should move the full 20 pixels north from the center.");
+        Assert.AreEqual(80, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "Heading 0 FD 20 should move the full 20 pixels north from the center (screen y 100-20).");
         Assert.AreEqual(0, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
             "FD should not change the turtle heading.");
     }
@@ -1940,11 +1940,11 @@ public class NovaLogoTests
         Assert.AreEqual(45, heading, "RT 45 should leave turtle heading at 45 degrees.");
         Assert.IsTrue(x is >= 172 and <= 175,
             $"Second FD should advance eastward from the current turtle position after RT 45. X={x}");
-        Assert.IsTrue(y is >= 44 and <= 47,
+        Assert.IsTrue(y is >= 64 and <= 67,
             $"Second FD should advance northward on the 45-degree heading from the post-FD position. Y={y}");
-        Assert.IsTrue(CountNonzeroPixels(bus, 161, 53, 167, 60) >= 4,
+        Assert.IsTrue(CountNonzeroPixels(bus, 161, 73, 167, 80) >= 4,
             "Pen-down FD after RT 45 should draw the diagonal segment from the current turtle position.");
-        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 80),
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 100),
             "The isolated pen-down move should not redraw from the original center position.");
     }
 
@@ -1967,8 +1967,8 @@ public class NovaLogoTests
             "FD must not mutate turtle heading before any turn.");
         Assert.AreEqual(160, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
             "Initial FD 50 should move north with no x drift.");
-        Assert.AreEqual(30, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
-            "Initial FD 50 should move north by exactly 50 pixels.");
+        Assert.AreEqual(50, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "Initial FD 50 should move north by exactly 50 pixels (screen y 100-50).");
         QueueLine(editor, "RT 90");
         RunSteps(cpu, bus, 8_000_000);
         Assert.AreEqual(90, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
@@ -1977,8 +1977,8 @@ public class NovaLogoTests
         RunSteps(cpu, bus, 8_000_000);
         Assert.AreEqual(210, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
             "FD 50 after RT 90 should move east by exactly 50 pixels.");
-        Assert.AreEqual(30, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
-            "FD 50 after RT 90 should not drift vertically.");
+        Assert.AreEqual(50, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+            "FD 50 after RT 90 should not drift vertically (stays on the north leg, screen y 50).");
         Assert.AreEqual(90, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
             "FD after RT 90 must not mutate turtle heading.");
         QueueLine(editor, "RT 90");
@@ -1997,8 +1997,8 @@ public class NovaLogoTests
 
         Assert.AreEqual(210, x,
             $"After FD 50 RT 90 FD 50 RT 90 FD 50, X should stay on the exact east leg. {state}");
-        Assert.AreEqual(80, y,
-            $"The second RT 90 is relative to the current east-facing heading and should move south. {state}");
+        Assert.AreEqual(100, y,
+            $"The second RT 90 is relative to the current east-facing heading and should move south (back to center y). {state}");
         Assert.AreEqual(180, heading,
             $"Two RT 90 commands should leave the turtle facing 180 degrees, not reset to an absolute 90. {state}");
     }
@@ -2062,9 +2062,9 @@ public class NovaLogoTests
         Assert.AreEqual(45, heading, "RIGHT should update the same heading state as RT.");
         Assert.IsTrue(x is >= 172 and <= 175,
             $"FORWARD after RIGHT should advance eastward from the current turtle position. X={x}");
-        Assert.IsTrue(y is >= 44 and <= 47,
+        Assert.IsTrue(y is >= 64 and <= 67,
             $"FORWARD after RIGHT should advance northward on the 45-degree heading. Y={y}");
-        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 80),
+        Assert.AreEqual(0, bus.Vgc.GetGfxPixelColor(160, 100),
             "Long-form FORWARD should not redraw from the original center position.");
     }
 
@@ -2188,10 +2188,11 @@ public class NovaLogoTests
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsFalse(screen.Contains("I DON'T KNOW", StringComparison.Ordinal),
             $"SETPOS should be a real turtle primitive, not an unknown word.\n{screen}");
-        Assert.AreEqual(100, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
-            "SETPOS [x y] should move the turtle to the list's X coordinate.");
+        // Centered Logo [100 50] -> internal screen (100+160, 100-50) = (260, 50).
+        Assert.AreEqual(260, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+            "SETPOS [100 y] should move the turtle to screen X 100+160.");
         Assert.AreEqual(50, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
-            "SETPOS [x y] should move the turtle to the list's Y coordinate.");
+            "SETPOS [x 50] should move the turtle to screen Y 100-50.");
     }
 
     [TestMethod]

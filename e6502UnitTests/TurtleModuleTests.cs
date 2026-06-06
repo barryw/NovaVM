@@ -52,7 +52,8 @@ namespace e6502UnitTests
                              TS_HEADING_LO = 0x9F06, TS_HEADING_HI = 0x9F07,
                              TS_PEN = 0x9F08, TS_SHOWN = 0x9F09, TS_COLOR = 0x9F0A,
                              TS_INITED = 0x9F0C;
-        private const int    TURTLE_CENTER_X = 160, TURTLE_CENTER_Y = 80;
+        // Internal screen-pixel home (the Logo origin (0,0) maps to screen center).
+        private const int    TURTLE_CENTER_X = 160, TURTLE_CENTER_Y = 100;
         private const byte   LERR_OK = 0x00, LERR_NO_FN = 0x83, LERR_VSPRITE_FAIL = 0x84;
         private const ushort Sentinel = 0xFFF9;       // RTS lands here; loop stops
 
@@ -472,6 +473,18 @@ namespace e6502UnitTests
         private static int ResultInt(CompositeBusDevice bus) =>
             bus.ReadRam((ushort)(RESULT + 1)) | (bus.ReadRam((ushort)(RESULT + 2)) << 8);
 
+        // ResultInt sign-extended (coordinates are signed: left/below center are negative).
+        private static int ResultS16(CompositeBusDevice bus) => (short)ResultInt(bus);
+
+        // Run a reporter op (synchronous — reporters never frame-wait) and return
+        // the signed 16-bit value. Used for XCOR/YCOR which can be negative.
+        private static int Report(CompositeBusDevice bus, byte op)
+        {
+            SetArg(bus, ARG2, op);
+            RunFn(bus, TUR_OP);
+            return ResultS16(bus);
+        }
+
         // --- $B3 op dispatch is wired (not gfn_unimpl): a command op returns OK. ---
         [TestMethod]
         public void Axis2_TurtleOp_DispatchesOk()
@@ -491,7 +504,7 @@ namespace e6502UnitTests
 
             int x0 = Read16(bus, TS_X_LO), y0 = Read16(bus, TS_Y_LO);
             Assert.AreEqual(TURTLE_CENTER_X, x0, "CS must center X at 160");
-            Assert.AreEqual(TURTLE_CENTER_Y, y0, "CS must center Y at 80");
+            Assert.AreEqual(TURTLE_CENTER_Y, y0, "CS must center Y at 100");
 
             SetTurtleArg(bus, ARG0, 50);  // FD 50
             RunTurtleOp(bus, TOP_FD);
@@ -592,11 +605,11 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
             RunTurtleOp(bus, TOP_CS);
 
-            SetTurtleArg(bus, ARG0, 123);   // SETXY 123 200
-            SetTurtleArg(bus, ARG1, 200);
+            SetTurtleArg(bus, ARG0, 50);    // SETXY 50 30 (centered Logo coords)
+            SetTurtleArg(bus, ARG1, 30);
             RunTurtleOp(bus, TOP_SETXY);
-            Assert.AreEqual(123, Read16(bus, TS_X_LO), "SETXY must set X");
-            Assert.AreEqual(200, Read16(bus, TS_Y_LO), "SETXY must set Y");
+            Assert.AreEqual(210, Read16(bus, TS_X_LO), "SETXY x=50 -> internal screen X = 50+160");
+            Assert.AreEqual(70, Read16(bus, TS_Y_LO), "SETXY y=30 -> internal screen Y = 100-30");
 
             SetTurtleArg(bus, ARG0, 45);    // SETH 45
             RunTurtleOp(bus, TOP_SETH);
@@ -617,13 +630,13 @@ namespace e6502UnitTests
 
             SetTurtleArg(bus, ARG0, 55);
             RunTurtleOp(bus, TOP_SETX);
-            Assert.AreEqual(55, Read16(bus, TS_X_LO), "SETX must set X");
+            Assert.AreEqual(215, Read16(bus, TS_X_LO), "SETX 55 -> internal screen X = 55+160");
             Assert.AreEqual(y0, Read16(bus, TS_Y_LO), "SETX must leave Y unchanged");
 
             int x1 = Read16(bus, TS_X_LO);
             SetTurtleArg(bus, ARG0, 33);
             RunTurtleOp(bus, TOP_SETY);
-            Assert.AreEqual(33, Read16(bus, TS_Y_LO), "SETY must set Y");
+            Assert.AreEqual(67, Read16(bus, TS_Y_LO), "SETY 33 -> internal screen Y = 100-33");
             Assert.AreEqual(x1, Read16(bus, TS_X_LO), "SETY must leave X unchanged");
         }
 
@@ -642,7 +655,7 @@ namespace e6502UnitTests
 
             RunTurtleOp(bus, TOP_HOME);
             Assert.AreEqual(TURTLE_CENTER_X, Read16(bus, TS_X_LO), "HOME must recenter X to 160");
-            Assert.AreEqual(TURTLE_CENTER_Y, Read16(bus, TS_Y_LO), "HOME must recenter Y to 80");
+            Assert.AreEqual(TURTLE_CENTER_Y, Read16(bus, TS_Y_LO), "HOME must recenter Y to 100");
             Assert.AreEqual(0, Read16(bus, TS_HEADING_LO), "HOME must reset heading to 0");
         }
 
@@ -759,34 +772,46 @@ namespace e6502UnitTests
             Assert.AreEqual(0, ResultInt(bus), "SHOWN? must be 0 after HT (turtle hidden)");
         }
 
-        // --- TOWARDS reports the ATAN2-derived angle (degrees) towards a target.
-        // This is a FAITHFUL port of the legacy ext_towards (extension.s:1368),
-        // which feeds dx = target_x - turtle_x and dy = turtle_y - target_y into
-        // the math copro's ATAN2 (math convention: CCW from +x). So a point due
-        // east (dx>0, dy=0) reports ~0deg and a point due north (dx=0, dy>0)
-        // reports ~90deg. (The legacy reporter does NOT remap into the Logo
-        // north=0 heading convention; the port preserves that behavior exactly.) ---
+        // --- TOWARDS reports a LOGO HEADING toward a target (north=0, east=90,
+        // clockwise) so SETHEADING TOWARDS [x y] points the turtle at the target,
+        // exactly like UCBLogo/FMSLogo. Targets are centered Logo coords. ---
         [TestMethod]
-        public void Axis2_TurtleTowards_ReportsAtan2Angle()
+        public void Axis2_TurtleTowards_ReportsLogoHeading()
         {
             using var bus = MakeAxis2Bus();
-            RunTurtleOp(bus, TOP_CS);     // center (160,80)
+            RunTurtleOp(bus, TOP_CS);     // turtle at origin (0,0)
 
-            // Point due east: (260, 80) -> dx=+100, dy=0 -> atan2 0 -> ~0deg.
-            SetTurtleArg(bus, ARG0, 260);
-            SetTurtleArg(bus, ARG1, 80);
-            SetArg(bus, ARG2, TOP_TOWARDS);
-            RunFn(bus, TUR_OP);
-            int east = ResultInt(bus);
-            Assert.IsTrue(east <= 2 || east >= 358, $"TOWARDS due east must be ~0deg (got {east})");
-
-            // Point due north: (160, 0) -> dx=0, dy=+80 -> atan2 64 -> ~90deg.
-            SetTurtleArg(bus, ARG0, 160);
+            // Due east (target to the right) -> Logo heading 90.
+            SetTurtleArg(bus, ARG0, 100);
             SetTurtleArg(bus, ARG1, 0);
             SetArg(bus, ARG2, TOP_TOWARDS);
             RunFn(bus, TUR_OP);
+            int east = ResultInt(bus);
+            Assert.IsTrue(east >= 88 && east <= 92, $"TOWARDS due east must be ~90 (Logo heading) (got {east})");
+
+            // Due north (target above) -> Logo heading 0.
+            SetTurtleArg(bus, ARG0, 0);
+            SetTurtleArg(bus, ARG1, 80);
+            SetArg(bus, ARG2, TOP_TOWARDS);
+            RunFn(bus, TUR_OP);
             int north = ResultInt(bus);
-            Assert.IsTrue(north >= 88 && north <= 92, $"TOWARDS due north must be ~90deg (got {north})");
+            Assert.IsTrue(north <= 2 || north >= 358, $"TOWARDS due north must be ~0 (Logo heading) (got {north})");
+
+            // Due south (target below) -> Logo heading 180.
+            SetTurtleArg(bus, ARG0, 0);
+            SetTurtleArg(bus, ARG1, unchecked((short)-80));
+            SetArg(bus, ARG2, TOP_TOWARDS);
+            RunFn(bus, TUR_OP);
+            int south = ResultInt(bus);
+            Assert.IsTrue(south >= 178 && south <= 182, $"TOWARDS due south must be ~180 (Logo heading) (got {south})");
+
+            // Due west (target to the left) -> Logo heading 270.
+            SetTurtleArg(bus, ARG0, unchecked((short)-100));
+            SetTurtleArg(bus, ARG1, 0);
+            SetArg(bus, ARG2, TOP_TOWARDS);
+            RunFn(bus, TUR_OP);
+            int west = ResultInt(bus);
+            Assert.IsTrue(west >= 268 && west <= 272, $"TOWARDS due west must be ~270 (Logo heading) (got {west})");
         }
 
         // --- SETXY x y: generic numeric move (the module's only positioning op).
@@ -800,12 +825,164 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
             RunTurtleOp(bus, TOP_CS);
 
-            SetTurtleArg(bus, ARG0, 137);   // x = 137 (Logo 16.8, frac=0)
+            SetTurtleArg(bus, ARG0, 137);   // x = 137 (centered Logo, frac=0)
             SetTurtleArg(bus, ARG1, 64);    // y = 64
             RunTurtleOp(bus, TOP_SETXY);
 
-            Assert.AreEqual(137, Read16(bus, TS_X_LO), "SETXY must set X from ARG0");
-            Assert.AreEqual(64, Read16(bus, TS_Y_LO), "SETXY must set Y from ARG1");
+            Assert.AreEqual(297, Read16(bus, TS_X_LO), "SETXY x=137 -> internal screen X = 137+160");
+            Assert.AreEqual(36, Read16(bus, TS_Y_LO), "SETXY y=64 -> internal screen Y = 100-64");
+        }
+
+        // =====================================================================
+        // Logo coordinate convention: origin (0,0) at screen CENTER, +Y up, +X
+        // right. HOME reports (0,0); FD north reports positive YCOR; RT 90 + FD
+        // reports positive XCOR; SETXY takes centered coords. Verified against
+        // UCBLogo/FMSLogo/Terrapin/Python-logo-mode. The internal $9F00 state
+        // stays screen-pixel (home = 160,100); only the op boundary translates.
+        // =====================================================================
+
+        // --- HOME / CS leave the turtle at the origin: XCOR = 0, YCOR = 0. ---
+        [TestMethod]
+        public void Axis2_TurtleHome_ReportsOrigin()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            Assert.AreEqual(0, Report(bus, TOP_XCOR), "at home XCOR must be 0 (origin at screen center)");
+            Assert.AreEqual(0, Report(bus, TOP_YCOR), "at home YCOR must be 0 (origin at screen center)");
+        }
+
+        // --- FD north from home reports POSITIVE YCOR (+Y is up in Logo). ---
+        [TestMethod]
+        public void Axis2_TurtleFdNorth_ReportsPositiveYcor()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 50);  // FD 50 at heading 0 (north)
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(0, Report(bus, TOP_XCOR), "FD north leaves XCOR at 0");
+            Assert.AreEqual(50, Report(bus, TOP_YCOR), "FD 50 north must report YCOR +50 (up is positive)");
+        }
+
+        // --- RT 90 + FD reports POSITIVE XCOR (+X is right). ---
+        [TestMethod]
+        public void Axis2_TurtleRt90Fd_ReportsPositiveXcor()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 90);
+            RunTurtleOp(bus, TOP_RT);
+            SetTurtleArg(bus, ARG0, 50);
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(50, Report(bus, TOP_XCOR), "RT 90 + FD 50 must report XCOR +50 (right is positive)");
+            Assert.AreEqual(0, Report(bus, TOP_YCOR), "FD east leaves YCOR at 0");
+        }
+
+        // --- SETXY takes centered coords: SETXY -50 50 goes left-and-up, reports
+        //     them back, and lands at the matching screen pixel (110, 50). ---
+        [TestMethod]
+        public void Axis2_TurtleSetxyCentered_ReportsAndPositions()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, unchecked((short)-50));  // SETXY -50 50
+            SetTurtleArg(bus, ARG1, 50);
+            RunTurtleOp(bus, TOP_SETXY);
+
+            Assert.AreEqual(-50, Report(bus, TOP_XCOR), "SETXY -50 must report XCOR -50");
+            Assert.AreEqual(50, Report(bus, TOP_YCOR), "SETXY 50 must report YCOR 50");
+            // Internal screen pixel: sx = -50 + 160 = 110, sy = 100 - 50 = 50.
+            Assert.AreEqual(110, Read16(bus, TS_X_LO), "internal screen X = lx + 160");
+            Assert.AreEqual(50, Read16(bus, TS_Y_LO), "internal screen Y = 100 - ly");
+        }
+
+        // --- SETX / SETY take centered coords on one axis. ---
+        [TestMethod]
+        public void Axis2_TurtleSetxSetyCentered_Report()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, unchecked((short)-30));
+            RunTurtleOp(bus, TOP_SETX);
+            Assert.AreEqual(-30, Report(bus, TOP_XCOR), "SETX -30 must report XCOR -30");
+            Assert.AreEqual(0, Report(bus, TOP_YCOR), "SETX must leave YCOR unchanged (0)");
+
+            SetTurtleArg(bus, ARG0, unchecked((short)-40));
+            RunTurtleOp(bus, TOP_SETY);
+            Assert.AreEqual(-40, Report(bus, TOP_YCOR), "SETY -40 must report YCOR -40");
+            Assert.AreEqual(-30, Report(bus, TOP_XCOR), "SETY must leave XCOR unchanged (-30)");
+        }
+
+        // =====================================================================
+        // WRAP (default edge behavior): moving past an edge reappears on the
+        // opposite edge. The stored screen position is reduced mod 320 x 200, so
+        // reporters always return in-range values, and pen lines that cross an
+        // edge are drawn wrapped (the tile-shift draws the opposite-side segment).
+        // =====================================================================
+
+        // --- FD past the top edge wraps Y to the bottom of the plane. ---
+        [TestMethod]
+        public void Axis2_TurtleWrapNorth_WrapsYIntoRange()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 99);     // SETY 99 -> screen y = 1 (one below the top edge)
+            RunTurtleOp(bus, TOP_SETY);
+            Assert.AreEqual(1, Read16(bus, TS_Y_LO), "fixture: SETY 99 -> screen y 1");
+
+            SetTurtleArg(bus, ARG0, 5);      // FD 5 north -> unwrapped screen y = -4 -> wrap 196
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(196, Read16(bus, TS_Y_LO), "FD past the top edge wraps screen Y to 200-4");
+            Assert.AreEqual(-96, Report(bus, TOP_YCOR), "wrapped YCOR = 100 - 196 = -96");
+        }
+
+        // --- FD past the right edge wraps X to the left of the plane. ---
+        [TestMethod]
+        public void Axis2_TurtleWrapEast_WrapsXIntoRange()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+
+            SetTurtleArg(bus, ARG0, 159);    // SETX 159 -> screen x = 319 (right edge)
+            RunTurtleOp(bus, TOP_SETX);
+            Assert.AreEqual(319, Read16(bus, TS_X_LO), "fixture: SETX 159 -> screen x 319");
+
+            SetTurtleArg(bus, ARG0, 90);
+            RunTurtleOp(bus, TOP_RT);
+            SetTurtleArg(bus, ARG0, 5);      // FD 5 east -> unwrapped screen x = 324 -> wrap 4
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreEqual(4, Read16(bus, TS_X_LO), "FD past the right edge wraps screen X to 320+4-320");
+            Assert.AreEqual(-156, Report(bus, TOP_XCOR), "wrapped XCOR = 4 - 160 = -156");
+        }
+
+        // --- A pen-down move across the top edge draws BOTH segments: the part up
+        //     to the edge AND the wrapped part at the opposite edge. ---
+        [TestMethod]
+        public void Axis2_TurtleWrapPenLine_DrawsOnBothEdges()
+        {
+            using var bus = MakeAxis2Bus();
+            RunTurtleOp(bus, TOP_CS);
+            RunTurtleOp(bus, TOP_HT);        // hide the icon so only the pen line marks the plane
+            RunTurtleOp(bus, TOP_PU);
+            SetTurtleArg(bus, ARG0, 99);     // move to screen y=1 (no line, pen up)
+            RunTurtleOp(bus, TOP_SETY);
+            RunTurtleOp(bus, TOP_PD);
+
+            SetTurtleArg(bus, ARG0, 5);      // FD 5 north across the top edge (pen down)
+            RunTurtleOp(bus, TOP_FD);
+
+            Assert.AreNotEqual(0, GfxPixel(bus, 160, 0),
+                "pen line must mark the top edge (the pre-wrap segment)");
+            Assert.AreNotEqual(0, GfxPixel(bus, 160, 198),
+                "pen line must mark the bottom edge (the wrapped segment)");
         }
 
         // --- ST after HT re-shows the turtle (TURTLE_SHOWN toggles). ---

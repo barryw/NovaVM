@@ -1260,4 +1260,62 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegFont, 0xFF);
         Assert.AreEqual(7, _vgc.GetFontIndex());
     }
+
+    // -- Signed LINE endpoints (needed for turtle WRAP: lines are drawn shifted
+    //    by whole plane-tiles and clipped, so endpoints can be negative). The
+    //    endpoint words are signed 16-bit; pixels outside the plane are dropped. --
+
+    // Draw a LINE with the four endpoint words as signed 16-bit.
+    private void DrawSignedLine(int x0, int y0, int x1, int y1, byte color)
+    {
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcls);   // clear plane
+        _vgc.Write(VgcConstants.RegP0, color);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
+        _vgc.Write(VgcConstants.RegP0, (byte)(x0 & 0xFF));
+        _vgc.Write(VgcConstants.RegP1, (byte)((x0 >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP2, (byte)(y0 & 0xFF));
+        _vgc.Write(VgcConstants.RegP3, (byte)((y0 >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP4, (byte)(x1 & 0xFF));
+        _vgc.Write(VgcConstants.RegP5, (byte)((x1 >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegP6, (byte)(y1 & 0xFF));
+        _vgc.Write(VgcConstants.RegP7, (byte)((y1 >> 8) & 0xFF));
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdLine);
+    }
+
+    [TestMethod]
+    public void Line_CrossingLeftEdge_DrawsInBoundsPartOnly()
+    {
+        // Horizontal line from x=-10 to x=30 at y=50. With unsigned endpoints the
+        // -10 reads as 65526 and the segment lands on x=30..319 (garbage); with
+        // signed endpoints the in-bounds part x=0..30 is drawn and x>30 stays 0.
+        DrawSignedLine(-10, 50, 30, 50, 5);
+
+        Assert.AreEqual(5, _vgc.GetGfxPixelColor(0, 50), "left edge pixel must be drawn");
+        Assert.AreEqual(5, _vgc.GetGfxPixelColor(5, 50), "in-bounds pixel near the clipped end must be drawn");
+        Assert.AreEqual(5, _vgc.GetGfxPixelColor(30, 50), "far endpoint must be drawn");
+        Assert.IsFalse(_vgc.GetGfxPixel(100, 50), "no pixel may be drawn past the real endpoint");
+    }
+
+    [TestMethod]
+    public void Line_CrossingTopEdge_DrawsInBoundsPartOnly()
+    {
+        // Vertical line from y=-10 to y=20 at x=50. Mirrors a turtle wrap over the
+        // top edge: only y=0..20 should be drawn.
+        DrawSignedLine(50, -10, 50, 20, 7);
+
+        Assert.AreEqual(7, _vgc.GetGfxPixelColor(50, 0), "top edge pixel must be drawn");
+        Assert.AreEqual(7, _vgc.GetGfxPixelColor(50, 5), "in-bounds pixel near the clipped end must be drawn");
+        Assert.AreEqual(7, _vgc.GetGfxPixelColor(50, 20), "far endpoint must be drawn");
+        Assert.IsFalse(_vgc.GetGfxPixel(50, 100), "no pixel may be drawn past the real endpoint");
+    }
+
+    [TestMethod]
+    public void Line_FullyOffPlaneLeft_DrawsNothing()
+    {
+        // Both endpoints left of the plane — nothing is visible.
+        DrawSignedLine(-50, 50, -10, 50, 9);
+        for (int x = 0; x < VgcConstants.GfxWidth; x++)
+            Assert.IsFalse(_vgc.GetGfxPixel(x, 50), $"off-plane line must draw nothing (x={x})");
+    }
 }

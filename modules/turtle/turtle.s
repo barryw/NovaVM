@@ -333,8 +333,14 @@ TURTLE_INITED      = TURTLE_STATE_BASE + 12
 TURTLE_GFX_VISIBLE = TURTLE_STATE_BASE + 17  ; 1 = split/full graphics active
 
 ; --- Turtle constants ---
-TURTLE_CENTER_X    = 160         ; center of 320-wide graphics
-TURTLE_CENTER_Y    = 80          ; center of the split graphics viewport
+; The Logo coordinate origin (0,0) is the CENTER of the full 320x200 plane, so
+; the turtle's screen-pixel home is (160,100). Internally the turtle state stays
+; in screen pixels; the op boundary translates to/from centered Logo coordinates
+; (XCOR/YCOR report signed, +Y up; SETXY/SETX/SETY/TOWARDS accept the same):
+;   logo -> screen:  sx = lx + 160   sy = 100 - ly
+;   screen -> logo:  lx = sx - 160   ly = 100 - sy
+TURTLE_CENTER_X    = 160         ; screen x of Logo origin (0,0)
+TURTLE_CENTER_Y    = 100         ; screen y of Logo origin (0,0) — full-plane center
 TURTLE_SPLIT_Y     = 160         ; copper split: gfx rows 0-159, text below
 TURTLE_MODE_GFXSPR = 3           ; VGC mode: graphics + sprites
 TURTLE_MODE_TEXT   = 0           ; VGC mode: text only
@@ -414,6 +420,265 @@ reset_pos_heading:
       stz     TURTLE_HEADING_LO
       stz     TURTLE_HEADING_HI
       rts
+
+; =====================================================================
+; Logo<->screen coordinate translation. The turtle state is stored in screen
+; pixels; SETXY/SETX/SETY accept centered Logo coords and XCOR/YCOR report them.
+;   screen_x_from_TA0:  TURTLE_X = (TA0 lx) + 160,  frac 0   (SETX / SETXY x)
+;   screen_y_from_TA0:  TURTLE_Y = 100 - (TA0 ly),  frac 0   (SETY)
+;   screen_y_from_TA1:  TURTLE_Y = 100 - (TA1 ly),  frac 0   (SETXY y)
+; 16-bit signed add/sub of the center constant — a negative Logo coord lands on
+; the correct screen pixel (e.g. lx=-50 -> sx=110). Frac is dropped (SETXY is
+; integer, matching the prior behavior).
+; =====================================================================
+screen_x_from_TA0:
+      clc
+      lda     TA0_LO
+      adc     #<TURTLE_CENTER_X
+      sta     TURTLE_X_LO
+      lda     TA0_HI
+      adc     #>TURTLE_CENTER_X
+      sta     TURTLE_X_HI
+      stz     TURTLE_X_FRAC
+      rts
+screen_y_from_TA0:
+      sec
+      lda     #<TURTLE_CENTER_Y
+      sbc     TA0_LO
+      sta     TURTLE_Y_LO
+      lda     #>TURTLE_CENTER_Y
+      sbc     TA0_HI
+      sta     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      rts
+screen_y_from_TA1:
+      sec
+      lda     #<TURTLE_CENTER_Y
+      sbc     TA1_LO
+      sta     TURTLE_Y_LO
+      lda     #>TURTLE_CENTER_Y
+      sbc     TA1_HI
+      sta     TURTLE_Y_HI
+      stz     TURTLE_Y_FRAC
+      rts
+
+; =====================================================================
+; WRAP — default Logo edge behavior: the turtle reappears on the opposite edge.
+; The plane is the full 320 x 200 screen.
+;
+; compute_wrap — from the UNWRAPPED screen position in TURTLE_X/Y (LO/HI), derive:
+;   wrap_wx/wy   = position reduced into [0,320) x [0,200)  (the committed pos)
+;   wrap_dxoff   = TURTLE_X - wrap_wx   (= tiles_x * 320; sign gives wrap direction)
+;   wrap_dyoff   = TURTLE_Y - wrap_wy   (= tiles_y * 200)
+; TURTLE_X/Y themselves are NOT modified (the pen line still needs the unwrapped
+; endpoint). The frac bytes are irrelevant here — wrapping only shifts whole pixels.
+; =====================================================================
+TURTLE_PLANE_W = 320
+TURTLE_PLANE_H = 200
+
+compute_wrap:
+      lda     TURTLE_X_LO
+      sta     wrap_wx_lo
+      lda     TURTLE_X_HI
+      sta     wrap_wx_hi
+      jsr     reduce_wx_mod_w          ; wrap_wx -> [0,320)
+      sec
+      lda     TURTLE_X_LO
+      sbc     wrap_wx_lo
+      sta     wrap_dxoff_lo
+      lda     TURTLE_X_HI
+      sbc     wrap_wx_hi
+      sta     wrap_dxoff_hi
+
+      lda     TURTLE_Y_LO
+      sta     wrap_wy_lo
+      lda     TURTLE_Y_HI
+      sta     wrap_wy_hi
+      jsr     reduce_wy_mod_h          ; wrap_wy -> [0,200)
+      sec
+      lda     TURTLE_Y_LO
+      sbc     wrap_wy_lo
+      sta     wrap_dyoff_lo
+      lda     TURTLE_Y_HI
+      sbc     wrap_wy_hi
+      sta     wrap_dyoff_hi
+      rts
+
+; reduce_wx_mod_w — reduce the signed 16-bit wrap_wx into [0,320). Add/subtract
+; 320 until in range (move displacements are small, so few iterations).
+reduce_wx_mod_w:
+@chk:
+      lda     wrap_wx_hi
+      bmi     @add                     ; negative -> add a plane width
+      cmp     #>TURTLE_PLANE_W         ; hi vs 1
+      bcc     @done                    ; hi < 1 -> < 320
+      bne     @sub                     ; hi > 1 -> >= 320
+      lda     wrap_wx_lo
+      cmp     #<TURTLE_PLANE_W         ; hi == 1: lo vs $40
+      bcc     @done
+@sub:
+      sec
+      lda     wrap_wx_lo
+      sbc     #<TURTLE_PLANE_W
+      sta     wrap_wx_lo
+      lda     wrap_wx_hi
+      sbc     #>TURTLE_PLANE_W
+      sta     wrap_wx_hi
+      bra     @chk
+@add:
+      clc
+      lda     wrap_wx_lo
+      adc     #<TURTLE_PLANE_W
+      sta     wrap_wx_lo
+      lda     wrap_wx_hi
+      adc     #>TURTLE_PLANE_W
+      sta     wrap_wx_hi
+      bra     @chk
+@done:
+      rts
+
+; reduce_wy_mod_h — reduce the signed 16-bit wrap_wy into [0,200).
+reduce_wy_mod_h:
+@chk:
+      lda     wrap_wy_hi
+      bmi     @add                     ; negative -> add a plane height
+      bne     @sub                     ; hi >= 1 -> >= 256 -> >= 200
+      lda     wrap_wy_lo
+      cmp     #<TURTLE_PLANE_H         ; hi == 0: lo vs 200
+      bcc     @done
+@sub:
+      sec
+      lda     wrap_wy_lo
+      sbc     #<TURTLE_PLANE_H
+      sta     wrap_wy_lo
+      lda     wrap_wy_hi
+      sbc     #>TURTLE_PLANE_H
+      sta     wrap_wy_hi
+      bra     @chk
+@add:
+      clc
+      lda     wrap_wy_lo
+      adc     #<TURTLE_PLANE_H
+      sta     wrap_wy_lo
+      lda     wrap_wy_hi
+      adc     #>TURTLE_PLANE_H
+      sta     wrap_wy_hi
+      bra     @chk
+@done:
+      rts
+
+; =====================================================================
+; draw_wrapped_pen_line — draw the pen line old -> (unwrapped) TURTLE_X/Y on a
+; torus: for each plane-tile the move spans, draw the line shifted by that tile
+; and let the VGC clip the off-plane part. The X offsets step by +/-320 from 0 to
+; wrap_dxoff; the Y offsets by +/-200 from 0 to wrap_dyoff. The common (no-wrap)
+; case has dxoff = dyoff = 0 -> a single line, exactly the pre-WRAP behavior.
+; =====================================================================
+draw_wrapped_pen_line:
+      jsr     vgc_wait_cmd             ; set the pen color once
+      lda     TURTLE_COLOR
+      sta     VGC_P0
+      jsr     vgc_gcolor
+      jsr     vgc_wait_cmd
+      stz     woff_x_lo                ; off_x = 0
+      stz     woff_x_hi
+@xloop:
+      stz     woff_y_lo                ; off_y = 0
+      stz     woff_y_hi
+@yloop:
+      jsr     draw_one_shifted_line
+      ; inner done when off_y == dyoff
+      lda     woff_y_lo
+      cmp     wrap_dyoff_lo
+      bne     @ystep
+      lda     woff_y_hi
+      cmp     wrap_dyoff_hi
+      beq     @xnext
+@ystep:
+      bit     wrap_dyoff_hi            ; N = sign of dyoff -> step direction
+      bmi     @ysub
+      clc
+      lda     woff_y_lo
+      adc     #<TURTLE_PLANE_H
+      sta     woff_y_lo
+      lda     woff_y_hi
+      adc     #>TURTLE_PLANE_H
+      sta     woff_y_hi
+      bra     @yloop
+@ysub:
+      sec
+      lda     woff_y_lo
+      sbc     #<TURTLE_PLANE_H
+      sta     woff_y_lo
+      lda     woff_y_hi
+      sbc     #>TURTLE_PLANE_H
+      sta     woff_y_hi
+      bra     @yloop
+@xnext:
+      ; outer done when off_x == dxoff
+      lda     woff_x_lo
+      cmp     wrap_dxoff_lo
+      bne     @xstep
+      lda     woff_x_hi
+      cmp     wrap_dxoff_hi
+      beq     @done
+@xstep:
+      bit     wrap_dxoff_hi
+      bmi     @xsub
+      clc
+      lda     woff_x_lo
+      adc     #<TURTLE_PLANE_W
+      sta     woff_x_lo
+      lda     woff_x_hi
+      adc     #>TURTLE_PLANE_W
+      sta     woff_x_hi
+      bra     @xloop
+@xsub:
+      sec
+      lda     woff_x_lo
+      sbc     #<TURTLE_PLANE_W
+      sta     woff_x_lo
+      lda     woff_x_hi
+      sbc     #>TURTLE_PLANE_W
+      sta     woff_x_hi
+      bra     @xloop
+@done:
+      rts
+
+; draw_one_shifted_line — VGC line from (old - woff) to (new - woff), signed 16-bit
+; endpoints (the VGC clips off-plane). old = turtle_old_x/y, new = TURTLE_X/Y.
+draw_one_shifted_line:
+      jsr     vgc_wait_cmd
+      sec
+      lda     turtle_old_x_lo
+      sbc     woff_x_lo
+      sta     VGC_P0
+      lda     turtle_old_x_hi
+      sbc     woff_x_hi
+      sta     VGC_P1
+      sec
+      lda     turtle_old_y_lo
+      sbc     woff_y_lo
+      sta     VGC_P2
+      lda     turtle_old_y_hi
+      sbc     woff_y_hi
+      sta     VGC_P3
+      sec
+      lda     TURTLE_X_LO
+      sbc     woff_x_lo
+      sta     VGC_P4
+      lda     TURTLE_X_HI
+      sbc     woff_x_hi
+      sta     VGC_P5
+      sec
+      lda     TURTLE_Y_LO
+      sbc     woff_y_lo
+      sta     VGC_P6
+      lda     TURTLE_Y_HI
+      sbc     woff_y_hi
+      sta     VGC_P7
+      jsr     vgc_line
+      jmp     vgc_wait_cmd             ; tail
 
 ; =====================================================================
 ; turtle_init_state — initialize persistent turtle state, then install the icon
@@ -558,34 +823,26 @@ draw_turtle:
 ; =====================================================================
 turtle_render:
       jsr     gfn_turtle_erase         ; lift the old turtle before the line (see ORDER note)
+      ; WRAP: the move-math left TURTLE_X/Y as the UNWRAPPED screen position (it may
+      ; sit off the plane). compute_wrap derives the wrapped target + the per-axis
+      ; tile offset WITHOUT mutating TURTLE_X/Y, so the pen line below can still be
+      ; drawn from old -> unwrapped-new (tile-shifted so the opposite-edge segment
+      ; lands), and only THEN do we commit the wrapped position.
+      jsr     compute_wrap
       lda     TURTLE_PEN
       bne     @no_line                 ; pen up ($01) -> skip line
-      ; --- direct VGC line (draw_line, extension.s:627): color then endpoints ---
-      jsr     vgc_wait_cmd
-      lda     TURTLE_COLOR
-      sta     VGC_P0
-      jsr     vgc_gcolor
-      jsr     vgc_wait_cmd
-      lda     turtle_old_x_lo
-      sta     VGC_P0
-      lda     turtle_old_x_hi
-      sta     VGC_P1
-      lda     turtle_old_y_lo
-      sta     VGC_P2
-      lda     turtle_old_y_hi
-      sta     VGC_P3
-      lda     TURTLE_X_LO
-      sta     VGC_P4
-      lda     TURTLE_X_HI
-      sta     VGC_P5
-      lda     TURTLE_Y_LO
-      sta     VGC_P6
-      lda     TURTLE_Y_HI
-      sta     VGC_P7
-      jsr     vgc_line
-      jsr     vgc_wait_cmd
+      jsr     draw_wrapped_pen_line     ; old -> unwrapped-new, drawn wrapped across edges
 @no_line:
-      jmp     draw_turtle              ; tail: redraw turtle at the new position
+      ; commit the wrapped position (integer part only; the sub-pixel frac is kept).
+      lda     wrap_wx_lo
+      sta     TURTLE_X_LO
+      lda     wrap_wx_hi
+      sta     TURTLE_X_HI
+      lda     wrap_wy_lo
+      sta     TURTLE_Y_LO
+      lda     wrap_wy_hi
+      sta     TURTLE_Y_HI
+      jmp     draw_turtle              ; tail: redraw turtle at the wrapped position
 
 ; =====================================================================
 ; heading_mod360 — reduce TURTLE_HEADING to 0-359. (turtle.s:251)
@@ -843,16 +1100,8 @@ t_home:
 t_setxy:
       jsr     ensure_gfx_mode          ; guarantees INITED (inits if needed)
       jsr     turtle_save_old
-      lda     TA0_LO
-      sta     TURTLE_X_LO
-      lda     TA0_HI
-      sta     TURTLE_X_HI
-      stz     TURTLE_X_FRAC
-      lda     TA1_LO
-      sta     TURTLE_Y_LO
-      lda     TA1_HI
-      sta     TURTLE_Y_HI
-      stz     TURTLE_Y_FRAC
+      jsr     screen_x_from_TA0        ; TURTLE_X = lx + 160
+      jsr     screen_y_from_TA1        ; TURTLE_Y = 100 - ly
       jmp     render_then_ok
 
 ; t_setx — SETX x: set X only, draw line if pen down. (turtle.s:562)
@@ -861,22 +1110,14 @@ t_setxy:
 t_setx:
       jsr     ensure_gfx_mode          ; guarantees INITED (inits if needed)
       jsr     turtle_save_old
-      lda     TA0_LO
-      sta     TURTLE_X_LO
-      lda     TA0_HI
-      sta     TURTLE_X_HI
-      stz     TURTLE_X_FRAC
+      jsr     screen_x_from_TA0        ; TURTLE_X = lx + 160
       jmp     render_then_ok
 
 ; t_sety — SETY y: set Y only, draw line if pen down. (turtle.s:572)
 t_sety:
       jsr     ensure_gfx_mode          ; guarantees INITED (inits if needed)
       jsr     turtle_save_old
-      lda     TA0_LO
-      sta     TURTLE_Y_LO
-      lda     TA0_HI
-      sta     TURTLE_Y_HI
-      stz     TURTLE_Y_FRAC
+      jsr     screen_y_from_TA0        ; TURTLE_Y = 100 - ly
       jmp     render_then_ok
 
 ; =====================================================================
@@ -1008,12 +1249,22 @@ t_report16:
       jmp     finish_ok_nowait
 
 t_xcor:
-      ldx     TURTLE_X_LO
+      ; lx = screen_x - 160 (signed 16-bit; left of center is negative)
+      sec
+      lda     TURTLE_X_LO
+      sbc     #<TURTLE_CENTER_X
+      tax
       lda     TURTLE_X_HI
+      sbc     #>TURTLE_CENTER_X
       jmp     t_report16
 t_ycor:
-      ldx     TURTLE_Y_LO
-      lda     TURTLE_Y_HI
+      ; ly = 100 - screen_y (signed 16-bit; +Y is up, below center is negative)
+      sec
+      lda     #<TURTLE_CENTER_Y
+      sbc     TURTLE_Y_LO
+      tax
+      lda     #>TURTLE_CENTER_Y
+      sbc     TURTLE_Y_HI
       jmp     t_report16
 t_heading:
       ldx     TURTLE_HEADING_LO
@@ -1035,6 +1286,23 @@ t_shownp:
 ;   ARG0 = target x, ARG1 = target y. (extension.s:1368)
 ; =====================================================================
 t_towards:
+      ; The target rides in as centered Logo coords; convert to screen in place
+      ; (TA0 = lx + 160, TA1 = 100 - ly) so the screen-space ATAN2 below is
+      ; unchanged. turtle_x/turtle_y are already screen pixels.
+      clc
+      lda     TA0_LO
+      adc     #<TURTLE_CENTER_X
+      sta     TA0_LO
+      lda     TA0_HI
+      adc     #>TURTLE_CENTER_X
+      sta     TA0_HI
+      sec
+      lda     #<TURTLE_CENTER_Y
+      sbc     TA1_LO
+      sta     TA1_LO
+      lda     #>TURTLE_CENTER_Y
+      sbc     TA1_HI
+      sta     TA1_HI
       ; dy = turtle_y - target_y (screen Y is inverted) — set FIRST so DX_HI
       ; is the LAST write (the math copro triggers ATAN2 on MATH_ATAN_DX_HI;
       ; the legacy ext_towards wrote DX before DY, latching a stale DY — fixed
@@ -1054,16 +1322,37 @@ t_towards:
       lda     TA0_HI
       sbc     TURTLE_X_HI
       sta     MATH_ATAN_DX_HI          ; writing DX_HI triggers ATAN2
-      ; angle u8 (0-255) -> degrees: u8 * 360 / 256 = hi byte of (u8 * 360)
+      ; angle u8 (0-255) -> degrees: u8 * 360 / 256 = hi byte of (u8 * 360).
+      ; The ATAN2 result is a MATH angle (east=0, CCW). Remap to a LOGO HEADING
+      ; (north=0, east=90, clockwise) so SETHEADING TOWARDS [x y] points at the
+      ; target: heading = (90 - mathdeg) mod 360.
       lda     MATH_RES0
       sta     MATH_MUL16_A_LO
       stz     MATH_MUL16_A_HI
       lda     #<360
       sta     MATH_MUL16_B_LO
       lda     #>360
-      sta     MATH_MUL16_B_HI          ; triggers multiply
-      ldx     MATH_RES1                ; (u8*360) >> 8 low
-      lda     MATH_RES2                ; high
+      sta     MATH_MUL16_B_HI          ; triggers multiply; mathdeg = MATH_RES2:RES1
+      ; heading = 90 - mathdeg (signed 16-bit) -> turtle_tmp0/1 (clamp scratch,
+      ; unused outside render)
+      sec
+      lda     #<90
+      sbc     MATH_RES1
+      sta     turtle_tmp0
+      lda     #>90
+      sbc     MATH_RES2
+      sta     turtle_tmp1
+      bpl     @h_ok                    ; >= 0 -> already in [0,90]
+      clc                              ; negative -> + 360
+      lda     turtle_tmp0
+      adc     #<360
+      sta     turtle_tmp0
+      lda     turtle_tmp1
+      adc     #>360
+      sta     turtle_tmp1
+@h_ok:
+      ldx     turtle_tmp0
+      lda     turtle_tmp1
       jmp     t_report16
 
 ; turtle_icon — the built-in 16x16 upward-triangle turtle, one color (white).
@@ -1130,6 +1419,20 @@ t_save_a0_1:          .res 1
 t_save_a1_0:          .res 1
 t_save_a1_1:          .res 1
 t_save_a2_0:          .res 1
+; WRAP scratch: wrapped target (committed pos), per-axis tile offset (= unwrapped
+; minus wrapped), and the tile-loop offset accumulators for the pen line.
+wrap_wx_lo:           .res 1
+wrap_wx_hi:           .res 1
+wrap_wy_lo:           .res 1
+wrap_wy_hi:           .res 1
+wrap_dxoff_lo:        .res 1
+wrap_dxoff_hi:        .res 1
+wrap_dyoff_lo:        .res 1
+wrap_dyoff_hi:        .res 1
+woff_x_lo:            .res 1
+woff_x_hi:            .res 1
+woff_y_lo:            .res 1
+woff_y_hi:            .res 1
       .segment "CODE"
 
 ; ===========================================================================

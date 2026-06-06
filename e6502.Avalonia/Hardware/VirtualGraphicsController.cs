@@ -987,7 +987,11 @@ public class VirtualGraphicsController : IBusDevice
                 BlockGraphics.Plot(_gfxBitmap, p0, p1, 0);
                 break;
             case VgcConstants.CmdLine:
-                BlockGraphics.Line(_gfxBitmap, p0, p1, p2, p3, color);
+                // Line endpoints are signed 16-bit: the turtle WRAP path draws a
+                // line shifted by whole plane-tiles and relies on the off-plane
+                // copies clipping cleanly (a negative endpoint must mean "left/above
+                // the plane", not ~65000). BlockGraphics.Line clips to the plane.
+                BlockGraphics.Line(_gfxBitmap, (short)p0, (short)p1, (short)p2, (short)p3, color);
                 break;
             case VgcConstants.CmdCircle:
                 int ry = _cmdRegs[7] | (_cmdRegs[8] << 8);

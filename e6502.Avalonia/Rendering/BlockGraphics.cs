@@ -22,6 +22,12 @@ public static class BlockGraphics
 
     public static void Line(byte[] bmp, int x0, int y0, int x1, int y1, byte color)
     {
+        // Clip to the plane first so a line whose endpoints sit far off-plane
+        // (e.g. the turtle WRAP path's tile-shifted copies) only rasterizes the
+        // visible span instead of iterating across thousands of dropped pixels.
+        if (!ClipLine(ref x0, ref y0, ref x1, ref y1))
+            return;
+
         int dx  =  Math.Abs(x1 - x0);
         int dy  = -Math.Abs(y1 - y0);
         int sx  = x0 < x1 ? 1 : -1;
@@ -35,6 +41,42 @@ public static class BlockGraphics
             int e2 = 2 * err;
             if (e2 >= dy) { err += dy; x0 += sx; }
             if (e2 <= dx) { err += dx; y0 += sy; }
+        }
+    }
+
+    // Cohen–Sutherland clip of the segment to [0,Width-1] x [0,Height-1].
+    // Returns false if the segment is entirely outside the plane.
+    private const int OutLeft = 1, OutRight = 2, OutBottom = 4, OutTop = 8;
+
+    private static int OutCode(int x, int y)
+    {
+        int code = 0;
+        if (x < 0)            code |= OutLeft;
+        else if (x >= Width)  code |= OutRight;
+        if (y < 0)            code |= OutTop;
+        else if (y >= Height) code |= OutBottom;
+        return code;
+    }
+
+    private static bool ClipLine(ref int x0, ref int y0, ref int x1, ref int y1)
+    {
+        int xmax = Width - 1, ymax = Height - 1;
+        int c0 = OutCode(x0, y0), c1 = OutCode(x1, y1);
+
+        while (true)
+        {
+            if ((c0 | c1) == 0) return true;       // both inside
+            if ((c0 & c1) != 0) return false;      // both share an outside zone
+
+            int outc = c0 != 0 ? c0 : c1;
+            int x, y;
+            if ((outc & OutTop) != 0)         { x = x0 + (x1 - x0) * (0 - y0) / (y1 - y0); y = 0; }
+            else if ((outc & OutBottom) != 0) { x = x0 + (x1 - x0) * (ymax - y0) / (y1 - y0); y = ymax; }
+            else if ((outc & OutRight) != 0)  { y = y0 + (y1 - y0) * (xmax - x0) / (x1 - x0); x = xmax; }
+            else                              { y = y0 + (y1 - y0) * (0 - x0) / (x1 - x0); x = 0; }
+
+            if (outc == c0) { x0 = x; y0 = y; c0 = OutCode(x0, y0); }
+            else            { x1 = x; y1 = y; c1 = OutCode(x1, y1); }
         }
     }
 

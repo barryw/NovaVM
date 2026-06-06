@@ -265,10 +265,12 @@ public class NovaLogoHarnessTests
                 AssertScreenContains(screen, "130");
                 AssertScreenContains(screen, "70");
                 AssertScreenContains(screen, "180");
-                Assert.AreEqual(130, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
-                    "SETX should leave the turtle at the requested X coordinate.");
-                Assert.AreEqual(70, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
-                    "SETY should leave the turtle at the requested Y coordinate.");
+                // Internal state is screen-pixel: SETX 130 -> 130+160=290; SETY 70 ->
+                // 100-70=30. The public XCOR/YCOR (130/70) are checked on-screen above.
+                Assert.AreEqual(290, ReadTurtleWord(bus, TurtleXLo, TurtleXHi),
+                    "SETX 130 should leave the turtle at screen X 130+160.");
+                Assert.AreEqual(30, ReadTurtleWord(bus, TurtleYLo, TurtleYHi),
+                    "SETY 70 should leave the turtle at screen Y 100-70.");
                 Assert.AreEqual(180, ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi),
                     "SETH should use the same heading state as SETHEADING.");
             });
