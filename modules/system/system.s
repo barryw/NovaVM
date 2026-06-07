@@ -826,9 +826,11 @@ sys_screen_readline:
       LDA   VGC_CHARIN
       BEQ   @poll
       CMP   #$0D
-      BEQ   @enter                     ; ENTER -> read the row, return
+      BEQ   @goenter                   ; ENTER -> read the row, return
       CMP   #$20
       BCS   @printable                 ; >= $20 -> echo the char
+      CMP   #$08
+      BEQ   @backspace                 ; BS -> destructive erase-left
       ; arrow keys (28=Left, 29=Right, 30=Up, 31=Down) move the cursor, clamped.
       CMP   #28
       BEQ   @arrow_left
@@ -840,28 +842,50 @@ sys_screen_readline:
       BEQ   @arrow_down
       BRA   @poll                      ; other control codes ignored for now
 
+      ; Loop-back trampoline: handlers below sit far enough from @poll that a
+      ; direct BRA would overflow the +/-128 range, so they JMP here instead.
+@loop:
+      JMP   @poll
+      ; Forward trampoline for ENTER: the @enter read-row block sits past the echo
+      ; handler, out of the dispatch's short-branch range, so jump there.
+@goenter:
+      JMP   @enter
+
 @arrow_left:
       LDA   VGC_CURSX
-      BEQ   @poll                      ; at column 0 -> clamp
+      BEQ   @loop                      ; at column 0 -> clamp
       DEC   VGC_CURSX
-      BRA   @poll
+      BRA   @loop
 @arrow_right:
       LDA   VGC_CURSX
       CMP   #(NOVA_SCREEN_COLS-1)
-      BCS   @poll                      ; at column 79 -> clamp
+      BCS   @loop                      ; at column 79 -> clamp
       INC   VGC_CURSX
-      BRA   @poll
+      BRA   @loop
 @arrow_up:
       LDA   VGC_CURSY
-      BEQ   @poll                      ; at row 0 -> clamp
+      BEQ   @loop                      ; at row 0 -> clamp
       DEC   VGC_CURSY
-      BRA   @poll
+      BRA   @loop
 @arrow_down:
       LDA   VGC_CURSY
       CMP   #(NOVA_SCREEN_ROWS-1)
-      BCS   @poll                      ; at row 49 -> clamp
+      BCS   @loop                      ; at row 49 -> clamp
       INC   VGC_CURSY
-      BRA   @poll
+      BRA   @loop
+
+      ; --- destructive backspace: at CURSX>0, move left and erase the cell. MVP
+      ; (no shift-left DELETE): the freed cell becomes a space. ---
+@backspace:
+      LDA   VGC_CURSX
+      BEQ   @loop                      ; at column 0 -> nothing to erase
+      DEC   VGC_CURSX                  ; move left
+      LDA   VGC_CURSY
+      JSR   screen_row_base            ; srl_winL/H = $A200 + CURSY*80
+      LDY   VGC_CURSX
+      LDA   #$20                       ; erase the freed cell
+      STA   (srl_winL),Y
+      BRA   @loop
 
       ; --- echo a printable char at the cursor, then advance the cursor ---
 @printable:
@@ -882,7 +906,7 @@ sys_screen_readline:
       INC   VGC_CURSY                  ; advance to the next row
 @echo_setx:
       STY   VGC_CURSX
-      BRA   @poll
+      BRA   @loop
 
       ; --- ENTER: read the physical row under the cursor into the buffer ---
       ; Window row base = VGC_CURSY*80 -> srl_winL/H (= $A200 + CURSY*80).

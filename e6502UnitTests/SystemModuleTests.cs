@@ -276,6 +276,45 @@ public class SystemModuleTests
         Assert.AreEqual(0, bus.Read(VGC_CURSY), "Up clamps at row 0");
     }
 
+    /// <summary>
+    /// Task 5 — destructive backspace erases the char before the cursor and moves
+    /// left. Type "PRIM", backspace (drops the M), then "NT" -> "PRINT" on screen
+    /// and in the buffer.
+    /// (The plan's "PRIMT"+BS+"NT" is a typo; that yields "PRIMNT". "PRIM"+BS+"NT"
+    /// is the input that genuinely exercises a destructive backspace into "PRINT".)
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_BackspaceErasesAndMovesLeft()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int row = 6;
+        BlankScreenWindowRow(bus, row);
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)row);
+
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        QueueText(editor, "PRIM");
+        editor.QueueInput(0x08);     // backspace -> erase M, cursor back to col 3
+        QueueText(editor, "NT");
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual("PRINT", ReadScreenWindowRow(bus, row, 0, 5),
+            "destructive backspace must leave PRINT on the screen window");
+        Assert.AreEqual(5, bus.ReadRam(RESULT), "returned line length is 5 (PRINT)");
+        var got = new char[5];
+        for (int i = 0; i < 5; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual("PRINT", new string(got), "buffer must hold PRINT");
+    }
+
     private static string RepoPath(params string[] parts)
     {
         string root = Path.GetFullPath(Path.Combine(
