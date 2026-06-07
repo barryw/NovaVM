@@ -1254,6 +1254,8 @@ EXT_CMD_BLTFILL   = $0A
 .ifndef EXT_CMD_XMCCMD
 EXT_CMD_XMCCMD    = $0B
 .endif
+; RETIRED — COPPER relocated to the BASIC ROM (LAB_COPPER, lib_call(GRAPHICS)).
+; Extension slot $0C now dispatches EXT_UNSUPPORTED; use the COPPER token directly.
 .ifndef EXT_CMD_COPPER
 EXT_CMD_COPPER    = $0C
 .endif

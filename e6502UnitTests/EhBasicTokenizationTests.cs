@@ -1938,6 +1938,119 @@ public class EhBasicTokenizationTests
         Assert.Fail($"Timed out.\n{SnapshotScreen(bus.Vgc)}");
     }
 
+    // End-to-end verification that the relocated LAB_COPPER handler (parse +
+    // marshal + lib_call(GRAPHICS)) produces the SAME copper-list entries the
+    // old extension-ROM EXT_COPPER did. Runs a BASIC program through RUN, then
+    // commits the copper program at vblank and asserts the resulting
+    // CopperEvents (position/register/value). Covers the numeric-register and
+    // BGCOL direct-register ADD forms plus a 16-bit X argument.
+    [TestMethod]
+    public void AvaloniaRomCopperAddWritesCorrectListEntries()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // 10: numeric register form -> GFN_COPPER_SET_REG (regIndex 1 = BGCOL).
+        EnterLine(editor, "10 COPPER ADD 0,50,1,6");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        // 20: named BGCOL form -> GFN_COPPER_SET_REG, with a 16-bit X (>255).
+        EnterLine(editor, "20 COPPER ADD 300,100,BGCOL,9");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        // 30: named MODE form -> GFN_COPPER_SET_REG (regIndex 0 = MODE).
+        EnterLine(editor, "30 COPPER ADD 5,5,MODE,2");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "40 COPPER ON");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "RUN");
+        RunUntilEditorIdle(cpu, bus, editor, 50_000_000);
+        RunForSteps(cpu, bus, 2_000_000);
+
+        string runScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(runScreen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"COPPER ADD produced a syntax error.\n{runScreen}");
+
+        // Commit the target list (list 0) to the active program at vblank.
+        bus.Vgc.IncrementFrameCounter();
+        var program = bus.Vgc.GetCopperProgram();
+        Assert.AreEqual(3, program.Length,
+            $"Expected 3 copper events on list 0, got {program.Length}.\n{runScreen}");
+
+        // Build a lookup by position so order is irrelevant.
+        var byPos = program.ToArray().ToDictionary(e => (int)e.Position);
+
+        int pos1 = 50 * VgcConstants.GfxWidth + 0;     // line 10: x=0,y=50
+        int pos2 = 100 * VgcConstants.GfxWidth + 300;  // line 20: x=300,y=100
+        int pos3 = 5 * VgcConstants.GfxWidth + 5;      // line 30: x=5,y=5
+
+        Assert.IsTrue(byPos.ContainsKey(pos1), $"Missing event at pos {pos1} (line 10).");
+        Assert.AreEqual((byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase), byPos[pos1].RegisterIndex, "Line 10 register index");
+        Assert.AreEqual(6, byPos[pos1].Value, "Line 10 value");
+
+        Assert.IsTrue(byPos.ContainsKey(pos2), $"Missing event at pos {pos2} (line 20, 16-bit X).");
+        Assert.AreEqual((byte)(VgcConstants.RegBgCol - VgcConstants.VgcBase), byPos[pos2].RegisterIndex, "Line 20 register index");
+        Assert.AreEqual(9, byPos[pos2].Value, "Line 20 value");
+
+        Assert.IsTrue(byPos.ContainsKey(pos3), $"Missing event at pos {pos3} (line 30, MODE).");
+        Assert.AreEqual((byte)(VgcConstants.RegMode - VgcConstants.VgcBase), byPos[pos3].RegisterIndex, "Line 30 register index");
+        Assert.AreEqual(2, byPos[pos3].Value, "Line 30 value");
+    }
+
+    // End-to-end verification of the sprite-register ADD form. COPPER ADD
+    // SPRX(n)/SPRSHAPE(n) etc. routes through GFN_COPPER_SET_SPRITE_REG, whose
+    // module wrapper computes the absolute sprite-attribute register
+    // ($A040 + n*8 + field). The committed CopperEvent's RegisterIndex is that
+    // absolute address minus VgcBase.
+    [TestMethod]
+    public void AvaloniaRomCopperAddSpriteRegisterEntries()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // SPRX(2): field 0 (X low) on sprite 2 -> $A040 + 2*8 + 0 = $A050.
+        EnterLine(editor, "10 COPPER ADD 0,40,SPRX(2),100");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        // SPRSHAPE(3): field 4 on sprite 3 -> $A040 + 3*8 + 4 = $A05C.
+        EnterLine(editor, "20 COPPER ADD 0,80,SPRSHAPE(3),7");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        EnterLine(editor, "RUN");
+        RunUntilEditorIdle(cpu, bus, editor, 50_000_000);
+        RunForSteps(cpu, bus, 2_000_000);
+
+        string runScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(runScreen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"COPPER ADD sprite-reg produced a syntax error.\n{runScreen}");
+
+        bus.Vgc.IncrementFrameCounter();
+        var program = bus.Vgc.GetCopperProgram();
+        Assert.AreEqual(2, program.Length,
+            $"Expected 2 sprite-register copper events, got {program.Length}.\n{runScreen}");
+
+        var byPos = program.ToArray().ToDictionary(e => (int)e.Position);
+
+        int pos1 = 40 * VgcConstants.GfxWidth + 0;
+        int pos2 = 80 * VgcConstants.GfxWidth + 0;
+
+        Assert.IsTrue(byPos.ContainsKey(pos1), $"Missing SPRX(2) event at pos {pos1}.");
+        Assert.AreEqual((byte)(0xA050 - VgcConstants.VgcBase), byPos[pos1].RegisterIndex, "SPRX(2) absolute register");
+        Assert.AreEqual(100, byPos[pos1].Value, "SPRX(2) value");
+
+        Assert.IsTrue(byPos.ContainsKey(pos2), $"Missing SPRSHAPE(3) event at pos {pos2}.");
+        Assert.AreEqual((byte)(0xA05C - VgcConstants.VgcBase), byPos[pos2].RegisterIndex, "SPRSHAPE(3) absolute register");
+        Assert.AreEqual(7, byPos[pos2].Value, "SPRSHAPE(3) value");
+    }
+
     private static string BuildRandomStressLine(Random rng, int i)
     {
         string[] kw = ["MODE", "COLOR", "GCLS", "GCOLOR", "LINE", "MUSIC", "PLAYING", "MNOTE(", "SIDPLAY", "SIDSTOP", "MIDPLAY", "MIDSTOP", "SFLOAD", "COPPER", "XFREE", "XPEEK(", "IF", "THEN", "GOTO", "FOR", "NEXT", "REM", "DATA", "NOPEN", "NCLOSE", "NSEND", "NRECV$(", "NSTATUS(", "NREADY(", "DMACOPY", "DMAFILL", "DMASTATUS", "DMAERR", "DMACOUNT", "BLITCOPY", "BLITFILL", "BLITSTATUS", "BLITERR", "BLITCOUNT"];

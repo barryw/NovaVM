@@ -61,14 +61,6 @@ Bpntrh          = $C4
 FAC1_2          = $AE           ; FAC1 mantissa2 (16-bit hi after LAB_GTWRD)
 FAC1_3          = $AF           ; FAC1 mantissa3 (16-bit lo after LAB_GTWRD)
 
-; --- BASIC token bytes (sequential from $80, see basic.asm:321) ---
-TK_END_VAL      = $80
-TK_ON_VAL       = $93
-TK_LIST_VAL     = $A1
-TK_CLEAR_VAL    = $A2
-TK_GMODE_VAL    = $B5
-TK_OFF_VAL      = $CB
-
 ; VGC register and command constants live in runtime/asm/nova.inc.
 
       .segment "CODE"
@@ -100,7 +92,7 @@ ExtTable:
       .word EXT_DMAFILL-1     ; cmd 9: DMAFILL
       .word EXT_BLTFILL-1     ; cmd A: BLITFILL
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
-      .word EXT_COPPER-1      ; cmd C: COPPER subcommand parser
+      .word EXT_UNSUPPORTED-1 ; cmd C: was COPPER (relocated to BASIC ROM LAB_COPPER)
       .word EXT_XLOAD-1       ; cmd D: XLOAD file -> XRAM
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
       .word EXT_DMACOPY-1     ; cmd F: DMACOPY
@@ -1659,7 +1651,6 @@ EXT_BLTFILL:
       JMP   blitter_fill
 
       .include "blitter.s"
-      .include "copper.s"
 AUDIO_POINTER_FILE_HELPERS = 0
 NOVA_EMIT_ALL_RUNTIME = 1
       .include "audio.s"
@@ -1818,235 +1809,7 @@ EXT_XUNMAP:
       JSR   EXT_GTBY_VEC
       JMP   xmc_unmap_window
 
-; =====================================================================
-; EXT_COPPER — COPPER subcommand parser.
-; Relocated from BASIC ROM (LAB_COPPER) to free ~390 bytes there.
-; Original handler lived in basic.asm and used LAB_GBYT / LAB_IGBY ZP
-; helpers (still callable from extension ROM since they are RAM-
-; resident) plus LAB_GTBY / LAB_GTWRD / LAB_1C01 / LAB_15D9 ROM helpers
-; (NOT callable here — replaced with the EXT_GTBY / EXT_GTWRD /
-; EXT_1C01 / EXT_SNERR_VEC bridges).
-;
-; Subcommand grammar:
-;   COPPER CLEAR | ON | OFF
-;   COPPER LIST n | LIST END
-;   COPPER USE n
-;   COPPER ADD x, y, reg, value
-;     reg = MODE | BGCOL | SCROLLX | SCROLLY |
-;           SPRX(n) | SPRXH(n) | SPRY(n) |
-;           SPRSHAPE(n) | SPRFLAGS(n) | SPRPRI(n) |
-;           <8-bit numeric expression>
-; =====================================================================
-EXT_COPPER:
-      JSR   LAB_GBYT          ; peek next byte (ZP routine, skips spaces)
-      CMP   #TK_CLEAR_VAL
-      BEQ   @c_clear
-      CMP   #TK_ON_VAL
-      BEQ   @c_on
-      CMP   #TK_OFF_VAL
-      BEQ   @c_off
-      CMP   #'A'
-      BEQ   @c_add
-      CMP   #TK_LIST_VAL
-      BEQ   @c_list
-      CMP   #'U'
-      BEQ   @c_use
-      JMP   EXT_SNERR_VEC     ; syntax error
-
-; --- COPPER CLEAR ---
-@c_clear:
-      JSR   LAB_IGBY          ; consume CLEAR token
-      JMP   copper_clear
-
-; --- COPPER ON ---
-@c_on:
-      JSR   LAB_IGBY          ; consume ON token
-      JMP   copper_on
-
-; --- COPPER OFF ---
-@c_off:
-      JSR   LAB_IGBY          ; consume OFF token
-      JMP   copper_off
-
-; --- COPPER LIST n / COPPER LIST END ---
-@c_list:
-      JSR   LAB_IGBY          ; consume LIST token
-      JSR   LAB_GBYT          ; peek next
-      CMP   #TK_END_VAL
-      BEQ   @c_list_end
-      JSR   EXT_GTBY_VEC      ; bridge: parse 8-bit expr → X
-      STX   VGC_P0
-      JMP   copper_list
-@c_list_end:
-      JSR   LAB_IGBY          ; consume END token
-      JMP   copper_list_end
-
-; --- COPPER USE n ---
-@c_use:
-      LDX   #3
-      JSR   ext_skipx         ; USE
-      JSR   EXT_GTBY_VEC      ; list index → X
-      STX   VGC_P0
-      JMP   copper_use
-
-; --- COPPER ADD x, y, reg, value ---
-@c_add:
-      LDX   #3
-      JSR   ext_skipx         ; ADD
-      JSR   EXT_GTWRD_VEC     ; x (16-bit) → FAC1_3 (lo) / FAC1_2 (hi)
-      LDA   FAC1_3
-      STA   VGC_P0
-      LDA   FAC1_2
-      STA   VGC_P1
-      JSR   ext_comma         ; comma
-      JSR   EXT_GTBY_VEC      ; y (8-bit) → X
-      STX   VGC_P2
-      JSR   ext_comma         ; comma
-      ; parse register name
-      JSR   LAB_GBYT          ; peek
-      CMP   #'B'
-      BEQ   @c_bgcol
-      CMP   #TK_GMODE_VAL
-      BEQ   @c_mode
-      CMP   #'S'
-      BEQ   @c_s_dispatch
-      ; numeric register index fallback
-      JSR   EXT_GTBY_VEC      ; 8-bit expression → X
-      TXA
-      JMP   @c_store_idx
-
-@c_bgcol:
-      LDX   #5
-      JSR   ext_skipx         ; BGCOL
-      LDA   #COPPER_REG_BGCOL
-      JMP   @c_store_idx
-
-@c_mode:
-      JSR   LAB_IGBY          ; consume MODE token
-      LDA   #COPPER_REG_MODE
-      JMP   @c_store_idx
-
-@c_s_dispatch:
-      JSR   LAB_IGBY          ; consume S
-      JSR   LAB_GBYT          ; peek next: C=scroll, P=sprite
-      CMP   #'C'
-      BEQ   @c_scroll
-      CMP   #'P'
-      BEQ   @c_spr
-      JMP   EXT_SNERR_VEC
-
-@c_scroll:
-      LDX   #5
-      JSR   ext_skipx         ; CROLL
-      JSR   LAB_GBYT          ; peek X or Y
-      CMP   #'X'
-      BEQ   @c_scrollx
-      CMP   #'Y'
-      BEQ   @c_scrolly
-      JMP   EXT_SNERR_VEC
-
-@c_scrollx:
-      JSR   LAB_IGBY          ; consume X
-      LDA   #COPPER_REG_SCROLLX
-      JMP   @c_store_idx
-
-@c_scrolly:
-      JSR   LAB_IGBY          ; consume Y
-      LDA   #COPPER_REG_SCROLLY
-      JMP   @c_store_idx
-
-@c_store_idx:
-      JSR   copper_set_reg_index
-      JMP   @c_store_val
-
-      ; --- Sprite register names: SPR + field + (n) ---
-@c_spr:
-      JSR   LAB_IGBY          ; consume P
-      JSR   LAB_IGBY          ; consume R
-      JSR   LAB_GBYT          ; peek field start: X, Y, S, F, P
-      CMP   #'X'
-      BEQ   @cs_x
-      CMP   #'Y'
-      BEQ   @cs_y
-      CMP   #'S'
-      BEQ   @cs_shape
-      CMP   #'F'
-      BEQ   @cs_flags
-      CMP   #'P'
-      BEQ   @cs_pri
-      JMP   EXT_SNERR_VEC
-
-@cs_x:
-      JSR   LAB_IGBY          ; consume X
-      JSR   LAB_GBYT          ; peek H or (
-      CMP   #'H'
-      BEQ   @cs_xh
-      LDA   #VGC_SPR_XL_OFF
-      JMP   @c_spr_idx
-@cs_xh:
-      JSR   LAB_IGBY          ; consume H
-      LDA   #VGC_SPR_XH_OFF
-      JMP   @c_spr_idx
-
-@cs_y:
-      JSR   LAB_IGBY          ; consume Y
-      JSR   LAB_GBYT          ; peek H or (
-      CMP   #'H'
-      BEQ   @cs_yh
-      LDA   #VGC_SPR_YL_OFF
-      JMP   @c_spr_idx
-@cs_yh:
-      JSR   LAB_IGBY          ; consume H
-      LDA   #VGC_SPR_YH_OFF
-      JMP   @c_spr_idx
-
-@cs_shape:
-      LDX   #5
-      JSR   ext_skipx         ; SHAPE
-      LDA   #VGC_SPR_SHAPE_OFF
-      JMP   @c_spr_idx
-
-@cs_flags:
-      LDX   #5
-      JSR   ext_skipx         ; FLAGS
-      LDA   #VGC_SPR_FLAGS_OFF
-      JMP   @c_spr_idx
-
-@cs_pri:
-      LDX   #3
-      JSR   ext_skipx         ; PRI
-      LDA   #VGC_SPR_PRI_OFF
-      ; fall through
-
-      ; A = field offset, parse (n) and compute VGC_SPR_BASE + n*8 + A
-@c_spr_idx:
-      PHA                     ; save field offset
-      JSR   LAB_IGBY          ; consume '('
-      JSR   EXT_GTBY_VEC      ; sprite index → X
-      CPX   #VGC_MAX_SPRITES
-      BCC   @cs_idx_ok
-      JMP   EXT_SNERR_VEC
-@cs_idx_ok:
-      STX   VGC_P3            ; temporary sprite index
-      JSR   LAB_IGBY          ; consume ')'
-      PLA                     ; A = field offset
-      LDX   VGC_P3
-      JSR   copper_set_sprite_reg
-
-@c_store_val:
-      JSR   ext_comma         ; comma
-      JSR   EXT_GTBY_VEC      ; value → X
-      STX   VGC_P5
-      JMP   copper_add
-
-; --- Local helpers used only by EXT_COPPER ---
-
-; ext_skipx — skip X bytes of BASIC text (LAB_SKIPX equivalent)
-ext_skipx:
-      JSR   LAB_IGBY          ; advance + skip spaces
-      DEX
-      BNE   ext_skipx
-      RTS
+; --- Local helpers (shared by several extension handlers) ---
 
 ; ext_comma — consume comma (LAB_1C01 equivalent). Triggers syntax
 ; error via EXT_SNERR_VEC if next non-space char isn't ','.

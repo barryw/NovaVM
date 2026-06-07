@@ -65,6 +65,7 @@ Itemph            = Itempl+1  ; temporary integer high byte
       .include "libsound.inc"     ; MODULE_ID_SOUND + SND_* ids
       .include "libnet.inc"       ; MODULE_ID_NET + NET_* ids
       .include "libfiles.inc"     ; MODULE_ID_FILES + FILE_* ids
+      .include "copper.inc"       ; COPPER_REG_* register indices for LAB_COPPER
       .include "fio.inc"          ; FIO_ARG_* (zp) pseudo-regs + FIO_NAME_LIMIT /
                                   ; FIO_RESULT_* equates for the inline name helpers
 
@@ -10274,15 +10275,249 @@ LAB_MUSIC
 @m_seq_err
       JMP   LAB_FIO_ERRIO
 
-; perform COPPER subcommand — full handler relocated to extension ROM.
-; Saves ~390 bytes in BASIC ROM. EXT_COPPER in extension.s parses raw
-; BASIC text via (Bpntrl),Y and uses RAM bridges (EXT_GTBY, EXT_GTWRD,
-; EXT_SNERR) to reach BASIC's numeric expression evaluator and syntax
-; error path.
+; perform COPPER subcommand — parse + marshal + lib_call(GRAPHICS).
+; COPPER CLEAR | ON | OFF
+; COPPER LIST n | LIST END
+; COPPER USE n
+; COPPER ADD x, y, reg, value
+;   reg = MODE | BGCOL | SCROLLX | SCROLLY |
+;         SPRX(n) | SPRXH(n) | SPRY(n) | SPRYH(n) |
+;         SPRSHAPE(n) | SPRFLAGS(n) | SPRPRI(n) |
+;         <8-bit numeric expression>
+;
+; Relocated back from extension ROM (EXT_COPPER) into BASIC ROM as a
+; lib_call(GRAPHICS) handler: ext-ROM code cannot call lib_call (the page-in
+; swaps out the extension ROM's own bank mid-execution), so the COPPER handler
+; must live where the token dispatch is. Each old copper.s call is replaced by a
+; marshal-to-LIB_ARG + basic_gfx_call with the matching GFN_COPPER_* id. The
+; direct-register ADD forms (MODE/BGCOL/SCROLLX/SCROLLY/numeric) use
+; GFN_COPPER_SET_REG (the module runs copper_set_reg_index + copper_add); the
+; sprite-register ADD forms (SPR*(n)) use GFN_COPPER_SET_SPRITE_REG (the module
+; runs copper_set_sprite_reg + copper_add). Parsing/semantics are identical to
+; the old handler. basic_lib_zargs is called FIRST in each path (it clobbers X
+; to $FF), then args are parsed via LAB_GTBY/LAB_GTWRD and stored into LIB_ARG*.
 
 LAB_COPPER
-      LDA   #EXT_CMD_COPPER
-      JMP   EXT_vec
+      JSR   LAB_GBYT          ; peek next byte
+      CMP   #TK_CLEAR
+      BEQ   @c_clear
+      CMP   #TK_ON
+      BEQ   @c_on
+      CMP   #TK_OFF
+      BEQ   @c_off
+      CMP   #'A'
+      BEQ   @c_add
+      CMP   #TK_LIST
+      BEQ   @c_list
+      CMP   #'U'
+      BEQ   @c_use
+      JMP   LAB_15D9          ; syntax error
+
+; --- COPPER CLEAR ---  -> GFN_COPPER_CLEAR ()
+@c_clear
+      JSR   LAB_IGBY          ; consume CLEAR token
+      LDX   #GFN_COPPER_CLEAR
+      JMP   basic_gfx_call
+
+; --- COPPER ON ---  -> GFN_COPPER_ON ()
+@c_on
+      JSR   LAB_IGBY          ; consume ON token
+      LDX   #GFN_COPPER_ON
+      JMP   basic_gfx_call
+
+; --- COPPER OFF ---  -> GFN_COPPER_OFF ()
+@c_off
+      JSR   LAB_IGBY          ; consume OFF token
+      LDX   #GFN_COPPER_OFF
+      JMP   basic_gfx_call
+
+; --- COPPER LIST n / COPPER LIST END ---
+@c_list
+      JSR   LAB_IGBY          ; consume LIST token
+      JSR   LAB_GBYT          ; peek next
+      CMP   #TK_END
+      BEQ   @c_list_end
+      ; LIST n -> GFN_COPPER_LIST (idx:ARG0)
+      JSR   basic_lib_zargs   ; zero ARG0..3 (clobbers X)
+      JSR   LAB_GTBY          ; list index 8-bit -> X
+      STX   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_COPPER_LIST
+      JMP   basic_gfx_call
+
+@c_list_end
+      JSR   LAB_IGBY          ; consume END token
+      LDX   #GFN_COPPER_END
+      JMP   basic_gfx_call
+
+; --- COPPER USE n ---  -> GFN_COPPER_USE (idx:ARG0)
+@c_use
+      LDX   #3
+      JSR   LAB_SKIPX          ; USE
+      JSR   basic_lib_zargs   ; zero ARG0..3 (clobbers X)
+      JSR   LAB_GTBY          ; list index -> X
+      STX   LIB_ARG0          ; idx -> ARG0
+      LDX   #GFN_COPPER_USE
+      JMP   basic_gfx_call
+
+; --- COPPER ADD x, y, reg, value ---
+; x:ARG0 (s16), y:ARG1, reg index:ARG2 (sprite forms also use ARG2+1 = field),
+; value:ARG3. Direct-register forms -> GFN_COPPER_SET_REG; sprite forms ->
+; GFN_COPPER_SET_SPRITE_REG.
+@c_add
+      LDX   #3
+      JSR   LAB_SKIPX          ; ADD
+      JSR   basic_lib_zargs   ; zero ARG0..3 (clobbers X) BEFORE parsing
+      JSR   LAB_GTWRD         ; x (16-bit) -> FAC1_3(lo), FAC1_2(hi)
+      LDY   #0                ; ARG0
+      JSR   basic_lib_arg_word ; x -> ARG0 (sign-extended s16)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; y (8-bit) -> X
+      STX   LIB_ARG1          ; y -> ARG1
+      JSR   LAB_1C01          ; comma
+      ; parse register name
+      JSR   LAB_GBYT          ; peek
+      CMP   #'B'
+      BEQ   @c_bgcol
+      CMP   #TK_GMODE
+      BEQ   @c_mode
+      CMP   #'S'
+      BEQ   @c_s_dispatch
+      ; numeric register index fallback
+      JSR   LAB_GTBY          ; evaluate 8-bit expression -> X
+      TXA
+      JMP   @c_store_idx
+
+@c_bgcol
+      LDX   #5
+      JSR   LAB_SKIPX          ; BGCOL
+      LDA   #COPPER_REG_BGCOL ; reg index = BGCOL
+      JMP   @c_store_idx
+
+@c_mode
+      JSR   LAB_IGBY          ; consume MODE token
+      LDA   #COPPER_REG_MODE  ; reg index = MODE
+      JMP   @c_store_idx
+
+@c_s_dispatch
+      JSR   LAB_IGBY          ; consume S
+      JSR   LAB_GBYT          ; peek next: C=scroll, P=sprite
+      CMP   #'C'
+      BEQ   @c_scroll
+      CMP   #'P'
+      BEQ   @c_spr
+      JMP   LAB_15D9          ; syntax error
+
+@c_scroll
+      LDX   #5
+      JSR   LAB_SKIPX          ; CROLL
+      JSR   LAB_GBYT          ; peek X or Y
+      CMP   #'X'
+      BEQ   @c_scrollx
+      CMP   #'Y'
+      BEQ   @c_scrolly
+      JMP   LAB_15D9          ; syntax error
+
+@c_scrollx
+      JSR   LAB_IGBY          ; consume X
+      LDA   #COPPER_REG_SCROLLX ; reg index = SCROLLX
+      JMP   @c_store_idx
+
+@c_scrolly
+      JSR   LAB_IGBY          ; consume Y
+      LDA   #COPPER_REG_SCROLLY ; reg index = SCROLLY
+      ; fall through to @c_store_idx
+
+; A = direct VGC register index. -> GFN_COPPER_SET_REG (regIndex:ARG2).
+@c_store_idx
+      STA   LIB_ARG2          ; register index -> ARG2
+      JSR   @c_value          ; parse comma + value -> ARG3
+      LDX   #GFN_COPPER_SET_REG
+      JMP   basic_gfx_call
+
+      ; --- Sprite register names: SPR + field + (n) ---
+      ; SPRX(n) field 0, SPRXH(n) 1, SPRY(n) 2, SPRYH(n) 3,
+      ; SPRSHAPE(n) 4, SPRFLAGS(n) 5, SPRPRI(n) 6
+@c_spr
+      JSR   LAB_IGBY          ; consume P
+      JSR   LAB_IGBY          ; consume R
+      JSR   LAB_GBYT          ; peek field start: X, Y, S, F, P
+      CMP   #'X'
+      BEQ   @cs_x
+      CMP   #'Y'
+      BEQ   @cs_y
+      CMP   #'S'
+      BEQ   @cs_shape
+      CMP   #'F'
+      BEQ   @cs_flags
+      CMP   #'P'
+      BEQ   @cs_pri
+      JMP   LAB_15D9          ; syntax error
+
+@cs_x
+      JSR   LAB_IGBY          ; consume X
+      JSR   LAB_GBYT          ; peek: H or (
+      CMP   #'H'
+      BEQ   @cs_xh
+      LDA   #VGC_SPR_XL_OFF   ; field 0 = X low
+      JMP   @c_spr_idx
+@cs_xh
+      JSR   LAB_IGBY          ; consume H
+      LDA   #VGC_SPR_XH_OFF   ; field 1 = X high
+      JMP   @c_spr_idx
+
+@cs_y
+      JSR   LAB_IGBY          ; consume Y
+      JSR   LAB_GBYT          ; peek: H or (
+      CMP   #'H'
+      BEQ   @cs_yh
+      LDA   #VGC_SPR_YL_OFF   ; field 2 = Y low
+      JMP   @c_spr_idx
+@cs_yh
+      JSR   LAB_IGBY          ; consume H
+      LDA   #VGC_SPR_YH_OFF   ; field 3 = Y high
+      JMP   @c_spr_idx
+
+@cs_shape
+      LDX   #5
+      JSR   LAB_SKIPX          ; SHAPE
+      LDA   #VGC_SPR_SHAPE_OFF ; field 4 = Shape
+      JMP   @c_spr_idx
+
+@cs_flags
+      LDX   #5
+      JSR   LAB_SKIPX          ; FLAGS
+      LDA   #VGC_SPR_FLAGS_OFF ; field 5 = Flags
+      JMP   @c_spr_idx
+
+@cs_pri
+      LDX   #3
+      JSR   LAB_SKIPX          ; PRI
+      LDA   #VGC_SPR_PRI_OFF  ; field 6 = Priority
+      ; fall through to @c_spr_idx
+
+      ; A = field offset. Store it into ARG2+1, parse (n) -> sprite index into
+      ; ARG2 byte0 (the GFN_COPPER_SET_SPRITE_REG layout). The module's
+      ; copper_set_sprite_reg computes VGC_SPR_BASE + n*8 + field.
+@c_spr_idx
+      STA   LIB_ARG2+1        ; field offset -> ARG2 byte1
+      JSR   LAB_IGBY          ; consume '('
+      JSR   LAB_GTBY          ; sprite index (0-15) -> X
+      CPX   #VGC_MAX_SPRITES
+      BCC   @cs_idx_ok
+      JMP   LAB_15D9          ; syntax error if n > 15
+@cs_idx_ok
+      STX   LIB_ARG2          ; sprite index -> ARG2 byte0
+      JSR   LAB_IGBY          ; consume ')'
+      JSR   @c_value          ; parse comma + value -> ARG3
+      LDX   #GFN_COPPER_SET_SPRITE_REG
+      JMP   basic_gfx_call
+
+; parse ", value" tail: consume comma, evaluate 8-bit value -> ARG3.
+@c_value
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; value (8-bit) -> X
+      STX   LIB_ARG3          ; value -> ARG3
+      RTS
 
 ; perform RESET — full system reset (VGC, SID, music) + cold start BASIC
 
