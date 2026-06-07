@@ -53,9 +53,10 @@ public class SystemModuleTests
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
     private const ushort VGC_CURSX = 0xA003, VGC_CURSY = 0xA004, VGC_TEXT_TOPROW = 0xA0ED;
+    private const ushort VGC_CURSEN = 0xA00A, VGC_CHAROUT = 0xA00E;
     private const ushort VGC_SCREENWIN = 0xA200, VGC_SCREENWIN_PLANE = 0xB1A0;
     private const byte   VGC_SCREENWIN_CHAR = 0x00;
-    private const int    ScreenCols = 80;
+    private const int    ScreenCols = 80, ScreenRows = 50;
 
     private static CompositeBusDevice MakeSystemBus()
     {
@@ -101,6 +102,36 @@ public class SystemModuleTests
         int baseAddr = VGC_SCREENWIN + row * ScreenCols + col0;
         for (int i = 0; i < text.Length; i++)
             bus.Write((ushort)(baseAddr + i), (byte)text[i]);
+    }
+
+    // Read `count` cells of the char-plane screen window starting at (col0,row).
+    private static string ReadScreenWindowRow(CompositeBusDevice bus, int row, int col0, int count)
+    {
+        int baseAddr = VGC_SCREENWIN + row * ScreenCols + col0;
+        var sb = new System.Text.StringBuilder(count);
+        for (int i = 0; i < count; i++)
+            sb.Append((char)bus.Read((ushort)(baseAddr + i)));
+        return sb.ToString();
+    }
+
+    // Fill a screen-window row with spaces (a blank row the editor types onto).
+    private static void BlankScreenWindowRow(CompositeBusDevice bus, int row)
+    {
+        int baseAddr = VGC_SCREENWIN + row * ScreenCols;
+        for (int i = 0; i < ScreenCols; i++)
+            bus.Write((ushort)(baseAddr + i), 0x20);
+    }
+
+    // Queue every byte of `keys` (raw bytes) to the editor input queue, in order.
+    private static void QueueKeys(ScreenEditor editor, params byte[] keys)
+    {
+        foreach (byte k in keys) editor.QueueInput(k);
+    }
+
+    // Queue each character of `text` as its ASCII byte.
+    private static void QueueText(ScreenEditor editor, string text)
+    {
+        foreach (char c in text) editor.QueueInput((byte)c);
     }
 
     /// <summary>
@@ -150,6 +181,44 @@ public class SystemModuleTests
         Assert.AreEqual("PRINT 7", new string(got), "buffer must hold the row text under the cursor");
         Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 7)),
             "no trailing NUL or padding: the byte past the line must be untouched");
+    }
+
+    /// <summary>
+    /// Task 3 — echo: typed printable chars land on the screen window at the cursor,
+    /// the cursor advances per char, and on ENTER the row reads back as the typed line.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_TypedCharsLandOnScreenThenReturn()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int row = 8;
+        BlankScreenWindowRow(bus, row);
+
+        // Cursor starts at column 0 of the blank row.
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)row);
+
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        QueueText(editor, "GOTO 10");
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        // The typed chars landed on the screen window row...
+        Assert.AreEqual("GOTO 10", ReadScreenWindowRow(bus, row, 0, 7),
+            "typed chars must be echoed to the char-plane screen window");
+        // ...and the returned buffer is the same line.
+        Assert.AreEqual(7, bus.ReadRam(RESULT), "RESULT b0 must be the typed line length");
+        var got = new char[7];
+        for (int i = 0; i < 7; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual("GOTO 10", new string(got), "buffer must hold the typed line");
     }
 
     private static string RepoPath(params string[] parts)

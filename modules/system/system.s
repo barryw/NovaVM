@@ -815,15 +815,46 @@ sys_screen_readline:
       LDA   #VGC_SCREENWIN_CHAR
       STA   VGC_SCREENWIN_PLANE
 
-      ; --- poll keys until ENTER ($0D). 0 = empty queue -> keep polling. ---
+      ; --- the editor owns the cursor while it runs: make it visible at entry ---
+      LDA   #$01
+      STA   VGC_CURSEN
+
+      ; --- key dispatch loop. Poll CHARIN (0 = empty -> keep polling); on a key,
+      ; route to ENTER (read-row) or echo (printable >= $20). Arrows / backspace /
+      ; scroll land in later chunks; unknown control bytes are ignored. ---
 @poll:
       LDA   VGC_CHARIN
       BEQ   @poll
       CMP   #$0D
-      BNE   @poll                      ; (echo/arrows/backspace handled in later chunks)
+      BEQ   @enter                     ; ENTER -> read the row, return
+      CMP   #$20
+      BCS   @printable                 ; >= $20 -> echo the char
+      BRA   @poll                      ; other control codes ignored for now
+
+      ; --- echo a printable char at the cursor, then advance the cursor ---
+@printable:
+      PHA                              ; save the char to write
+      LDA   VGC_CURSY
+      JSR   screen_row_base            ; srl_winL/H = $A200 + CURSY*80
+      PLA
+      LDY   VGC_CURSX
+      STA   (srl_winL),Y               ; write the char at the cursor cell
+      ; advance CURSX; at column 80 wrap to col 0 of the next row (clamp row <= 49)
+      INY
+      CPY   #NOVA_SCREEN_COLS
+      BCC   @echo_setx                 ; still within the row -> just store X
+      LDY   #$00                       ; wrap: X = 0
+      LDA   VGC_CURSY
+      CMP   #(NOVA_SCREEN_ROWS-1)
+      BCS   @echo_setx                 ; already on the last row -> don't advance Y
+      INC   VGC_CURSY                  ; advance to the next row
+@echo_setx:
+      STY   VGC_CURSX
+      BRA   @poll
 
       ; --- ENTER: read the physical row under the cursor into the buffer ---
       ; Window row base = VGC_CURSY*80 -> srl_winL/H (= $A200 + CURSY*80).
+@enter:
       LDA   VGC_CURSY
       JSR   screen_row_base
 
@@ -905,12 +936,14 @@ screen_row_base:
       LDA   srb_tH
       ADC   srl_winH
       STA   srl_winH                   ; srl_winL/H = row*80
-      ; + VGC_SCREENWIN base ($A200)
+      ; + VGC_SCREENWIN base ($A200). The low add is #$00 (no carry generated),
+      ; but make the carry chain explicit with a defensive CLC before the hi add.
       LDA   srl_winL
       CLC
       ADC   #<VGC_SCREENWIN
       STA   srl_winL
       LDA   srl_winH
+      CLC
       ADC   #>VGC_SCREENWIN
       STA   srl_winH
       RTS
