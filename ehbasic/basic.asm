@@ -305,7 +305,7 @@ IrqBase           = $DF       ; IRQ handler enabled/setup/triggered flags
 
 ; *** removed unused comments for $DE-$E1
 
-help_len          = $E2       ; scratch byte for HELP command keyword length
+;                 = $E2       ; unused (was help_len; HELP removed)
 ;                 = $E3       ; unused
 ExtCmdId          = $E4       ; extension ROM command ID (set by trampoline)
 SysAddrL          = $E5       ; SYS target address low byte
@@ -2054,7 +2054,7 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITERR    ($43) — function only
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
       .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
-      .word LAB_HELP-1        ; XTK_HELP       ($46)
+      .word LAB_15D9-1        ; XTK_HELP       ($46) — HELP removed (docs -> LaTeX books)
       .word LAB_15D9-1        ; reserved       ($47)
       .word LAB_FONT-1        ; XTK_FONT       ($48)
       .word LAB_CD-1          ; XTK_CD         ($49)
@@ -8025,13 +8025,9 @@ LAB_BITTGL
       LDA   #EXT_CMD_BITTGL
       JMP   EXT_vec
 
-;; ========================================
-;; HELP [keyword$]
-;; Opens the help panel, optionally searching for a keyword
-;; ========================================
-LAB_HELP
-      LDA   #EXT_CMD_HELP
-      JMP   EXT_vec
+; HELP removed (docs -> LaTeX books). XTK_HELP ($46) tombstoned: dispatch slot
+; now points at LAB_15D9-1 (syntax error) and the "HELP" name string was
+; stripped from the cruncher table, so HELP no longer tokenizes or runs.
 
 
 ; perform BITTST(addr, mask) — returns -1 if ALL masked bits set, else 0
@@ -8794,7 +8790,7 @@ TAB_XTKSTR
       .endrepeat
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
       .word @s_bittgl
-      .word @s_help
+      .word @s_reserved_ext   ; XTK_HELP ($46) — HELP removed (name stripped)
       .word @s_reserved_ext
       .word @s_font
       .word @s_cd
@@ -8866,7 +8862,6 @@ TAB_XTKSTR
 @s_bliterr: .byte "BLITERR",0
 @s_blitcount: .byte "BLITCOUNT",0
 @s_bittgl: .byte "BITTGL",0
-@s_help:   .byte "HELP",0
 @s_font:   .byte "FONT",0
 @s_cd:     .byte "CD",0
 @s_mkdir:  .byte "MKDIR",0

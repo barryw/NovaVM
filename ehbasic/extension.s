@@ -80,7 +80,7 @@ ExtTable:
       .word EXT_XDIR-1        ; cmd 5: XDIR listing loop
       .word EXT_UNSUPPORTED-1 ; cmd 6: reserved
       .word EXT_UNSUPPORTED-1 ; cmd 7: reserved
-      .word EXT_HELP-1        ; cmd 8: HELP command
+      .word EXT_UNSUPPORTED-1 ; cmd 8: was HELP (removed; docs -> LaTeX books)
       .word EXT_UNSUPPORTED-1 ; cmd 9: was DMAFILL (relocated to BASIC ROM LAB_DMAFILL)
       .word EXT_UNSUPPORTED-1 ; cmd A: was BLITFILL (relocated to BASIC ROM LAB_BLITFILL)
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
@@ -529,88 +529,9 @@ EXT_XDIR:
 EXT_UNSUPPORTED:
       JMP   EXT_SNERR_VEC
 
-; =====================================================================
-; HELP handler — moved from BASIC ROM to save space.
-; Reads BASIC text at (Bpntrl),Y and copies raw bytes to help buffer.
-; The C# help system handles detokenization.
-; =====================================================================
-Bpntrl_ext      = $C3           ; BASIC execute pointer low
-Bpntrh_ext      = $C4           ; BASIC execute pointer high
-help_len_ext    = $E2           ; help keyword length scratch
-TKX_PREFIX_EXT  = $01           ; extended token prefix
-
-EXT_HELP:
-      LDY   #$00
-      LDA   (Bpntrl_ext),Y
-      BEQ   @help_noarg
-      CMP   #':'
-      BEQ   @help_noarg
-      CMP   #'"'
-      BEQ   @help_quoted
-      LDX   #$00
-@help_raw:
-      LDA   (Bpntrl_ext),Y
-      BEQ   @help_rawdone
-      CMP   #':'
-      BEQ   @help_rawdone
-      STA   HELP_BUF,X
-      INY
-      INX
-      CPX   #$10
-      BCC   @help_raw
-@help_rawdone:
-      TYA
-      CLC
-      ADC   Bpntrl_ext
-      STA   Bpntrl_ext
-      BCC   @help_noinc
-      INC   Bpntrh_ext
-@help_noinc:
-      STX   help_len_ext
-      JMP   @help_trigger
-@help_quoted:
-      INY
-      LDX   #$00
-@help_qloop:
-      LDA   (Bpntrl_ext),Y
-      BEQ   @help_qdone
-      CMP   #'"'
-      BEQ   @help_qclose
-      STA   HELP_BUF,X
-      INY
-      INX
-      CPX   #$10
-      BCC   @help_qloop
-@help_qclose:
-      INY
-@help_qdone:
-      TYA
-      CLC
-      ADC   Bpntrl_ext
-      STA   Bpntrl_ext
-      BCC   @help_noinc2
-      INC   Bpntrh_ext
-@help_noinc2:
-      STX   help_len_ext
-@help_trigger:
-      LDY   help_len_ext
-@help_zero:
-      CPY   #$10
-      BCS   @help_search
-      LDA   #$00
-      STA   HELP_BUF,Y
-      INY
-      BNE   @help_zero
-@help_search:
-      LDA   #$02
-      STA   REG_HELP
-      LDA   #$00
-      RTS
-@help_noarg:
-      LDA   #$01
-      STA   REG_HELP
-      LDA   #$00
-      RTS
+; HELP handler removed (docs -> LaTeX books). ExtTable cmd 8 now points at
+; EXT_UNSUPPORTED. The HELP-only scratch equates (Bpntrl_ext/Bpntrh_ext/
+; help_len_ext/TKX_PREFIX_EXT) and the HELP_BUF/REG_HELP writes went with it.
 
 ; =====================================================================
 ; Math coprocessor BASIC function parsers that do not fit in primary ROM.

@@ -875,6 +875,64 @@ public class EhBasicTokenizationTests
             $"LEFT$ neighbour failed: expected LEFT$(\"HELLO\",2)=HE.\n{screen}");
     }
 
+    // Phase-11 HELP removal (phase11-rip-help): the extended-token HELP command
+    // (XTK_HELP $46) was removed from the ROM in TOMBSTONE mode — docs move to
+    // LaTeX books. The XTK_HELP token value and its extended dispatch slot are
+    // kept (positional dispatch), but the slot now points at the syntax-error
+    // vector and the "HELP" keyword string was stripped from the cruncher table,
+    // so HELP no longer tokenizes and must produce a Syntax Error.
+    [TestMethod]
+    public void AvaloniaRomRemovedHelpYieldsSyntaxError()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterLine(editor, "HELP");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Removed HELP command should produce a Syntax Error (tombstoned), not run.\n{screen}");
+    }
+
+    // Guard HELP's extended-token neighbours. HELP is XTK_HELP ($46): its slot
+    // sits between XTK_BITTGL ($45) and XTK_FONT ($48, via the reserved $47).
+    // A table edit that shifts a row would corrupt BITTGL or FONT.
+    [TestMethod]
+    public void AvaloniaRomHelpNeighborsStillWork()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // BITTGL (neighbour before HELP): toggle bits in a byte at $0300.
+        EnterLine(editor, "POKE 768,1");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "BITTGL 768,3");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "PRINT PEEK(768)");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        // FONT (neighbour after HELP): select font slot 0 — must not Syntax Error.
+        EnterLine(editor, "FONT 0");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Neighbour keyword of the HELP slot produced a Syntax Error.\n{screen}");
+        Assert.IsTrue(screen.Contains("2", StringComparison.Ordinal),
+            $"BITTGL neighbour failed: expected PEEK(768)=2 after toggling bits 0+1 of 1.\n{screen}");
+    }
+
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
     {
         for (int i = 0; i < maxSteps; i++)
