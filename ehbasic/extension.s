@@ -116,29 +116,29 @@ ExtTable:
       .word EXT_XMAP-1        ; cmd 29: XMAP
       .word EXT_XUNMAP-1      ; cmd 2A: XUNMAP
       .word EXT_XPEEK-1       ; cmd 2B: XPEEK(offset)
-      .word EXT_PLAYING-1     ; cmd 2C: PLAYING
-      .word EXT_MNOTE-1       ; cmd 2D: MNOTE(voice)
-      .word EXT_NSTATUS-1     ; cmd 2E: NSTATUS(slot)
-      .word EXT_NREADY-1      ; cmd 2F: NREADY(slot)
+      .word EXT_UNSUPPORTED-1 ; cmd 2C: was PLAYING (relocated to main @xtk_playing)
+      .word EXT_UNSUPPORTED-1 ; cmd 2D: was MNOTE (relocated to main @xtk_mnote)
+      .word EXT_UNSUPPORTED-1 ; cmd 2E: was NSTATUS (relocated to main @xtk_nstatus)
+      .word EXT_UNSUPPORTED-1 ; cmd 2F: was NREADY (relocated to main @xtk_nready)
       .word EXT_UNSUPPORTED-1 ; cmd 30: was DMASTATUS (relocated to BASIC ROM @xtk_dmastatus)
       .word EXT_UNSUPPORTED-1 ; cmd 31: was DMAERR (relocated to BASIC ROM @xtk_dmaerr)
       .word EXT_UNSUPPORTED-1 ; cmd 32: was DMACOUNT (relocated to BASIC ROM @xtk_dmacount)
       .word EXT_UNSUPPORTED-1 ; cmd 33: was BLITSTATUS (relocated to BASIC ROM @xtk_blitstatus)
       .word EXT_UNSUPPORTED-1 ; cmd 34: was BLITERR (relocated to BASIC ROM @xtk_bliterr)
       .word EXT_UNSUPPORTED-1 ; cmd 35: was BLITCOUNT (relocated to BASIC ROM @xtk_blitcount)
-      .word EXT_SPRCOLL-1     ; cmd 36: SPRCOLL
-      .word EXT_SPRBG-1       ; cmd 37: SPRBG
-      .word EXT_VPEEK-1       ; cmd 38: VPEEK(plane,addr)
-      .word EXT_BITSET-1      ; cmd 39: BITSET addr,mask
-      .word EXT_BITCLR-1      ; cmd 3A: BITCLR addr,mask
-      .word EXT_BITTGL-1      ; cmd 3B: BITTGL addr,mask
-      .word EXT_REVERSE-1     ; cmd 3C: REVERSE [fg,bg]
-      .word EXT_REVERSEOFF-1  ; cmd 3D: REVERSEOFF
-      .word EXT_FLASH-1       ; cmd 3E: FLASH
-      .word EXT_FLASHOFF-1    ; cmd 3F: FLASHOFF
-      .word EXT_VPOKE-1       ; cmd 40: VPOKE plane,addr,value
-      .word EXT_FIOCLR-1      ; cmd 41: FIOCLR
-      .word EXT_CLS-1         ; cmd 42: CLS active text window
+      .word EXT_UNSUPPORTED-1 ; cmd 36: was SPRCOLL (relocated to main @xtk_sprcoll)
+      .word EXT_UNSUPPORTED-1 ; cmd 37: was SPRBG (relocated to main @xtk_sprbg)
+      .word EXT_VPEEK-1       ; cmd 38: VPEEK(plane,addr)  [deferred — budget]
+      .word EXT_UNSUPPORTED-1 ; cmd 39: was BITSET (relocated to main LAB_BITSET)
+      .word EXT_UNSUPPORTED-1 ; cmd 3A: was BITCLR (relocated to main LAB_BITCLR)
+      .word EXT_UNSUPPORTED-1 ; cmd 3B: was BITTGL (relocated to main LAB_BITTGL)
+      .word EXT_REVERSE-1     ; cmd 3C: REVERSE [fg,bg]    [deferred — budget]
+      .word EXT_UNSUPPORTED-1 ; cmd 3D: was REVERSEOFF (relocated to main LAB_REVERSEOFF)
+      .word EXT_UNSUPPORTED-1 ; cmd 3E: was FLASH (relocated to main LAB_FLASH)
+      .word EXT_UNSUPPORTED-1 ; cmd 3F: was FLASHOFF (relocated to main LAB_FLASHOFF)
+      .word EXT_VPOKE-1       ; cmd 40: VPOKE plane,addr,value  [deferred — budget]
+      .word EXT_UNSUPPORTED-1 ; cmd 41: was FIOCLR (relocated to main LAB_FIOCLR)
+      .word EXT_CLS-1         ; cmd 42: CLS active text window  [skipped — window-aware, not thin]
 
 ; =====================================================================
 ; SFLOAD handler — issue FIO_CMD_SFLOAD and return status
@@ -823,79 +823,17 @@ EXT_XPEEK:
       LDA   #$00
       RTS
 
-EXT_PLAYING:
-      JSR   LAB_IGBY          ; consume extension token id
-      JSR   audio_music_playing
-      TAY
-      LDA   #$00
-      RTS
-
-EXT_MNOTE:
-      JSR   LAB_IGBY          ; consume extension token id, advance to voice
-      JSR   EXT_GTBY_VEC
-      STX   ext_firstdig
-      JSR   ext_rparen
-      LDX   ext_firstdig
-      JSR   audio_music_note
-      TAY
-      LDA   #$00
-      RTS
-
-EXT_NSTATUS:
-      JSR   LAB_IGBY          ; consume extension token id, advance to slot
-      JSR   EXT_GTBY_VEC
-      STX   ext_firstdig
-      JSR   ext_rparen
-      LDX   ext_firstdig
-      JSR   ext_nic_status
-      TAY
-      LDA   #$00
-      RTS
-
-EXT_NREADY:
-      JSR   LAB_IGBY          ; consume extension token id, advance to slot
-      JSR   EXT_GTBY_VEC
-      STX   ext_firstdig
-      JSR   ext_rparen
-      LDX   ext_firstdig
-      JSR   ext_nic_status
-      AND   #NIC_ST_DATAREADY
-      BEQ   @not_ready
-      LDY   #$FF
-      LDA   #$FF
-      RTS
-@not_ready:
-      LDY   #$00
-      LDA   #$00
-      RTS
+; EXT_PLAYING / EXT_MNOTE / EXT_NSTATUS / EXT_NREADY relocated to BASIC main ROM
+; (@xtk_playing / @xtk_mnote / @xtk_nstatus / @xtk_nready, direct MMIO reads of
+; MUSIC_STATUS / MUSIC_NOTE1 / NIC_SLOTST0). ExtTable cmds $2C-$2F neutralized.
 
 ; EXT_DMASTATUS / EXT_DMAERR / EXT_DMACOUNT / EXT_BLITSTATUS / EXT_BLITERR /
 ; EXT_BLITCOUNT relocated to basic.asm (@xtk_dma*/@xtk_blit* reporters, reading
 ; the DMA_*/BLT_* MMIO registers directly). ExtTable cmds $30-$35 neutralized.
 
-EXT_SPRCOLL:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   VGC_COLLST
-      LDA   VGC_COLLST_HI
-      PHA
-      STZ   VGC_COLLST
-      STZ   VGC_COLLST_HI
-      LDA   #VGC_IRQ_SPRCOLL
-      STA   VGC_IRQ_STATUS
-      PLA
-      RTS
-
-EXT_SPRBG:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   VGC_COLLBG
-      LDA   VGC_COLLBG_HI
-      PHA
-      STZ   VGC_COLLBG
-      STZ   VGC_COLLBG_HI
-      LDA   #VGC_IRQ_SPRBG
-      STA   VGC_IRQ_STATUS
-      PLA
-      RTS
+; EXT_SPRCOLL / EXT_SPRBG relocated to BASIC main ROM (@xtk_sprcoll / @xtk_sprbg,
+; direct VGC_COLLST/VGC_COLLBG read-clear + IRQ ack). ExtTable cmds $36-$37
+; neutralized.
 
 EXT_VPEEK:
       JSR   LAB_IGBY          ; consume extension token id, advance to plane
@@ -916,33 +854,9 @@ EXT_VPEEK:
       LDA   #$00
       RTS
 
-EXT_BITSET:
-      JSR   ext_parse_addr_mask
-      TXA
-      LDY   #$00
-      ORA   (ext_ptrL),Y
-      STA   (ext_ptrL),Y
-      LDA   #$00
-      RTS
-
-EXT_BITCLR:
-      JSR   ext_parse_addr_mask
-      TXA
-      EOR   #$FF
-      LDY   #$00
-      AND   (ext_ptrL),Y
-      STA   (ext_ptrL),Y
-      LDA   #$00
-      RTS
-
-EXT_BITTGL:
-      JSR   ext_parse_addr_mask
-      TXA
-      LDY   #$00
-      EOR   (ext_ptrL),Y
-      STA   (ext_ptrL),Y
-      LDA   #$00
-      RTS
+; EXT_BITSET / EXT_BITCLR / EXT_BITTGL relocated to BASIC main ROM (LAB_BITSET /
+; LAB_BITCLR / LAB_BITTGL + shared basic_bit_addr_mask parser). ExtTable cmds
+; $39-$3B neutralized.
 
 EXT_REVERSE:
       JSR   LAB_GBYT          ; optional explicit reverse colours?
@@ -979,26 +893,10 @@ EXT_REVERSE:
       LDA   #$00
       RTS
 
-EXT_REVERSEOFF:
-      LDA   VGC_TXTFLAGS
-      AND   #$FC
-      STA   VGC_TXTFLAGS
-      LDA   #$00
-      RTS
-
-EXT_FLASH:
-      LDA   VGC_TXTFLAGS
-      ORA   #VTXT_FLASH
-      STA   VGC_TXTFLAGS
-      LDA   #$00
-      RTS
-
-EXT_FLASHOFF:
-      LDA   VGC_TXTFLAGS
-      AND   #$FB
-      STA   VGC_TXTFLAGS
-      LDA   #$00
-      RTS
+; EXT_REVERSEOFF / EXT_FLASH / EXT_FLASHOFF relocated to BASIC main ROM
+; (LAB_REVERSEOFF / LAB_FLASH / LAB_FLASHOFF, direct VGC_TXTFLAGS writes).
+; ExtTable cmds $3D-$3F neutralized. (EXT_REVERSE $3C kept — fg/bg parse deferred
+; for main-ROM budget.)
 
 EXT_VPOKE:
       JSR   EXT_GTBY_VEC
@@ -1019,8 +917,9 @@ EXT_VPOKE:
       LDA   #$00
       RTS
 
-EXT_FIOCLR:
-      JMP   fio_clear_error
+; EXT_FIOCLR relocated to BASIC main ROM (LAB_FIOCLR -> basic_fio_clear_error
+; directly). ExtTable cmd $41 neutralized. (EXT_CLS $42 kept — window-aware, not
+; a thin register poke.)
 
 EXT_CLS:
       JSR   ext_text_window_valid
@@ -1252,21 +1151,8 @@ ext_current_text_attr:
       LDA   #$00
       RTS
 
-ext_parse_addr_mask:
-      JSR   EXT_GTWRD_VEC
-      LDA   FAC1_3
-      STA   ext_ptrL
-      LDA   FAC1_2
-      STA   ext_ptrH
-      JSR   ext_comma
-      JMP   EXT_GTBY_VEC
-
-ext_nic_status:
-      TXA
-      AND   #$03
-      TAX
-      LDA   NIC_SLOTST0,X
-      RTS
+; ext_parse_addr_mask removed (BIT* relocated to main basic_bit_addr_mask).
+; ext_nic_status removed (NSTATUS/NREADY relocated to main, inline NIC_SLOTST0).
 
 ext_vgc_wait_cmd:
 @wait:

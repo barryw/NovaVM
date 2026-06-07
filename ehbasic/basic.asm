@@ -3839,14 +3839,31 @@ LAB_1BEE
 @xpeek_ok
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
-@xtk_playing
-      LDA   #EXT_CMD_PLAYING
-      JSR   EXT_vec
+@xtk_playing                  ; relocated from ext EXT_PLAYING (direct, Group A)
+      JSR   LAB_IGBY          ; consume extension token id
+      LDA   MUSIC_STATUS
+      AND   #MUSIC_STATUS_MUSIC
+      BEQ   @playing_off
+      LDA   #$01
+@playing_off
+      TAY
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
-@xtk_mnote
-      LDA   #EXT_CMD_MNOTE
-      JSR   EXT_vec
+@xtk_mnote                    ; relocated from ext EXT_MNOTE (direct, Group A)
+      JSR   LAB_IGBY          ; consume token id, advance to voice
+      JSR   LAB_GTBY          ; voice -> X
+      STX   NVR3H             ; ext_firstdig scratch
+      JSR   LAB_1BFB          ; scan for ')'
+      LDX   NVR3H
+      DEX
+      CPX   #$0E              ; voices 1..14
+      BCS   @mnote_bad
+      LDA   MUSIC_NOTE1,X
+      BRA   @mnote_y
+@mnote_bad
+      LDA   #$00
+@mnote_y
+      TAY
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 ; NRECV$(slot) — receive message as BASIC string
@@ -3878,16 +3895,36 @@ LAB_1BEE
       JMP   LAB_RTST          ; push descriptor, return
 
 ; NSTATUS(slot) — return slot status byte
-@xtk_nstatus
-      LDA   #EXT_CMD_NSTATUS
-      JSR   EXT_vec
+@xtk_nstatus                  ; relocated from ext EXT_NSTATUS (direct, Group A)
+      JSR   LAB_IGBY          ; consume token id, advance to slot
+      JSR   LAB_GTBY          ; slot -> X
+      STX   NVR3H             ; preserve across ')' scan (LAB_1BFB clobbers X)
+      JSR   LAB_1BFB          ; scan for ')'
+      LDA   NVR3H
+      AND   #$03
+      TAX
+      LDY   NIC_SLOTST0,X
       JMP   @ret_0ay          ; return AY as FAC1
 
 ; NREADY(slot) — return -1 (true) if data waiting, 0 (false) otherwise
 ; Uses BASIC boolean convention: true = $FFFF (-1) so NOT works correctly
-@xtk_nready
-      LDA   #EXT_CMD_NREADY
-      JSR   EXT_vec
+@xtk_nready                   ; relocated from ext EXT_NREADY (direct, Group A)
+      JSR   LAB_IGBY          ; consume token id, advance to slot
+      JSR   LAB_GTBY          ; slot -> X
+      STX   NVR3H             ; preserve across ')' scan
+      JSR   LAB_1BFB          ; scan for ')'
+      LDA   NVR3H
+      AND   #$03
+      TAX
+      LDA   NIC_SLOTST0,X
+      AND   #NIC_ST_DATAREADY
+      BEQ   @nready_no
+      LDA   #$FF              ; data waiting -> true ($FFFF)
+      TAY
+      JMP   LAB_AYFC
+@nready_no
+      LDA   #$00              ; no data -> false (0)
+      TAY
       JMP   LAB_AYFC
 
 ; DMA / blitter reporters — relocated from extension.s (EXT_DMASTATUS..) and
@@ -4057,15 +4094,29 @@ LAB_1BEE
       JMP   @ret_s16
 
 ; SPRCOLL - read and clear the sprite-sprite collision mask, then ack IRQ source
-@xtk_sprcoll
-      LDA   #EXT_CMD_SPRCOLL
-      JSR   EXT_vec
+@xtk_sprcoll                  ; relocated from ext EXT_SPRCOLL (direct, Group A)
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   VGC_COLLST
+      LDA   VGC_COLLST_HI
+      PHA
+      STZ   VGC_COLLST
+      STZ   VGC_COLLST_HI
+      LDA   #VGC_IRQ_SPRCOLL
+      STA   VGC_IRQ_STATUS    ; ack collision IRQ source
+      PLA
       JMP   LAB_AYFC
 
 ; SPRBG - read and clear the sprite-background collision mask, then ack IRQ source
-@xtk_sprbg
-      LDA   #EXT_CMD_SPRBG
-      JSR   EXT_vec
+@xtk_sprbg                    ; relocated from ext EXT_SPRBG (direct, Group A)
+      JSR   LAB_IGBY          ; consume extension token id
+      LDY   VGC_COLLBG
+      LDA   VGC_COLLBG_HI
+      PHA
+      STZ   VGC_COLLBG
+      STZ   VGC_COLLBG_HI
+      LDA   #VGC_IRQ_SPRBG
+      STA   VGC_IRQ_STATUS    ; ack collision IRQ source
+      PLA
       JMP   LAB_AYFC
 
 ; return unsigned 16-bit A:Y as a positive BASIC number
@@ -8007,23 +8058,51 @@ LAB_2CC2
 
 ; perform BITSET addr, mask — set bits: mem[addr] = mem[addr] OR mask
 
+; relocated from ext EXT_BITSET (direct, Group A). NVR0L/NVR0H = addr pointer.
 LAB_BITSET
-      LDA   #EXT_CMD_BITSET
-      JMP   EXT_vec
+      JSR   basic_bit_addr_mask  ; NVR0 = addr, X = mask
+      TXA
+      LDY   #$00
+      ORA   (NVR0L),Y
+      STA   (NVR0L),Y
+      LDA   #$00
+      RTS
 LAB_2D04
       RTS
 
 ; perform BITCLR addr, mask — clear bits: mem[addr] = mem[addr] AND NOT mask
 
-LAB_BITCLR
-      LDA   #EXT_CMD_BITCLR
-      JMP   EXT_vec
+LAB_BITCLR                      ; relocated from ext EXT_BITCLR (direct, Group A)
+      JSR   basic_bit_addr_mask
+      TXA
+      EOR   #$FF
+      LDY   #$00
+      AND   (NVR0L),Y
+      STA   (NVR0L),Y
+      LDA   #$00
+      RTS
 
 ; perform BITTGL addr, mask — toggle bits: mem[addr] = mem[addr] EOR mask
 
-LAB_BITTGL
-      LDA   #EXT_CMD_BITTGL
-      JMP   EXT_vec
+LAB_BITTGL                      ; relocated from ext EXT_BITTGL (direct, Group A)
+      JSR   basic_bit_addr_mask
+      TXA
+      LDY   #$00
+      EOR   (NVR0L),Y
+      STA   (NVR0L),Y
+      LDA   #$00
+      RTS
+
+; basic_bit_addr_mask — parse "addr, mask": NVR0L/H = addr word, X = mask byte.
+; Relocated from ext ext_parse_addr_mask. Mirrors that order exactly.
+basic_bit_addr_mask
+      JSR   LAB_GTWRD          ; addr -> FAC1_3 (lo) / FAC1_2 (hi)
+      LDA   FAC1_3
+      STA   NVR0L
+      LDA   FAC1_2
+      STA   NVR0H
+      JSR   LAB_1C01           ; scan for "," and advance, else syntax error
+      JMP   LAB_GTBY           ; mask -> X (RTS to caller)
 
 ; HELP removed (docs -> LaTeX books). XTK_HELP ($46) tombstoned: dispatch slot
 ; now points at LAB_15D9-1 (syntax error) and the "HELP" name string was
@@ -9253,21 +9332,27 @@ LAB_REVERSE
 
 ; perform REVERSEOFF
 
-LAB_REVERSEOFF
-      LDA   #EXT_CMD_REVERSEOFF
-      JMP   EXT_vec
+LAB_REVERSEOFF                  ; relocated from ext EXT_REVERSEOFF (direct, Group A)
+      LDA   VGC_TXTFLAGS
+      AND   #$FC
+      STA   VGC_TXTFLAGS
+      RTS
 
 ; perform FLASH
 
-LAB_FLASH
-      LDA   #EXT_CMD_FLASH
-      JMP   EXT_vec
+LAB_FLASH                       ; relocated from ext EXT_FLASH (direct, Group A)
+      LDA   VGC_TXTFLAGS
+      ORA   #VTXT_FLASH
+      STA   VGC_TXTFLAGS
+      RTS
 
 ; perform FLASHOFF
 
-LAB_FLASHOFF
-      LDA   #EXT_CMD_FLASHOFF
-      JMP   EXT_vec
+LAB_FLASHOFF                    ; relocated from ext EXT_FLASHOFF (direct, Group A)
+      LDA   VGC_TXTFLAGS
+      AND   #$FB
+      STA   VGC_TXTFLAGS
+      RTS
 
 ; perform VPOKE plane,addr,value — write a byte to VGC memory
 
@@ -10835,8 +10920,7 @@ LAB_SFLOAD
 ; perform FIOCLR — clear FIO error/status latch
 
 LAB_FIOCLR
-      LDA   #EXT_CMD_FIOCLR
-      JMP   LAB_EXT_FCER
+      JMP   basic_fio_clear_error ; relocated from ext EXT_FIOCLR (direct, Group A)
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO

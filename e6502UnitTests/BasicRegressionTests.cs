@@ -594,6 +594,35 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void FioclrCommand_ClearsLatchedFioError()
+    {
+        // FIOCLR was relocated from the extension ROM into BASIC main as a direct
+        // JMP to basic_fio_clear_error. This proves the relocated statement handler
+        // actually runs the clear: seed a latched error, run FIOCLR, expect it gone.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Latch a fake FIO error into the controller registers.
+        bus.Write(0xB9A1, 0x03); // FIO_STATUS = error
+        bus.Write(0xB9A2, 0x05); // FIO_ERRCODE = nonzero
+
+        foreach (char ch in "FIOCLR")
+            editor.QueueInput((byte)ch);
+        editor.QueueInput(0x0D);
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        Assert.AreEqual(0x00, bus.Read(0xB9A2),
+            "FIOCLR should clear FIO_ERRCODE.");
+        Assert.AreNotEqual(0x03, bus.Read(0xB9A1),
+            "FIOCLR should clear the FIO_STATUS error state.");
+    }
+
+    [TestMethod]
     public void RunProgram_HidesCursorWhileProgramIsExecuting()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
