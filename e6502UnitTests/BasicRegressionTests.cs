@@ -1,4 +1,7 @@
 using System;
+using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
@@ -1090,6 +1093,150 @@ public class BasicRegressionTests
         EnterProgramLines(cpu, bus, editor, ["MUSIC PRIORITY 5,2"]);
         CollectionAssert.AreEqual(new[] { 1 }, bus.Music.StealPriority,
             "MUSIC PRIORITY 5,2 must collapse to the last voice -> {1} (2-1).");
+    }
+
+    // NRECV$(slot) routes through lib_call(NET): NET_RECV (dstptr -> ARG0 byte0/1,
+    // slot -> ARG3 byte0) DMAs a queued message into the freshly-allocated BASIC
+    // string buffer, then NET_LENGTH (() reporter -> RESULT byte0) feeds the actual
+    // received length into str_ln. We pre-load slot 2's receive queue with a known
+    // payload via InjectTestMessage (the same hook NicControllerTests uses), then
+    // RUN a program that reads it into A$ and PRINTs it. Seeing the bytes on screen
+    // proves the dst-pointer marshalling (ARG0), the slot (ARG3) and the length
+    // reporter (RESULT -> str_ln) all reached the host through the NET module.
+    [TestMethod]
+    public void NetRecvKeywordRoutesThroughLibCall()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Queue "HI THERE" on slot 2's receive queue (DoRecv dequeues it).
+        byte[] payload = Encoding.ASCII.GetBytes("HI THERE");
+        bus.Nic.InjectTestMessage(2, payload);
+
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 A$=NRECV$(2)",
+            "20 PRINT A$",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"NRECV$ should run without errors.\n{screen}");
+        Assert.IsTrue(screen.Contains("HI THERE", StringComparison.Ordinal),
+            $"NRECV$(2) must DMA the queued message into A$ (NET_RECV dst ptr) and " +
+            $"set its length from NET_LENGTH (RESULT -> str_ln), so PRINT A$ shows " +
+            $"the payload.\n{screen}");
+    }
+
+    // NOPEN / NSEND / NCLOSE route through lib_call(NET): NET_CONNECT (name ptr ->
+    // ARG0 b0/1, name len -> ARG0 b2, port -> ARG1, slot -> ARG3), NET_SEND (data
+    // ptr -> ARG0 b0/1, len -> ARG0 b2, slot -> ARG3) and NET_DISCONNECT (slot ->
+    // ARG3). A real loopback TcpListener accepts the connection and reads back the
+    // length-prefixed payload NSEND wrote, proving the full host-name copy + connect
+    // + DMA-send path survived the conversion. NCLOSE then drops the slot.
+    [TestMethod]
+    public void NetOpenSendCloseRouteThroughLibCall()
+    {
+        using var server = new TcpListener(IPAddress.Loopback, 0);
+        server.Start();
+        int port = ((IPEndPoint)server.LocalEndpoint).Port;
+
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // NOPEN slot 0 to the loopback server, then accept it on the host side.
+        var acceptTask = server.AcceptTcpClientAsync();
+        QueueLine(editor, $"NOPEN 0,\"127.0.0.1\",{port}");
+        RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+        // The connect completes on a background thread; pump the CPU while the
+        // accept lands and the slot flips to Connected.
+        TcpClient serverClient = RunUntilConnected(cpu, bus, acceptTask, slot: 0,
+            statusReg: VgcConstants.NicSlotStatus0);
+        using (serverClient)
+        {
+            using var serverStream = serverClient.GetStream();
+
+            // NSEND slot 0, "PING" -> server reads 1-byte length (4) + "PING".
+            QueueLine(editor, "NSEND 0,\"PING\"");
+            RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+            byte[] framed = ReadExactly(serverStream, 5, cpu, bus);
+            Assert.AreEqual(4, framed[0], "NSEND must frame the payload length (4) first.");
+            Assert.AreEqual("PING", Encoding.ASCII.GetString(framed, 1, 4),
+                "NSEND must DMA the BASIC string bytes (NET_SEND data ptr -> ARG0, " +
+                "slot -> ARG3) to the connected peer.");
+
+            // NCLOSE slot 0 -> NET_DISCONNECT (slot -> ARG3) drops the connection.
+            QueueLine(editor, "NCLOSE 0");
+            RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 2000 &&
+                   (bus.Nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected) != 0)
+            {
+                RunSteps(cpu, bus, 50_000);
+            }
+            Assert.AreEqual(0,
+                bus.Nic.Read((ushort)VgcConstants.NicSlotStatus0) & VgcConstants.NicSlotConnected,
+                "NCLOSE 0 must disconnect slot 0 (NET_DISCONNECT slot -> ARG3).");
+        }
+
+        server.Stop();
+    }
+
+    // Pump the CPU until a background NIC connect on the given slot reports
+    // Connected and the loopback listener has accepted, returning the accepted
+    // server-side client. Fails the test on a 4s timeout.
+    private static TcpClient RunUntilConnected(Cpu cpu, CompositeBusDevice bus,
+        System.Threading.Tasks.Task<TcpClient> acceptTask, int slot, int statusReg)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 4000)
+        {
+            if (acceptTask.IsCompleted &&
+                (bus.Nic.Read((ushort)statusReg) & VgcConstants.NicSlotConnected) != 0)
+                return acceptTask.Result;
+            RunSteps(cpu, bus, 50_000);
+            // Yield so the NIC's async ConnectAsync continuation (s.Connect on the
+            // thread pool) gets a chance to run between CPU bursts.
+            System.Threading.Thread.Sleep(2);
+        }
+        Assert.Fail($"Timed out waiting for NIC slot {slot} to connect to the loopback server. " +
+                    $"acceptDone={acceptTask.IsCompleted} status=" +
+                    $"{bus.Nic.Read((ushort)statusReg):X2}");
+        return null!; // unreachable
+    }
+
+    // Read exactly count bytes from a loopback stream while pumping the CPU so the
+    // emulator's NIC reader thread keeps draining the socket.
+    private static byte[] ReadExactly(NetworkStream stream, int count, Cpu cpu, CompositeBusDevice bus)
+    {
+        var buf = new byte[count];
+        int total = 0;
+        var sw = Stopwatch.StartNew();
+        while (total < count && sw.ElapsedMilliseconds < 4000)
+        {
+            if (stream.DataAvailable)
+            {
+                int n = stream.Read(buf, total, count - total);
+                if (n > 0) { total += n; continue; }
+            }
+            RunSteps(cpu, bus, 20_000);
+        }
+        Assert.AreEqual(count, total, $"Loopback peer only received {total}/{count} bytes from NSEND.");
+        return buf;
     }
 
     private static string RunProgram(string[] lines)

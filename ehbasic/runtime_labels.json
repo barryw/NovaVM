@@ -1417,7 +1417,7 @@
       "kind": "routine",
       "symbol": "fio_cd",
       "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE06"
+      "address": "$EE14"
     },
     {
       "label": "FIO.CHECK",
@@ -1434,7 +1434,7 @@
       "kind": "routine",
       "symbol": "fio_check",
       "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$ED87"
+      "address": "$ED95"
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1451,7 +1451,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$EDA7"
+      "address": "$EDB5"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1520,7 +1520,7 @@
       "kind": "routine",
       "symbol": "fio_copy_name",
       "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDC6"
+      "address": "$EDD4"
     },
     {
       "label": "FIO.DELETE",
@@ -1535,7 +1535,7 @@
       "kind": "routine",
       "symbol": "fio_delete",
       "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDF7"
+      "address": "$EE05"
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1547,7 +1547,7 @@
       "kind": "routine",
       "symbol": "fio_dir_open",
       "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$EDED"
+      "address": "$EDFB"
     },
     {
       "label": "FIO.DIR_READ",
@@ -1559,7 +1559,7 @@
       "kind": "routine",
       "symbol": "fio_dir_read",
       "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$EDF2"
+      "address": "$EE00"
     },
     {
       "label": "FIO.EXEC",
@@ -1581,7 +1581,7 @@
       "kind": "routine",
       "symbol": "fio_exec",
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$ED94"
+      "address": "$EDA2"
     },
     {
       "label": "FIO.GLOAD",
@@ -1601,7 +1601,7 @@
       "kind": "routine",
       "symbol": "fio_gload",
       "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$EE01"
+      "address": "$EE0F"
     },
     {
       "label": "FIO.GSAVE",
@@ -1621,7 +1621,7 @@
       "kind": "routine",
       "symbol": "fio_gsave",
       "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$EDFC"
+      "address": "$EE0A"
     },
     {
       "label": "FIO.ISSUE",
@@ -1638,7 +1638,7 @@
       "kind": "routine",
       "symbol": "fio_issue",
       "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$ED83"
+      "address": "$ED91"
     },
     {
       "label": "FIO.LOAD",
@@ -1655,7 +1655,7 @@
       "kind": "routine",
       "symbol": "fio_load",
       "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$EDE8"
+      "address": "$EDF6"
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1670,7 +1670,7 @@
       "kind": "routine",
       "symbol": "fio_load_runtime",
       "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$EE1A"
+      "address": "$EE28"
     },
     {
       "label": "FIO.MKDIR",
@@ -1685,7 +1685,7 @@
       "kind": "routine",
       "symbol": "fio_mkdir",
       "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE0B"
+      "address": "$EE19"
     },
     {
       "label": "FIO.NAME",
@@ -1741,7 +1741,7 @@
       "kind": "routine",
       "symbol": "fio_pwd",
       "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE15"
+      "address": "$EE23"
     },
     {
       "label": "FIO.RMDIR",
@@ -1756,7 +1756,7 @@
       "kind": "routine",
       "symbol": "fio_rmdir",
       "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$EE10"
+      "address": "$EE1E"
     },
     {
       "label": "FIO.RNG",
@@ -1777,7 +1777,7 @@
       "kind": "routine",
       "symbol": "fio_rng",
       "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$EE1F"
+      "address": "$EE2D"
     },
     {
       "label": "FIO.RNG0",
@@ -1855,7 +1855,7 @@
       "kind": "routine",
       "symbol": "fio_save",
       "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$EDE3"
+      "address": "$EDF1"
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1872,7 +1872,7 @@
       "kind": "routine",
       "symbol": "fio_set_io_error",
       "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$EDB9"
+      "address": "$EDC7"
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
@@ -2419,8 +2419,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "nic_command",
-      "summary": "Issue a raw NIC command.",
-      "address": "$EE24"
+      "summary": "Issue a raw NIC command."
     },
     {
       "label": "NIC.CONNECT",
@@ -2436,8 +2435,7 @@
       ],
       "kind": "routine",
       "symbol": "nic_connect",
-      "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H.",
-      "address": "$EE45"
+      "summary": "Connect NIC_SLOT to NIC_NAMEBUF:NIC_RPORTL/H."
     },
     {
       "label": "NIC.COPY_NAME",
@@ -2457,8 +2455,7 @@
       ],
       "kind": "routine",
       "symbol": "nic_copy_name",
-      "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL.",
-      "address": "$EE6B"
+      "summary": "Copy a pointer-based host name to NIC_NAMEBUF and append NUL."
     },
     {
       "label": "NIC.DISCONNECT",
@@ -2471,8 +2468,7 @@
       ],
       "kind": "routine",
       "symbol": "nic_disconnect",
-      "summary": "Disconnect NIC_SLOT.",
-      "address": "$EE49"
+      "summary": "Disconnect NIC_SLOT."
     },
     {
       "label": "NIC.LENGTH",
@@ -2488,8 +2484,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "nic_length",
-      "summary": "Read the most recent NIC message length.",
-      "address": "$EE67"
+      "summary": "Read the most recent NIC message length."
     },
     {
       "label": "NIC.LISTEN",
@@ -2521,8 +2516,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "nic_ready",
-      "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0.",
-      "address": "$EE5D"
+      "summary": "Return 1 when NIC_SLOT has data/accept readiness, otherwise 0."
     },
     {
       "label": "NIC.RECV",
@@ -2537,8 +2531,7 @@
       ],
       "kind": "routine",
       "symbol": "nic_recv",
-      "summary": "Receive data for NIC_SLOT into NIC_DMAL/H.",
-      "address": "$EE51"
+      "summary": "Receive data for NIC_SLOT into NIC_DMAL/H."
     },
     {
       "label": "NIC.SEND",
@@ -2554,8 +2547,7 @@
       ],
       "kind": "routine",
       "symbol": "nic_send",
-      "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT.",
-      "address": "$EE4D"
+      "summary": "Send NIC_DMALEN bytes from NIC_DMAL/H on NIC_SLOT."
     },
     {
       "label": "NIC.STATUS",
@@ -2576,8 +2568,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "nic_status",
-      "summary": "Read clamped NIC slot status.",
-      "address": "$EE55"
+      "summary": "Read clamped NIC slot status."
     },
     {
       "label": "NVG.ADDRH",

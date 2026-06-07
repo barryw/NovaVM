@@ -63,6 +63,7 @@ Itemph            = Itempl+1  ; temporary integer high byte
       .include "libgraphics.inc"  ; MODULE_ID_GRAPHICS + GFN_* ids (pulls libabi.inc)
       .include "libsystem.inc"    ; MODULE_ID_SYSTEM + SYS_FN_* ids
       .include "libsound.inc"     ; MODULE_ID_SOUND + SND_* ids
+      .include "libnet.inc"       ; MODULE_ID_NET + NET_* ids
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -3863,21 +3864,30 @@ LAB_1BEE
       JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 ; NRECV$(slot) — receive message as BASIC string
+; Routes through lib_call(NET): NET_RECV (dstptr -> ARG0 byte0/1, slot -> ARG3
+; byte0) DMAs the queued message into the freshly-allocated string buffer; then
+; NET_LENGTH (() reporter -> RESULT byte0; ignores ARG3 — reads the global NIC
+; msg-length register) yields the actual received length for str_ln.
+; basic_lib_zargs runs FIRST (it clobbers X = $FF on exit), so the slot parsed
+; below survives into LIB_ARG3 (Phase 3 LAB_SIDPLAY X-clobber lesson).
 @xtk_nrecv
+      JSR   basic_lib_zargs   ; zero ARG0..3 (slot/ptr default 0)
       JSR   LAB_IGBY          ; consume token, advance to argument
       JSR   LAB_EVNM          ; evaluate numeric expression (slot)
       JSR   LAB_1BFB          ; scan for ')'
       JSR   LAB_EVBY          ; convert to byte → X
-      STX   NIC_SLOT
+      STX   LIB_ARG3          ; slot -> ARG3 byte0
       LDA   #$FF              ; 255 bytes max
       JSR   LAB_MSSP          ; allocate string space, str_pl/ph set
-      ; Point DMA at string buffer
       LDA   str_pl
-      STA   NIC_DMAL
+      STA   LIB_ARG0          ; dst pointer low  -> ARG0 byte0
       LDA   str_ph
-      STA   NIC_DMAH
-      JSR   nic_recv
-      JSR   nic_length
+      STA   LIB_ARG0+1        ; dst pointer high -> ARG0 byte1
+      LDX   #NET_RECV
+      JSR   basic_net_call    ; DMA queued message into the string buffer
+      LDX   #NET_LENGTH
+      JSR   basic_net_call    ; () reporter -> RESULT byte0 = received length
+      LDA   LIB_RESULT
       STA   str_ln            ; actual received length (0=empty)
       JMP   LAB_RTST          ; push descriptor, return
 
@@ -9064,6 +9074,13 @@ basic_snd_call:
       LDA   #MODULE_ID_SOUND
       BRA   basic_lib_call
 
+; basic_net_call — NET lib_call. X = NET_* id (caller filled LIB_ARG0..3).
+;   Saves the per-call "LDA #MODULE_ID_NET" at every networking call site, exactly
+;   as basic_gfx_call/basic_snd_call do. Returns A = LIB_STATUS (Z set when OK).
+basic_net_call:
+      LDA   #MODULE_ID_NET
+      BRA   basic_lib_call
+
 ; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
 ;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.
 basic_lib_zargs:
@@ -9661,10 +9678,12 @@ LAB_ENVELOPE
 FIO_NO_STREAMING = 1
 NOVA_EMIT_ALL_RUNTIME = 1
       .include "fio.s"
-; Primary ROM is tight. NIC server entry points are library concerns, so omit
-; those helper shims from the BASIC ROM build.
-NIC_SERVER_COMMANDS = 0
-      .include "nic.s"
+; nic.s is no longer compiled into the BASIC ROM: every NET keyword (NOPEN/NCLOSE/
+; NSEND/NRECV$) now routes through the shared NET module via lib_call (NET_*),
+; exactly as Phase 1 did for graphics (vgc.s), Phase 2 for sprites (sprite.s) and
+; Phase 3 for audio (audio.s). The NIC_* MMIO register names the converted handlers
+; no longer reference (and the NSTATUS/NREADY reporters that stay on the extension-
+; ROM EXT_CMD_* path) come from nova.inc, which is already included above.
 
 LAB_FIO_CMD_RTS = fio_issue
 
@@ -10158,51 +10177,66 @@ LAB_RESET
 ; --- NIC BASIC keyword handlers ---
 
 ; NOPEN slot,"host",port — connect slot to remote host
+; Routes through lib_call(NET): NET_CONNECT (nameptr -> ARG0 byte0/1, namelen ->
+; ARG0 byte2, rport -> ARG1 u16, slot -> ARG3 byte0). The NET module copies the
+; host name into NIC_NAMEBUF itself (no nic_copy_name here) and reports a bad-name
+; length as LIB_STATUS != 0, so the @nopen_err path is preserved by a BNE on
+; LIB_STATUS after the call. basic_lib_zargs runs FIRST (it clobbers X = $FF on
+; exit) so the slot parsed next survives into LIB_ARG3 (Phase 3 X-clobber lesson).
 LAB_NOPEN
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; slot → X
-      STX   NIC_SLOT
+      STX   LIB_ARG3          ; slot -> ARG3 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate string expression
       JSR   LAB_EVST          ; pop: A=len, ut1_pl/ph=ptr
-      STA   NIC_ARG_NAMELEN
+      STA   LIB_ARG0+2        ; name length -> ARG0 byte2
       LDA   ut1_pl
-      STA   NIC_ARG_NAMEPTR_L
+      STA   LIB_ARG0          ; name pointer low  -> ARG0 byte0
       LDA   ut1_ph
-      STA   NIC_ARG_NAMEPTR_H
-      JSR   nic_copy_name
-      BNE   @nopen_err
+      STA   LIB_ARG0+1        ; name pointer high -> ARG0 byte1
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; port → FAC1_3/FAC1_2
-      LDA   FAC1_3
-      STA   NIC_RPORTL
-      LDA   FAC1_2
-      STA   NIC_RPORTH
-      JMP   nic_connect
+      LDY   #4                ; ARG1
+      JSR   basic_lib_arg_word ; port (FAC1_3/2) -> ARG1 u16
+      LDX   #NET_CONNECT
+      JSR   basic_net_call    ; copies the name + issues connect; A = LIB_STATUS
+      BNE   @nopen_err        ; bad name length -> LERR_NET_FAIL
+      RTS
 @nopen_err
       JMP   LAB_FCER          ; function call error
 
 ; NCLOSE slot — disconnect slot
+; Routes through lib_call(NET): NET_DISCONNECT (slot -> ARG3 byte0). zargs runs
+; FIRST (it clobbers X = $FF) so the slot parsed next survives into LIB_ARG3.
 LAB_NCLOSE
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; slot → X
-      STX   NIC_SLOT
-      JMP   nic_disconnect
+      STX   LIB_ARG3          ; slot -> ARG3 byte0
+      LDX   #NET_DISCONNECT
+      JMP   basic_net_call    ; lib_call(NET, NET_DISCONNECT); RTS from there
 
 ; NSEND slot,A$ — send string via NIC
+; Routes through lib_call(NET): NET_SEND (dataptr -> ARG0 byte0/1, len -> ARG0
+; byte2, slot -> ARG3 byte0). zargs runs FIRST (it clobbers X = $FF) so the slot
+; parsed next survives into LIB_ARG3 (Phase 3 X-clobber lesson). The empty-string
+; check (-> LAB_FCER) is preserved.
 LAB_NSEND
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; slot → X
-      STX   NIC_SLOT
+      STX   LIB_ARG3          ; slot -> ARG3 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate expression
       JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
       TAX
       BEQ   @nsend_err        ; empty string
-      ; Point DMA at string in BASIC memory
+      STX   LIB_ARG0+2        ; length -> ARG0 byte2
       LDA   ut1_pl
-      STA   NIC_DMAL
+      STA   LIB_ARG0          ; data pointer low  -> ARG0 byte0
       LDA   ut1_ph
-      STA   NIC_DMAH
-      STX   NIC_DMALEN        ; length
-      JMP   nic_send
+      STA   LIB_ARG0+1        ; data pointer high -> ARG0 byte1
+      LDX   #NET_SEND
+      JMP   basic_net_call    ; lib_call(NET, NET_SEND); RTS from there
 @nsend_err
       JMP   LAB_FCER
 
