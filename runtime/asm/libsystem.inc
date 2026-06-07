@@ -99,8 +99,22 @@ SYS_OVL_TICK    = $10   ; ()                           -> call the overlay tick 
 ; =====================================================================
 SYS_ADDR_LOOKUP = $11   ; (nameptr,namelen) reporter -> RESULT b0..1 = 16-bit address
 
+; =====================================================================
+; C64-style full-screen line editor (sys_screen_readline, backs BASIC's
+; LAB_1357). Runs the whole interactive edit loop against VGC MMIO so it
+; works identically on Avalonia and FPGA: poll VGC_CHARIN, echo printables /
+; move the cursor / backspace directly on the char-plane screen window, and on
+; ENTER read the physical screen row under the cursor into the caller's buffer
+; and return its length. The submitted line carries no trailing NUL (matching
+; the legacy LAB_1357 contract); trailing spaces on the row are trimmed.
+;   In:  ARG0 b0/b1 = destination buffer ptr   ARG0 b2 = max length
+;   Out: RESULT b0 = submitted line length; buffer filled (no trailing NUL);
+;        LIB_STATUS = LERR_OK. (RESULT b1 reserved for a future exit reason.)
+; =====================================================================
+SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer filled
+
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $12
+SYS_FN_COUNT  = $13
 
 .endif

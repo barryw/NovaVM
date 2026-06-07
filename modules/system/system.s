@@ -164,10 +164,22 @@ EDITOR_FGCOL      = $01                ; white text
 ;@effect bucket table and walks the chain; returns the value as raw data.
 ;@status LERR_OK, LERR_SYS_FAIL
 ; (no ;@ndk: the hash/bucket walk is local to this module, not a wrapped NDK routine.)
+;
+; --- C64-style full-screen line editor (backs BASIC's LAB_1357) ---
+;@fn SYS_SCREEN_READLINE
+;@brief Run the full-screen edit loop; on ENTER read the row under the cursor.
+;@arg buffer u16 destination buffer ptr (ARG0 byte0,1)
+;@arg maxlen u8 buffer capacity in bytes (ARG0 byte2)
+;@ret u8 submitted line length (RESULT byte0); buffer filled, no trailing NUL
+;@effect Drives the cursor + screen directly through VGC MMIO (CHARIN, the
+;@effect char-plane screen window, cursor X/Y). On ENTER copies the physical
+;@effect screen row at the cursor (trailing spaces trimmed) into the buffer.
+;@status LERR_OK
+; (no ;@ndk: the edit loop is local to this module, not a wrapped NDK routine.)
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (18) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (19) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -204,6 +216,7 @@ sys_jtable:
       .word   sys_ovl_main-1           ; $0F SYS_OVL_MAIN
       .word   sys_ovl_tick-1           ; $10 SYS_OVL_TICK
       .word   sys_addr_lookup-1        ; $11 SYS_ADDR_LOOKUP
+      .word   sys_screen_readline-1    ; $12 SYS_SCREEN_READLINE
 
 ; ===========================================================================
 ; SYS_FN_EDIT — port of the extension's ext_edit, reading the canonical lib_call
@@ -757,6 +770,22 @@ sal_upper:
       BCS   @upper_done
       AND   #$DF
 @upper_done:
+      RTS
+
+; ===========================================================================
+; SYS_SCREEN_READLINE — C64-style full-screen line reader (backs BASIC's
+; LAB_1357). Skeleton (Task 1): publishes an empty line + OK. The interactive
+; edit loop + read-row-on-ENTER lands in Task 2.
+;   In:  ARG0 b0/b1 = destination buffer ptr   ARG0 b2 = max length
+;   Out: RESULT b0 = line length; LIB_STATUS = LERR_OK
+; ===========================================================================
+sys_screen_readline:
+      STZ   LIB_RESULT+0               ; length 0 (skeleton: nothing read yet)
+      STZ   LIB_RESULT+1               ; reserved exit reason = 0
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
       RTS
 
       .segment "BSS"

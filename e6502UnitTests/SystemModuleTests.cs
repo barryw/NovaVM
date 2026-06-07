@@ -11,9 +11,9 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($12  EDIT + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($13  EDIT + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
-///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP)
+///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging the editor.
 /// </summary>
@@ -31,7 +31,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x12, img[7]);   // SYS_FN_COUNT (EDIT + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP)
+        Assert.AreEqual(0x13, img[7]);   // SYS_FN_COUNT (EDIT + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE)
     }
 
     private static string RepoPath(params string[] parts)
