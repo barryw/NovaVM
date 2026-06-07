@@ -797,6 +797,74 @@ public class EhBasicTokenizationTests
         Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal), $"LIST produced syntax error under stress.\n{screen}");
     }
 
+    // Phase-9 vocabulary prune (phase9-vocab-prune): WAIT, NULL, SWAP (commands)
+    // and SADD, VARPTR, TWOPI (functions) were removed from the main ROM in
+    // TOMBSTONE mode. Their TK_ token values and dispatch-table slots are kept
+    // (positional dispatch), but the slot now points at the syntax-error vector
+    // and the keyword name strings were stripped from the cruncher tables, so the
+    // words no longer tokenize and must produce a Syntax Error instead of running.
+    [TestMethod]
+    public void AvaloniaRomPrunedKeywordsYieldSyntaxError()
+    {
+        foreach (string stmt in new[] { "WAIT 100,1", "NULL 5", "SWAP A,B" })
+        {
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            cpu.Boot();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+            EnterLine(editor, stmt);
+            RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+
+            string screen = SnapshotScreen(bus.Vgc);
+            Assert.IsTrue(screen.Contains("Syntax Error", StringComparison.Ordinal),
+                $"Removed keyword '{stmt}' should produce a Syntax Error (tombstoned), not run.\n{screen}");
+        }
+    }
+
+    // Guard the immediate neighbours of every pruned keyword: a table edit that
+    // shifts a row would silently corrupt the keyword before/after. INC sits
+    // between the tombstoned NULL and WAIT command slots; PI is the function slot
+    // immediately before the tombstoned TWOPI; LEFT$ follows the tombstoned
+    // VARPTR slot; SADD's neighbours are DEEK and LEN.
+    [TestMethod]
+    public void AvaloniaRomPrunedKeywordNeighborsStillWork()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // INC (neighbour of NULL/WAIT command slots): increment a variable.
+        EnterLine(editor, "A=5");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "INC A");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "PRINT A");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+
+        // PI (neighbour of TWOPI function slot) and DEEK/LEN (neighbours of SADD)
+        // and LEFT$ (neighbour of VARPTR) all in one PRINT.
+        EnterLine(editor, "PRINT INT(PI*100);LEN(\"ABCD\");LEFT$(\"HELLO\",2)");
+        RunUntilEditorIdle(cpu, bus, editor, 15_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Neighbour keyword of a pruned slot produced a Syntax Error.\n{screen}");
+        Assert.IsTrue(screen.Contains("6", StringComparison.Ordinal),
+            $"INC neighbour failed: expected A=6 after INC.\n{screen}");
+        Assert.IsTrue(screen.Contains("314", StringComparison.Ordinal),
+            $"PI neighbour failed: expected INT(PI*100)=314.\n{screen}");
+        Assert.IsTrue(screen.Contains("HE", StringComparison.Ordinal),
+            $"LEFT$ neighbour failed: expected LEFT$(\"HELLO\",2)=HE.\n{screen}");
+    }
+
     private static void RunUntilScreenContains(Cpu cpu, CompositeBusDevice bus, string marker, int maxSteps)
     {
         for (int i = 0; i < maxSteps; i++)

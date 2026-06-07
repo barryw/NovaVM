@@ -2229,10 +2229,8 @@ LAB_line_found
       BCC   LAB_uflow         ; else decrement high byte then save DATA pointer and
                               ; return (branch always)
 
-; perform NULL
+; NULL removed (tombstoned) — dispatch slot points at syntax-error vector
 
-LAB_NULL
-      JSR   LAB_GTBY          ; parse and discard byte parameter
 LAB_167A
       RTS
 
@@ -6007,23 +6005,7 @@ NoString
                               ; address and length on descriptor stack and update stack
                               ; pointers
 
-; perform SADD()
-
-LAB_SADD
-      JSR   LAB_IGBY          ; increment and scan memory
-      JSR   LAB_GVAR          ; get var address
-
-      JSR   LAB_1BFB          ; scan for ")", else do syntax error then warm start
-      JSR   LAB_CTST          ; check if source is string, else do type mismatch
-
-      LDY   #$02              ; index to string pointer high byte
-      LDA   (Cvaral),Y        ; get string pointer high byte
-      TAX                     ; copy string pointer high byte to X
-      DEY                     ; index to string pointer low byte
-      LDA   (Cvaral),Y        ; get string pointer low byte
-      TAY                     ; copy string pointer low byte to Y
-      TXA                     ; copy string pointer high byte to A
-      JMP   LAB_AYFC          ; save and convert integer AY to FAC1 and return
+; SADD() removed (tombstoned) — dispatch slot points at syntax-error vector
 
 ; perform LEN()
 
@@ -6258,36 +6240,7 @@ Dokeh
       STA   (Frnxtl,X)        ; POKE high byte
       JMP   LAB_GBYT          ; scan memory and return
 
-; perform SWAP
-
-LAB_SWAP
-      JSR   LAB_GVAR          ; get var1 address
-      STA   Lvarpl            ; save var1 address low byte
-      STY   Lvarph            ; save var1 address high byte
-      LDA   Dtypef            ; get data type flag, $FF=string, $00=numeric
-      PHA                     ; save data type flag
-
-      JSR   LAB_1C01          ; scan for "," , else do syntax error then warm start
-      JSR   LAB_GVAR          ; get var2 address (pointer in Cvaral/h)
-      PLA                     ; pull var1 data type flag
-      EOR   Dtypef            ; compare with var2 data type
-      BPL   SwapErr           ; exit if not both the same type
-
-      LDY   #$03              ; four bytes to swap (either value or descriptor+1)
-SwapLp
-      LDA   (Lvarpl),Y        ; get byte from var1
-      TAX                     ; save var1 byte
-      LDA   (Cvaral),Y        ; get byte from var2
-      STA   (Lvarpl),Y        ; save byte to var1
-      TXA                     ; restore var1 byte
-      STA   (Cvaral),Y        ; save byte to var2
-      DEY                     ; decrement index
-      BPL   SwapLp            ; loop until done
-
-      RTS
-
-SwapErr
-      JMP   LAB_1ABC          ; do "Type mismatch" error then warm start
+; SWAP removed (tombstoned) — dispatch slot points at syntax-error vector
 
 ; perform SYS
 
@@ -6351,23 +6304,8 @@ LAB_CURS_OFF_CR
       STZ   VGC_CURSEN        ; VGC cursor enable register
       JMP   LAB_1866          ; do CR/LF exit to BASIC
 
-; perform WAIT
-
-LAB_WAIT
-      JSR   LAB_GADB          ; get two parameters for POKE or WAIT
-      STX   Frnxtl            ; save byte
-      LDX   #$00              ; clear mask
-      JSR   LAB_GBYT          ; scan memory
-      BEQ   LAB_2441          ; skip if no third argument
-
-      JSR   LAB_SCGB          ; scan for "," and get byte, else SN error then warm start
-LAB_2441
-      STX   Frnxth            ; save EOR argument
-LAB_2445
-      LDA   (Itempl),Y        ; get byte via temporary integer (addr)
-      EOR   Frnxth            ; EOR with second argument (mask)
-      AND   Frnxtl            ; AND with first argument (byte)
-      BEQ   LAB_2445          ; loop if result is zero
+; WAIT removed (tombstoned) — dispatch slot points at syntax-error vector
+; LAB_244D RTS retained below: shared exit used by FP add/subtract (LAB_247C)
 
 LAB_244D
       RTS
@@ -8833,15 +8771,7 @@ LAB_SQNS
       STA   FAC1_e            ; save it
       JMP   LAB_24D5          ; normalise FAC1 and return
 
-; perform VARPTR()
-
-LAB_VARPTR
-      JSR   LAB_IGBY          ; increment and scan memory
-      JSR   LAB_GVAR          ; get var address
-      JSR   LAB_1BFB          ; scan for ")" , else do syntax error then warm start
-      LDY   Cvaral            ; get var address low byte
-      LDA   Cvarah            ; get var address high byte
-      JMP   LAB_AYFC          ; save and convert integer AY to FAC1 and return
+; VARPTR() removed (tombstoned) — dispatch slot points at syntax-error vector
 
 ; perform PI
 
@@ -8852,12 +8782,8 @@ LAB_PI
       DEC   FAC1_e            ; make result = PI
       RTS
 
-; perform TWOPI
-
-LAB_TWOPI
-      LDA   #<LAB_2C7C        ; set (2*pi) pointer low byte
-      LDY   #>LAB_2C7C        ; set (2*pi) pointer high byte
-      JMP   LAB_UFAC          ; unpack memory (AY) into FAC1 and return
+; TWOPI removed (tombstoned) — dispatch slot points at syntax-error vector
+; shared 2*pi constant LAB_2C7C retained (PI and ATN still use it)
 
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
@@ -11499,9 +11425,9 @@ LAB_CTBL
       .word LAB_REM-1         ; REM
       .word LAB_STOP-1        ; STOP
       .word LAB_ON-1          ; ON              modified command
-      .word LAB_NULL-1        ; NULL            modified command
+      .word LAB_15D9-1        ; NULL            removed (tombstone → syntax error)
       .word LAB_INC-1         ; INC             new command
-      .word LAB_WAIT-1        ; WAIT
+      .word LAB_15D9-1        ; WAIT            removed (tombstone → syntax error)
       .word V_LOAD-1          ; LOAD
       .word V_SAVE-1          ; SAVE
       .word LAB_DEF-1         ; DEF
@@ -11517,7 +11443,7 @@ LAB_CTBL
       .word LAB_NEW-1         ; NEW
       .word LAB_WDTH-1        ; WIDTH           new command
       .word LAB_GET-1         ; GET             new command
-      .word LAB_SWAP-1        ; SWAP            new command
+      .word LAB_15D9-1        ; SWAP            removed (tombstone → syntax error)
       .word LAB_BITSET-1      ; BITSET          new command
       .word LAB_BITCLR-1      ; BITCLR          new command
       .word LAB_IRQ-1         ; IRQ             new command
@@ -11579,7 +11505,7 @@ LAB_FTPM    = LAB_FTPL+$01
       .word LAB_MMPP-1        ; MAX()     process numeric expression
       .word LAB_MMPP-1        ; MIN()           "
       .word LAB_PPBI-1        ; PI        advance pointer
-      .word LAB_PPBI-1        ; TWOPI           "
+      .word $0000             ; TWOPI     removed (tombstone, no preprocess)
       .word $0000             ; VARPTR()  none
       .word LAB_LRMS-1        ; LEFT$()   process string expression
       .word LAB_LRMS-1        ; RIGHT$()        "
@@ -11609,7 +11535,7 @@ LAB_FTBM    = LAB_FTBL+$01
       .word LAB_ATN-1         ; ATN()
       .word LAB_PEEK-1        ; PEEK()
       .word LAB_DEEK-1        ; DEEK()          new function
-      .word LAB_SADD-1        ; SADD()          new function
+      .word LAB_15D9-1        ; SADD()          removed (tombstone → syntax error)
       .word LAB_LENS-1        ; LEN()
       .word LAB_STRS-1        ; STR$()
       .word LAB_VAL-1         ; VAL()
@@ -11623,8 +11549,8 @@ LAB_FTBM    = LAB_FTBL+$01
       .word LAB_MAX-1         ; MAX()           new function
       .word LAB_MIN-1         ; MIN()           new function
       .word LAB_PI-1          ; PI              new function
-      .word LAB_TWOPI-1       ; TWOPI           new function
-      .word LAB_VARPTR-1      ; VARPTR()        new function
+      .word LAB_15D9-1        ; TWOPI           removed (tombstone → syntax error)
+      .word LAB_15D9-1        ; VARPTR()        removed (tombstone → syntax error)
       .word LAB_LEFT-1        ; LEFT$()
       .word LAB_RIGHT-1       ; RIGHT$()
       .word LAB_MIDS-1        ; MID$()
@@ -11914,8 +11840,6 @@ LBB_NMI
       .byte "MI",TK_NMI       ; NMI
 LBB_NOT
       .byte "OT",TK_NOT       ; NOT
-LBB_NULL
-      .byte "ULL",TK_NULL     ; NULL
       .byte $00
 TAB_ASCO
 LBB_OFF
@@ -11966,8 +11890,6 @@ LBB_RUN
       .byte "UN",TK_RUN       ; RUN
       .byte $00
 TAB_ASCS
-LBB_SADD
-      .byte "ADD(",TK_SADD    ; SADD(
 LBB_SAVE
       .byte "AVE",TK_SAVE     ; SAVE
 LBB_SGN
@@ -12003,8 +11925,6 @@ LBB_STOP
       .byte "TOP",TK_STOP     ; STOP
 LBB_STRS
       .byte "TR$(",TK_STRS    ; STR$(
-LBB_SWAP
-      .byte "WAP",TK_SWAP     ; SWAP
 LBB_SYS
       .byte "YS",TK_SYS       ; SYS
       .byte $00
@@ -12017,8 +11937,6 @@ LBB_THEN
       .byte "HEN",TK_THEN     ; THEN
 LBB_TO
       .byte "O",TK_TO         ; TO
-LBB_TWOPI
-      .byte "WOPI",TK_TWOPI   ; TWOPI
       .byte $00
 TAB_ASCU
 LBB_UCASES
@@ -12034,16 +11952,12 @@ LBB_USR
 TAB_ASCV
 LBB_VAL
       .byte "AL(",TK_VAL      ; VAL(
-LBB_VPTR
-      .byte "ARPTR(",TK_VPTR  ; VARPTR(
 LBB_VOLUME
       .byte "OLUME",TK_VOLUME ; VOLUME
 LBB_VSYNC
       .byte "SYNC",TK_VSYNC   ; VSYNC
       .byte $00
 TAB_ASCW
-LBB_WAIT
-      .byte "AIT",TK_WAIT     ; WAIT
 LBB_WAVE
       .byte "AVE",TK_WAVE     ; WAVE
 LBB_WHILE
@@ -12102,12 +12016,12 @@ LAB_KEYT
       .word LBB_STOP          ; STOP
       .byte 2,'O'
       .word LBB_ON            ; ON
-      .byte 4,'N'
-      .word LBB_NULL          ; NULL
+      .byte 1,'?'
+      .word $0000             ; NULL  removed (tombstone — positional slot kept)
       .byte 3,'I'
       .word LBB_INC           ; INC
-      .byte 4,'W'
-      .word LBB_WAIT          ; WAIT
+      .byte 1,'?'
+      .word $0000             ; WAIT  removed (tombstone — positional slot kept)
       .byte 4,'L'
       .word LBB_LOAD          ; LOAD
       .byte 4,'S'
@@ -12138,8 +12052,8 @@ LAB_KEYT
       .word LBB_WIDTH         ; WIDTH
       .byte 3,'G'
       .word LBB_GET           ; GET
-      .byte 4,'S'
-      .word LBB_SWAP          ; SWAP
+      .byte 1,'?'
+      .word $0000             ; SWAP  removed (tombstone — positional slot kept)
       .byte 6,'B'
       .word LBB_BITSET        ; BITSET
       .byte 6,'B'
@@ -12281,8 +12195,8 @@ LAB_KEYT
       .word LBB_PEEK          ; PEEK
       .byte 5,'D'             ;
       .word LBB_DEEK          ; DEEK
-      .byte 5,'S'             ;
-      .word LBB_SADD          ; SADD
+      .byte 1,'?'             ;
+      .word $0000             ; SADD  removed (tombstone — positional slot kept)
       .byte 4,'L'             ;
       .word LBB_LEN           ; LEN
       .byte 5,'S'             ;
@@ -12309,10 +12223,10 @@ LAB_KEYT
       .word LBB_MIN           ; MIN
       .byte 2,'P'             ;
       .word LBB_PI            ; PI
-      .byte 5,'T'             ;
-      .word LBB_TWOPI         ; TWOPI
-      .byte 7,'V'             ;
-      .word LBB_VPTR          ; VARPTR
+      .byte 1,'?'             ;
+      .word $0000             ; TWOPI  removed (tombstone — positional slot kept)
+      .byte 1,'?'             ;
+      .word $0000             ; VARPTR removed (tombstone — positional slot kept)
       .byte 6,'L'             ;
       .word LBB_LEFTS         ; LEFT$
       .byte 7,'R'             ;
