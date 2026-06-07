@@ -221,6 +221,61 @@ public class SystemModuleTests
         Assert.AreEqual("GOTO 10", new string(got), "buffer must hold the typed line");
     }
 
+    /// <summary>
+    /// Task 4 — arrows move the cursor and clamp at the screen edges. From (5,5):
+    /// Up,Up,Left,Right,Down -> (5,4). From a corner, Up/Left stay put.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_ArrowsMoveCursorClamped()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        bus.Write(VGC_CURSX, 5);
+        bus.Write(VGC_CURSY, 5);
+
+        const ushort buf = 0x0275;
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        // 30=Up, 28=Left, 29=Right, 31=Down. (5,5)->Up(5,4)->Up(5,3)->Left(4,3)
+        // ->Right(5,3)->Down(5,4).
+        QueueKeys(editor, 30, 30, 28, 29, 31);
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(5, bus.Read(VGC_CURSX), "final cursor X after arrow moves");
+        Assert.AreEqual(4, bus.Read(VGC_CURSY), "final cursor Y after arrow moves");
+    }
+
+    /// <summary>
+    /// Task 4 — clamp at the top-left corner: Up and Left from (0,0) stay at (0,0).
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_ArrowsClampAtTopLeft()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, 0);
+
+        const ushort buf = 0x0275;
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        QueueKeys(editor, 30, 28);   // Up, Left -- both clamp
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(0, bus.Read(VGC_CURSX), "Left clamps at column 0");
+        Assert.AreEqual(0, bus.Read(VGC_CURSY), "Up clamps at row 0");
+    }
+
     private static string RepoPath(params string[] parts)
     {
         string root = Path.GetFullPath(Path.Combine(

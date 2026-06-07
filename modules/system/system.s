@@ -829,7 +829,39 @@ sys_screen_readline:
       BEQ   @enter                     ; ENTER -> read the row, return
       CMP   #$20
       BCS   @printable                 ; >= $20 -> echo the char
+      ; arrow keys (28=Left, 29=Right, 30=Up, 31=Down) move the cursor, clamped.
+      CMP   #28
+      BEQ   @arrow_left
+      CMP   #29
+      BEQ   @arrow_right
+      CMP   #30
+      BEQ   @arrow_up
+      CMP   #31
+      BEQ   @arrow_down
       BRA   @poll                      ; other control codes ignored for now
+
+@arrow_left:
+      LDA   VGC_CURSX
+      BEQ   @poll                      ; at column 0 -> clamp
+      DEC   VGC_CURSX
+      BRA   @poll
+@arrow_right:
+      LDA   VGC_CURSX
+      CMP   #(NOVA_SCREEN_COLS-1)
+      BCS   @poll                      ; at column 79 -> clamp
+      INC   VGC_CURSX
+      BRA   @poll
+@arrow_up:
+      LDA   VGC_CURSY
+      BEQ   @poll                      ; at row 0 -> clamp
+      DEC   VGC_CURSY
+      BRA   @poll
+@arrow_down:
+      LDA   VGC_CURSY
+      CMP   #(NOVA_SCREEN_ROWS-1)
+      BCS   @poll                      ; at row 49 -> clamp
+      INC   VGC_CURSY
+      BRA   @poll
 
       ; --- echo a printable char at the cursor, then advance the cursor ---
 @printable:
