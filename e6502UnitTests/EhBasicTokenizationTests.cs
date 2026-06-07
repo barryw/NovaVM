@@ -246,22 +246,24 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(0xE7, bus.Read(0x6000), "ADDR(\"SYS.REGA\") low byte mismatch.");
         Assert.AreEqual(0x00, bus.Read(0x6001), "ADDR(\"SYS.REGA\") high byte mismatch.");
 
-        // VGC/sprite/audio routines moved out of the BASIC ROM into the GRAPHICS
-        // and SOUND modules (BASIC-on-Modules refactor Phases 1-3), so vgc.*,
-        // sprite.* and audio.* labels no longer resolve inside the primary ROM.
-        // fio.* still lives in the BASIC ROM (basic.asm includes fio.s directly
-        // for SAVE/LOAD/DIR/etc.), so use it to prove ADDR resolves a routine.
-        EnterLine(editor, "DOKE 24578,ADDR(\"fio.save\")");
+        // All the runtime NDK routines moved out of the BASIC ROM into the shared
+        // modules: vgc.*/text into GRAPHICS (Phase 1), sprite.* into GRAPHICS
+        // (Phase 2), audio.* into SOUND (Phase 3), nic.* into NET (Phase 4) and
+        // fio.*/pager.* into FILES (Phase 5). So no runtime *routine* label resolves
+        // inside the primary ROM any more. Prove ADDR still resolves a memory-mapped
+        // FIO register label: FIO.NAME is the filename buffer at $B9B0, untouched by
+        // the refactor (it lives in nova.inc, the MMIO map).
+        EnterLine(editor, "DOKE 24578,ADDR(\"fio.name\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
-        ushort fioSave = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
-        Assert.IsTrue(fioSave >= 0xC000 && fioSave < 0xFFD7,
-            $"ADDR(\"FIO.SAVE\") should resolve inside primary ROM, got ${fioSave:X4}.");
+        ushort fioName = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
+        Assert.AreEqual(0xB9B0, fioName,
+            $"ADDR(\"FIO.NAME\") should resolve to the $B9B0 filename buffer, got ${fioName:X4}.");
 
-        EnterLine(editor, "DOKE 24580,ADDR(\"fio.clear_error\")");
+        EnterLine(editor, "DOKE 24580,ADDR(\"fio.namelen\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
-        ushort fioClear = (ushort)(bus.Read(0x6004) | (bus.Read(0x6005) << 8));
-        Assert.IsTrue(fioClear >= 0xC000 && fioClear < 0xFFD7,
-            $"ADDR(\"FIO.CLEAR_ERROR\") should resolve inside primary ROM, got ${fioClear:X4}.");
+        ushort fioNameLen = (ushort)(bus.Read(0x6004) | (bus.Read(0x6005) << 8));
+        Assert.AreEqual(0xB9A3, fioNameLen,
+            $"ADDR(\"FIO.NAMELEN\") should resolve to the $B9A3 length register, got ${fioNameLen:X4}.");
 
         EnterLine(editor, "10 A=ADDR(\"sys.regx\")");
         RunUntilEditorIdle(cpu, bus, editor, 10_000_000);

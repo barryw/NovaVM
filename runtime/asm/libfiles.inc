@@ -28,7 +28,7 @@
 ; namelen in its own cell, so it packs namelen into ARG0 byte2 (see its @arg).
 ;
 ; STATUS MAPPING: fallible NDK routines return A=0 on success / A=1 on error;
-;   the wrapper maps A!=0 -> LIB_STATUS = LERR_FILE_FAIL, A==0 -> LERR_OK.
+;   the wrapper maps A!=0 -> LIB_STATUS = LERR_FIO_FAIL, A==0 -> LERR_OK.
 ;   Detailed status remains in the FIO_STATUS/FIO_ERRCODE MMIO registers.
 ;   The fio_rng reporter publishes FIO_RNG0..3 to LIB_RESULT (LIB_STATUS=OK).
 
@@ -38,7 +38,9 @@ LIBFILES_INC = 1
 .include "libabi.inc"            ; MODULE_ID_FILES, LIB_* mailbox cells, LERR_*
 
 ; --- Status code returned when a wrapped NDK fio_*/pager_* routine reports failure ---
-LERR_FILE_FAIL = $8A   ; fio_*/pager_* NDK routine returned A!=0 (FIO error / bad arg)
+; Named LERR_FIO_FAIL (distinct from libgraphics.inc's graphics-domain LERR_FILE_FAIL
+; for gsave/gload) so the two headers co-include with no symbol collision.
+LERR_FIO_FAIL = $8A   ; fio_*/pager_* NDK routine returned A!=0 (FIO error / bad arg)
 
 ; =====================================================================
 ; File save / load (fio.s, FIO.NAME + FIO_SRCL/H/FIO_ENDL/H ABI)

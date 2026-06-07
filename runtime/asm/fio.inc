@@ -63,7 +63,6 @@ FIO_ARG_NAMEPTR_L = NVR4H
 FIO_ARG_NAMEPTR_H = NVR5L
 
 ; Public helper routines.
-.global fio_issue
 .global fio_check
 .global fio_exec
 .global fio_copy_name

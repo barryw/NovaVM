@@ -973,7 +973,6 @@ Change directory to FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_cd`
-- Address: `$EE14`
 
 Requires:
 - `FIO_NAME`
@@ -985,7 +984,6 @@ Convert the current FIO status register to the shared A=0/1 result.
 
 - Kind: `routine`
 - Symbol: `fio_check`
-- Address: `$ED95`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -996,7 +994,6 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$EDB5`
 
 Outputs:
 - `A`: 0 on success.
@@ -1039,7 +1036,6 @@ Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_copy_name`
-- Address: `$EDD4`
 
 Outputs:
 - `A`: 0 on success, 1 on invalid name.
@@ -1055,7 +1051,6 @@ Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_delete`
-- Address: `$EE05`
 
 Requires:
 - `FIO_NAME`
@@ -1067,7 +1062,6 @@ Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
 
 - Kind: `routine`
 - Symbol: `fio_dir_open`
-- Address: `$EDFB`
 
 ## FIO.DIR_READ
 
@@ -1075,7 +1069,6 @@ Read the next directory entry into the FIO directory result registers.
 
 - Kind: `routine`
 - Symbol: `fio_dir_read`
-- Address: `$EE00`
 
 ## FIO.EXEC
 
@@ -1083,7 +1076,6 @@ Issue an FIO command, wait for completion, and return A=0/1 status.
 
 - Kind: `routine`
 - Symbol: `fio_exec`
-- Address: `$EDA2`
 
 Inputs:
 - `A`: FIO command byte.
@@ -1097,7 +1089,6 @@ Load VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gload`
-- Address: `$EE0F`
 
 Requires:
 - `FIO_NAME`
@@ -1114,7 +1105,6 @@ Save VGC/graphics memory using FIO graphics registers.
 
 - Kind: `routine`
 - Symbol: `fio_gsave`
-- Address: `$EE0A`
 
 Requires:
 - `FIO_NAME`
@@ -1131,7 +1121,6 @@ Issue a raw FIO command without waiting for completion.
 
 - Kind: `routine`
 - Symbol: `fio_issue`
-- Address: `$ED91`
 
 Inputs:
 - `A`: FIO command byte.
@@ -1142,7 +1131,6 @@ Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_load`
-- Address: `$EDF6`
 
 Requires:
 - `FIO_NAME`
@@ -1156,7 +1144,6 @@ Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runt
 
 - Kind: `routine`
 - Symbol: `fio_load_runtime`
-- Address: `$EE28`
 
 Requires:
 - `FIO_NAME`
@@ -1168,7 +1155,6 @@ Create the directory named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_mkdir`
-- Address: `$EE19`
 
 Requires:
 - `FIO_NAME`
@@ -1213,7 +1199,6 @@ Read the current directory into FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_pwd`
-- Address: `$EE23`
 
 ## FIO.RMDIR
 
@@ -1221,7 +1206,6 @@ Remove the directory named by FIO.NAME/FIO_NAMELEN.
 
 - Kind: `routine`
 - Symbol: `fio_rmdir`
-- Address: `$EE1E`
 
 Requires:
 - `FIO_NAME`
@@ -1233,7 +1217,6 @@ Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.
 
 - Kind: `routine`
 - Symbol: `fio_rng`
-- Address: `$EE2D`
 
 Outputs:
 - `A`: 0 on success, 1 on error.
@@ -1284,7 +1267,6 @@ Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.
 
 - Kind: `routine`
 - Symbol: `fio_save`
-- Address: `$EDF1`
 
 Requires:
 - `FIO_NAME`
@@ -1300,7 +1282,6 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 - Kind: `routine`
 - Symbol: `fio_set_io_error`
-- Address: `$EDC7`
 
 Outputs:
 - `A`: 1 on error.

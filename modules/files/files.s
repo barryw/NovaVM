@@ -41,7 +41,7 @@
 ;@arg src u16 first RAM address to save -> FIO_SRCL/H (ARG2)
 ;@arg end u16 last RAM address to save -> FIO_ENDL/H (ARG3)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_LOAD
 ;@ndk fio_load
@@ -49,26 +49,26 @@
 ;@arg namelen u8 filename length 1..63 (ARG1 byte0)
 ;@arg dest u16 destination RAM address -> FIO_SRCL/H (ARG2)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_DIR_OPEN
 ;@ndk fio_dir_open
 ;@arg nameptr u16 pointer to optional filter name, ignored when namelen=0 (ARG0)
 ;@arg namelen u8 filter length 0..63; 0 lists everything (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_DIR_READ
 ;@ndk fio_dir_read
 ;@ret void (entry data lands in the FIO directory result registers)
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_DELETE
 ;@ndk fio_delete
 ;@arg nameptr u16 pointer to filename bytes (ARG0)
 ;@arg namelen u8 filename length 1..63 (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_GSAVE
 ;@ndk fio_gsave
@@ -78,7 +78,7 @@
 ;@arg gaddr u16 VGC source address -> FIO_GADDRL/H (ARG2 byte1, byte2)
 ;@arg glen u16 byte count -> FIO_GLENL/H (ARG3)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_GLOAD
 ;@ndk fio_gload
@@ -88,51 +88,51 @@
 ;@arg gaddr u16 VGC destination address -> FIO_GADDRL/H (ARG2 byte1, byte2)
 ;@arg glen u16 byte count -> FIO_GLENL/H (ARG3)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_CD
 ;@ndk fio_cd
 ;@arg nameptr u16 pointer to directory name (ARG0)
 ;@arg namelen u8 name length 1..63 (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_MKDIR
 ;@ndk fio_mkdir
 ;@arg nameptr u16 pointer to directory name (ARG0)
 ;@arg namelen u8 name length 1..63 (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_RMDIR
 ;@ndk fio_rmdir
 ;@arg nameptr u16 pointer to directory name (ARG0)
 ;@arg namelen u8 name length 1..63 (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_PWD
 ;@ndk fio_pwd
 ;@ret void (current directory lands in FIO.NAME/FIO.NAMELEN)
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_LOAD_RUNTIME
 ;@ndk fio_load_runtime
 ;@arg nameptr u16 pointer to runtime image filename (ARG0)
 ;@arg namelen u8 name length 1..63 (ARG1 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_RUN
 ;@ndk fio_run
 ;@arg cmd u8 raw FIO command byte -> A (ARG0 byte0)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_RNG
 ;@ndk fio_rng
 ;@ret u32 32 host-backed random bits from FIO_RNG0..3 (RESULT bytes 0..3)
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_PAGE
 ;@ndk pager_load_file_page
@@ -143,7 +143,7 @@
 ;@arg destaddr u24 destination address/space -> PAGER_ADDRL/M/H (ARG2 byte0,1,2)
 ;@arg len u16 byte count -> PAGER_LENL/H (ARG3)
 ;@ret void
-;@status LERR_OK, LERR_FILE_FAIL
+;@status LERR_OK, LERR_FIO_FAIL
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router (RTS-trick). FILE_FN_COUNT is small so fn*2 < 256.
@@ -197,7 +197,7 @@ file_finish_status:
       sta     LIB_STATUS
       rts
 @fail:
-      lda     #LERR_FILE_FAIL
+      lda     #LERR_FIO_FAIL
       sta     LIB_STATUS
       rts
 
@@ -251,7 +251,7 @@ file_load:
 ; Shared bad-name epilogue: fio_copy_name already set FIO_STATUS/ERRCODE; report
 ; failure to the mailbox. (Not ;@ndk-mapped; ignored by the drift JSR check.)
 file_name_fail:
-      LDA   #LERR_FILE_FAIL
+      LDA   #LERR_FIO_FAIL
       STA   LIB_STATUS
       RTS
 
@@ -403,7 +403,7 @@ file_rng:
       STA   LIB_STATUS
       RTS
 @fail:
-      LDA   #LERR_FILE_FAIL
+      LDA   #LERR_FIO_FAIL
       STA   LIB_STATUS
       RTS
 

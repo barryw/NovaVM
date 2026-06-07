@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -1237,6 +1238,149 @@ public class BasicRegressionTests
         }
         Assert.AreEqual(count, total, $"Loopback peer only received {total}/{count} bytes from NSEND.");
         return buf;
+    }
+
+    // SAVE "f" / LOAD "f" round-trip through lib_call(FILES): FILE_SAVE marshals
+    // the program range (Smeml..Svarl) into ARG2/ARG3 and the parsed name into
+    // ARG0/ARG1 (via LAB_FIO_GETNAME -> inline fio_copy_name -> FIO_NAME), then
+    // FILE_LOAD streams it back. NEW wipes the program in between; a clean LIST of
+    // the restored line proves the whole save/load path survived the conversion.
+    // Real regression net: this passes on the unconverted fio.s ROM too.
+    [TestMethod]
+    public void SaveLoadRoundTripsAProgramThroughFilesModule()
+    {
+        using var temp = new TempStorageRoot();
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 PRINT \"ROUNDTRIP\"",
+            "SAVE \"RTTEST\"",
+            "NEW",
+            "LOAD \"RTTEST\"",
+            "LIST",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"SAVE/LOAD must complete without an I/O error.\n{screen}");
+        Assert.IsTrue(screen.Contains("ROUNDTRIP", StringComparison.Ordinal),
+            $"After NEW + LOAD \"RTTEST\", LIST must show the saved program line, " +
+            $"proving FILE_SAVE (range -> ARG2/ARG3, name -> ARG0/ARG1) and FILE_LOAD " +
+            $"(dest -> ARG2) round-tripped the program through the FILES module.\n{screen}");
+
+        // The on-disk artifact must really exist under the FILES-module save path.
+        Assert.IsTrue(File.Exists(Path.Combine(temp.Hd0, "RTTEST.bas")),
+            "SAVE \"RTTEST\" must write RTTEST.bas under the program directory.");
+    }
+
+    // DELETE "f" routes through lib_call(FILES) FILE_DELETE; the parsed name reaches
+    // the module via FIO_NAME (LAB_FIO_GETNAME -> inline fio_copy_name). Save a file,
+    // confirm it exists, DELETE it, confirm it is gone — proving FILE_DELETE's
+    // name marshalling reached the host through the module.
+    [TestMethod]
+    public void DeleteRemovesAFileThroughFilesModule()
+    {
+        using var temp = new TempStorageRoot();
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 PRINT \"DELME\"",
+            "SAVE \"DELTEST\"",
+        ]);
+        string path = Path.Combine(temp.Hd0, "DELTEST.bas");
+        Assert.IsTrue(File.Exists(path), "SAVE \"DELTEST\" must create DELTEST.bas first.");
+
+        EnterProgramLines(cpu, bus, editor, ["DEL \"DELTEST\""]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"DEL \"DELTEST\" must complete without an I/O error.\n{screen}");
+        Assert.IsFalse(File.Exists(path),
+            "DEL \"DELTEST\" must remove DELTEST.bas via FILE_DELETE.");
+    }
+
+    // GSAVE / GLOAD round-trip through lib_call(FILES): FILE_GSAVE marshals the VGC
+    // graphics-space selector + offset (ARG2) and byte length (ARG3) plus the name
+    // (ARG0/ARG1), FILE_GLOAD reads it back. PLOT writes a pixel into the bitmap
+    // space, GSAVE captures the row, CLS clears it, GLOAD restores it. Reading the
+    // pixel back proves the gfx-register marshalling survived the conversion.
+    [TestMethod]
+    public void GSaveGLoadRoundTripsGraphicsMemoryThroughFilesModule()
+    {
+        using var temp = new TempStorageRoot();
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Space 3 = graphics bitmap. Plot a pixel, GSAVE the first 256 bytes of the
+        // bitmap, clear it with GCLS, then GLOAD them back.
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 GCOLOR 5",
+            "20 PLOT 0,0",
+            "30 GSAVE \"GFXTEST\",3,0,256",
+            "40 GCLS",
+            "50 GLOAD \"GFXTEST\",3,0,256",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"GSAVE/GLOAD must complete without an I/O error.\n{screen}");
+        Assert.IsTrue(File.Exists(Path.Combine(temp.Hd0, "GFXTEST.gfx")),
+            "GSAVE \"GFXTEST\",3,0,256 must write GFXTEST.gfx under the program directory.");
+
+        // GCLS zeroes space 3; the pixel restored by GLOAD must be the nonzero color
+        // we plotted (space 3, offset 0), proving FILE_GSAVE captured + FILE_GLOAD
+        // restored the gfx bytes through the FILES module.
+        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(3, 0, out byte restored),
+            "Graphics space 3 offset 0 must be readable after GLOAD.");
+        Assert.AreNotEqual(0, restored,
+            "GLOAD must restore the plotted pixel into graphics space 3 offset 0 " +
+            "(GCLS had cleared it to 0), proving FILE_GSAVE/FILE_GLOAD marshalled the " +
+            "gfx registers through the FILES module.");
+    }
+
+    // Points NOVA_STORAGE_ROOT at a throwaway directory so file-op tests never touch
+    // the developer's ~/e6502-programs. hd0 (the program/save device) lands under it.
+    private sealed class TempStorageRoot : IDisposable
+    {
+        private readonly string? _previous;
+        public string Root { get; }
+        public string Hd0 { get; }
+
+        public TempStorageRoot()
+        {
+            _previous = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+            Root = Path.Combine(Path.GetTempPath(), "e6502-filestest-" + Guid.NewGuid().ToString("N"));
+            Hd0 = Path.Combine(Root, "hd0");
+            Directory.CreateDirectory(Hd0);
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", Root);
+        }
+
+        public void Dispose()
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", _previous);
+            try { Directory.Delete(Root, recursive: true); } catch { /* best effort */ }
+        }
     }
 
     private static string RunProgram(string[] lines)

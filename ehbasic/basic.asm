@@ -64,6 +64,9 @@ Itemph            = Itempl+1  ; temporary integer high byte
       .include "libsystem.inc"    ; MODULE_ID_SYSTEM + SYS_FN_* ids
       .include "libsound.inc"     ; MODULE_ID_SOUND + SND_* ids
       .include "libnet.inc"       ; MODULE_ID_NET + NET_* ids
+      .include "libfiles.inc"     ; MODULE_ID_FILES + FILE_* ids
+      .include "fio.inc"          ; FIO_ARG_* (zp) pseudo-regs + FIO_NAME_LIMIT /
+                                  ; FIO_RESULT_* equates for the inline name helpers
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -9081,6 +9084,88 @@ basic_net_call:
       LDA   #MODULE_ID_NET
       BRA   basic_lib_call
 
+; basic_file_call — FILES lib_call. X = FILE_* id (caller filled LIB_ARG0..3).
+;   Saves the per-call "LDA #MODULE_ID_FILES" at every file call site, exactly as
+;   basic_gfx_call/basic_snd_call/basic_net_call do. Returns A = LIB_STATUS (Z set
+;   when OK). For ops with extra args (SAVE/LOAD src/end/dest in ARG2/ARG3;
+;   GSAVE/GLOAD space/gaddr/glen in ARG2/ARG3) the FILES module re-applies them to
+;   FIO_SRCL/ENDL + the gfx registers AFTER its page-in, so callers must marshal
+;   those into ARG cells (never pre-set the FIO registers — the demand-load page-in
+;   clobbers them). Name-only ops (DELETE/CD/MKDIR/RMDIR) carry just ARG0/ARG1.
+basic_file_call:
+      LDA   #MODULE_ID_FILES
+      BRA   basic_lib_call
+
+; basic_file_call_name — common tail for the name-only FILES ops (DELETE/CD/MKDIR/
+;   RMDIR). LAB_FIO_GETNAME has already filled FIO_NAME + FIO_NAMELEN; marshal those
+;   into the pointer-filename ABI (ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN) and
+;   issue the FILE_* op held in X. The module self-copies FIO_NAME -> FIO_NAME, which
+;   is harmless: FIO_NAME ($B9B0) survives the page-in (only FIO_SRCL/ENDL/STATUS/CMD
+;   are clobbered by the loader). Returns A = LIB_STATUS (Z set when OK).
+basic_file_call_name:
+      PHX                     ; save FILE_* id across zargs (zargs clobbers X=$FF)
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      JSR   basic_file_arg_name ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
+      PLX                     ; restore FILE_* id
+      BRA   basic_file_call   ; lib_call(FILES, X); returns A = LIB_STATUS
+
+; basic_file_arg_name — store the parsed filename pointer/length (already in
+;   FIO_NAME/FIO_NAMELEN) into ARG0 (u16 = &FIO_NAME) and ARG1 byte0 (= FIO_NAMELEN).
+;   Clobbers A; preserves X/Y. Used by every name-taking FILES handler.
+basic_file_arg_name:
+      LDA   #<FIO_NAME
+      STA   LIB_ARG0          ; name pointer low  -> ARG0 byte0
+      LDA   #>FIO_NAME
+      STA   LIB_ARG0+1        ; name pointer high -> ARG0 byte1
+      LDA   FIO_NAMELEN
+      STA   LIB_ARG1          ; name length       -> ARG1 byte0
+      RTS
+
+; basic_fio_copy_name — inline reimplementation of the dropped fio.s fio_copy_name
+;   helper. Copies a parsed filename from FIO_ARG_NAMEPTR_L/H (length in
+;   FIO_ARG_NAMELEN) into FIO_NAME and sets FIO_NAMELEN. Length must be 1..63
+;   (FIO_NAME_LIMIT). Returns A=0 OK (Z set) / A!=0 on a bad/empty/too-long name,
+;   setting FIO_STATUS/FIO_ERRCODE to the I/O-error state. Used by LAB_FIO_GETNAME,
+;   which BOTH the file handlers and the already-converted audio keywords
+;   (SIDPLAY/MIDPLAY, whose SOUND module reads FIO_NAME) rely on — so its external
+;   behavior is identical to the old fio_copy_name.
+basic_fio_copy_name:
+      LDA   FIO_ARG_NAMELEN
+      BEQ   @bad
+      CMP   #FIO_NAME_LIMIT + 1
+      BCS   @bad
+      STA   FIO_NAMELEN
+      TAX
+      LDY   #$00
+@copy:
+      LDA   (FIO_ARG_NAMEPTR_L),Y
+      STA   FIO_NAME,Y
+      INY
+      DEX
+      BNE   @copy
+      LDA   #FIO_RESULT_OK
+      RTS
+@bad:
+      LDA   #FIO_STATUS_ERROR
+      STA   FIO_STATUS
+      LDA   #FIO_ERR_IO
+      STA   FIO_ERRCODE
+      LDA   #FIO_RESULT_ERROR
+      RTS
+
+; basic_fio_clear_error — inline reimplementation of the dropped fio.s
+;   fio_clear_error helper. Clears the host-visible FIO error/status latch.
+;   AUTOBOOT calls this so a missing AUTOBOOT file is not reported as a disk error.
+basic_fio_clear_error:
+      LDA   #FIO_ERR_NONE
+      STA   FIO_ERRCODE
+      LDA   #FIO_STATUS_OK
+      STA   FIO_STATUS
+      LDA   #FIO_CMD_CLEARERR
+      STA   FIO_CMD
+      LDA   #FIO_RESULT_OK
+      RTS
+
 ; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
 ;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.
 basic_lib_zargs:
@@ -9673,19 +9758,24 @@ LAB_ENVELOPE
 ; routes through the shared SOUND module via lib_call (SND_*), exactly as Phase 1
 ; did for the graphics primitives (vgc.s) and Phase 2 for sprites (sprite.s).
 ; (extension.s keeps its own audio.s include for EXT_SFLOAD/PLAYING/MNOTE.)
-; audio.s used to pull fio.s for the file/SAVE/LOAD commands; include it directly
-; now that audio.s is gone (BASIC's SAVE/LOAD/DIR/etc. still need fio_exec et al).
-FIO_NO_STREAMING = 1
-NOVA_EMIT_ALL_RUNTIME = 1
-      .include "fio.s"
+;
+; fio.s is no longer compiled into the BASIC ROM either: every FILE keyword
+; (SAVE/LOAD/GSAVE/GLOAD/DEL/CD/MKDIR/RMDIR) now routes through the shared FILES
+; module via lib_call (FILE_*), exactly as Phase 1 did for graphics (vgc.s),
+; Phase 2 for sprites (sprite.s), Phase 3 for audio (audio.s) and Phase 4 for net
+; (nic.s). The two small fio.s helpers BASIC still needs OUTSIDE the module are
+; reimplemented inline above: basic_fio_copy_name (used by LAB_FIO_GETNAME, which
+; the audio keywords also rely on) and basic_fio_clear_error (used by AUTOBOOT).
+; The FIO_ARG_* (zp) pointer-filename pseudo-registers and the FIO_NAME_LIMIT /
+; FIO_RESULT_* equates those inline helpers need come from fio.inc (header only, no
+; code), pulled up with the other lib_call includes at the top of this file; the
+; FIO_* MMIO register and command names come from nova.inc (also included above).
 ; nic.s is no longer compiled into the BASIC ROM: every NET keyword (NOPEN/NCLOSE/
 ; NSEND/NRECV$) now routes through the shared NET module via lib_call (NET_*),
 ; exactly as Phase 1 did for graphics (vgc.s), Phase 2 for sprites (sprite.s) and
 ; Phase 3 for audio (audio.s). The NIC_* MMIO register names the converted handlers
 ; no longer reference (and the NSTATUS/NREADY reporters that stay on the extension-
 ; ROM EXT_CMD_* path) come from nova.inc, which is already included above.
-
-LAB_FIO_CMD_RTS = fio_issue
 
 ; WAVE is deprecated — use INSTRUMENT instead
 
@@ -9742,39 +9832,49 @@ LAB_BUMPED
 ; perform SAVE "filename"                     (program save)
 ; or      SAVE "filename", address, length    (raw block save)
 
+; Routes through lib_call(FILES): FILE_SAVE (nameptr -> ARG0, namelen -> ARG1,
+; src -> ARG2 u16, end -> ARG3 u16). The save range (src/end) MUST ride in ARG
+; cells, never pre-set into FIO_SRCL/FIO_ENDL: the FILES module's demand-load
+; page-in writes those very registers ($B9A4/$B9A6) while streaming the module in,
+; so the wrapper re-applies ARG2/ARG3 to FIO_SRCL/ENDL AFTER the page-in. The
+; parsed name (in FIO_NAME via LAB_FIO_GETNAME) is passed by &FIO_NAME pointer;
+; FIO_NAME ($B9B0) survives the page-in, so the module's self-copy is harmless.
 LAB_FSAVE
       JSR   LAB_FIO_GETNAME   ; parse filename into FIO_NAME (errors internally)
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      JSR   basic_file_arg_name ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
       JSR   LAB_GBYT          ; peek at next token
       CMP   #','
       BEQ   @sv_raw
-      ; default: save BASIC program area
+      ; default: save BASIC program area (src = Smem, end = Svar)
       LDA   Smeml
-      STA   FIO_SRCL
+      STA   LIB_ARG2          ; src low  -> ARG2 byte0
       LDA   Smemh
-      STA   FIO_SRCH
+      STA   LIB_ARG2+1        ; src high -> ARG2 byte1
       LDA   Svarl
-      STA   FIO_ENDL
+      STA   LIB_ARG3          ; end low  -> ARG3 byte0
       LDA   Svarh
-      STA   FIO_ENDH
+      STA   LIB_ARG3+1        ; end high -> ARG3 byte1
       BRA   @sv_go
 @sv_raw
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; source address
       LDA   FAC1_3
-      STA   FIO_SRCL
+      STA   LIB_ARG2          ; src low  -> ARG2 byte0
       LDA   FAC1_2
-      STA   FIO_SRCH
+      STA   LIB_ARG2+1        ; src high -> ARG2 byte1
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTWRD         ; length
+      JSR   LAB_GTWRD         ; length -> end = src + length
       CLC
-      LDA   FIO_SRCL
+      LDA   LIB_ARG2
       ADC   FAC1_3
-      STA   FIO_ENDL
-      LDA   FIO_SRCH
+      STA   LIB_ARG3          ; end low  -> ARG3 byte0
+      LDA   LIB_ARG2+1
       ADC   FAC1_2
-      STA   FIO_ENDH
+      STA   LIB_ARG3+1        ; end high -> ARG3 byte1
 @sv_go
-      JSR   fio_save
+      LDX   #FILE_SAVE
+      JSR   basic_file_call   ; A = LIB_STATUS (0 = OK)
       BEQ   @sv_ok
       JMP   LAB_FIO_ERRIO
 @sv_ok
@@ -9785,14 +9885,23 @@ LAB_FSAVE
 ;   .bas — loaded into BASIC program space, pointers updated
 ;   .bin — loaded at embedded address (from 2-byte file header)
 
+; Routes through lib_call(FILES): FILE_LOAD (nameptr -> ARG0, namelen -> ARG1,
+; dest -> ARG2 u16). The load destination (Smem) rides in ARG2, NOT pre-set into
+; FIO_SRCL: the FILES module re-applies ARG2 to FIO_SRCL/H AFTER its demand-load
+; page-in (which clobbers $B9A4). After the call the host has updated FIO_DIRTYPE/
+; FIO_SIZE/FIO_SRCL/H in the (now-restored) FIO MMIO, which BASIC reads below to
+; finalise .bas vs .bin pointers.
 LAB_FLOAD
       JSR   LAB_FIO_GETNAME   ; parse filename into FIO_NAME (errors internally)
-      ; set default load address to BASIC program start
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      JSR   basic_file_arg_name ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
+      ; default load address to BASIC program start -> ARG2 (dest)
       LDA   Smeml
-      STA   FIO_SRCL
+      STA   LIB_ARG2          ; dest low  -> ARG2 byte0
       LDA   Smemh
-      STA   FIO_SRCH
-      JSR   fio_load
+      STA   LIB_ARG2+1        ; dest high -> ARG2 byte1
+      LDX   #FILE_LOAD
+      JSR   basic_file_call   ; A = LIB_STATUS (0 = OK)
       BNE   @ld_chk_err
       ; check file type — host sets FIO_DIRTYPE after load
       LDA   FIO_DIRTYPE
@@ -9834,56 +9943,68 @@ LAB_FLOAD
 @s_loaded .byte $0D,$0A,"Loaded at $",0
 
 ; perform GSAVE "filename", space, offset, length
+; Routes through lib_call(FILES): FILE_GSAVE (nameptr -> ARG0, namelen -> ARG1,
+; space -> ARG2 b0, gaddr -> ARG2 b1.b2 u16, glen -> ARG3 u16). The gfx registers
+; (FIO_GSPACE/GADDR/GLEN) are NOT touched by the demand-load page-in, but the FILES
+; module rewrites them from these ARG cells anyway, so we marshal everything into
+; the mailbox uniformly. basic_lib_zargs runs FIRST (it clobbers X = $FF on exit)
+; so the space byte parsed below survives into LIB_ARG2 (Phase 3 X-clobber lesson).
 
 LAB_GSAVE
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
+      JSR   basic_lib_zargs   ; zero ARG0..3 (also clears X to $FF)
+      JSR   basic_file_arg_name ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; graphics space id
-      STX   FIO_GSPACE
+      JSR   LAB_GTBY          ; graphics space id -> X
+      STX   LIB_ARG2          ; space -> ARG2 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; graphics offset
       LDA   FAC1_3
-      STA   FIO_GADDRL
+      STA   LIB_ARG2+1        ; gaddr low  -> ARG2 byte1
       LDA   FAC1_2
-      STA   FIO_GADDRH
+      STA   LIB_ARG2+2        ; gaddr high -> ARG2 byte2
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; graphics length
       LDA   FAC1_3
-      STA   FIO_GLENL
+      STA   LIB_ARG3          ; glen low  -> ARG3 byte0
       LDA   FAC1_2
-      STA   FIO_GLENH
-      JSR   fio_gsave
+      STA   LIB_ARG3+1        ; glen high -> ARG3 byte1
+      LDX   #FILE_GSAVE
+      JSR   basic_file_call   ; A = LIB_STATUS (0 = OK)
       BEQ   @gs_ok
       JMP   LAB_FIO_ERRIO
 @gs_ok
       RTS
 
 ; perform GLOAD "filename", space, offset [,length]
+; Routes through lib_call(FILES): FILE_GLOAD (same arg layout as FILE_GSAVE). glen
+; defaults to 0 (load full file) when the optional ,length is omitted.
 
 LAB_GLOAD
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
+      JSR   basic_lib_zargs   ; zero ARG0..3 (also clears X to $FF; glen defaults 0)
+      JSR   basic_file_arg_name ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
       JSR   LAB_1C01          ; comma
-      JSR   LAB_GTBY          ; graphics space id
-      STX   FIO_GSPACE
+      JSR   LAB_GTBY          ; graphics space id -> X
+      STX   LIB_ARG2          ; space -> ARG2 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTWRD         ; graphics offset
       LDA   FAC1_3
-      STA   FIO_GADDRL
+      STA   LIB_ARG2+1        ; gaddr low  -> ARG2 byte1
       LDA   FAC1_2
-      STA   FIO_GADDRH
-      STZ   FIO_GLENL         ; default: load full file
-      STZ   FIO_GLENH
+      STA   LIB_ARG2+2        ; gaddr high -> ARG2 byte2
       JSR   LAB_GBYT          ; optional comma,length
       CMP   #','
       BNE   @gl_go
       JSR   LAB_1C01
       JSR   LAB_GTWRD
       LDA   FAC1_3
-      STA   FIO_GLENL
+      STA   LIB_ARG3          ; glen low  -> ARG3 byte0
       LDA   FAC1_2
-      STA   FIO_GLENH
+      STA   LIB_ARG3+1        ; glen high -> ARG3 byte1
 @gl_go
-      JSR   fio_gload
+      LDX   #FILE_GLOAD
+      JSR   basic_file_call   ; A = LIB_STATUS (0 = OK)
       BEQ   @gl_ok
       JMP   LAB_FIO_ERRHND
 @gl_ok
@@ -10004,14 +10125,10 @@ LAB_MIDSTOP
       LDX   #SND_MIDSTOP
       JMP   basic_snd_call    ; lib_call(SOUND, SND_MIDSTOP); RTS from there
 
-; common: issue FIO command in A, check status, error on fail
-
-LAB_FIO_EXEC
-      JSR   fio_exec
-      BNE   @fio_chk_err
-      RTS
-@fio_chk_err
-      JMP   LAB_FIO_ERRHND
+; LAB_FIO_EXEC (the raw "issue FIO command in A, wait, error on fail" helper that
+; wrapped fio_exec) is gone: it had no callers after the audio conversion and its
+; only routine, fio.s's fio_exec, is no longer linked into the BASIC ROM. Raw FIO
+; commands now go through the FILES module's FILE_RUN fn if ever needed.
 
 ; Skip X characters from BASIC input
 LAB_SKIPX
@@ -10268,41 +10385,47 @@ LAB_BLITFILL
       LDA   #EXT_CMD_BLTFILL
       JMP   LAB_EXT_FCER
 
-; perform DEL "filename"
+; The name-only FILES ops (DEL/CD/MKDIR/RMDIR) all share the same shape: parse the
+; filename into FIO_NAME (LAB_FIO_GETNAME), then issue the FILE_* op with the name
+; marshalled into ARG0/ARG1. basic_file_call_name does the zargs + name-arg marshal
+; + lib_call(FILES) and returns A = LIB_STATUS, so each handler is just "load X with
+; its FILE_* id, JSR the common tail, BEQ ok / JMP error".
 
+; perform DEL "filename"  -> FILE_DELETE
 LAB_FDEL
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
-      JSR   fio_delete
+      LDX   #FILE_DELETE
+      JSR   basic_file_call_name ; zargs + name -> ARG0/1 + lib_call; A = LIB_STATUS
       BEQ   @fd_ok
       JMP   LAB_FIO_ERRHND
 @fd_ok
       RTS
 
-; perform CD "path"
-
+; perform CD "path"  -> FILE_CD
 LAB_CD
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      JSR   fio_cd
+      LDX   #FILE_CD
+      JSR   basic_file_call_name
       BEQ   @cd_ok
       JMP   LAB_FIO_ERRHND
 @cd_ok
       RTS
 
-; perform MKDIR "path"
-
+; perform MKDIR "path"  -> FILE_MKDIR
 LAB_MKDIR
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      JSR   fio_mkdir
+      LDX   #FILE_MKDIR
+      JSR   basic_file_call_name
       BEQ   @md_ok
       JMP   LAB_FIO_ERRHND
 @md_ok
       RTS
 
-; perform RMDIR "path"
-
+; perform RMDIR "path"  -> FILE_RMDIR
 LAB_RMDIR
       JSR   LAB_FIO_GETNAME   ; parse string arg into FIO_NAME
-      JSR   fio_rmdir
+      LDX   #FILE_RMDIR
+      JSR   basic_file_call_name
       BEQ   @rd_ok
       JMP   LAB_FIO_ERRHND
 @rd_ok
@@ -10342,7 +10465,7 @@ LAB_FIO_GETNAME
       STA   FIO_ARG_NAMEPTR_L
       LDA   ut1_ph
       STA   FIO_ARG_NAMEPTR_H
-      JSR   fio_copy_name
+      JSR   basic_fio_copy_name ; inline reimpl of fio.s fio_copy_name (see above)
       BNE   @fio_bad_name
       RTS
 @fio_bad_name
@@ -10594,7 +10717,10 @@ LAB_XUNMAP
 LAB_AUTOBOOT
       STZ   AUTOBOOT_ACTIVE
       LDA   AUTOBOOT_SKIP
-      BNE   @ab_done              ; skip if flag set
+      BEQ   @ab_try               ; flag clear -> attempt the autoboot load
+      JMP   @ab_done              ; skip if flag set (JMP: FILE_LOAD marshalling
+                                  ; pushed @ab_done past short-branch range)
+@ab_try
 
       ; Copy "AUTOBOOT" into FIO_NAME
       LDX   #0
@@ -10608,19 +10734,25 @@ LAB_AUTOBOOT
       LDA   #8
       STA   FIO_NAMELEN
 
-      ; Set load address to BASIC program start
+      ; Issue LOAD through lib_call(FILES): FILE_LOAD (nameptr -> ARG0, namelen ->
+      ; ARG1, dest -> ARG2). The "AUTOBOOT" name was just written into FIO_NAME
+      ; above, so we marshal &FIO_NAME/FIO_NAMELEN into ARG0/ARG1 and the BASIC
+      ; program start (Smem) into ARG2. The load dest MUST ride in ARG2, not be
+      ; pre-set into FIO_SRCL: the FILES module's demand-load page-in clobbers
+      ; FIO_SRCL ($B9A4) and the wrapper re-applies ARG2 to it AFTER the page-in.
+      JSR   basic_lib_zargs       ; zero ARG0..3
+      JSR   basic_file_arg_name   ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
       LDA   Smeml
-      STA   FIO_SRCL
+      STA   LIB_ARG2              ; dest low  -> ARG2 byte0
       LDA   Smemh
-      STA   FIO_SRCH
-
-      ; Issue LOAD command
-      JSR   fio_load
+      STA   LIB_ARG2+1           ; dest high -> ARG2 byte1
+      LDX   #FILE_LOAD
+      JSR   basic_file_call       ; A = LIB_STATUS (0 = OK)
       BEQ   @ab_found             ; autoboot exists
       LDA   FIO_ERRCODE
       CMP   #FIO_ERR_NOTFOUND
       BNE   @ab_done              ; leave unexpected boot I/O errors visible
-      JSR   fio_clear_error       ; missing AUTOBOOT is normal, not a disk error
+      JSR   basic_fio_clear_error ; missing AUTOBOOT is normal, not a disk error
       BRA   @ab_done
 
 @ab_found

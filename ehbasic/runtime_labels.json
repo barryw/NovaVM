@@ -1416,8 +1416,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_cd",
-      "summary": "Change directory to FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE14"
+      "summary": "Change directory to FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "FIO.CHECK",
@@ -1433,8 +1432,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_check",
-      "summary": "Convert the current FIO status register to the shared A=0/1 result.",
-      "address": "$ED95"
+      "summary": "Convert the current FIO status register to the shared A=0/1 result."
     },
     {
       "label": "FIO.CLEAR_ERROR",
@@ -1450,8 +1448,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_clear_error",
-      "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$EDB5"
+      "summary": "Clear the host-visible FIO status and error latch."
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1519,8 +1516,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_copy_name",
-      "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EDD4"
+      "summary": "Copy a pointer-based filename into FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "FIO.DELETE",
@@ -1534,8 +1530,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_delete",
-      "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE05"
+      "summary": "Delete the host file or BASIC program named by FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "FIO.DIR_OPEN",
@@ -1546,8 +1541,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_dir_open",
-      "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.",
-      "address": "$EDFB"
+      "summary": "Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter."
     },
     {
       "label": "FIO.DIR_READ",
@@ -1558,8 +1552,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_dir_read",
-      "summary": "Read the next directory entry into the FIO directory result registers.",
-      "address": "$EE00"
+      "summary": "Read the next directory entry into the FIO directory result registers."
     },
     {
       "label": "FIO.EXEC",
@@ -1580,8 +1573,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_exec",
-      "summary": "Issue an FIO command, wait for completion, and return A=0/1 status.",
-      "address": "$EDA2"
+      "summary": "Issue an FIO command, wait for completion, and return A=0/1 status."
     },
     {
       "label": "FIO.GLOAD",
@@ -1600,8 +1592,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_gload",
-      "summary": "Load VGC/graphics memory using FIO graphics registers.",
-      "address": "$EE0F"
+      "summary": "Load VGC/graphics memory using FIO graphics registers."
     },
     {
       "label": "FIO.GSAVE",
@@ -1620,8 +1611,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_gsave",
-      "summary": "Save VGC/graphics memory using FIO graphics registers.",
-      "address": "$EE0A"
+      "summary": "Save VGC/graphics memory using FIO graphics registers."
     },
     {
       "label": "FIO.ISSUE",
@@ -1637,8 +1627,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_issue",
-      "summary": "Issue a raw FIO command without waiting for completion.",
-      "address": "$ED91"
+      "summary": "Issue a raw FIO command without waiting for completion."
     },
     {
       "label": "FIO.LOAD",
@@ -1654,8 +1643,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_load",
-      "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H.",
-      "address": "$EDF6"
+      "summary": "Load a BASIC or binary file using FIO.NAME and FIO_SRCL/H."
     },
     {
       "label": "FIO.LOAD_RUNTIME",
@@ -1669,8 +1657,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_load_runtime",
-      "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank.",
-      "address": "$EE28"
+      "summary": "Load a 16K runtime ROM image named by FIO.NAME/FIO.NAMELEN into the primary runtime ROM bank."
     },
     {
       "label": "FIO.MKDIR",
@@ -1684,8 +1671,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_mkdir",
-      "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE19"
+      "summary": "Create the directory named by FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "FIO.NAME",
@@ -1740,8 +1726,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_pwd",
-      "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN.",
-      "address": "$EE23"
+      "summary": "Read the current directory into FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "FIO.RMDIR",
@@ -1755,8 +1740,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_rmdir",
-      "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN.",
-      "address": "$EE1E"
+      "summary": "Remove the directory named by FIO.NAME/FIO_NAMELEN."
     },
     {
       "label": "FIO.RNG",
@@ -1776,8 +1760,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_rng",
-      "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3.",
-      "address": "$EE2D"
+      "summary": "Issue FIO.CMD_RNG and return random bytes in FIO_RNG0..3."
     },
     {
       "label": "FIO.RNG0",
@@ -1854,8 +1837,7 @@
       ],
       "kind": "routine",
       "symbol": "fio_save",
-      "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H.",
-      "address": "$EDF1"
+      "summary": "Save RAM using FIO.NAME plus FIO_SRCL/H and FIO_ENDL/H."
     },
     {
       "label": "FIO.SET_IO_ERROR",
@@ -1871,8 +1853,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_set_io_error",
-      "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.",
-      "address": "$EDC7"
+      "summary": "Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state."
     },
     {
       "label": "NGS.BEGIN_MESSAGE",
