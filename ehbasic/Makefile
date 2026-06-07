@@ -5,7 +5,7 @@ CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 NOVA_ASM := ../runtime/asm
 NOVAVM_INC := $(NOVA_ASM)/novavm.inc
 
-all: basic.bin extension.bin ../assembly/apps/keyboard/keyboard.bin ../assembly/apps/demo/demo.bin tokens.json
+all: basic.bin extension.bin ../runtime/asm/runtime_labels.inc ../assembly/apps/keyboard/keyboard.bin ../assembly/apps/demo/demo.bin tokens.json
 
 ABI_SOURCES = \
 	$(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s \
@@ -36,17 +36,17 @@ basic.o: basic.asm min_mon.asm $(NOVA_ASM)/nova.inc $(NOVA_ASM)/copper.inc $(NOV
 extension.bin: extension.o extension.cfg
 	ld65 -C extension.cfg -o extension.bin extension.o
 
-extension.o: extension.s runtime_labels.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s $(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s $(NOVA_ASM)/xmc.s
+extension.o: extension.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s $(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s $(NOVA_ASM)/xmc.s
 	ca65 --cpu 65c02 -I $(NOVA_ASM) extension.s -o extension.o
 
 # Token table extraction
 tokens.json: basic.asm ../tools/gen_tokens.py
 	python3 ../tools/gen_tokens.py basic.asm -o tokens.json
 
-runtime_labels.json ../docs/assembly/runtime-labels.md runtime_labels.inc: basic.sym $(ABI_SOURCES) ../tools/gen_runtime_abi_docs.py
-	python3 ../tools/gen_runtime_abi_docs.py $(ABI_SOURCES) --sym basic.sym --json runtime_labels.json --md ../docs/assembly/runtime-labels.md --asm runtime_labels.inc
+runtime_labels.json ../docs/assembly/runtime-labels.md ../runtime/asm/runtime_labels.inc: basic.sym $(ABI_SOURCES) ../tools/gen_runtime_abi_docs.py
+	python3 ../tools/gen_runtime_abi_docs.py $(ABI_SOURCES) --sym basic.sym --json runtime_labels.json --md ../docs/assembly/runtime-labels.md --asm ../runtime/asm/runtime_labels.inc
 
-runtime-labels: runtime_labels.json ../docs/assembly/runtime-labels.md runtime_labels.inc
+runtime-labels: runtime_labels.json ../docs/assembly/runtime-labels.md ../runtime/asm/runtime_labels.inc
 
 # Auto-generate hardware constants include
 $(NOVAVM_INC): ../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../tools/gen_novavm_inc.py

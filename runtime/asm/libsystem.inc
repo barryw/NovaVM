@@ -85,8 +85,22 @@ SYS_OVL_INIT    = $0E   ; ()                           -> call the overlay init 
 SYS_OVL_MAIN    = $0F   ; ()                           -> call the overlay main entry (required)
 SYS_OVL_TICK    = $10   ; ()                           -> call the overlay tick entry (optional)
 
+; =====================================================================
+; Runtime label lookup (sys_addr_lookup, backs BASIC's ADDR("LABEL")).
+; The generated runtime_labels.inc hash table (MMIO registers + BASIC-ROM
+; routine addresses) lives in this module's 16K image instead of the EhBASIC
+; extension ROM. The wrapper hashes the UPPERCASED name (x33), walks the bucket
+; chain (entry = len byte + 16-bit LE value + name bytes), and returns the raw
+; 16-bit value as data (correct even though BASIC ROM is unmapped while bank 1
+; is paged in).
+;   In:  ARG0 b0/b1 = name ptr   ARG0 b2 = name len   (ARG0 b3 = 0)
+;   Out (hit):  RESULT b0 = addr low, b1 = addr high; LIB_STATUS = LERR_OK
+;   Out (miss / len 0): LIB_STATUS = LERR_SYS_FAIL ($8D); RESULT ignored
+; =====================================================================
+SYS_ADDR_LOOKUP = $11   ; (nameptr,namelen) reporter -> RESULT b0..1 = 16-bit address
+
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $11
+SYS_FN_COUNT  = $12
 
 .endif

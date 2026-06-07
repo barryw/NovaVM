@@ -276,6 +276,16 @@ public class EhBasicTokenizationTests
         screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("10 A=ADDR(\"sys.regx\")", StringComparison.Ordinal),
             $"ADDR did not LIST back correctly.\n{screen}");
+
+        // Miss path: a bogus label must raise Function Call Error. After the
+        // ADDR-table relocation to SYS_ADDR_LOOKUP, the miss is reported via
+        // LIB_STATUS = LERR_SYS_FAIL -> @addr_miss -> LAB_FCER (previously CPX #0
+        // on the EXT_vec return), so this exercises the new status-driven path.
+        EnterLine(editor, "PRINT ADDR(\"no.such.label\")");
+        RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
+        screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("Function call Error", StringComparison.OrdinalIgnoreCase),
+            $"ADDR of a bogus label should raise Function Call Error.\n{screen}");
     }
 
     [TestMethod]

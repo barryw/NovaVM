@@ -18,11 +18,18 @@ system.o: system.s \
             $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s \
             $(NOVA_ASM)/overlay.inc $(NOVA_ASM)/overlay.s \
             $(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s \
-            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s
+            $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s \
+            $(NOVA_ASM)/runtime_labels.inc
 	$(CA65) system.s -o system.o
 
 system.bin: system.o system.cfg
 	$(LD65) -C system.cfg -m system.map -o system.bin system.o
+
+# The ADDR("LABEL") table is generated from the EhBASIC build (basic.sym). Build it
+# there if missing so `make -C modules/system` works cold (the Avalonia/root build
+# already runs `make -C ehbasic` first, making this a no-op in that path).
+$(NOVA_ASM)/runtime_labels.inc:
+	$(MAKE) -C ../../ehbasic runtime-labels
 
 # Self-documenting module: image + NDOC doc (from system.s ;@ comments, ids
 # resolved from libsystem.inc) -> system.nmod. --ndk-dir single-sources each ;@ndk

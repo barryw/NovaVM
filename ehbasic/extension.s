@@ -31,14 +31,6 @@ txt_addrL       = ext_u32_0
 txt_addrH       = ext_u32_1
 txt_tmp         = ext_u32_2
 
-addr_entryL     = ext_ptrL
-addr_entryH     = ext_ptrH
-addr_nameL      = ext_dig0
-addr_nameH      = ext_dig1
-addr_len        = ext_dig2
-addr_ch         = ext_dig3
-addr_hash       = ext_dig4
-
 ; --- RAM addresses ---
 ; RAM landing addresses of the trampolines copied from the LAB_vec block (see
 ; min_mon.asm). These MUST match the actual copy targets — re-read from
@@ -115,7 +107,7 @@ ExtTable:
       .word EXT_MLEN2-1       ; cmd 20: MLEN2(x,y)
       .word EXT_MSCALX-1      ; cmd 21: MSCALX(x,y,s)
       .word EXT_MSCALY-1      ; cmd 22: MSCALY(x,y,s)
-      .word EXT_ADDR-1        ; cmd 23: ADDR("label") lookup
+      .word EXT_UNSUPPORTED-1 ; cmd 23: was ADDR (relocated to SYS_ADDR_LOOKUP)
       .word EXT_XBANK-1       ; cmd 24: XBANK
       .word EXT_XPOKE-1       ; cmd 25: XPOKE
       .word EXT_XFREE-1       ; cmd 26: XFREE
@@ -163,119 +155,9 @@ EXT_SFLOAD:
       RTS
 
 ; =====================================================================
-; ADDR("label") lookup — label string pointer/length are supplied by BASIC
-; in EXT_ARG_PTRL/H and EXT_ARG_LEN. Returns X=0, A=high, Y=low on success;
-; X=1 on miss so BASIC can raise Function Call error.
+; (ADDR("label") lookup relocated to the SYSTEM module as SYS_ADDR_LOOKUP;
+;  ExtTable cmd 23 is now EXT_UNSUPPORTED. The hash table moved with it.)
 ; =====================================================================
-EXT_ADDR:
-      LDA   EXT_ARG_LEN
-      BEQ   @not_found
-      JSR   ext_label_hash
-      AND   #(RUNTIME_LABEL_BUCKET_COUNT-1)
-      ASL
-      TAX
-      LDA   RuntimeLabelBuckets,X
-      STA   addr_entryL
-      LDA   RuntimeLabelBuckets+1,X
-      STA   addr_entryH
-
-@entry_loop:
-      LDY   #$00
-      LDA   (addr_entryL),Y
-      BEQ   @not_found
-      STA   addr_len
-      CMP   EXT_ARG_LEN
-      BNE   @next_entry
-
-      CLC
-      LDA   addr_entryL
-      ADC   #$03              ; skip len + 16-bit value
-      STA   addr_nameL
-      LDA   addr_entryH
-      ADC   #$00
-      STA   addr_nameH
-
-      LDX   #$00
-@cmp_loop:
-      CPX   addr_len
-      BEQ   @found
-      TXA
-      TAY
-      LDA   (EXT_ARG_PTRL),Y
-      JSR   ext_upper
-      STA   addr_ch
-      LDA   (addr_nameL),Y
-      CMP   addr_ch
-      BNE   @next_entry
-      INX
-      BRA   @cmp_loop
-
-@found:
-      LDY   #$01
-      LDA   (addr_entryL),Y   ; value low
-      STA   addr_ch
-      INY
-      LDA   (addr_entryL),Y   ; value high
-      LDY   addr_ch
-      LDX   #$00
-      RTS
-
-@next_entry:
-      CLC
-      LDA   addr_entryL
-      ADC   addr_len
-      STA   addr_entryL
-      BCC   @add_entry_header
-      INC   addr_entryH
-@add_entry_header:
-      CLC
-      LDA   addr_entryL
-      ADC   #$03
-      STA   addr_entryL
-      BCC   @entry_loop
-      INC   addr_entryH
-      BRA   @entry_loop
-
-@not_found:
-      LDX   #$01
-      LDY   #$00
-      TYA
-      RTS
-
-ext_label_hash:
-      STZ   addr_hash
-      LDY   #$00
-@hash_loop:
-      CPY   EXT_ARG_LEN
-      BEQ   @hash_done
-      LDA   (EXT_ARG_PTRL),Y
-      JSR   ext_upper
-      STA   addr_ch
-      LDA   addr_hash
-      ASL
-      ASL
-      ASL
-      ASL
-      ASL
-      CLC
-      ADC   addr_hash
-      CLC
-      ADC   addr_ch
-      STA   addr_hash
-      INY
-      BRA   @hash_loop
-@hash_done:
-      LDA   addr_hash
-      RTS
-
-ext_upper:
-      CMP   #'a'
-      BCC   @upper_done
-      CMP   #'z'+1
-      BCS   @upper_done
-      AND   #$DF
-@upper_done:
-      RTS
 
 ; =====================================================================
 ; DIR handler — list directory entries
@@ -1831,7 +1713,8 @@ ext_rparen:
 @no_rparen:
       JMP   EXT_SNERR_VEC
 
-      .include "runtime_labels.inc"
+; (runtime_labels.inc moved to the SYSTEM module; the ADDR table no longer
+;  lives in this ROM — see SYS_ADDR_LOOKUP.)
 
 ; =====================================================================
 ; Reset handler — if RESET fires while extension ROM is active,

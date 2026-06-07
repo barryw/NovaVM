@@ -153,10 +153,21 @@ EDITOR_FGCOL      = $01                ; white text
 ;@ndk overlay_call_tick
 ;@ret u8 OVL_ERR_* detail on failure (RESULT byte1)
 ;@status LERR_OK, LERR_SYS_FAIL
+;
+; --- runtime label lookup (backs BASIC's ADDR("LABEL")) ---
+;@fn SYS_ADDR_LOOKUP
+;@brief Resolve a generated runtime label name to its 16-bit address.
+;@arg nameptr u16 pointer to the label name bytes (ARG0 byte0,1)
+;@arg namelen u8 label length in bytes (ARG0 byte2)
+;@ret u16 resolved address (RESULT byte0,1) on a hit
+;@effect Hashes the UPPERCASED name (x33) into the baked runtime_labels.inc
+;@effect bucket table and walks the chain; returns the value as raw data.
+;@status LERR_OK, LERR_SYS_FAIL
+; (no ;@ndk: the hash/bucket walk is local to this module, not a wrapped NDK routine.)
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (17) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (18) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -192,6 +203,7 @@ sys_jtable:
       .word   sys_ovl_init-1           ; $0E SYS_OVL_INIT
       .word   sys_ovl_main-1           ; $0F SYS_OVL_MAIN
       .word   sys_ovl_tick-1           ; $10 SYS_OVL_TICK
+      .word   sys_addr_lookup-1        ; $11 SYS_ADDR_LOOKUP
 
 ; ===========================================================================
 ; SYS_FN_EDIT — port of the extension's ext_edit, reading the canonical lib_call
@@ -595,6 +607,158 @@ sys_ovl_tick:
       JSR   overlay_call_tick
       JMP   sys_finish_overlay
 
+; ===========================================================================
+; SYS_ADDR_LOOKUP — runtime label lookup backing BASIC's ADDR("LABEL").
+; Faithful relocation of the extension ROM's EXT_ADDR/ext_label_hash/ext_upper:
+; the hash (x33 over UPPERCASED chars, masked to bucket count), the bucket-chain
+; walk, the entry format (len byte + 16-bit LE value + name bytes), and the
+; uppercasing are byte-for-byte identical in logic. Only the I/O changes: the
+; name ptr/len arrive in ARG0 instead of EXT_ARG_*, and the result is published
+; to LIB_RESULT/LIB_STATUS instead of returned in registers.
+;
+; ZP usage: SYSTEM's module-ZP band ($A3-$C2) is all but full (only $C1-$C2
+; free), so the three live indirect pointers ALIAS the editor's ZP working-window
+; cells. sys_addr_lookup and SYS_FN_EDIT never run in the same lib_call (each
+; lib_call runs exactly one fn to completion), so reusing the editor's pointer
+; cells is safe. This mirrors how the extension aliased its scratch onto ext_*.
+; The non-pointer scratch (len/ch/hash) lives in module BSS (no ZP needed).
+;   addr_entryL/H  = entry-base ptr        (EB_SRCL/EB_SRCH)
+;   addr_nameL/H   = entry name-bytes ptr  (EB_DSTL/EB_DSTH)
+;   addr_argL/H    = input name ptr        (EB_PL/EB_PH, seeded from ARG0)
+addr_entryL = EB_SRCL
+addr_entryH = EB_SRCH
+addr_nameL  = EB_DSTL
+addr_nameH  = EB_DSTH
+addr_argL   = EB_PL
+addr_argH   = EB_PH
+
+;   In:  ARG0 b0/b1 = name ptr   ARG0 b2 = name len
+;   Out (hit):  RESULT b0/b1 = 16-bit address; LIB_STATUS = LERR_OK
+;   Out (miss / len 0): LIB_STATUS = LERR_SYS_FAIL
+sys_addr_lookup:
+      ; seed the input-name pointer from ARG0 b0/b1, length from ARG0 b2
+      LDA   LIB_ARG0+0
+      STA   addr_argL
+      LDA   LIB_ARG0+1
+      STA   addr_argH
+      LDA   LIB_ARG0+2
+      STA   sal_len
+      BNE   @have_name              ; empty name -> miss (status set inline)
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+@have_name:
+      JSR   sal_label_hash
+      AND   #(RUNTIME_LABEL_BUCKET_COUNT-1)
+      ASL
+      TAX
+      LDA   RuntimeLabelBuckets,X
+      STA   addr_entryL
+      LDA   RuntimeLabelBuckets+1,X
+      STA   addr_entryH
+
+@entry_loop:
+      LDY   #$00
+      LDA   (addr_entryL),Y
+      BEQ   @not_found              ; bucket terminator -> miss
+      STA   sal_entrylen
+      CMP   sal_len
+      BNE   @next_entry
+
+      CLC
+      LDA   addr_entryL
+      ADC   #$03                    ; skip len + 16-bit value
+      STA   addr_nameL
+      LDA   addr_entryH
+      ADC   #$00
+      STA   addr_nameH
+
+      LDX   #$00
+@cmp_loop:
+      CPX   sal_entrylen
+      BEQ   @found
+      TXA
+      TAY
+      LDA   (addr_argL),Y
+      JSR   sal_upper
+      STA   sal_ch
+      LDA   (addr_nameL),Y
+      CMP   sal_ch
+      BNE   @next_entry
+      INX
+      BRA   @cmp_loop
+
+@found:
+      LDY   #$01
+      LDA   (addr_entryL),Y         ; value low
+      STA   LIB_RESULT+0
+      INY
+      LDA   (addr_entryL),Y         ; value high
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+@next_entry:
+      CLC
+      LDA   addr_entryL
+      ADC   sal_entrylen
+      STA   addr_entryL
+      BCC   @add_entry_header
+      INC   addr_entryH
+@add_entry_header:
+      CLC
+      LDA   addr_entryL
+      ADC   #$03
+      STA   addr_entryL
+      BCC   @entry_loop
+      INC   addr_entryH
+      BRA   @entry_loop
+
+@not_found:
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; sal_label_hash — x33 hash over the UPPERCASED input name; returns hash in A.
+sal_label_hash:
+      STZ   sal_hash
+      LDY   #$00
+@hash_loop:
+      CPY   sal_len
+      BEQ   @hash_done
+      LDA   (addr_argL),Y
+      JSR   sal_upper
+      STA   sal_ch
+      LDA   sal_hash
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      CLC
+      ADC   sal_hash
+      CLC
+      ADC   sal_ch
+      STA   sal_hash
+      INY
+      BRA   @hash_loop
+@hash_done:
+      LDA   sal_hash
+      RTS
+
+; sal_upper — ASCII a..z -> A..Z; passes everything else through.
+sal_upper:
+      CMP   #'a'
+      BCC   @upper_done
+      CMP   #'z'+1
+      BCS   @upper_done
+      AND   #$DF
+@upper_done:
+      RTS
+
       .segment "BSS"
 se_saved_mode:    .res 1
 se_saved_palette: .res 1
@@ -605,6 +769,12 @@ se_saved_cursx:   .res 1
 se_saved_cursy:   .res 1
 se_saved_cursen:  .res 1
 se_saved_flag:    .res 1               ; nonzero once the SAVE hook fires
+; sys_addr_lookup non-pointer scratch (the 3 live indirect pointers alias the
+; editor's ZP cells; only these counters/temps need fresh storage).
+sal_len:          .res 1               ; input name length (ARG0 b2)
+sal_entrylen:     .res 1               ; current bucket entry's name length
+sal_ch:           .res 1               ; uppercased compare byte / hash temp
+sal_hash:         .res 1               ; running x33 hash accumulator
       .segment "CODE"
 
 ; ===========================================================================
@@ -621,6 +791,12 @@ se_saved_flag:    .res 1               ; nonzero once the SAVE hook fires
       .include "rng.s"                 ; rng_get8/16/32 (-> fio_rng / fio_exec)
       .include "nui.s"                 ; nui_dialog_defaults/show_dialog[_wait]/show_error/wait_key
       .include "overlay.s"             ; overlay_load_fixed/unload/call_init/main/tick (-> pager + fio)
+
+; Generated runtime label hash table (RuntimeLabelBuckets + RUNTIME_LABEL_BUCKET_COUNT)
+; backing SYS_ADDR_LOOKUP. Placed in RODATA so it lands in the 16K ROM image.
+      .segment "RODATA"
+      .include "runtime_labels.inc"
+      .segment "CODE"
 
       .segment "VECTORS"
       ; Module runs under SEI (the loader masks IRQ across the bank swap); hardware

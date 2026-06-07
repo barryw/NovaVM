@@ -4105,22 +4105,27 @@ LAB_1BEE
       JSR   EXT_vec
       JMP   @ret_0ay
 
-; ADDR("label") — resolve generated runtime labels in extension ROM.
+; ADDR("label") — resolve a generated runtime label via lib_call(SYSTEM,
+; SYS_ADDR_LOOKUP). The hash table moved out of the extension ROM into the SYSTEM
+; module ($03). Marshal name ptr/len into ARG0 (NET packed-ARG0 style) WITHOUT
+; basic_lib_zargs (it clobbers X -> $FF, which would lose the parsed name ptr lo).
 @xtk_addr
       JSR   LAB_IGBY          ; consume token, advance to string argument
       JSR   LAB_EVEX          ; evaluate string expression
       JSR   LAB_EVST          ; pop string: A=len, X/Y=ptr
-      STA   EXT_ARG_LEN
-      STX   EXT_ARG_PTRL
-      STY   EXT_ARG_PTRH
+      STX   LIB_ARG0+0        ; name pointer low  -> ARG0 byte0
+      STY   LIB_ARG0+1        ; name pointer high -> ARG0 byte1
+      STA   LIB_ARG0+2        ; name length       -> ARG0 byte2
+      STZ   LIB_ARG0+3        ; ARG0 byte3 = 0
       JSR   LAB_1BFB          ; scan for ')' and advance
-      LDA   #EXT_CMD_ADDR
-      JSR   EXT_vec
-      CPX   #$00
-      BEQ   @addr_ok
+      LDA   #MODULE_ID_SYSTEM
+      LDX   #SYS_ADDR_LOOKUP
+      JSR   basic_lib_call    ; A = LIB_STATUS (Z set when OK)
+      BNE   @addr_miss
+      JSR   basic_lib_result_word  ; A = addr high, Y = addr low
+      JMP   LAB_AYFC
+@addr_miss
       JMP   LAB_FCER
-@addr_ok
-      JMP   LAB_AYFC          ; extension returns A=high, Y=low
 
 LAB_1BEE_STD
       SEC                     ; plain token base subtraction
