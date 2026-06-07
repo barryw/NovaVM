@@ -63,7 +63,8 @@ namespace e6502UnitTests
                              GFN_DMACOPY = 0x54, GFN_DMAFILL = 0x55,
                              GFN_BLIT_STATUS = 0x56, GFN_BLIT_ERR = 0x57,
                              GFN_BLIT_COUNT = 0x58, GFN_DMA_STATUS = 0x59,
-                             GFN_DMA_ERR = 0x5A, GFN_DMA_COUNT = 0x5B;
+                             GFN_DMA_ERR = 0x5A, GFN_DMA_COUNT = 0x5B,
+                             GFN_BLIT_START_FILL = 0x5C;
         // Vsprite-domain fn-ids ($60-$71), batch 4b.7.
         private const byte   GFN_VS_BLIT = 0x60, GFN_VS_BLIT_START = 0x61,
                              GFN_VS_FILL = 0x62, GFN_VS_USE_ORIGINAL = 0x63,
@@ -1405,6 +1406,73 @@ namespace e6502UnitTests
             Assert.AreEqual(0x22, GfxByte(bus, dst + w * h), "BLITFILL must not write past the rect");
         }
 
+        // --- $5C BLIT_START_FILL: run blitter_fill on caller-preloaded BLT_* regs. ---
+        // This is the arbitrary-stride BLITFILL lib_call path: BASIC's LAB_BLITFILL
+        // loads the BLT_* MMIO registers directly (dstStride != width is the whole
+        // point — the packed $51 ABI cannot express it) and then calls $5C, which
+        // runs the module's blitter_fill (zeros SRC/SRCSTRIDE/CKEY, MODE_FILL,
+        // CMD_START, wait). Pre-poison the SRC/CKEY/MODE registers so the test also
+        // proves the MODULE (not BASIC) does the zeroing/MODE setup.
+        [TestMethod]
+        public void Axis2_BlitStartFill_RunsFillOnPreloadedRegisters()
+        {
+            using var bus = MakeAxis2Bus();
+
+            // Fill a 3-wide x 2-high rect into the gfx plane with dstStride=80
+            // (rows are 80 bytes apart, NOT tightly packed). Row0 at dst, row1 at
+            // dst+80. Seed the target bytes and a guard byte after each row.
+            const int w = 3, h = 2, dstStride = 80;
+            int dst = 10 * VgcConstants.GfxWidth;
+            for (int r = 0; r < h; r++)
+                for (int c = 0; c < w + 1; c++)
+                    SetGfxByte(bus, dst + r * dstStride + c, 0x11);
+
+            // Poison the registers the MODULE must overwrite/zero. If BASIC were
+            // (wrongly) expected to do this, leaving them dirty would corrupt the
+            // fill; the $5C wrapper's blitter_fill must zero SRC*/SRCSTRIDE/CKEY
+            // and set MODE_FILL itself.
+            bus.Write((ushort)VgcConstants.BltSrcSpace, 0x05);
+            bus.Write((ushort)VgcConstants.BltSrcL, 0xEE);
+            bus.Write((ushort)VgcConstants.BltSrcM, 0xEE);
+            bus.Write((ushort)VgcConstants.BltSrcH, 0xEE);
+            bus.Write((ushort)VgcConstants.BltSrcStrideL, 0xEE);
+            bus.Write((ushort)VgcConstants.BltSrcStrideH, 0xEE);
+            bus.Write((ushort)VgcConstants.BltColorKey, 0xEE);
+            bus.Write((ushort)VgcConstants.BltMode, 0xFF);
+
+            // Caller (BASIC) preloads dst/space/stride/dims/fill in the MMIO regs.
+            bus.Write((ushort)VgcConstants.BltDstSpace, DMA_SPACE_GFX);
+            bus.Write((ushort)VgcConstants.BltDstL, (byte)(dst & 0xFF));
+            bus.Write((ushort)VgcConstants.BltDstM, (byte)((dst >> 8) & 0xFF));
+            bus.Write((ushort)VgcConstants.BltDstH, 0x00);
+            bus.Write((ushort)VgcConstants.BltDstStrideL, (byte)(dstStride & 0xFF));
+            bus.Write((ushort)VgcConstants.BltDstStrideH, 0x00);
+            bus.Write((ushort)VgcConstants.BltWidthL, (byte)w);
+            bus.Write((ushort)VgcConstants.BltWidthH, 0x00);
+            bus.Write((ushort)VgcConstants.BltHeightL, (byte)h);
+            bus.Write((ushort)VgcConstants.BltHeightH, 0x00);
+            bus.Write((ushort)VgcConstants.BltFillValue, 0x9D);
+
+            RunFn(bus, GFN_BLIT_START_FILL);
+
+            // Each row's w bytes must be filled with 0x9D; the byte past the rect
+            // width (still inside the stride gap) must be untouched.
+            for (int r = 0; r < h; r++)
+            {
+                for (int c = 0; c < w; c++)
+                    Assert.AreEqual(0x9D, GfxByte(bus, dst + r * dstStride + c),
+                        $"BLIT_START_FILL must fill row {r} byte {c}");
+                Assert.AreEqual(0x11, GfxByte(bus, dst + r * dstStride + w),
+                    $"BLIT_START_FILL must not write past width on row {r}");
+            }
+
+            // The module must have zeroed the SRC registers + CKEY and set MODE_FILL.
+            Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.BltSrcSpace), "module must zero BLT_SRCSPACE");
+            Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.BltColorKey), "module must zero BLT_CKEY");
+            Assert.AreEqual(VgcConstants.BltModeFill, bus.Read((ushort)VgcConstants.BltMode) & VgcConstants.BltModeFill,
+                "module must set MODE_FILL");
+        }
+
         // --- $56/$57 BLIT_STATUS + BLIT_ERR: reporters after a clean blit. ---
         [TestMethod]
         public void Axis2_BlitStatusAndErr_ReportDoneAndNoError()
@@ -1476,13 +1544,15 @@ namespace e6502UnitTests
                 "GRAPHICS module must be resident after the page-in");
         }
 
-        // --- Dispatch density: a gap id above the blit/dma range ($5C) returns LERR_NO_FN. ---
+        // --- Dispatch density: an unimplemented gap id in the blit/dma range
+        // ($5D, between BLIT_START_FILL/$5C and the vsprite domain/$60) routes to
+        // gfn_unimpl and reports LERR_NO_FN. ($5C is now GFN_BLIT_START_FILL.) ---
         [TestMethod]
         public void Axis2_BlitDmaRangeGap_ReturnsNoFn()
         {
             using var bus = MakeAxis2Bus();
 
-            bus.WriteRam(FN_ID, 0x5C);   // first id past GFX_FN_COUNT-1 ($5B)
+            bus.WriteRam(FN_ID, 0x5D);   // reserved gap slot ($5D-$5F -> gfn_unimpl)
             bus.WriteRam(STATUS, 0x00);  // poison opposite to expected non-OK
 
             var cpu = new Cpu(bus, E6502Type.Cmos);
@@ -1495,7 +1565,7 @@ namespace e6502UnitTests
                 cpu.ExecuteNext();
             Assert.AreEqual(Sentinel, cpu.Pc, "blit/dma-range gap must still RTS to the sentinel");
             Assert.AreEqual(LERR_NO_FN, bus.ReadRam(STATUS),
-                "id $5C (>= GFX_FN_COUNT) must report LERR_NO_FN via the bounds check");
+                "id $5D (gfn_unimpl gap slot) must report LERR_NO_FN");
         }
 
         // =====================================================================

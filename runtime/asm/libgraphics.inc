@@ -223,7 +223,12 @@ GFN_BLIT_COUNT  = $58  ; () reporter -> RESULT = 24-bit BLT bytes-written
 GFN_DMA_STATUS  = $59  ; () reporter -> RESULT = DMA_STATUS_REG byte
 GFN_DMA_ERR     = $5A  ; () reporter -> RESULT = DMA_ERRCODE_REG byte
 GFN_DMA_COUNT   = $5B  ; () reporter -> RESULT = 24-bit DMA bytes-moved
-;             $5C-$5F reserved
+GFN_BLIT_START_FILL = $5C ; () run blitter_fill on caller-preloaded BLT_* regs:
+                          ;   zeros SRC/SRCSTRIDE/CKEY, sets MODE_FILL, CMD_START,
+                          ;   waits. Mate to GFN_BLIT_START ($52) for the arbitrary-
+                          ;   stride BLITFILL path (BASIC loads BLT_DST*/STRIDE/
+                          ;   WIDTH/HEIGHT/FILLVALUE, then calls this).
+;             $5D-$5F reserved
 
 ; =====================================================================
 ; $60-$7F  vsprite  (driver: runtime/asm/vsprite.s — batch 4b.7)

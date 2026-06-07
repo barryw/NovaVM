@@ -1787,6 +1787,112 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(0x33, bus.Read(5002), "DMACOUNT function did not return expected value.");
     }
 
+    // Teeth test for the relocated LAB_DMACOPY/LAB_DMAFILL XRAM (space 5) path:
+    // when the destination space is XRAM the handler must use the current XBANK
+    // as the 24-bit address HIGH byte (DMA_DSTH = XMC_BANK). This is the one
+    // behaviorally-critical detail called out for bit-for-bit preservation in the
+    // ext->main relocation, and no other test exercises space 5 end-to-end.
+    // Set XBANK 2, DMAFILL into XRAM at offset 256, and confirm the bytes land at
+    // the BANKED linear address (0x20000+256), NOT at bank-0 offset 256 (which
+    // they would if the XBANK high byte were dropped). Then DMACOPY within XRAM
+    // from the banked source to a banked destination and confirm again.
+    [TestMethod]
+    public void AvaloniaRomDmaXramSpace_UsesXbankAsHighAddressByte()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Select XRAM bank 2, then fill 4 bytes of XRAM space at offset 256 with 88.
+        EnterLine(editor, "XBANK 2");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "DMAFILL 5,256,4,88");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        byte dmaStatus = bus.Read((ushort)VgcConstants.DmaStatus);
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.AreEqual(VgcConstants.DmaStatusOk, dmaStatus,
+            $"DMAFILL into XRAM did not complete. status={dmaStatus:X2}\n{screen}");
+
+        // Bytes must be at banked linear address 0x20000 + 256, NOT bank-0 256.
+        const int bank2Base = 2 << 16; // 0x20000
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.AreEqual(88, bus.ReadXram(bank2Base + 256 + i),
+                $"DMAFILL XRAM byte {i} missing at banked addr 0x{bank2Base + 256 + i:X5} " +
+                $"(XBANK high byte not applied?).\n{screen}");
+            Assert.AreEqual(0, bus.ReadXram(256 + i),
+                $"DMAFILL XRAM byte {i} wrongly written at bank-0 offset {256 + i} " +
+                $"(XBANK high byte dropped).");
+        }
+
+        // DMACOPY within XRAM: copy the 4 banked bytes from offset 256 to offset
+        // 512 (both in bank 2, since src+dst space are XRAM and DMA_SRCH/DSTH both
+        // take XMC_BANK). Confirms the XBANK high byte applies to BOTH src and dst.
+        EnterLine(editor, "DMACOPY 5,256,5,512,4");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.AreEqual(88, bus.ReadXram(bank2Base + 512 + i),
+                $"DMACOPY XRAM->XRAM byte {i} missing at banked dst 0x{bank2Base + 512 + i:X5}.");
+        }
+    }
+
+    // Teeth test for the relocated LAB_BLITFILL XRAM (space 5) path through the
+    // NEW GFN_BLIT_START_FILL ($5C) lib_call. Two things are proven end-to-end:
+    //   1. The XBANK high byte is applied to the 24-bit BLT_DST address for space
+    //      5 (BLT_DSTH = XMC_BANK) — bytes land at the BANKED linear address.
+    //   2. The arbitrary-stride fill driver (zero SRC/CKEY, MODE_FILL, start,
+    //      wait) runs inside the GRAPHICS module via $5C, not inline in BASIC.
+    // Uses a dstStride wider than the width so a tightly-packed mis-handling would
+    // bleed into the stride gap.
+    [TestMethod]
+    public void AvaloniaRomBlitFillXramSpace_UsesXbankAndArbitraryStride()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // XRAM bank 3. BLITFILL a 2-wide x 2-high rect at offset 64 with stride 16
+        // and fill value 77. Row0 = offsets 64,65; row1 = offsets 80,81.
+        EnterLine(editor, "XBANK 3");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        EnterLine(editor, "BLITFILL 5,64,16,2,2,77");
+        RunUntilEditorIdle(cpu, bus, editor, 10_000_000);
+        RunCpuSteps(cpu, 500_000);
+
+        byte bltStatus = bus.Read((ushort)VgcConstants.BltStatus);
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.AreEqual(VgcConstants.BltStatusOk, bltStatus,
+            $"BLITFILL into XRAM did not complete. status={bltStatus:X2}\n{screen}");
+
+        const int bank3Base = 3 << 16; // 0x30000
+        int[] filled = { 64, 65, 80, 81 };
+        foreach (int off in filled)
+        {
+            Assert.AreEqual(77, bus.ReadXram(bank3Base + off),
+                $"BLITFILL XRAM byte at banked addr 0x{bank3Base + off:X5} missing " +
+                $"(XBANK high byte not applied or $5C fill path broken).\n{screen}");
+            Assert.AreEqual(0, bus.ReadXram(off),
+                $"BLITFILL XRAM byte wrongly written at bank-0 offset {off} (XBANK high byte dropped).");
+        }
+        // The stride gap (offsets 66,67 between row0 width-end and row1 start) must
+        // be untouched — proves the arbitrary dstStride survives the $5C routing.
+        Assert.AreEqual(0, bus.ReadXram(bank3Base + 66),
+            "BLITFILL must not write into the stride gap (arbitrary stride lost?).");
+    }
+
     [TestMethod]
     public void AvaloniaRomListsBlitterKeywordsWithoutCorruption()
     {

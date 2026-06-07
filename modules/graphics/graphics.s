@@ -490,6 +490,12 @@ GFX_FIO_NAME_LIMIT = $3F
 ;@ret u32 bytes moved (24-bit)
 ;@effect Returns the count in RESULT.
 ;
+;@fn GFN_BLIT_START_FILL
+;@ndk blitter_fill
+;@brief Run a blitter fill on caller-preloaded BLT_* registers, then wait.
+;@ret void
+;@effect Zeros SRC/SRCSTRIDE/CKEY, sets MODE_FILL, issues CMD_START, self-waits.
+;
 ;@fn GFN_VS_BLIT
 ;@ndk vsprite_blit
 ;@arg cfg bytes pointer+length of the VSPRITE config struct
@@ -1075,7 +1081,7 @@ gfx_jtable:
       .word   gfn_dma_status-1         ; $59 DMA_STATUS  (reporter)
       .word   gfn_dma_err-1            ; $5A DMA_ERR     (reporter)
       .word   gfn_dma_count-1          ; $5B DMA_COUNT   (reporter)
-      .word   gfn_unimpl-1              ; $5C gap
+      .word   gfn_blit_start_fill-1     ; $5C BLIT_START_FILL
       .word   gfn_unimpl-1              ; $5D gap
       .word   gfn_unimpl-1              ; $5E gap
       .word   gfn_unimpl-1              ; $5F gap
@@ -1956,6 +1962,17 @@ gfn_dma_count:
       ldy     DMA_CNTM
       ldx     DMA_CNTH
       jmp     finish_result_store24
+
+; --- $5C BLIT_START_FILL: run blitter_fill on caller-preloaded BLT_* registers. ---
+; Mate to $52 BLIT_START for the arbitrary-stride BLITFILL path: BASIC loads
+; BLT_DSTSPACE/DST*/DSTSTR/WIDTH/HEIGHT/FILLVALUE into the MMIO registers (which
+; survive the lib_call page-in), then calls this. blitter_fill zeros the SRC regs
+; + SRCSTRIDE + CKEY, sets MODE_FILL, issues CMD_START, and self-waits — so the
+; full fill driver logic stays in the module. STATUS=OK on dispatch (the driver's
+; A=0/1 ok/err is exposed via GFN_BLIT_STATUS/ERR), exactly like $50/$51.
+gfn_blit_start_fill:
+      jsr     blitter_fill
+      jmp     finish_ok_nowait
 
 ; =====================================================================
 ; $60-$71  vsprite domain (batch 4b.7). Driver: vsprite.s (included below;

@@ -36,7 +36,7 @@ basic.o: basic.asm min_mon.asm $(NOVA_ASM)/nova.inc $(NOVA_ASM)/copper.inc $(NOV
 extension.bin: extension.o extension.cfg
 	ld65 -C extension.cfg -o extension.bin extension.o
 
-extension.o: extension.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s $(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s $(NOVA_ASM)/xmc.s
+extension.o: extension.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio.s $(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s $(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s $(NOVA_ASM)/xmc.s
 	ca65 --cpu 65c02 -I $(NOVA_ASM) extension.s -o extension.o
 
 # Token table extraction

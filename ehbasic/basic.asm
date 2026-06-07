@@ -3908,40 +3908,62 @@ LAB_1BEE
       JSR   EXT_vec
       JMP   LAB_AYFC
 
+; DMA / blitter reporters — relocated from extension.s (EXT_DMASTATUS..) and
+; routed through lib_call(GRAPHICS) so the controller register layout lives only
+; in the module. Each reporter takes no args: zero the ARG cells (clobbers X),
+; load the GFN_* id into X, basic_gfx_call, then read LIB_RESULT.
+;   basic_lib_result_word -> A = LIB_RESULT+1, Y = LIB_RESULT.
+;   STATUS/ERR use finish_result8 (RESULT+1 = 0) so A=0, Y=byte -> @ret_0ay
+;     (A=0, Y=byte), identical to the old single-byte return shape.
+;   COUNT uses finish_result_store24 (RESULT+0=low, +1=mid) so A=mid, Y=low ->
+;     LAB_AYFC (A=mid, Y=low), identical to the old 16-bit count return shape.
+
 ; DMASTATUS — return DMA status register (no args)
 @xtk_dmastatus
-      LDA   #EXT_CMD_DMASTATUS
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_DMA_STATUS
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=0, Y=status byte
       JMP   @ret_0ay
 
 ; DMAERR — return DMA error code register (no args)
 @xtk_dmaerr
-      LDA   #EXT_CMD_DMAERR
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_DMA_ERR
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=0, Y=err byte
       JMP   @ret_0ay
 
 ; DMACOUNT — return last DMA byte count (low 16 bits)
 @xtk_dmacount
-      LDA   #EXT_CMD_DMACOUNT
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_DMA_COUNT
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=count mid, Y=count low
       JMP   LAB_AYFC
 
 ; BLITSTATUS — return blitter status register (no args)
 @xtk_blitstatus
-      LDA   #EXT_CMD_BLITSTATUS
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_BLIT_STATUS
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=0, Y=status byte
       JMP   @ret_0ay
 
 ; BLITERR — return blitter error code register (no args)
 @xtk_bliterr
-      LDA   #EXT_CMD_BLITERR
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_BLIT_ERR
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=0, Y=err byte
       JMP   @ret_0ay
 
 ; BLITCOUNT — return last blit written-byte count (low 16 bits)
 @xtk_blitcount
-      LDA   #EXT_CMD_BLITCOUNT
-      JSR   EXT_vec
+      JSR   basic_lib_zargs   ; no args (clobbers X)
+      LDX   #GFN_BLIT_COUNT
+      JSR   basic_gfx_call
+      JSR   basic_lib_result_word  ; A=count mid, Y=count low
       JMP   LAB_AYFC
 
 ; MMULFX(a,b) - signed Q8.8 multiply with saturated Q8.8 result
@@ -9076,6 +9098,29 @@ basic_gfx_call:
       LDA   #MODULE_ID_GRAPHICS
       BRA   basic_lib_call
 
+; basic_dma_run / basic_blt_run — run a self-waiting DMA/blitter GFN, then raise a
+;   BASIC ?FC (Function call) error if the controller reported anything other than
+;   OK. The GRAPHICS module wrappers force LIB_STATUS=OK on dispatch (the real
+;   result lives only in the DMA_STATUS_REG/BLT_STATUS_REG MMIO byte), so the
+;   statement handlers MUST inspect the controller register here. Both ops self-wait
+;   inside the module, so by the time basic_gfx_call returns the BASIC ROM is mapped
+;   back in and the (always-accessible) MMIO status byte holds OK or an error code.
+;   X = GFN_* id on entry (caller filled LIB_ARG0..3 / the BLT_* regs).
+basic_dma_run:
+      JSR   basic_gfx_call
+      LDA   DMA_STATUS_REG
+      CMP   #DMA_STATUS_OK
+      BNE   basic_ctrl_fcer
+      RTS
+basic_blt_run:
+      JSR   basic_gfx_call
+      LDA   BLT_STATUS_REG
+      CMP   #BLT_STATUS_OK
+      BNE   basic_ctrl_fcer
+      RTS
+basic_ctrl_fcer:
+      JMP   LAB_FCER            ; controller error -> ?FC then warm start
+
 ; basic_snd_call — SOUND lib_call. X = SND_* id (caller filled LIB_ARG0..3).
 ;   Saves the per-call "LDA #MODULE_ID_SOUND" at every audio call site, exactly
 ;   as basic_gfx_call does for GRAPHICS. Returns A = LIB_STATUS (Z set when OK).
@@ -10597,33 +10642,227 @@ LAB_NSEND
 @nsend_err
       JMP   LAB_FCER
 
+; =====================================================================
+; DMA / blitter statement handlers.
+;
+; Relocated FROM extension.s (EXT_DMACOPY/EXT_DMAFILL/EXT_BLITCOPY/EXT_BLTFILL)
+; back INTO the BASIC ROM as part of the BASIC-on-modules extension-ROM track.
+; Like the COPPER relocation, EXECUTION runs through lib_call(GRAPHICS): the
+; fiddly controller driver logic (MODE/colorkey reg setup, fill-source zeroing,
+; CMD_START, busy-spin status state machine) lives ONLY in the GRAPHICS module
+; (modules/graphics/graphics.s), never re-baked into the BASIC ROM. The handlers
+; here do PARSE + MARSHAL + basic_gfx_call.
+;
+;   DMACOPY / DMAFILL — fully packed ABI: the handler touches NO DMA registers.
+;     Args are marshalled into the LIB_ARG cells (GFN_DMACOPY/$54, GFN_DMAFILL/$55
+;     layout) and the module wrapper loads DMA_SRC*/DST*/LEN*/MODE and runs the
+;     controller. 24-bit src/dst addresses carry the XBANK high byte (space 5) in
+;     ARG byte 2, exactly as the old direct-register path set DMA_*H from XMC_BANK.
+;
+;   BLITCOPY / BLITFILL — the packed GFN_BLITCOPY/$50 ABI forces
+;     srcStride=dstStride=width, which CANNOT represent BASIC's explicit-stride
+;     syntax (e.g. BLITCOPY 0,24576,4,2,0,80,3,2 has srcStride 4, dstStride 80,
+;     width 3). So the handler MARSHALS the arbitrary strides directly into the
+;     BLT_* MMIO registers ($BA86-$BA98 — disjoint from the $C000-$FFFF bank the
+;     lib_call page-in swaps, so the loaded values survive the page-in), then
+;     basic_gfx_calls GFN_BLIT_START ($52 = blitter_start_copy) / GFN_BLIT_START_FILL
+;     ($5C = blitter_fill) so the MODE/CKEY/SRC-zeroing/CMD_START/wait still run in
+;     the module. The handler does NOT issue CMD_START, set MODE/CKEY, or spin.
+;
+; Address parsing uses BASIC's native LAB_GTBY/LAB_GTWRD + LAB_1C01 for commas
+; (no EXT_GTBY/GTWRD bridges). Dropping these handlers' inline driver lets
+; blitter.s leave the extension ROM (dma.s stays — pulled in transitively by the
+; still-resident xram.s).
+;
+; --- shared DMA-arg-cell marshalling helpers (packed GFN_DMA* ABI) -----------
+;
+; basic_dma_xbank — return in A the 24-bit-address HIGH byte for a DMA/BLT space
+;   byte held in NVR2L: XMC_BANK when space == *_SPACE_XRAM (5), else 0. The
+;   caller stashes the parsed space byte in NVR2L (NVR* is Nova runtime scratch,
+;   untouched by BASIC core or LAB_GTWRD's evaluator). Clobbers A only.
+basic_dma_xbank
+      LDA   NVR2L             ; parsed space byte
+      CMP   #DMA_SPACE_XRAM   ; XRAM space (5)? (BLT_SPACE_XRAM aliases this)
+      BNE   @bz
+      LDA   XMC_BANK
+      RTS
+@bz:
+      LDA   #$00
+      RTS
+
+; basic_dma_arg24a — parse "," + 16-bit offset and marshal a 24-bit address into
+;   the LIB_ARG cell selected by Y (0/4/8/12 = ARG0/1/2/3): byte0=lo, byte1=hi,
+;   byte2 = XBANK-or-0 (from NVR2L space byte via basic_dma_xbank), byte3=0.
+;   Y selects the cell and MUST survive LAB_GTWRD (which clobbers Y) — saved on
+;   the stack. Clobbers A/Y; preserves nothing else of interest.
+basic_dma_arg24a
+      PHY                     ; save ARG-cell offset across LAB_GTWRD (clobbers Y)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; 16-bit -> FAC1_3 lo / FAC1_2 hi
+      PLY                     ; ARG-cell offset back in Y
+      LDA   FAC1_3
+      STA   LIB_ARG0,Y        ; addr low  -> cell byte0
+      LDA   FAC1_2
+      STA   LIB_ARG0+1,Y      ; addr high -> cell byte1
+      JSR   basic_dma_xbank   ; A = XBANK (space 5) or 0
+      STA   LIB_ARG0+2,Y      ; bank/0    -> cell byte2 (24-bit high)
+      LDA   #$00              ; STZ has no abs,Y mode -> use LDA #0 / STA abs,Y
+      STA   LIB_ARG0+3,Y      ; cell byte3 = 0
+      RTS
+
+; basic_dma_word24a — parse "," + 16-bit value (no XBANK) and marshal it as a
+;   24-bit value into the LIB_ARG cell selected by Y: byte0=lo, byte1=hi,
+;   byte2=0, byte3=0 (used for DMA length). Y saved across LAB_GTWRD.
+;   Clobbers A/Y.
+basic_dma_word24a
+      PHY                     ; save ARG-cell offset across LAB_GTWRD
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; 16-bit -> FAC1_3 lo / FAC1_2 hi
+      PLY
+      LDA   FAC1_3
+      STA   LIB_ARG0,Y        ; len low  -> cell byte0
+      LDA   FAC1_2
+      STA   LIB_ARG0+1,Y      ; len high -> cell byte1
+      LDA   #$00              ; STZ has no abs,Y mode -> use LDA #0 / STA abs,Y
+      STA   LIB_ARG0+2,Y      ; cell byte2 = 0
+      STA   LIB_ARG0+3,Y      ; cell byte3 = 0
+      RTS
+
+; --- shared BLT-register marshalling helpers (arbitrary-stride path) ---------
+;
+; basic_blt_cword — parse "," + 16-bit word, store L/H to the BLT_* MMIO register
+;   whose low/high address is in X:A. After LAB_GTWRD the value is FAC1_3(lo)/
+;   FAC1_2(hi). Clobbers A/Y; on exit NVR0 -> the register low byte.
+basic_blt_cword
+      STX   NVR0L
+      STA   NVR0H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTWRD         ; 16-bit -> FAC1_3 lo / FAC1_2 hi
+      LDY   #$00
+      LDA   FAC1_3
+      STA   (NVR0L),Y
+      INY
+      LDA   FAC1_2
+      STA   (NVR0L),Y
+      RTS
+
+; basic_blt_addr — parse "," + 16-bit offset into the BLT_*L/M registers at X:A,
+;   then set the H register (= L+2): XBANK-or-0 from the space byte in NVR2L.
+;   Clobbers A/Y; on exit NVR0 -> the L register.
+basic_blt_addr
+      JSR   basic_blt_cword   ; , offset -> (X:A) L/M ; NVR0 -> L reg
+      JSR   basic_dma_xbank   ; A = XBANK (space 5) or 0
+      LDY   #$02              ; H register = L + 2
+      STA   (NVR0L),Y
+      RTS
+
 ; DMACOPY srcSpace,srcAddr,dstSpace,dstAddr,len
 ; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
-; is used as the high address byte.
+; is used as the 24-bit high address byte. Fully packed lib_call: no DMA regs
+; touched here — the GRAPHICS module wrapper drives the controller.
+;   ARG0 byte0=srcSpace, byte1=dstSpace; ARG1=src 24-bit; ARG2=dst 24-bit;
+;   ARG3=len 24-bit.  -> GFN_DMACOPY ($54).
 LAB_DMACOPY
-      LDA   #EXT_CMD_DMACOPY
-      JMP   LAB_EXT_FCER
+      JSR   basic_lib_zargs   ; zero ARG0..3 (clobbers X)
+      JSR   LAB_GTBY          ; srcSpace -> X
+      STX   LIB_ARG0          ; srcSpace -> ARG0 byte0
+      STX   NVR2L             ; space byte for the src 24-bit high byte
+      LDY   #4                ; ARG1 = src 24-bit
+      JSR   basic_dma_arg24a  ; , srcAddr -> ARG1 (high = XBANK if space 5)
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; dstSpace -> X
+      STX   LIB_ARG0+1        ; dstSpace -> ARG0 byte1
+      STX   NVR2L             ; space byte for the dst 24-bit high byte
+      LDY   #8                ; ARG2 = dst 24-bit
+      JSR   basic_dma_arg24a  ; , dstAddr -> ARG2 (high = XBANK if space 5)
+      LDY   #12               ; ARG3 = len 24-bit
+      JSR   basic_dma_word24a ; , len -> ARG3
+      LDX   #GFN_DMACOPY
+      JMP   basic_dma_run     ; module loads regs + runs dma_copy (self-waits); ?FC on ctrl err
 
 ; DMAFILL dstSpace,dstAddr,len,value
 ; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
-; is used as the high address byte.
+; is used as the 24-bit high address byte. Fully packed lib_call.
+;   ARG0 byte1=dstSpace, byte2=fill value; ARG2=dst 24-bit; ARG3=len 24-bit.
+;   -> GFN_DMAFILL ($55).  (The module zeros the src regs itself.)
 LAB_DMAFILL
-      LDA   #EXT_CMD_DMAFILL
-      JMP   LAB_EXT_FCER
+      JSR   basic_lib_zargs   ; zero ARG0..3 (clobbers X)
+      JSR   LAB_GTBY          ; dstSpace -> X
+      STX   LIB_ARG0+1        ; dstSpace -> ARG0 byte1
+      STX   NVR2L             ; space byte for the dst 24-bit high byte
+      LDY   #8                ; ARG2 = dst 24-bit
+      JSR   basic_dma_arg24a  ; , dstAddr -> ARG2 (high = XBANK if space 5)
+      LDY   #12               ; ARG3 = len 24-bit
+      JSR   basic_dma_word24a ; , len -> ARG3
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; fill value -> X
+      STX   LIB_ARG0+2        ; fill value -> ARG0 byte2
+      LDX   #GFN_DMAFILL
+      JMP   basic_dma_run     ; module loads regs + runs dma_fill (self-waits); ?FC on ctrl err
 
 ; BLITCOPY srcSpace,srcAddr,srcStride,dstSpace,dstAddr,dstStride,width,height
 ; Address arguments are 16-bit offsets. For XRAM space (5), current XBANK
-; is used as the high address byte.
+; is used as the high address byte. srcStride/dstStride are arbitrary, so the
+; handler marshals them into the BLT_* MMIO registers (these survive the lib_call
+; page-in) then GFN_BLIT_START ($52) runs the module's blitter_start_copy
+; (zeros MODE+CKEY, CMD_START, waits). The handler issues no CMD_START / wait.
 LAB_BLITCOPY
-      LDA   #EXT_CMD_BLITCOPY
-      JMP   LAB_EXT_FCER
+      JSR   LAB_GTBY          ; srcSpace -> X
+      STX   BLT_SRCSPACE
+      STX   NVR2L             ; space byte for the src 24-bit high byte
+      LDX   #<BLT_SRCL
+      LDA   #>BLT_SRCL
+      JSR   basic_blt_addr    ; , srcAddr -> BLT_SRCL/M/H (H from src space)
+      LDX   #<BLT_SRCSTRL
+      LDA   #>BLT_SRCSTRL
+      JSR   basic_blt_cword   ; , srcStride -> BLT_SRCSTRL/H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; dstSpace -> X
+      STX   BLT_DSTSPACE
+      STX   NVR2L             ; space byte for the dst 24-bit high byte
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   basic_blt_addr    ; , dstAddr -> BLT_DSTL/M/H (H from dst space)
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   basic_blt_cword   ; , dstStride -> BLT_DSTSTRL/H
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   basic_blt_cword   ; , width -> BLT_WIDTHL/H
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   basic_blt_cword   ; , height -> BLT_HEIGHTL/H
+      LDX   #GFN_BLIT_START
+      JMP   basic_blt_run     ; module runs blitter_start_copy (MODE/CKEY/start/wait); ?FC on ctrl err
 
 ; BLITFILL dstSpace,dstAddr,dstStride,width,height,value
 ; Address argument is a 16-bit offset. For XRAM space (5), current XBANK
-; is used as the high address byte.
+; is used as the high address byte. dstStride is arbitrary, so the handler
+; marshals dst/stride/dims/fill into the BLT_* MMIO registers (these survive the
+; lib_call page-in) then GFN_BLIT_START_FILL ($5C) runs the module's blitter_fill
+; (zeros SRC/SRCSTRIDE/CKEY, sets MODE_FILL, CMD_START, waits). The handler does
+; NOT zero the src regs, set MODE, issue CMD_START, or spin.
 LAB_BLITFILL
-      LDA   #EXT_CMD_BLTFILL
-      JMP   LAB_EXT_FCER
+      JSR   LAB_GTBY          ; dstSpace -> X
+      STX   BLT_DSTSPACE
+      STX   NVR2L             ; space byte for the dst 24-bit high byte
+      LDX   #<BLT_DSTL
+      LDA   #>BLT_DSTL
+      JSR   basic_blt_addr    ; , dstAddr -> BLT_DSTL/M/H (H from dst space)
+      LDX   #<BLT_DSTSTRL
+      LDA   #>BLT_DSTSTRL
+      JSR   basic_blt_cword   ; , dstStride -> BLT_DSTSTRL/H
+      LDX   #<BLT_WIDTHL
+      LDA   #>BLT_WIDTHL
+      JSR   basic_blt_cword   ; , width -> BLT_WIDTHL/H
+      LDX   #<BLT_HEIGHTL
+      LDA   #>BLT_HEIGHTL
+      JSR   basic_blt_cword   ; , height -> BLT_HEIGHTL/H
+      JSR   LAB_1C01          ; comma
+      JSR   LAB_GTBY          ; fill value -> X
+      STX   BLT_FILLVALUE
+      LDX   #GFN_BLIT_START_FILL
+      JMP   basic_blt_run     ; module runs blitter_fill (SRC-zero/MODE/start/wait); ?FC on ctrl err
 
 ; The name-only FILES ops (DEL/CD/MKDIR/RMDIR) all share the same shape: parse the
 ; filename into FIO_NAME (LAB_FIO_GETNAME), then issue the FILE_* op with the name

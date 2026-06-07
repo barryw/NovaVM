@@ -81,14 +81,14 @@ ExtTable:
       .word EXT_UNSUPPORTED-1 ; cmd 6: reserved
       .word EXT_UNSUPPORTED-1 ; cmd 7: reserved
       .word EXT_HELP-1        ; cmd 8: HELP command
-      .word EXT_DMAFILL-1     ; cmd 9: DMAFILL
-      .word EXT_BLTFILL-1     ; cmd A: BLITFILL
+      .word EXT_UNSUPPORTED-1 ; cmd 9: was DMAFILL (relocated to BASIC ROM LAB_DMAFILL)
+      .word EXT_UNSUPPORTED-1 ; cmd A: was BLITFILL (relocated to BASIC ROM LAB_BLITFILL)
       .word EXT_XMCCMD-1      ; cmd B: XMC command processor
       .word EXT_UNSUPPORTED-1 ; cmd C: was COPPER (relocated to BASIC ROM LAB_COPPER)
       .word EXT_XLOAD-1       ; cmd D: XLOAD file -> XRAM
       .word EXT_XSAVE-1       ; cmd E: XSAVE XRAM -> file
-      .word EXT_DMACOPY-1     ; cmd F: DMACOPY
-      .word EXT_BLITCOPY-1    ; cmd 10: BLITCOPY
+      .word EXT_UNSUPPORTED-1 ; cmd F: was DMACOPY (relocated to BASIC ROM LAB_DMACOPY)
+      .word EXT_UNSUPPORTED-1 ; cmd 10: was BLITCOPY (relocated to BASIC ROM LAB_BLITCOPY)
       .word EXT_MMUL16L-1     ; cmd 11: MMUL16L(a,b)
       .word EXT_MMUL16H-1     ; cmd 12: MMUL16H(a,b)
       .word EXT_MDOTS16L-1    ; cmd 13: MDOTS16L(ax,ay,bx,by)
@@ -120,12 +120,12 @@ ExtTable:
       .word EXT_MNOTE-1       ; cmd 2D: MNOTE(voice)
       .word EXT_NSTATUS-1     ; cmd 2E: NSTATUS(slot)
       .word EXT_NREADY-1      ; cmd 2F: NREADY(slot)
-      .word EXT_DMASTATUS-1   ; cmd 30: DMASTATUS
-      .word EXT_DMAERR-1      ; cmd 31: DMAERR
-      .word EXT_DMACOUNT-1    ; cmd 32: DMACOUNT
-      .word EXT_BLITSTATUS-1  ; cmd 33: BLITSTATUS
-      .word EXT_BLITERR-1     ; cmd 34: BLITERR
-      .word EXT_BLITCOUNT-1   ; cmd 35: BLITCOUNT
+      .word EXT_UNSUPPORTED-1 ; cmd 30: was DMASTATUS (relocated to BASIC ROM @xtk_dmastatus)
+      .word EXT_UNSUPPORTED-1 ; cmd 31: was DMAERR (relocated to BASIC ROM @xtk_dmaerr)
+      .word EXT_UNSUPPORTED-1 ; cmd 32: was DMACOUNT (relocated to BASIC ROM @xtk_dmacount)
+      .word EXT_UNSUPPORTED-1 ; cmd 33: was BLITSTATUS (relocated to BASIC ROM @xtk_blitstatus)
+      .word EXT_UNSUPPORTED-1 ; cmd 34: was BLITERR (relocated to BASIC ROM @xtk_bliterr)
+      .word EXT_UNSUPPORTED-1 ; cmd 35: was BLITCOUNT (relocated to BASIC ROM @xtk_blitcount)
       .word EXT_SPRCOLL-1     ; cmd 36: SPRCOLL
       .word EXT_SPRBG-1       ; cmd 37: SPRBG
       .word EXT_VPEEK-1       ; cmd 38: VPEEK(plane,addr)
@@ -948,41 +948,9 @@ EXT_NREADY:
       LDA   #$00
       RTS
 
-EXT_DMASTATUS:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   DMA_STATUS
-      LDA   #$00
-      RTS
-
-EXT_DMAERR:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   DMA_ERRCODE
-      LDA   #$00
-      RTS
-
-EXT_DMACOUNT:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   DMA_CNTL
-      LDA   DMA_CNTM
-      RTS
-
-EXT_BLITSTATUS:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   BLT_STATUS
-      LDA   #$00
-      RTS
-
-EXT_BLITERR:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   BLT_ERRCODE
-      LDA   #$00
-      RTS
-
-EXT_BLITCOUNT:
-      JSR   LAB_IGBY          ; consume extension token id
-      LDY   BLT_CNTL
-      LDA   BLT_CNTM
-      RTS
+; EXT_DMASTATUS / EXT_DMAERR / EXT_DMACOUNT / EXT_BLITSTATUS / EXT_BLITERR /
+; EXT_BLITCOUNT relocated to basic.asm (@xtk_dma*/@xtk_blit* reporters, reading
+; the DMA_*/BLT_* MMIO registers directly). ExtTable cmds $30-$35 neutralized.
 
 EXT_SPRCOLL:
       JSR   LAB_IGBY          ; consume extension token id
@@ -1387,152 +1355,18 @@ ext_vgc_wait_cmd:
       RTS
 
 ; =====================================================================
-; DMA / blitter BASIC parsers.
-; These live in extension ROM because they are shared operation setup, not
-; BASIC core syntax. Returns A=0 success, A=1 error.
+; DMA / blitter BASIC parsers + handlers RELOCATED to BASIC main ROM.
+; The EXT_DMACOPY/EXT_DMAFILL/EXT_BLITCOPY/EXT_BLTFILL statement handlers and
+; their ext_cword / ext_dma_*_bank / ext_blt_*_bank parser helpers, plus the
+; EXT_DMASTATUS.. reporters, now live in basic.asm (LAB_DMACOPY.. and the
+; @xtk_dma*/@xtk_blit* reporters) and drive the DMA_*/BLT_* MMIO registers
+; directly. Their ExtTable slots (cmds $09/$0A/$0F/$10 and $30-$35) are
+; neutralized to EXT_UNSUPPORTED. blitter.s is no longer .include'd here (no
+; blitter_* function reference remains — ext_cls_fill_plane inlines its own BLT
+; MMIO sequence, and xram.s/xmc.s use only BLT_* registers, not the functions).
+; dma.s stays: it is pulled in transitively by xram.s (xram.s -> dma.s).
 ; =====================================================================
 
-; ext_cword — parse comma + 16-bit word, store L/H to address in X:A.
-ext_cword:
-      STX   ext_ptrL
-      STA   ext_ptrH
-      JSR   ext_comma
-      JSR   EXT_GTWRD_VEC
-      LDY   #$00
-      LDA   FAC1_3
-      STA   (ext_ptrL),Y
-      INY
-      LDA   FAC1_2
-      STA   (ext_ptrL),Y
-      RTS
-
-ext_dma_src_bank:
-      STZ   DMA_SRCH
-      LDA   DMA_SRCSPACE
-      CMP   #DMA_SPACE_XRAM
-      BNE   @done
-      LDA   XMC_BANK
-      STA   DMA_SRCH
-@done:
-      RTS
-
-ext_dma_dst_bank:
-      STZ   DMA_DSTH
-      LDA   DMA_DSTSPACE
-      CMP   #DMA_SPACE_XRAM
-      BNE   @done
-      LDA   XMC_BANK
-      STA   DMA_DSTH
-@done:
-      RTS
-
-ext_blt_src_bank:
-      STZ   BLT_SRCH
-      LDA   BLT_SRCSPACE
-      CMP   #BLT_SPACE_XRAM
-      BNE   @done
-      LDA   XMC_BANK
-      STA   BLT_SRCH
-@done:
-      RTS
-
-ext_blt_dst_bank:
-      STZ   BLT_DSTH
-      LDA   BLT_DSTSPACE
-      CMP   #BLT_SPACE_XRAM
-      BNE   @done
-      LDA   XMC_BANK
-      STA   BLT_DSTH
-@done:
-      RTS
-
-EXT_DMACOPY:
-      JSR   EXT_GTBY_VEC
-      STX   DMA_SRCSPACE
-      LDX   #<DMA_SRCL
-      LDA   #>DMA_SRCL
-      JSR   ext_cword
-      JSR   ext_dma_src_bank
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   DMA_DSTSPACE
-      LDX   #<DMA_DSTL
-      LDA   #>DMA_DSTL
-      JSR   ext_cword
-      JSR   ext_dma_dst_bank
-      LDX   #<DMA_LENL
-      LDA   #>DMA_LENL
-      JSR   ext_cword
-      STZ   DMA_LENH
-      JMP   dma_copy
-
-EXT_DMAFILL:
-      JSR   EXT_GTBY_VEC
-      STX   DMA_DSTSPACE
-      LDX   #<DMA_DSTL
-      LDA   #>DMA_DSTL
-      JSR   ext_cword
-      JSR   ext_dma_dst_bank
-      LDX   #<DMA_LENL
-      LDA   #>DMA_LENL
-      JSR   ext_cword
-      STZ   DMA_LENH
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   DMA_FILLVALUE
-      JMP   dma_fill
-
-EXT_BLITCOPY:
-      JSR   EXT_GTBY_VEC
-      STX   BLT_SRCSPACE
-      LDX   #<BLT_SRCL
-      LDA   #>BLT_SRCL
-      JSR   ext_cword
-      JSR   ext_blt_src_bank
-      LDX   #<BLT_SRCSTRL
-      LDA   #>BLT_SRCSTRL
-      JSR   ext_cword
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   BLT_DSTSPACE
-      LDX   #<BLT_DSTL
-      LDA   #>BLT_DSTL
-      JSR   ext_cword
-      JSR   ext_blt_dst_bank
-      LDX   #<BLT_DSTSTRL
-      LDA   #>BLT_DSTSTRL
-      JSR   ext_cword
-      LDX   #<BLT_WIDTHL
-      LDA   #>BLT_WIDTHL
-      JSR   ext_cword
-      LDX   #<BLT_HEIGHTL
-      LDA   #>BLT_HEIGHTL
-      JSR   ext_cword
-      STZ   BLT_FILLVALUE
-      JMP   blitter_copy
-
-EXT_BLTFILL:
-      JSR   EXT_GTBY_VEC
-      STX   BLT_DSTSPACE
-      LDX   #<BLT_DSTL
-      LDA   #>BLT_DSTL
-      JSR   ext_cword
-      JSR   ext_blt_dst_bank
-      LDX   #<BLT_DSTSTRL
-      LDA   #>BLT_DSTSTRL
-      JSR   ext_cword
-      LDX   #<BLT_WIDTHL
-      LDA   #>BLT_WIDTHL
-      JSR   ext_cword
-      LDX   #<BLT_HEIGHTL
-      LDA   #>BLT_HEIGHTL
-      JSR   ext_cword
-      JSR   ext_comma
-      JSR   EXT_GTBY_VEC
-      STX   BLT_FILLVALUE
-      JMP   blitter_fill
-
-      .include "blitter.s"
 AUDIO_POINTER_FILE_HELPERS = 0
 NOVA_EMIT_ALL_RUNTIME = 1
       .include "audio.s"

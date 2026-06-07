@@ -1280,6 +1280,107 @@ public class BasicRegressionTests
             "SAVE \"RTTEST\" must write RTTEST.bas under the program directory.");
     }
 
+    // --- DMA/BLIT controller-error -> BASIC ?FC (Function call) ----------------
+    // The blit/dma keywords route through lib_call(GRAPHICS). The module wrappers
+    // force LIB_STATUS=OK on dispatch, so the real controller result lives ONLY in
+    // the DMA_STATUS_REG ($BA64) / BLT_STATUS_REG ($BA84) MMIO byte. The statement
+    // handlers (LAB_DMACOPY/DMAFILL/BLITCOPY/BLITFILL) tail-jump basic_dma_run /
+    // basic_blt_run, which read that byte after the op self-waits and JMP LAB_FCER
+    // (?FC, "Function call") on anything other than OK. Without that check the bad
+    // op is silent and the program continues — these teeth tests prove the check.
+    //
+    // Valid DMA/blit space ids are 0,1,2,3,4,5,7 (CompositeBusDevice.GetDmaSpaceLength).
+    // Space 6 is unmapped -> the controller sets STATUS=ERROR/ERR=BadSpace. That is
+    // the cleanest trigger: it requires no out-of-range geometry, so it isolates the
+    // status-register check itself.
+
+    // DMAFILL with an invalid destination space (6) must raise ?FC and HALT, so the
+    // line after it never runs. A RAM sentinel (POKE 5000,123 on the next line) is
+    // the halt witness: it stays 0 only if line 20 never executed. (A screen marker
+    // is unusable here — the listed source line echoes the literal regardless of
+    // whether it ran.) Reverting basic_dma_run's status check (tail-jumping
+    // basic_gfx_call instead) makes the bad fill silent, line 20 runs, the sentinel
+    // becomes 123, and no ?FC prints — exactly the regression this test guards.
+    [TestMethod]
+    public void DmaFillControllerErrorRaisesFunctionCallErrorFromBasic()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        bus.Write(5000, 0);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 DMAFILL 6,0,16,0",
+            "20 POKE 5000,123",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("Function call", StringComparison.Ordinal),
+            $"A DMAFILL into the unmapped space 6 must raise a ?FC (Function call) " +
+            $"error: DMA_STATUS_REG holds ERROR after the op, and basic_dma_run must " +
+            $"JMP LAB_FCER on non-OK status.\n{screen}");
+        Assert.AreEqual(0, bus.Read(5000),
+            $"?FC must halt the program, so line 20 (POKE 5000,123) must not run. " +
+            $"A non-zero sentinel means the controller error was swallowed (the old " +
+            $"silent behavior).\n{screen}");
+    }
+
+    // BLITFILL path is identical (basic_blt_run reads BLT_STATUS_REG). Invalid dst
+    // space 6 -> BltStatusError -> ?FC + halt, so the RAM sentinel must stay 0.
+    [TestMethod]
+    public void BlitFillControllerErrorRaisesFunctionCallErrorFromBasic()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        bus.Write(5000, 0);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 BLITFILL 6,0,4,4,4,0",
+            "20 POKE 5000,123",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("Function call", StringComparison.Ordinal),
+            $"A BLITFILL into the unmapped space 6 must raise a ?FC (Function call) " +
+            $"error: BLT_STATUS_REG holds ERROR after the op, and basic_blt_run must " +
+            $"JMP LAB_FCER on non-OK status.\n{screen}");
+        Assert.AreEqual(0, bus.Read(5000),
+            $"?FC must halt the program, so line 20 (POKE 5000,123) must not run. " +
+            $"A non-zero sentinel means the controller error was swallowed (the old " +
+            $"silent behavior).\n{screen}");
+    }
+
+    // Happy-path guard: a VALID DMAFILL (gfx space 3) must NOT raise ?FC — the new
+    // status check must not false-positive on a successful op. The fill writes the
+    // value into the gfx bitmap, and the program runs to its "DMA OK" marker.
+    [TestMethod]
+    public void ValidDmaFillDoesNotRaiseFunctionCallErrorFromBasic()
+    {
+        string screen = RunProgram(new[]
+        {
+            "10 DMAFILL 3,0,16,7",
+            "20 PRINT \"DMA OK\"",
+            "RUN",
+        });
+
+        Assert.IsFalse(screen.Contains("Function call", StringComparison.Ordinal),
+            $"A valid DMAFILL into gfx space 3 completes with STATUS=OK, so the new " +
+            $"controller-error check must NOT raise ?FC.\n{screen}");
+        Assert.IsTrue(screen.Contains("DMA OK", StringComparison.Ordinal),
+            $"A valid DMAFILL must run to completion and reach line 20.\n{screen}");
+    }
+
     // DELETE "f" routes through lib_call(FILES) FILE_DELETE; the parsed name reaches
     // the module via FIO_NAME (LAB_FIO_GETNAME -> inline fio_copy_name). Save a file,
     // confirm it exists, DELETE it, confirm it is gone — proving FILE_DELETE's
