@@ -246,16 +246,16 @@ public class EhBasicTokenizationTests
         Assert.AreEqual(0xE7, bus.Read(0x6000), "ADDR(\"SYS.REGA\") low byte mismatch.");
         Assert.AreEqual(0x00, bus.Read(0x6001), "ADDR(\"SYS.REGA\") high byte mismatch.");
 
-        // VGC text/draw AND sprite routines moved out of the BASIC ROM into the
-        // GRAPHICS module (BASIC-on-Modules refactor Phases 1+2), so neither vgc.*
-        // nor sprite.* labels resolve inside the primary ROM any longer. AUDIO.*
-        // still lives in the BASIC ROM (audio.s remains included), so use it to
-        // prove ADDR resolves a runtime routine.
-        EnterLine(editor, "DOKE 24578,ADDR(\"audio.sound\")");
+        // VGC/sprite/audio routines moved out of the BASIC ROM into the GRAPHICS
+        // and SOUND modules (BASIC-on-Modules refactor Phases 1-3), so vgc.*,
+        // sprite.* and audio.* labels no longer resolve inside the primary ROM.
+        // fio.* still lives in the BASIC ROM (basic.asm includes fio.s directly
+        // for SAVE/LOAD/DIR/etc.), so use it to prove ADDR resolves a routine.
+        EnterLine(editor, "DOKE 24578,ADDR(\"fio.save\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);
-        ushort audioSound = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
-        Assert.IsTrue(audioSound >= 0xC000 && audioSound < 0xFFD7,
-            $"ADDR(\"AUDIO.SOUND\") should resolve inside primary ROM, got ${audioSound:X4}.");
+        ushort fioSave = (ushort)(bus.Read(0x6002) | (bus.Read(0x6003) << 8));
+        Assert.IsTrue(fioSave >= 0xC000 && fioSave < 0xFFD7,
+            $"ADDR(\"FIO.SAVE\") should resolve inside primary ROM, got ${fioSave:X4}.");
 
         EnterLine(editor, "DOKE 24580,ADDR(\"fio.clear_error\")");
         RunUntilEditorIdle(cpu, bus, editor, 20_000_000);

@@ -479,9 +479,18 @@ snd_music_loop:
       JMP   snd_finish_status
 
 ; --- $16 SND_MUSIC_PRIORITY: ARG0 = pri -> AUDIO.NOTE -> audio_music_priority ---
+; The host MPRI handler reads SIX consecutive FIO cells (FIO_SRCL..FIO_SIZEH) as a
+; voice-priority list. This single-value fn carries only ARG0, so it MUST zero the
+; other five cells — otherwise stale mailbox bytes (including FIO_END_LO, which the
+; lib_call loader band writes during a page-in) would be read as bogus extra voices.
 snd_music_priority:
       LDA   LIB_ARG0+0
       STA   AUDIO_NOTE                 ; = FIO_SRCL; priority value
+      STZ   AUDIO_DURATION             ; = FIO_SRCH
+      STZ   AUDIO_INSTRUMENT           ; = FIO_ENDL  (clobbered by page-in slot idx)
+      STZ   AUDIO_DECAY                ; = FIO_ENDH
+      STZ   AUDIO_SUSTAIN              ; = FIO_SIZEL
+      STZ   AUDIO_RELEASE              ; = FIO_SIZEH
       JSR   audio_music_priority
       JMP   snd_finish_status
 

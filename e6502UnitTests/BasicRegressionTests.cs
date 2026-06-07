@@ -898,6 +898,200 @@ public class BasicRegressionTests
             "LOCATE should position the cursor so the next PRINT lands at col 10, row 12.");
     }
 
+    // SOUND/VOLUME now route through lib_call(SOUND) (SND_SOUND/SND_SET_VOLUME)
+    // instead of the audio.s driver compiled into the BASIC ROM. SOUND pokes the
+    // SID voice-0 registers immediately; VOLUME writes the SID master volume reg.
+    [TestMethod]
+    public void SoundAndVolumeKeywordsRouteThroughLibCall()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 VOLUME 11",        // SND_SET_VOLUME: master volume 11 -> $D418
+            "20 SOUND 60,10",      // SND_SOUND: MIDI note 60, 10 frames on voice 0
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"SOUND/VOLUME should run without errors.\n{screen}");
+
+        Assert.AreEqual(11, bus.Sid.Read(0xD418) & 0x0F,
+            "VOLUME 11 must set SID1 master volume register ($D418) to 11.");
+
+        // SOUND pokes voice-0 freq + gates the control register (sawtooth | gate).
+        Assert.AreNotEqual(0, (bus.Sid.Read(0xD400) | bus.Sid.Read(0xD401)),
+            "SOUND must write a non-zero voice-0 frequency to $D400/$D401.");
+        Assert.AreEqual(0x01, bus.Sid.Read(0xD404) & 0x01,
+            "SOUND must gate voice-0 (control register $D404 bit 0 set).");
+    }
+
+    // INSTRUMENT id,wave,a,d,s,r routes through SND_INSTRUMENT. The d/s/r args are
+    // packed into ARG3 (byte0/1/2); the module scatters them so the NDK writes the
+    // 3-byte instrument slot at AUDIO_INST_BASE ($BB50 + id*3) = wave, AD, SR.
+    [TestMethod]
+    public void InstrumentKeywordRoutesThroughLibCallWithPackedArgs()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+        EnterProgramLines(cpu, bus, editor,
+        [
+            // id=2, wave=$40 (pulse), attack=1, decay=2, sustain=3, release=4
+            "10 INSTRUMENT 2,$40,1,2,3,4",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"INSTRUMENT should run without errors.\n{screen}");
+
+        const ushort instBase = 0xBB50;
+        ushort slot = (ushort)(instBase + 2 * 3);   // id 2
+        Assert.AreEqual(0x40, bus.Read(slot),
+            "INSTRUMENT waveform ($40) must land in the slot's waveform byte (wave & $FE).");
+        Assert.AreEqual(0x12, bus.Read((ushort)(slot + 1)),
+            "INSTRUMENT attack=1/decay=2 must pack into AD byte as $12 (proves ARG3 byte0=decay).");
+        Assert.AreEqual(0x34, bus.Read((ushort)(slot + 2)),
+            "INSTRUMENT sustain=3/release=4 must pack into SR byte as $34 (proves ARG3 byte1/2).");
+    }
+
+    // MUSIC TEMPO/LOOP/PRIORITY route through SND_MUSIC_TEMPO/LOOP/PRIORITY. The
+    // observable effect is the host MusicEngine's tempo/loop/steal-priority state.
+    [TestMethod]
+    public void MusicSubcommandsRouteThroughLibCall()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterProgramLines(cpu, bus, editor, ["MUSIC TEMPO 144"]);
+        Assert.AreEqual(144, bus.Music.CurrentBpm,
+            "MUSIC TEMPO 144 must set the music engine BPM to 144.");
+
+        EnterProgramLines(cpu, bus, editor, ["MUSIC LOOP ON"]);
+        Assert.IsTrue(bus.Music.IsLooping,
+            "MUSIC LOOP ON must enable looping.");
+        EnterProgramLines(cpu, bus, editor, ["MUSIC LOOP OFF"]);
+        Assert.IsFalse(bus.Music.IsLooping,
+            "MUSIC LOOP OFF must disable looping.");
+
+        // Multi-voice steal priority: BASIC parses up to 6 voices; the host maps
+        // each 1-based voice to (v-1). 3,1,2 -> {2,0,1}.
+        // MUSIC PRIORITY's effective behaviour is last-value-wins: of the parsed
+        // voices only the final one reaches the host's steal-priority list (mapped
+        // v-1). A single voice sets a one-element list.
+        EnterProgramLines(cpu, bus, editor, ["MUSIC PRIORITY 5"]);
+        CollectionAssert.AreEqual(new[] { 4 }, bus.Music.StealPriority,
+            "MUSIC PRIORITY 5 must set the engine steal priority to {4} (voice 5 -> 5-1).");
+        EnterProgramLines(cpu, bus, editor, ["MUSIC PRIORITY 4,6"]);
+        CollectionAssert.AreEqual(new[] { 5 }, bus.Music.StealPriority,
+            "MUSIC PRIORITY 4,6 applies the last voice -> {5} (voice 6 -> 6-1).");
+    }
+
+    // MUSIC v,"mml" routes through SND_MUSIC_SEQUENCE: BASIC marshals the MML
+    // string pointer (ARG1) + length (ARG2) so the module/host queue the sequence
+    // for the named voice. Proven by the engine reporting the voice's MIDI note.
+    [TestMethod]
+    public void MusicSequenceMarshalsMmlPointerAndLength()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // Queue an MML sequence on voice 1, then start playback so the engine
+        // latches a current note for that voice.
+        EnterProgramLines(cpu, bus, editor,
+        [
+            "10 MUSIC 1,\"O4 CDEFG\"",
+            "20 MUSIC PLAY",
+            "RUN",
+        ]);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
+            $"MUSIC sequence + PLAY should run without errors.\n{screen}");
+
+        // The hosted music engine reports MUSIC active once a queued sequence
+        // starts. This proves the MML pointer/length reached the host parser via
+        // SND_MUSIC_SEQUENCE (an empty/unparsed queue would leave it stopped).
+        byte status = bus.Read((ushort)VgcConstants.MusicStatus);
+        Assert.AreEqual(VgcConstants.MusicStatusMusic, status & VgcConstants.MusicStatusMusic,
+            "MUSIC 1,\"O4 CDEFG\" + PLAY must mark the hosted music engine playing.");
+    }
+
+    // SIDPLAY "f",song must deliver the REAL song number through SND_SIDPLAY ->
+    // AUDIO.NOTE (= FioSrcL) -> host DoSidPlay. Regression for the LAB_SIDPLAY
+    // X-clobber bug: basic_lib_zargs exits with X=$FF, so calling it AFTER the
+    // song was parsed into X (the old @sp_go order) stored $FF into ARG0 instead
+    // of the parsed song. The .sid file is absent in the headless env, so playback
+    // is skipped, but DoSidPlay records the requested song (FioSrcL) before the
+    // file check — that captures exactly what the BASIC handler marshalled.
+    [TestMethod]
+    public void SidPlaySongNumberReachesHost()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        EnterProgramLines(cpu, bus, editor, ["SIDPLAY \"x\",2"]);
+        Assert.AreEqual(2, bus.Fio.LastSidPlaySongRequested,
+            "SIDPLAY \"x\",2 must marshal song 2 into FioSrcL (not $FF from the " +
+            "basic_lib_zargs X-clobber). Got " + bus.Fio.LastSidPlaySongRequested + ".");
+    }
+
+    // MUSIC PRIORITY narrows to the LAST parsed voice (a single-element steal
+    // list). FINDING 2: the pre-lib_call ROM (0005557) *appeared* to build a
+    // multi-voice list, but its slot index lived in Y across JSR LAB_GTBY and the
+    // expression evaluator clobbers Y, so the consecutive-cell stores never landed
+    // and the host saw only one nonzero cell. Empirically both ROMs yield the same
+    // single-element StealPriority, so the converted single-value ARG0 path is
+    // exact-behaviour parity, not an API narrowing. This locks that parity.
+    [TestMethod]
+    public void MusicPriorityCollapsesToLastVoice()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        // 3,1,2 -> last voice 2 -> {2-1} = {1} (NOT a 3-element {2,0,1} list).
+        EnterProgramLines(cpu, bus, editor, ["MUSIC PRIORITY 3,1,2"]);
+        CollectionAssert.AreEqual(new[] { 1 }, bus.Music.StealPriority,
+            "MUSIC PRIORITY 3,1,2 must collapse to the last voice -> {1} (2-1), " +
+            "matching the documented base-ROM behaviour.");
+
+        // 5,2 -> last voice 2 -> {1}.
+        EnterProgramLines(cpu, bus, editor, ["MUSIC PRIORITY 5,2"]);
+        CollectionAssert.AreEqual(new[] { 1 }, bus.Music.StealPriority,
+            "MUSIC PRIORITY 5,2 must collapse to the last voice -> {1} (2-1).");
+    }
+
     private static string RunProgram(string[] lines)
     {
         using var bus = new CompositeBusDevice(enableSound: false);

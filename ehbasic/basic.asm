@@ -62,6 +62,7 @@ Itemph            = Itempl+1  ; temporary integer high byte
       .include "nova.inc"
       .include "libgraphics.inc"  ; MODULE_ID_GRAPHICS + GFN_* ids (pulls libabi.inc)
       .include "libsystem.inc"    ; MODULE_ID_SYSTEM + SYS_FN_* ids
+      .include "libsound.inc"     ; MODULE_ID_SOUND + SND_* ids
 
 nums_1            = Itempl    ; number to bin/hex string convert MSB
 nums_2            = nums_1+1  ; number to bin/hex string convert
@@ -9056,6 +9057,13 @@ basic_gfx_call:
       LDA   #MODULE_ID_GRAPHICS
       BRA   basic_lib_call
 
+; basic_snd_call — SOUND lib_call. X = SND_* id (caller filled LIB_ARG0..3).
+;   Saves the per-call "LDA #MODULE_ID_SOUND" at every audio call site, exactly
+;   as basic_gfx_call does for GRAPHICS. Returns A = LIB_STATUS (Z set when OK).
+basic_snd_call:
+      LDA   #MODULE_ID_SOUND
+      BRA   basic_lib_call
+
 ; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
 ;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.
 basic_lib_zargs:
@@ -9095,9 +9103,14 @@ basic_lib_result_word:
       LDY   LIB_RESULT        ; result low byte  -> Y
       RTS
 
+; LAB_VSYNC runs before every graphics primitive (the primitive marshals its args
+; into LIB_ARG, THEN calls LAB_VSYNC, THEN issues its GFN_*). So LAB_VSYNC must NOT
+; touch the LIB_ARG cells. SND_TICK takes no args, so we issue it directly without
+; zeroing — basic_lib_vsync (SYS_FN_WAITVBL) likewise leaves LIB_ARG untouched.
 LAB_VSYNC
       JSR   basic_lib_vsync   ; SYSTEM SYS_FN_WAITVBL (== vgc_vsync)
-      JMP   audio_tick
+      LDX   #SND_TICK         ; advance fire-and-forget SID SFX one frame
+      JMP   basic_snd_call    ; lib_call(SOUND, SND_TICK); RTS from there
 
 ; basic_lib_vsync — wait for the next vertical blank through the SYSTEM module.
 basic_lib_vsync:
@@ -9573,69 +9586,84 @@ LAB_SPRDATA
 ; SOUND 60, 10          — MIDI note 60, 10 frames, default instrument 0
 ; SOUND 60, 10, 3       — MIDI note 60, 10 frames, instrument 3
 
+; Routes through lib_call(SOUND): SND_SOUND (note:ARG0, dur:ARG1, instr:ARG2).
+
 LAB_SOUND
+      JSR   basic_lib_zargs   ; zero ARG0..3 (instr defaults to 0)
       JSR   LAB_GTBY          ; midi note → X
-      STX   AUDIO_NOTE
+      STX   LIB_ARG0          ; note  -> ARG0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; duration → X
-      STX   AUDIO_DURATION
-      STZ   AUDIO_INSTRUMENT  ; default instrument = 0
+      STX   LIB_ARG1          ; dur   -> ARG1
       JSR   LAB_GBYT          ; peek next token
       CMP   #','
       BNE   @snd_go
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; instrument id → X
-      STX   AUDIO_INSTRUMENT
+      STX   LIB_ARG2          ; instr -> ARG2
 @snd_go
-      JMP   audio_sound
+      LDX   #SND_SOUND
+      JMP   basic_snd_call
 
 ; perform VOLUME level (0-15)               — set master volume
 ; perform VOLUME level, voice (0-255, 1-6)  — set per-voice volume
+; Routes through lib_call(SOUND): SND_SET_VOLUME (vol:ARG0, voice:ARG1).
 
 LAB_VOLUME
+      JSR   basic_lib_zargs   ; zero ARG0..3 (voice defaults to 0 = master)
       JSR   LAB_GTBY          ; level → X
-      STX   AUDIO_VOLUME
-      STZ   AUDIO_VOICE       ; default voice = 0 (master)
+      STX   LIB_ARG0          ; vol   -> ARG0
       JSR   LAB_GBYT          ; peek next token
       CMP   #','
       BNE   @vol_go
       JSR   LAB_IGBY          ; skip comma
       JSR   LAB_GTBY          ; voice → X
-      STX   AUDIO_VOICE
+      STX   LIB_ARG1          ; voice -> ARG1
 @vol_go
-      JMP   audio_volume
+      LDX   #SND_SET_VOLUME
+      JMP   basic_snd_call
 
 ; perform INSTRUMENT id, waveform, a, d, s, r
 ; Waveform: $10=TRI, $20=SAW, $40=PULSE, $80=NOISE
 ; INSTRUMENT 1, $40, 0, 9, 0, 0
+; Routes through lib_call(SOUND): SND_INSTRUMENT. The d/s/r args are PACKED into
+; ARG3 (decay -> ARG3 byte0, sustain -> ARG3 byte1, release -> ARG3 byte2), per
+; the libsound.inc SND_INSTRUMENT contract; the module scatters them to the NDK.
 
 LAB_ENVELOPE
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; id → X
-      STX   AUDIO_INST_ID
+      STX   LIB_ARG0          ; id      -> ARG0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; waveform → X
-      STX   AUDIO_WAVEFORM
+      STX   LIB_ARG1          ; wave    -> ARG1
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; attack → X
-      STX   AUDIO_ATTACK
+      STX   LIB_ARG2          ; attack  -> ARG2 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; decay → X
-      STX   AUDIO_DECAY
+      STX   LIB_ARG3          ; decay   -> ARG3 byte0
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; sustain → X
-      STX   AUDIO_SUSTAIN
+      STX   LIB_ARG3+1        ; sustain -> ARG3 byte1
       JSR   LAB_1C01          ; comma
       JSR   LAB_GTBY          ; release → X
-      STX   AUDIO_RELEASE
-      JMP   audio_instrument
+      STX   LIB_ARG3+2        ; release -> ARG3 byte2
+      LDX   #SND_INSTRUMENT
+      JMP   basic_snd_call
 
+; audio.s is no longer compiled into the BASIC ROM: every audio keyword now
+; routes through the shared SOUND module via lib_call (SND_*), exactly as Phase 1
+; did for the graphics primitives (vgc.s) and Phase 2 for sprites (sprite.s).
+; (extension.s keeps its own audio.s include for EXT_SFLOAD/PLAYING/MNOTE.)
+; audio.s used to pull fio.s for the file/SAVE/LOAD commands; include it directly
+; now that audio.s is gone (BASIC's SAVE/LOAD/DIR/etc. still need fio_exec et al).
 FIO_NO_STREAMING = 1
-AUDIO_POINTER_FILE_HELPERS = 0
 NOVA_EMIT_ALL_RUNTIME = 1
+      .include "fio.s"
 ; Primary ROM is tight. NIC server entry points are library concerns, so omit
 ; those helper shims from the BASIC ROM build.
 NIC_SERVER_COMMANDS = 0
-      .include "audio.s"
       .include "nic.s"
 
 LAB_FIO_CMD_RTS = fio_issue
@@ -9907,19 +9935,24 @@ LAB_EXT_FCER
       JMP   LAB_FCER
 
 ; perform SIDPLAY "filename" [, song]
+; LAB_FIO_GETNAME fills FIO.NAME (read directly by the module); the 1-based song
+; number is marshalled into ARG0 for SND_SIDPLAY. Error path preserved: the SOUND
+; module maps an NDK failure to LIB_STATUS (LERR_AUDIO_FAIL), so BNE -> the FIO
+; error handler exactly as the old audio_sidplay BNE did.
 
 LAB_SIDPLAY
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
-      LDA   #$01              ; default song = 1
-      STA   FIO_SRCL
+      JSR   basic_lib_zargs   ; zero ARG0..3 FIRST (clobbers X to $FF)
+      LDX   #$01              ; default song = 1
       JSR   LAB_GBYT          ; peek next token
       CMP   #','
       BNE   @sp_go
       JSR   LAB_1C01          ; consume comma
       JSR   LAB_GTBY          ; evaluate song number -> X
-      STX   FIO_SRCL
 @sp_go
-      JSR   audio_sidplay
+      STX   LIB_ARG0          ; song -> ARG0 (X intact: zargs ran earlier)
+      LDX   #SND_SIDPLAY
+      JSR   basic_snd_call    ; A = LIB_STATUS
       BNE   @sp_err
       RTS
 @sp_err
@@ -9928,14 +9961,18 @@ LAB_SIDPLAY
 ; perform SIDSTOP
 
 LAB_SIDSTOP
-      JMP   audio_sidstop
+      JSR   basic_lib_zargs   ; no args
+      LDX   #SND_SIDSTOP
+      JMP   basic_snd_call    ; lib_call(SOUND, SND_SIDSTOP); RTS from there
 
 ; perform MIDPLAY "filename"
+; Name in FIO.NAME (read directly by the module); SND_MIDPLAY takes no arg.
 
 LAB_MIDPLAY
       JSR   LAB_FIO_GETNAME   ; parse filename (errors internally)
-      STZ   FIO_SRCL          ; no explicit mapping; auto-select channels
-      JSR   audio_midplay
+      JSR   basic_lib_zargs   ; no args
+      LDX   #SND_MIDPLAY
+      JSR   basic_snd_call    ; A = LIB_STATUS
       BNE   @mp_err
       RTS
 @mp_err
@@ -9944,7 +9981,9 @@ LAB_MIDPLAY
 ; perform MIDSTOP
 
 LAB_MIDSTOP
-      JMP   audio_midstop
+      JSR   basic_lib_zargs   ; no args
+      LDX   #SND_MIDSTOP
+      JMP   basic_snd_call    ; lib_call(SOUND, SND_MIDSTOP); RTS from there
 
 ; common: issue FIO command in A, check status, error on fail
 
@@ -9988,25 +10027,31 @@ LAB_MUSIC
       ; else PLAY — consume remaining "LAY" (3 chars, P already consumed)
       LDX   #3
       JSR   LAB_SKIPX          ; LAY
-      JMP   audio_music_play
+      JSR   basic_lib_zargs   ; no args
+      LDX   #SND_MUSIC_PLAY
+      JMP   basic_snd_call    ; lib_call(SOUND, SND_MUSIC_PLAY); RTS from there
 
 ; --- MUSIC STOP (TK_STOP is a single token byte) ---
 @m_stop_tok
       JSR   LAB_IGBY          ; consume TK_STOP token
-      JMP   audio_music_stop
+      JSR   basic_lib_zargs   ; no args
+      LDX   #SND_MUSIC_STOP
+      JMP   basic_snd_call    ; lib_call(SOUND, SND_MUSIC_STOP); RTS from there
 
 ; --- MUSIC TEMPO bpm ---
+; SND_MUSIC_TEMPO wants the 16-bit BPM in ARG0 (lo=byte0, hi=byte1).
 @m_tempo
       LDX   #5
       JSR   LAB_SKIPX          ; TEMPO
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTWRD         ; bpm as 16-bit → FAC1_3(lo), FAC1_2(hi)
-      LDA   FAC1_3
-      STA   FIO_SRCL
-      LDA   FAC1_2
-      STA   FIO_SRCH
-      JMP   audio_music_tempo
+      LDY   #0                ; ARG0 = bpm (u16: lo->byte0, hi->byte1)
+      JSR   basic_lib_arg_word
+      LDX   #SND_MUSIC_TEMPO
+      JMP   basic_snd_call
 
 ; --- MUSIC LOOP ON|OFF (TK_LOOP is a single token byte) ---
+; SND_MUSIC_LOOP: on:ARG0 (0=off, nonzero=on).
 @m_loop_tok
       JSR   LAB_IGBY          ; consume TK_LOOP token
       JSR   LAB_GBYT          ; skip spaces, get TK_ON or TK_OFF
@@ -10017,16 +10062,29 @@ LAB_MUSIC
       JMP   LAB_15D9          ; syntax error
 @m_loop_on
       JSR   LAB_IGBY          ; consume ON token
+      JSR   basic_lib_zargs   ; zero ARG0..3
       LDA   #$01
-      STA   FIO_SRCL
+      STA   LIB_ARG0          ; on -> ARG0
       BRA   @m_loop_go
 @m_loop_off
       JSR   LAB_IGBY          ; consume OFF token
-      STZ   FIO_SRCL
+      JSR   basic_lib_zargs   ; zero ARG0..3 (ARG0 = 0 -> off)
 @m_loop_go
-      JMP   audio_music_loop
+      LDX   #SND_MUSIC_LOOP
+      JMP   basic_snd_call
 
 ; --- MUSIC PRIORITY v1[,v2[,v3[,v4[,v5[,v6]]]]] ---
+; SND_MUSIC_PRIORITY carries a single value (pri:ARG0). The host MPRI handler
+; (DoMusicPri) reads SIX FIO cells as a voice list, so on paper a multi-voice
+; PRIORITY could set a multi-element steal list. In practice it never did: the
+; pre-lib_call BASIC handler (0005557) kept its slot index in Y across the
+; per-voice JSR LAB_GTBY, but the expression evaluator clobbers Y, so the
+; consecutive-cell stores never landed in order and the host saw only one
+; nonzero cell -> a single-element list (last value wins). Empirically verified:
+; the base ROM and this converted ROM both yield StealPriority=[1] for
+; "MUSIC PRIORITY 3,1,2" (last voice 2 -> 2-1=1) and for "MUSIC PRIORITY 5,2".
+; So carrying only the LAST parsed value through ARG0 is exact-behaviour parity,
+; not a narrowing. Regression-locked by MusicPriorityCollapsesToLastVoice.
 @m_priority
       ; P already consumed by @m_chk_p.  Skip remaining keyword bytes.
       ; "RIORITY" is tokenized as R,I,TK_OR,I,T,Y (OR becomes a token),
@@ -10037,47 +10095,44 @@ LAB_MUSIC
       BCS   @m_pri_skip       ; keep skipping keyword chars and tokens
       ; A < 'A': hit a space or digit — keyword is consumed.
       ; pointer is at the space/digit; LAB_GTBY calls GBYT which skips spaces.
-      ; Clear all 6 voice slots
-      LDA   #$00
-      LDY   #$05
-@m_pri_clr
-      STA   FIO_SRCL,Y
-      DEY
-      BPL   @m_pri_clr
-      ; Parse up to 6 comma-separated voice values
-      LDY   #$00              ; slot index
+      ; Parse up to 6 comma-separated voice values; keep the LAST in Itempl.
 @m_pri_nxt
       JSR   LAB_GTBY          ; get voice number → X
-      TXA
-      STA   FIO_SRCL,Y        ; store to slot
-      INY
-      CPY   #$06
-      BCS   @m_pri_go         ; all 6 parsed
+      STX   Itempl            ; remember the last value parsed
       JSR   LAB_GBYT          ; peek next char
       CMP   #','
       BNE   @m_pri_go         ; no more commas
       JSR   LAB_IGBY          ; skip comma
       BRA   @m_pri_nxt
 @m_pri_go
-      JMP   audio_music_priority
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      LDA   Itempl            ; last voice value
+      STA   LIB_ARG0          ; pri -> ARG0
+      LDX   #SND_MUSIC_PRIORITY
+      JMP   basic_snd_call
 
 ; --- MUSIC voice, "mml" ---
 ; Pass string via pointer (ut1_pl/ph) so MML strings can exceed 63 bytes.
-; FIO_SRCL = voice, FIO_ENDL/ENDH = string pointer, FIO_NAMELEN = length.
+; SND_MUSIC_SEQUENCE: voice:ARG0, mmlptr:ARG1 (lo/hi), mmllen:ARG2. The wrapper
+; rewrites the FIO cells from these ARG cells, so a first-call page-in (which
+; clobbers FIO_SRCL/FIO_ENDL) is harmless. The MML string lives in low BASIC RAM
+; (< $9800), which stays mapped during a module page-in, so the host reads it fine.
 @m_seq
+      JSR   basic_lib_zargs   ; zero ARG0..3
       JSR   LAB_GTBY          ; voice number (1-14) → X
-      STX   AUDIO_VOICE       ; store voice
+      STX   LIB_ARG0          ; voice -> ARG0
       JSR   LAB_1C01          ; comma
       JSR   LAB_EVEX          ; evaluate expression
       JSR   LAB_EVST          ; pop string: A=len, ut1_pl/ph=ptr
       TAX
       BEQ   @m_seq_err        ; empty string = error
-      STX   AUDIO_STRLEN      ; string length (1-255)
+      STX   LIB_ARG2          ; mml length (1-255) -> ARG2 byte0
       LDA   ut1_pl
-      STA   AUDIO_STRL        ; string pointer low
+      STA   LIB_ARG1          ; mml pointer low  -> ARG1 byte0
       LDA   ut1_ph
-      STA   AUDIO_STRH        ; string pointer high
-      JSR   audio_music_sequence
+      STA   LIB_ARG1+1        ; mml pointer high -> ARG1 byte1
+      LDX   #SND_MUSIC_SEQUENCE
+      JSR   basic_snd_call    ; A = LIB_STATUS
       BNE   @m_seq_err
       RTS
 @m_seq_err

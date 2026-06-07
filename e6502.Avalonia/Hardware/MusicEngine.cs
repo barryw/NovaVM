@@ -493,6 +493,12 @@ public sealed class MusicEngine
 
     public void SetPriority(int[] voices) => _stealPriority = voices;
 
+    // Test observability for BASIC MUSIC TEMPO/LOOP/PRIORITY routing (the
+    // setters above have no public getters; these mirror them for assertions).
+    internal int CurrentBpm => _bpm;
+    internal bool IsLooping => _loop;
+    internal int[] StealPriority => [.. _stealPriority];
+
     private int ComputeTotalFrames()
     {
         int maxFrames = 0;

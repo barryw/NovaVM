@@ -1364,9 +1364,19 @@ public sealed partial class FileIoController
         }
     }
 
+    /// <summary>
+    /// Test observability: the 1-based SID song number the last SIDPLAY request
+    /// carried in FioSrcL (what the BASIC handler + SOUND module marshalled into
+    /// AUDIO.NOTE = FioSrcL). Captured at the top of <see cref="DoSidPlay"/> so it
+    /// reflects the requested song even when playback is skipped (no .sid file).
+    /// </summary>
+    internal int LastSidPlaySongRequested { get; private set; } = -1;
+
     private void DoSidPlay()
     {
         if (_sidPlayer is null) { SetError(VgcConstants.FioErrIo); return; }
+
+        LastSidPlaySongRequested = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
 
         try
         {
