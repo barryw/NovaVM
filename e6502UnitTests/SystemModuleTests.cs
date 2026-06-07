@@ -396,6 +396,140 @@ public class SystemModuleTests
         Assert.AreEqual(last, bus.Read(VGC_CURSY), "cursor stays on the bottom row after scroll");
     }
 
+    /// <summary>
+    /// Multi-row read: a logical line wider than 80 columns wraps onto a second
+    /// physical row (its first row is "full" — col 79 non-space). On ENTER, with the
+    /// cursor on the SECOND row, SYS_SCREEN_READLINE walks UP to the line's start row
+    /// and reads the whole wrapped line back into the buffer as one logical line.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_EnterReadsFullWrappedMultiRowLine()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int startRow = 10;          // logical line starts here
+        BlankScreenWindowRow(bus, startRow - 1); // row above the line is NOT full
+        BlankScreenWindowRow(bus, startRow);
+        BlankScreenWindowRow(bus, startRow + 1);
+
+        // A 100-char logical line: 80 chars fill row 10 (col 79 non-space => "full"
+        // => wraps), the remaining 20 land on row 11. Built so the content is unique
+        // per column to catch any mis-ordered assembly.
+        var line = new System.Text.StringBuilder(100);
+        for (int i = 0; i < 100; i++)
+            line.Append((char)('A' + (i % 26)));
+        string expected = line.ToString();
+        WriteScreenWindowRow(bus, startRow, 0, expected.Substring(0, ScreenCols));   // 80 chars
+        WriteScreenWindowRow(bus, startRow + 1, 0, expected.Substring(ScreenCols));  // 20 chars
+
+        // Cursor on the SECOND row of the wrapped line (where the user would land
+        // after typing past col 79). ENTER must still ingest the whole line.
+        bus.Write(VGC_CURSX, 20);
+        bus.Write(VGC_CURSY, (byte)(startRow + 1));
+
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA); // poison
+        SetArg(bus, ARG0, buf | (0x7F << 16));   // b0/b1 = ptr, b2 = maxlen ($7F)
+
+        editor.QueueInput(0x0D);
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(100, bus.ReadRam(RESULT), "RESULT b0 must be the full 100-char wrapped-line length");
+        var got = new char[100];
+        for (int i = 0; i < 100; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual(expected, new string(got), "buffer must hold the full wrapped logical line, in order");
+        Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 100)),
+            "no padding past the line: the byte after the 100th char must be untouched");
+    }
+
+    /// <summary>
+    /// Regression for the single-row case under the multi-row reader: a line that
+    /// does NOT wrap (row-above is not full, this row's col 79 is a space) must read
+    /// as exactly one row. Guards against the walk-up over-climbing into a prior
+    /// full row, or the forward read over-running into the next row.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_EnterReadsSingleRowWhenNotWrapped()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int row = 15;
+        // The row above holds an unrelated short line (NOT full: col 79 is a space),
+        // so the walk-up must stop at the cursor row and the read must NOT merge the
+        // prior line. The cursor row's own col 79 is a space too, so the forward read
+        // must stop after this single row (no over-run into row 16).
+        BlankScreenWindowRow(bus, row - 1);
+        BlankScreenWindowRow(bus, row);
+        BlankScreenWindowRow(bus, row + 1);
+        WriteScreenWindowRow(bus, row - 1, 0, "PRIOR LINE");
+        WriteScreenWindowRow(bus, row, 0, "GOTO 100");
+
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)row);
+
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        editor.QueueInput(0x0D);
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(8, bus.ReadRam(RESULT), "single non-wrapped row reads exactly its 8 chars");
+        var got = new char[8];
+        for (int i = 0; i < 8; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual("GOTO 100", new string(got), "buffer holds only the cursor row, not the prior line");
+        Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 8)), "no over-read past the single row");
+    }
+
+    /// <summary>
+    /// Echo at the bottom row: typing a line wider than 80 columns when the cursor is
+    /// on the LAST physical row must SCROLL the screen up and continue the wrapped
+    /// continuation on the freshly exposed bottom row — not clamp and overwrite the
+    /// same row. This is the bug that dropped multi-row program lines typed at the
+    /// bottom of a scrolled screen (e.g. invention8 line 370). After ENTER the whole
+    /// wrapped line reads back intact across rows 48+49.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_BottomRowWrapScrollsAndKeepsFullLine()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        int last = ScreenRows - 1;          // 49
+        for (int r = 0; r < ScreenRows; r++) BlankScreenWindowRow(bus, r);
+
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)last);   // start typing on the bottom row
+
+        // 90-char line: 80 fill the bottom row (forcing a wrap+scroll), 10 continue.
+        var line = new System.Text.StringBuilder(90);
+        for (int i = 0; i < 90; i++) line.Append((char)('0' + (i % 10)));
+        string expected = line.ToString();
+        QueueText(editor, expected);
+        editor.QueueInput(0x0D);
+
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(90, bus.ReadRam(RESULT),
+            "the full 90-char line survives the bottom-row wrap-scroll");
+        var got = new char[90];
+        for (int i = 0; i < 90; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual(expected, new string(got),
+            "buffer holds the full wrapped line typed across the scroll boundary");
+    }
+
     private static string RepoPath(params string[] parts)
     {
         string root = Path.GetFullPath(Path.Combine(

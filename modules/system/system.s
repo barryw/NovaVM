@@ -895,56 +895,143 @@ sys_screen_readline:
       PLA
       LDY   VGC_CURSX
       STA   (srl_winL),Y               ; write the char at the cursor cell
-      ; advance CURSX; at column 80 wrap to col 0 of the next row (clamp row <= 49)
+      ; advance CURSX; at column 80 the line WRAPS to col 0 of the next row.
       INY
       CPY   #NOVA_SCREEN_COLS
       BCC   @echo_setx                 ; still within the row -> just store X
       LDY   #$00                       ; wrap: X = 0
       LDA   VGC_CURSY
       CMP   #(NOVA_SCREEN_ROWS-1)
-      BCS   @echo_setx                 ; already on the last row -> don't advance Y
+      BCC   @echo_wrap_down            ; not on the last row -> advance to next row
+      ; On the LAST row: the wrapped continuation has nowhere to go, so SCROLL the
+      ; screen up one row (reusing the VGC's own LF scroll) and keep typing on the
+      ; new last row. Without this, the continuation would overwrite the same row
+      ; and corrupt the logical line (the bug that dropped multi-row lines typed at
+      ; the bottom of the screen). LF via CHAROUT: cy 49->50 triggers ScrollUp, cy
+      ; settles back to 49; the line's earlier rows move up so the ENTER walk-up
+      ; still finds them. CHAROUT leaves CURSX unchanged, so force it to col 0.
+      LDA   #$0A
+      STA   VGC_CHAROUT                ; scroll up; cursor stays on row 49
+      STZ   VGC_CURSX
+      BRA   @loop
+@echo_wrap_down:
       INC   VGC_CURSY                  ; advance to the next row
 @echo_setx:
       STY   VGC_CURSX
       BRA   @loop
 
-      ; --- ENTER: read the physical row under the cursor into the buffer ---
-      ; Window row base = VGC_CURSY*80 -> srl_winL/H (= $A200 + CURSY*80).
+      ; --- ENTER: read the full LOGICAL line under the cursor into the buffer ---
+      ; A logical line spans one or more physical rows: when typed text fills a row
+      ; (its last column, col 79, is non-space) the editor wraps it onto the next
+      ; row, so the logical line continues there. To re-ingest the whole thing we
+      ;   (1) walk UP from CURSY to the FIRST row of the logical line (the topmost
+      ;       row whose row-above is NOT full), then
+      ;   (2) read FORWARD appending each row's cells, continuing past every "full"
+      ;       row (col 79 non-space) and stopping after the first NON-full row.
+      ; The assembled line is capped at srl_maxlen (Ibuffs capacity, $7F=127) and
+      ; trailing spaces are trimmed.
+      ;
+      ; KNOWN LIMITATION (accepted): a logical line whose length is an exact
+      ; multiple of 80 fills col 79 with no real wrap; it is indistinguishable from
+      ; a wrap, so the reader will over-read into the (blank) next row. The trailing-
+      ; space trim removes the over-read, so the stored line is still correct unless
+      ; the user has typed unrelated text on the very next row.
+
+      ; --- (1) find the logical-line START row: walk up while row above is full ---
 @enter:
       LDA   VGC_CURSY
-      JSR   screen_row_base
-
-      ; Pass 1: scan cols 0..min(maxlen,80)-1 for the trimmed length (last
-      ; non-space col + 1). Read-only; the buffer is not touched yet so any cell
-      ; past the line stays at the caller's value (no padding, no NUL).
-      STZ   srl_trim                   ; trimmed length so far
-      LDY   #$00                       ; column index
-@scan:
-      CPY   srl_maxlen
-      BCS   @copy                      ; reached the buffer capacity -> stop scanning
-      CPY   #NOVA_SCREEN_COLS          ; reached the right edge (80 cols)
-      BCS   @copy
-      LDA   (srl_winL),Y               ; row cell at $A200 + base + Y
-      CMP   #$20
-      BEQ   @scan_next                 ; space: does not extend the trimmed length
-      INY
-      STY   srl_trim                   ; non-space -> trimmed length = Y+1
-      DEY
-@scan_next:
-      INY
-      BRA   @scan
-
-      ; Pass 2: copy exactly srl_trim bytes (the trimmed line) into the buffer.
-@copy:
-      LDY   #$00
-@copy_loop:
-      CPY   srl_trim
-      BCS   @done_copy
+      STA   srl_startrow
+@find_start:
+      LDA   srl_startrow
+      BEQ   @start_found               ; already at row 0 -> can't go higher
+      DEC   A                          ; A = row above the current start row
+      JSR   screen_row_base            ; srl_winL/H = base of the row above
+      LDY   #(NOVA_SCREEN_COLS-1)      ; col 79 of that row
       LDA   (srl_winL),Y
-      STA   (srl_dstL),Y
-      INY
-      BRA   @copy_loop
+      CMP   #$20
+      BEQ   @start_found               ; row above NOT full -> start row is correct
+      DEC   srl_startrow               ; row above wrapped into us -> climb higher
+      BRA   @find_start
+@start_found:
 
+      ; --- (2) read FORWARD from the start row, appending each row's cells.
+      ; To honour the "no padding past the line; the byte after the last char is
+      ; untouched" contract while still copying *internal* spaces, spaces are
+      ; emitted LAZILY: pending blanks are only flushed to the buffer when a later
+      ; non-space appears. Trailing spaces therefore never reach the buffer, so the
+      ; final byte written is the last real character and srl_trim == bytes written.
+      ;   srl_dsti = bytes actually written (the trimmed length on exit)
+      ;   srl_cur  = current physical row; srl_pend = pending (deferred) spaces
+      ;   srl_dstL/H walks forward through the destination buffer (65C02 (zp) store).
+      STZ   srl_dsti                   ; bytes written so far
+      STZ   srl_pend                   ; pending un-flushed spaces
+      LDA   srl_startrow
+      STA   srl_cur                    ; current physical row being read
+@read_row:
+      LDA   srl_cur
+      JSR   screen_row_base            ; srl_winL/H = $A200 + cur*80
+      LDY   #$00                       ; column index within this row (0..79)
+@row_copy:
+      LDX   srl_dsti
+      CPX   srl_maxlen
+      BCS   @rows_done                 ; destination buffer full -> stop entirely
+      CPY   #NOVA_SCREEN_COLS
+      BCS   @row_end                   ; consumed all 80 columns of this row
+      LDA   (srl_winL),Y               ; row cell
+      CMP   #$20
+      BNE   @emit_char                 ; non-space -> flush pending blanks, then write
+      INC   srl_pend                   ; space -> defer it (might be trailing)
+      INY
+      BRA   @row_copy
+
+@emit_char:
+      PHA                              ; save the non-space char
+@flush_pend:
+      LDA   srl_pend
+      BEQ   @write_char                ; no deferred spaces -> write the char itself
+      LDX   srl_dsti
+      CPX   srl_maxlen
+      BCS   @flush_full                ; buffer fills mid-flush -> stop (drop char too)
+      LDA   #$20
+      STA   (srl_dstL)                 ; flush one deferred space
+      JSR   srl_dst_adv                ; advance dest ptr + srl_dsti
+      DEC   srl_pend
+      BRA   @flush_pend
+@flush_full:
+      PLA                              ; discard the pending char; buffer is full
+      BRA   @rows_done
+@write_char:
+      ; A space flush may have filled the buffer exactly; re-check before the char.
+      LDX   srl_dsti
+      CPX   srl_maxlen
+      BCS   @write_full                ; buffer full -> drop the char and stop
+      PLA                              ; restore the non-space char
+      STA   (srl_dstL)
+      JSR   srl_dst_adv                ; advance dest ptr + srl_dsti
+      INY
+      BRA   @row_copy
+@write_full:
+      PLA                              ; discard the char; buffer is full
+      BRA   @rows_done
+
+@row_end:
+      ; Row exhausted. If FULL (col 79 non-space) the logical line wraps onward.
+      ; Note: a full row's col-79 char is non-space, so it was already written and
+      ; srl_pend is 0 here; deferred spaces only ever exist on the final row.
+      LDY   #(NOVA_SCREEN_COLS-1)
+      LDA   (srl_winL),Y               ; col 79 of the row just copied
+      CMP   #$20
+      BEQ   @rows_done                 ; not full -> end of the logical line
+      LDA   srl_cur
+      CMP   #(NOVA_SCREEN_ROWS-1)
+      BCS   @rows_done                 ; on the last screen row -> can't wrap further
+      INC   srl_cur                    ; full -> continue on the next row
+      JMP   @read_row                  ; (out of BRA range -> JMP)
+
+@rows_done:
+      ; srl_dsti is exactly the trimmed length (trailing spaces were never written).
+      LDA   srl_dsti
+      STA   srl_trim
 @done_copy:
       ; --- advance to the start of the next line, REUSING the VGC's own CR/LF +
       ; scroll. Emit $0D ($A00E -> col 0) then $0A (advance row; at the bottom row
@@ -1014,9 +1101,22 @@ screen_row_base:
       STA   srl_winH
       RTS
 
+; srl_dst_adv — advance the multi-row read destination: bump the 16-bit dest
+; pointer srl_dstL/H by one and increment the byte counter srl_dsti. Clobbers A.
+srl_dst_adv:
+      INC   srl_dstL
+      BNE   :+
+      INC   srl_dstH
+:     INC   srl_dsti
+      RTS
+
       .segment "BSS"
 srl_maxlen:       .res 1               ; destination buffer capacity (ARG0 b2)
 srl_trim:         .res 1               ; trimmed line length (last non-space col + 1)
+srl_startrow:     .res 1               ; multi-row read: logical-line start row
+srl_cur:          .res 1               ; multi-row read: current physical row
+srl_dsti:         .res 1               ; multi-row read: bytes written so far
+srl_pend:         .res 1               ; multi-row read: deferred (pending) spaces
 srb_row:          .res 1               ; screen_row_base: saved row
 srb_tH:           .res 1               ; screen_row_base: row<<4 high byte
 se_saved_mode:    .res 1
