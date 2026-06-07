@@ -773,7 +773,7 @@ CmpStatusError                = $03
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                      = $C000
-V_INPT                        = $E8DE
-V_OUTP                        = $E8E1
-V_LOAD                        = $E8E4
-V_SAVE                        = $E8E7
+V_INPT                        = $E8CD
+V_OUTP                        = $E8D0
+V_LOAD                        = $E8D3
+V_SAVE                        = $E8D6

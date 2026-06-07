@@ -1182,62 +1182,46 @@ LAB_INLN
       JSR   LAB_18E0          ; print " "
       BNE   LAB_1357          ; call for BASIC input and return
 
-; receive line from keyboard
-
-                              ; $08 as delete key (BACKSPACE on standard keyboard)
-LAB_134B
-      JSR   LAB_PRNA          ; go print the character
-      DEX                     ; decrement the buffer counter (delete)
-      BRA   LAB_1359          ; loop for next input character
-
 ; call for BASIC input (main entry point)
-
+;
+; C64-style full-screen line reader. The whole edit loop (cursor visibility,
+; printable echo, arrow navigation, destructive backspace, ENTER, CR/LF + scroll)
+; now lives in the SYSTEM module's SYS_SCREEN_READLINE fn, driven against VGC MMIO
+; so it works identically on Avalonia and FPGA. This is a thin marshalling wrapper:
+; it hands the module Ibuffs as the destination buffer, lets it block until ENTER,
+; then reproduces the OLD LAB_1357 exit contract for the downstream crunch path.
+;
+; Old exit contract (was LAB_1384 -> LAB_CURS_OFF_CR -> LAB_1866):
+;   - Ibuffs holds the submitted line, NUL-terminated at its length.
+;   - X = <Ibuffs, Y = >Ibuffs  (caller stores these into Bpntr).
+;   - cursor OFF on return; one CR/LF emitted.
+; The module returns the line length in LIB_RESULT b0 (no trailing NUL) and has
+; ALREADY emitted CR/LF (via VGC_CHAROUT, which also scrolls at the bottom row), so
+; the wrapper only NUL-terminates, restores X/Y, and turns the cursor off. The
+; module turned the cursor ON at entry, so the off-here / on-at-next-entry pair
+; reproduces the old LAB_CURS_ON / LAB_CURS_OFF_CR cadence exactly.
 LAB_1357
-      JSR   LAB_CURS_ON       ; show cursor while waiting for input
-      LDX   #$00              ; clear BASIC line buffer pointer
-LAB_1359
-      JSR   V_INPT            ; call scan input device
-      BCC   LAB_1359          ; loop if no byte
+      LDA   #<Ibuffs          ; destination buffer ptr low  -> ARG0 b0
+      STA   LIB_ARG0+0
+      LDA   #>Ibuffs          ; destination buffer ptr high -> ARG0 b1
+      STA   LIB_ARG0+1
+      LDA   #Ibuffe-Ibuffs    ; max line length ($7F)       -> ARG0 b2
+      STA   LIB_ARG0+2
+      STZ   LIB_ARG0+3        ; ARG0 b3 = 0
 
-      BEQ   LAB_1359          ; loop until valid input (ignore NULLs)
+      LDA   #MODULE_ID_SYSTEM
+      LDX   #SYS_SCREEN_READLINE
+      JSR   basic_lib_call    ; block until ENTER; A = LIB_STATUS
 
-      CMP   #$07              ; compare with [BELL]
-      BEQ   LAB_1378          ; branch if [BELL]
+      LDX   LIB_RESULT+0      ; submitted line length (no trailing NUL yet)
+      LDA   #$00
+      STA   Ibuffs,X          ; NUL-terminate the line at its length
 
-      CMP   #$0D              ; compare with [CR]
-      BEQ   LAB_1384          ; do CR/LF exit if [CR]
+      STZ   VGC_CURSEN        ; cursor off (module enabled it; CR/LF already emitted)
 
-      CPX   #$00              ; compare pointer with $00
-      BNE   LAB_1374          ; branch if not empty
-
-; next two lines ignore any non print character and [SPACE] if input buffer empty
-
-      CMP   #$21              ; compare with [SP]+1
-      BCC   LAB_1359          ; if < ignore character
-
-LAB_1374
-      CMP   #$08              ; compare with [BACKSPACE] (delete last character)
-      BEQ   LAB_134B          ; go delete last character
-
-LAB_1378
-      CPX   #Ibuffe-Ibuffs    ; compare character count with max
-      BCS   LAB_138E          ; skip store and do [BELL] if buffer full
-
-      STA   Ibuffs,X          ; else store in buffer
-      INX                     ; increment pointer
-LAB_137F
-      JSR   LAB_PRNA          ; go print the character
-      BNE   LAB_1359          ; always loop for next character
-
-LAB_1384
-      JMP   LAB_CURS_OFF_CR   ; cursor off, then CR/LF exit to BASIC
-
-; announce buffer full
-
-LAB_138E
-      LDA   #$07              ; [BELL] character into A
-      BNE   LAB_137F          ; go print the [BELL] but ignore input character
-                              ; branch always
+      LDX   #<Ibuffs          ; X = buffer start low  (caller -> Bpntrl)
+      LDY   #>Ibuffs          ; Y = buffer start high (caller -> Bpntrh)
+      RTS
 
 ; uppercase A if lowercase letter (a-z → A-Z), preserves carry for non-letters
 LAB_TOUC

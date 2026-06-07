@@ -21,6 +21,120 @@ namespace e6502UnitTests;
 public class BasicRegressionTests
 {
     [TestMethod]
+    public void ScreenEditor_FreshLineExecutes()
+    {
+        // Proves the new SYS_SCREEN_READLINE path: type a fresh immediate-mode
+        // line, ENTER submits the screen row, BASIC tokenizes + executes it.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        QueueLine(editor, "PRINT 6*7");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains(" 42", StringComparison.Ordinal),
+            $"PRINT 6*7 should output 42 through the screen-editor input path.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ScreenEditor_EditListedLineUpdatesProgram()
+    {
+        // The C64 magic: LIST the program, arrow the cursor onto a listed line,
+        // overwrite a digit on the SCREEN, press ENTER -> BASIC re-ingests the
+        // physical screen row and updates the stored program line. RUN then
+        // reflects the screen edit, not the originally-typed buffer.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        QueueLine(editor, "10 PRINT 1");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        QueueLine(editor, "20 PRINT 2");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+        QueueLine(editor, "LIST");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        // Locate the listed "10 PRINT 1" row and the cursor's current row.
+        int listedRow = FindScreenRow(bus.Vgc, "10 PRINT 1");
+        Assert.IsTrue(listedRow >= 0,
+            $"LIST should display line 10.\n{SnapshotScreen(bus.Vgc)}");
+        int cursorRow = bus.Vgc.GetCursorY();
+        Assert.IsTrue(cursorRow > listedRow,
+            $"Cursor (row {cursorRow}) should sit below the listed line (row {listedRow}).");
+
+        // The listed text is "10 PRINT 1" -> the '1' operand is at column 9.
+        const int OperandCol = 9;
+        Assert.AreEqual((byte)'1', bus.Vgc.GetScreenChar(OperandCol, listedRow),
+            "Expected the digit operand of line 10 at column 9.");
+
+        // Arrow UP from the prompt to the listed row, RIGHT to the operand column,
+        // overwrite '1' with '9', then ENTER to re-ingest the edited screen row.
+        for (int i = 0; i < cursorRow - listedRow; i++)
+            editor.QueueInput(30);                  // Up
+        for (int i = 0; i < OperandCol; i++)
+            editor.QueueInput(29);                  // Right
+        editor.QueueInput((byte)'9');               // overwrite the '1'
+        editor.QueueInput(0x0D);                    // ENTER -> re-ingest the row
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        // The line-10 echo row must now read "10 PRINT 9" (edited on screen).
+        Assert.AreEqual((byte)'9', bus.Vgc.GetScreenChar(OperandCol, listedRow),
+            $"The screen edit should have changed the operand to 9.\n{SnapshotScreen(bus.Vgc)}");
+
+        // After ENTER the cursor advanced onto a row that still shows stale listed
+        // text; on a real C64 you'd type RUN on a clear line. Drive the cursor down
+        // past all content onto a guaranteed-blank row before typing RUN, so the
+        // re-ingested ENTER row is exactly "RUN" (not RUN overlaid on old text).
+        for (int i = 0; i < 20; i++)
+            editor.QueueInput(31);                  // Down (clamps at row 49)
+        QueueLine(editor, "RUN");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        // Assert against the RUN output region only (the two rows printed directly
+        // below the "RUN" line), not the listing text — the listed "10 PRINT 9" row
+        // also contains a '9'. Line 10 prints "9", line 20 prints "2", in order.
+        string screen = SnapshotScreen(bus.Vgc);
+        int runRow = FindScreenRow(bus.Vgc, "RUN");
+        Assert.IsTrue(runRow >= 0, $"RUN command should appear on screen.\n{screen}");
+        string out1 = ReadRow(bus.Vgc, runRow + 1).Trim();
+        string out2 = ReadRow(bus.Vgc, runRow + 2).Trim();
+        Assert.AreEqual("9", out1,
+            $"Line 10 (edited on screen from 1 to 9) should print 9.\n{screen}");
+        Assert.AreEqual("2", out2,
+            $"Line 20 (unchanged) should print 2.\n{screen}");
+        Assert.IsFalse(screen.Contains("Syntax Error", StringComparison.Ordinal),
+            $"Editing the screen row must not corrupt the re-ingested line.\n{screen}");
+    }
+
+    private static int FindScreenRow(VirtualGraphicsController vgc, string needle)
+    {
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+            if (ReadRow(vgc, row).Contains(needle, StringComparison.Ordinal))
+                return row;
+        return -1;
+    }
+
+    private static string ReadRow(VirtualGraphicsController vgc, int row)
+    {
+        var sb = new StringBuilder(VgcConstants.ScreenCols);
+        for (int col = 0; col < VgcConstants.ScreenCols; col++)
+        {
+            byte ch = vgc.GetScreenChar(col, row);
+            sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
+        }
+        return sb.ToString();
+    }
+
+    [TestMethod]
     public void ArrayIndexedAssignAndPrintReadsBack()
     {
         string screen = RunProgram(new[]

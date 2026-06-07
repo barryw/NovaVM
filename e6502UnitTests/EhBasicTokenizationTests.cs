@@ -82,13 +82,22 @@ public class EhBasicTokenizationTests
     {
         using var bus = new CompositeBusDevice(enableSound: false);
         // User RAM (Ram_base) now starts at $0900. The $0300-$08FF band is
-        // reserved cross-runtime and BASIC must not touch it: $0300-$031F is the
-        // library mailbox (libabi.inc LIB_MBOX), $0320-$041F is the resident
-        // library loader band (libcall.s), and $0420-$08FF is the cross-runtime
-        // module-BSS band (libabi.inc MODULE_BSS_BAND, carved by 4c.2-1).
-        // Program/variable storage begins at $0900.
+        // reserved cross-runtime: $0300-$031F is the library mailbox (libabi.inc
+        // LIB_MBOX), $0320-$041F is the resident loader band (libcall.s), and
+        // $0420-$08FF is the cross-runtime module-BSS band (libabi.inc
+        // MODULE_BSS_BAND). The invariant this test guards is that BASIC's cold-start
+        // RAM clear stops at $0900 and never reaches down into the band.
+        //
+        // NOTE: the mailbox + the SYSTEM module's own BSS ($0420-$0687) are NOT
+        // probed for "untouched" — by the time "Ready" appears the line reader
+        // (LAB_1357 -> lib_call(SYSTEM, SYS_SCREEN_READLINE)) is already polling for
+        // input, and that call legitimately writes the mailbox and the low module-BSS
+        // bytes. We probe only band addresses the cold start would zero if its clear
+        // loop wrongly extended below $0900 AND that the line reader never writes:
+        // the top of the module-BSS band ($0688-$08FF), well above the SYSTEM
+        // module's $0420-$0687 working store.
         int[] zeroedProgramAddresses = [0x0900, 0x0901, 0x0902, 0x2000, 0x7FFF];
-        int[] mailboxAddresses = [0x0300, 0x0301, 0x0302, 0x031F, 0x0320, 0x0321, 0x0420, 0x0500, 0x08FE, 0x08FF];
+        int[] mailboxAddresses = [0x0700, 0x0800, 0x08FE, 0x08FF];
         int[] topOfRamAddresses = [0x9FFE, 0x9FFF];
         int[] sampleAddresses = [.. zeroedProgramAddresses, .. mailboxAddresses, .. topOfRamAddresses];
         foreach (int address in sampleAddresses)
@@ -108,7 +117,8 @@ public class EhBasicTokenizationTests
         foreach (int address in mailboxAddresses)
         {
             Assert.AreEqual(0xA5, bus.ReadRam((ushort)address),
-                $"Cold start must leave the reserved library band ($0300-$08FF) at ${address:X4} untouched.");
+                $"Cold start's RAM clear must stop at $0900 and leave the upper module-BSS " +
+                $"band byte ${address:X4} untouched (it is below Ram_base, not program RAM).");
         }
 
         foreach (int address in topOfRamAddresses)

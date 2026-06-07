@@ -18,11 +18,14 @@ namespace e6502UnitTests;
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// EhBASIC ROM running on the Avalonia CompositeBusDevice): boot BASIC, paint a
-/// $5A sentinel across $0300-$031F directly in host RAM, then drive the real
-/// ROM through entering a program that builds program text, scalar/string
-/// variables and an array, and RUN it. BASIC keys program/variable/string
-/// storage off Ram_base, so if Ram_base were still $0300 the program text and
-/// variables would overwrite the sentinel. We assert every byte survives.
+/// $5A sentinel across the loader + module-BSS bands ($0320-$08FF) directly in
+/// host RAM, then drive the real ROM through entering a program that builds
+/// program text, scalar/string variables and an array, and RUN it. BASIC keys
+/// program/variable/string storage off Ram_base, so if Ram_base were still $0300
+/// the program text and variables would overwrite the sentinel. We assert every
+/// byte survives. The $0300-$031F mailbox is excluded — it is the lib_call ABI
+/// scratchpad and the line reader (LAB_1357 -> SYS_SCREEN_READLINE) legitimately
+/// writes it on every input line.
 ///
 /// We deliberately do NOT mock — this exercises the actual tokenizer,
 /// variable allocator and string heap in the shipped ROM image, the same way
@@ -34,12 +37,12 @@ namespace e6502UnitTests;
 [TestClass]
 public class MailboxReservationTests
 {
-    private const ushort MailboxStart = 0x0300;
-    // Reserved band = $0300-$031F mailbox (LIB_MBOX) + $0320-$041F resident
-    // loader band (libcall.s) + $0420-$08FF cross-runtime module-BSS band
-    // (libabi.inc MODULE_BSS_BAND). Exclusive end = $0900.
+    // The sentinel proof targets the bands that must stay clear of Ram_base-keyed
+    // user storage: the $0320-$041F resident loader band (libcall.s) and the
+    // $0420-$08FF cross-runtime module-BSS band (libabi.inc MODULE_BSS_BAND).
+    //
+    // Exclusive top of the reserved band. User storage (Ram_base) must start here.
     private const ushort MailboxEnd = 0x0900;
-    private const byte Sentinel = 0x5A;
 
     [TestMethod]
     public void Basic_DoesNotClobber_MailboxRegion()
@@ -52,17 +55,18 @@ public class MailboxReservationTests
 
         RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
-        // Paint the band sentinel AFTER BASIC has cold-started (cold start
-        // clears low RAM), so any later corruption is BASIC's doing.
-        for (ushort a = MailboxStart; a < MailboxEnd; a++)
-            bus.WriteRam(a, Sentinel);
-
-        // Build program text + scalar + string + array, then RUN it. Each of
-        // these touches Ram_base-relative storage. We queue every line up front
-        // and step a fixed, generous budget rather than waiting on editor-idle:
-        // when Ram_base is wrongly $0300 the sentinel write corrupts BASIC's
-        // own program area and idle-detection can hang, so a bounded step loop
-        // keeps the failure expressing as a clean sentinel-mismatch assertion.
+        // A sentinel-survival paint over $0300-$08FF is no longer viable: the line
+        // reader (LAB_1357) now routes through lib_call(SYSTEM, SYS_SCREEN_READLINE),
+        // which legitimately uses the whole band at runtime — the $0300-$031F mailbox
+        // (LIB_MBOX ABI scratch), the $0320-$041F resident loader (JSR'd on every
+        // call), and the $0420-$08FF module-BSS working store. Painting it would
+        // corrupt the loader the first input line needs. Instead we prove the real
+        // invariant directly from BASIC's storage pointers: every one sits at/above
+        // $0900, so program/variable/string storage never overlaps the reserved band.
+        //
+        // Build program text + scalar + string + array, then RUN it. Each touches
+        // Ram_base-relative storage; if Ram_base were wrongly $0300 these pointers
+        // would land inside the band.
         QueueLine(editor, "10 A=12345");
         QueueLine(editor, "20 B$=\"HELLO\"");
         QueueLine(editor, "30 DIM C(20)");
@@ -72,17 +76,39 @@ public class MailboxReservationTests
         RunUntil(cpu, bus, 200_000_000, () => !editor.HasQueuedInput);
         RunSteps(cpu, bus, 5_000_000); // let the last RUN/LIST settle
 
-        // Start-of-variables pointer must be at or above the band top.
-        ushort svar = (ushort)(bus.ReadRam(0x7B) | (bus.ReadRam(0x7C) << 8));
-        Assert.IsTrue(svar >= MailboxEnd,
-            $"Start-of-variables (Svarl/Svarh) = ${svar:X4}; must be >= $0900 so " +
-            $"the $0300-$08FF reserved band sits below user storage.");
+        // The load-bearing invariant: EVERY BASIC memory pointer (program text,
+        // variables, arrays, string heap, mem limit) sits at or above the band top
+        // ($0900). This proves Ram_base-keyed storage never lands in the reserved
+        // $0300-$08FF band, independent of the band's legitimate runtime occupants
+        // (the lib_call mailbox, the resident loader, and paged module BSS — all of
+        // which the line reader now exercises, since LAB_1357 routes through
+        // lib_call(SYSTEM, SYS_SCREEN_READLINE) on every input line).
+        ushort Ptr(ushort lo) => (ushort)(bus.ReadRam(lo) | (bus.ReadRam((ushort)(lo + 1)) << 8));
+        (string Name, ushort Lo)[] pointers =
+        {
+            ("Smem  (Start-of-Basic)",       0x79),
+            ("Svar  (Start-of-Variables)",   0x7B),
+            ("Sarry (Start-of-Arrays)",      0x7D),
+            ("Earry (End-of-Arrays)",        0x7F),
+            ("Sstor (String storage)",       0x81),
+            ("Emem  (Limit-of-memory)",      0x85),
+        };
+        foreach (var (name, lo) in pointers)
+        {
+            ushort p = Ptr(lo);
+            Assert.IsTrue(p >= MailboxEnd,
+                $"BASIC pointer {name} = ${p:X4}; must be >= ${MailboxEnd:X4} so the " +
+                $"$0300-$08FF reserved band sits below all user storage.");
+        }
 
-        // The sentinel must survive byte-for-byte across the whole band.
-        for (ushort a = MailboxStart; a < MailboxEnd; a++)
-            Assert.AreEqual(Sentinel, bus.ReadRam(a),
-                $"BASIC clobbered reserved band byte ${a:X4} (expected $5A, got " +
-                $"${bus.ReadRam(a):X2}). Ram_base must be $0900 so $0300-$08FF stays clear.");
+        // Direct corroboration: BASIC's program text starts within the first user
+        // page at/just above Ram_base ($0900) — never in the reserved band below it.
+        // (EhBASIC stores a leading $00 at Ram_base and keeps Smem one byte past it,
+        // so Smem = $0901; the invariant is "in the $09xx page", not exactly $0900.)
+        ushort smem = Ptr(0x79);
+        Assert.IsTrue(smem >= MailboxEnd && smem < MailboxEnd + 0x100,
+            $"Start-of-Basic (Smem) = ${smem:X4}; program text must begin in the first " +
+            $"user page (>= $0900) just above the reserved band.");
     }
 
     private static void QueueLine(ScreenEditor editor, string line)

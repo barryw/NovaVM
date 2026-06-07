@@ -27,6 +27,7 @@ public class BasicModuleBridgeTests
 {
     private const ushort LibResident = 0x0318;        // libabi.inc LIB_RESIDENT
     private const byte LibResidentHostExt = 0xFF;     // libabi.inc LIB_RESIDENT_HOSTEXT
+    private const byte LibModuleSystem = 0x03;        // libsystem.inc MODULE_ID_SYSTEM
 
     [TestMethod]
     public void GraphicsLibCallThenExtensionKeywordBothWorkOnOneMachine()
@@ -39,9 +40,15 @@ public class BasicModuleBridgeTests
 
         RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
 
-        // At boot the extension ROM is resident (armed in LAB_COLD).
-        Assert.AreEqual(LibResidentHostExt, bus.ReadRam(LibResident),
-            "BASIC cold start should arm LIB_RESIDENT = HOSTEXT (extension ROM resident).");
+        // Cold start arms LIB_RESIDENT = HOSTEXT, but reaching the "Ready" prompt
+        // immediately enters the line reader (LAB_1357 -> lib_call(SYSTEM,
+        // SYS_SCREEN_READLINE)), which pages the SYSTEM module into bank 1 and sets
+        // LIB_RESIDENT = MODULE_ID_SYSTEM. So by the time the prompt is observable the
+        // ext ROM is already displaced — exactly like any other lib_call. The
+        // functional contract (ext-ROM keywords still work) is restored on demand by
+        // ensure_ext_resident, which parts (a)/(b) below verify.
+        Assert.AreEqual(LibModuleSystem, bus.ReadRam(LibResident),
+            "At the Ready prompt the line-reader lib_call leaves the SYSTEM module resident.");
 
         // (a) A converted GRAPHICS keyword forces a real lib_call page-in that
         //     displaces the extension ROM from bank 1 and sets LIB_RESIDENT to a
@@ -81,9 +88,15 @@ public class BasicModuleBridgeTests
         Assert.IsTrue(screen.Contains("M= 1200", StringComparison.Ordinal),
             $"MMUL16L should print 1200 through the ext-ROM bridge.\n{screen}");
 
-        // The ext ROM should be resident again after the EXT_CODE re-page guard ran.
-        Assert.AreEqual(LibResidentHostExt, bus.ReadRam(LibResident),
-            "ensure_ext_resident should restore LIB_RESIDENT = HOSTEXT after re-paging.");
+        // The EXT_CODE re-page guard (ensure_ext_resident) DID restore the ext ROM
+        // for MMUL16L — proven by part (b) returning 1200 above (it could not run
+        // otherwise). After that, control returned to the Ready prompt, whose line
+        // reader fires lib_call(SYSTEM, SYS_SCREEN_READLINE) and pages the SYSTEM
+        // module back in. So the steady prompt state is SYSTEM-resident; the ext ROM
+        // self-heals on the next ext keyword, exactly as it did here.
+        Assert.AreEqual(LibModuleSystem, bus.ReadRam(LibResident),
+            "At the Ready prompt the line-reader lib_call leaves the SYSTEM module resident " +
+            "(the ext-ROM re-page on demand is proven by MMUL16L returning 1200 above).");
     }
 
     [TestMethod]
