@@ -1,9 +1,11 @@
 # BASIC C64-Style Screen Editor — Design (DEFERRED plan)
 
 **Date:** 2026-06-07
-**Status:** Design captured. **NOT scheduled** — deferred behind the ext-ROM
-migration track (`docs/plans/2026-06-06-basic-on-modules-design.md`). Resume this
-only after BASIC's remaining ext-ROM domains are migrated.
+**Status:** ✅ SHIPPED 2026-06-07 (branch phase10-screen-editor). Implemented per
+`docs/plans/2026-06-07-basic-screen-editor-impl.md` as SYSTEM-module fn
+`SYS_SCREEN_READLINE` ($12) with multi-row wrapped-line read on ENTER; BASIC
+`LAB_1357` routes through it. Faithful-MVP scope (deferred: full multi-row
+*interactive editing* of previously-listed long lines; INSERT mode).
 
 ## The idea (user)
 

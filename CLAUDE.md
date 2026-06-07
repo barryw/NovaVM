@@ -86,7 +86,7 @@ $D420-$D43F  SID 2 registers (inside ROM range, intercepted on Write)
 
 ### Virtual Graphics Controller (`VGC`)
 
-Manages three layers: 80x25 text, 320x200 block graphics (4-bit color per pixel), and 16 multicolor 16x16 sprites. Register writes to $A010 trigger immediate commands for graphics primitives (plot, line, circle, rect, fill, paint), sprite manipulation (define, position, enable, flip, priority), and memory I/O (bulk read/write of screen/color/gfx/sprite data).
+Manages three layers: 80x50 text, 320x200 block graphics (4-bit color per pixel), and 16 multicolor 16x16 sprites. Register writes to $A010 trigger immediate commands for graphics primitives (plot, line, circle, rect, fill, paint), sprite manipulation (define, position, enable, flip, priority), and memory I/O (bulk read/write of screen/color/gfx/sprite data).
 
 Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (order depends on mode) → priority-1 sprites → priority-2 sprites → collision detection.
 
