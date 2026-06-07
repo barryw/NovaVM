@@ -1,5 +1,8 @@
 using System;
 using System.IO;
+using e6502.Avalonia.Hardware;
+using e6502.Avalonia.Input;
+using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace e6502UnitTests;
@@ -32,6 +35,121 @@ public class SystemModuleTests
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
         Assert.AreEqual(0x13, img[7]);   // SYS_FN_COUNT (EDIT + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE)
+    }
+
+    // =====================================================================
+    // SYS_SCREEN_READLINE ($12) — the C64-style full-screen line reader.
+    // Axis-2 harness (mirrors GraphicsModuleTests): inject system.bin as the
+    // extension ROM, romswap it to $C000, attach a ScreenEditor for key input,
+    // then JSR the module dispatch directly (loader bypassed — paging is proven
+    // independently in LibCallTests). The real VGC backs the char-plane screen
+    // window ($A200), the cursor registers, and the CHARIN key queue.
+    // =====================================================================
+
+    // Mailbox cells mirror runtime/asm/libabi.inc.
+    private const ushort FN_ID = 0x0301, STATUS = 0x0302, ARG0 = 0x0303, RESULT = 0x0313;
+    private const byte   SYS_SCREEN_READLINE = 0x12;
+    private const byte   LERR_OK = 0x00;
+    private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
+    // VGC register / window addresses (runtime/asm/nova.inc).
+    private const ushort VGC_CURSX = 0xA003, VGC_CURSY = 0xA004, VGC_TEXT_TOPROW = 0xA0ED;
+    private const ushort VGC_SCREENWIN = 0xA200, VGC_SCREENWIN_PLANE = 0xB1A0;
+    private const byte   VGC_SCREENWIN_CHAR = 0x00;
+    private const int    ScreenCols = 80;
+
+    private static CompositeBusDevice MakeSystemBus()
+    {
+        var bus = new CompositeBusDevice(enableSound: false);
+        bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("modules", "system", "system.bin")));
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
+        Assert.AreEqual(CompositeBusDevice.ActiveRom.Extension, bus.CurrentRom);
+        Assert.AreEqual(0x4C, bus.Read(0xC000), "module $C000 must be JMP (the header trampoline)");
+        return bus;
+    }
+
+    // Write a 32-bit LE arg cell.
+    private static void SetArg(CompositeBusDevice bus, ushort cell, int value)
+    {
+        for (int i = 0; i < 4; i++)
+            bus.WriteRam((ushort)(cell + i), (byte)((value >> (8 * i)) & 0xFF));
+    }
+
+    // Drive the module dispatch directly for fn-id `fn`; assert it RTSes and
+    // returns LIB_STATUS = OK.
+    private static void RunFn(CompositeBusDevice bus, byte fn)
+    {
+        bus.WriteRam(FN_ID, fn);
+        bus.WriteRam(STATUS, 0xFF);   // poison so a real OK write is observable
+
+        var cpu = new Cpu(bus, E6502Type.Cmos);
+        bus.WriteRam(0x01FF, (byte)((Sentinel - 1) >> 8));
+        bus.WriteRam(0x01FE, (byte)((Sentinel - 1) & 0xFF));
+        var s = cpu.GetState();
+        cpu.RestoreState(new CpuState(s.A, s.X, s.Y, 0xFD, 0xC000,
+                                      s.Nf, s.Vf, s.Df, true /*I*/, s.Zf, s.Cf));
+
+        for (int guard = 0; guard < 4_000_000 && cpu.Pc != Sentinel; guard++)
+            cpu.ExecuteNext();
+        Assert.AreEqual(Sentinel, cpu.Pc, $"fn ${fn:X2} dispatch did not RTS back to the sentinel");
+        Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), $"fn ${fn:X2} must set LIB_STATUS = OK");
+    }
+
+    // Write a string into the char-plane screen window at (col0,row) via the bus
+    // ($A200 + row*ScreenCols + col), exactly as the module reads it.
+    private static void WriteScreenWindowRow(CompositeBusDevice bus, int row, int col0, string text)
+    {
+        int baseAddr = VGC_SCREENWIN + row * ScreenCols + col0;
+        for (int i = 0; i < text.Length; i++)
+            bus.Write((ushort)(baseAddr + i), (byte)text[i]);
+    }
+
+    /// <summary>
+    /// Core mechanic: on ENTER, SYS_SCREEN_READLINE reads the physical screen row
+    /// under the cursor into the caller buffer and returns its length with trailing
+    /// spaces trimmed. Proves the row mapping (window row == CURSY directly).
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_ReadsRowUnderCursorOnEnter()
+    {
+        using var bus = MakeSystemBus();
+
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        // Set a NONZERO ring-scroll base. This makes the row mapping falsifiable:
+        // the screen window + VGC_CURSY index the physical plane row directly, while
+        // VGC_TEXT_TOPROW only remaps display-row -> physical-row at render time. If
+        // the module wrongly read (CURSY+TOPROW) mod 50 it would land on a blank row
+        // and the text/length asserts below would fail.
+        bus.Write(VGC_TEXT_TOPROW, 17);
+
+        // Select the char plane for the screen window, then paint "PRINT 7" at row R.
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int row = 12;
+        WriteScreenWindowRow(bus, row, 0, "PRINT 7");
+
+        // Cursor sits at the start of that row.
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)row);
+
+        // Caller buffer in low RAM (page 2, like BASIC's Ibuffs), poisoned so an
+        // untouched trailing byte is observable. b2 = max length $7F.
+        const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
+        SetArg(bus, ARG0, buf | (0x7F << 16));   // b0/b1 = ptr, b2 = maxlen
+
+        // Press ENTER — the only key needed for the read-row mechanic.
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        // The submitted line is "PRINT 7" (7 chars), no trailing NUL, spaces trimmed.
+        Assert.AreEqual(7, bus.ReadRam(RESULT), "RESULT b0 must be the trimmed line length (7)");
+        var got = new char[7];
+        for (int i = 0; i < 7; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual("PRINT 7", new string(got), "buffer must hold the row text under the cursor");
+        Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 7)),
+            "no trailing NUL or padding: the byte past the line must be untouched");
     }
 
     private static string RepoPath(params string[] parts)

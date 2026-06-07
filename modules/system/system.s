@@ -774,21 +774,152 @@ sal_upper:
 
 ; ===========================================================================
 ; SYS_SCREEN_READLINE — C64-style full-screen line reader (backs BASIC's
-; LAB_1357). Skeleton (Task 1): publishes an empty line + OK. The interactive
-; edit loop + read-row-on-ENTER lands in Task 2.
+; LAB_1357). Task 2 (core mechanic): poll keys; on ENTER ($0D) copy the physical
+; screen row under the cursor into the caller's buffer (trailing spaces trimmed)
+; and return its length. Echo / arrows / backspace / scroll land in later chunks.
+;
+; ROW MAPPING (established empirically by ScreenReadline_ReadsRowUnderCursorOnEnter):
+;   The $A200 screen window and VGC_CURSY both index the PHYSICAL plane row
+;   directly. VGC_TEXT_TOPROW ($A0ED) only remaps display-row -> physical-row at
+;   render time (the renderer's ring scroll); it does NOT shift the window's cell
+;   addressing or the plane row VGC_CURSY refers to. So the window row for the
+;   visible cursor row CURSY is CURSY itself — NOT (CURSY+TOPROW) mod 50. The
+;   row base is therefore CURSY*80 with no TOPROW term. (Confirmed: the test
+;   passes with base=CURSY*80 and leaves TOPROW at its default 0; the model is
+;   self-consistent for any TOPROW since cursor and window share the plane row.)
+;
+; ZP usage: like sys_addr_lookup, this fn never runs in the same lib_call as the
+; editor, so it ALIASES the editor's ZP pointer cells:
+;   srl_winL/H  = the $A200 row-base window pointer  (EB_SRCL/EB_SRCH)
+;   srl_dstL/H  = the caller's destination buffer ptr (EB_DSTL/EB_DSTH)
+; Non-pointer scratch (maxlen / col / trimmed length) lives in module BSS.
 ;   In:  ARG0 b0/b1 = destination buffer ptr   ARG0 b2 = max length
-;   Out: RESULT b0 = line length; LIB_STATUS = LERR_OK
+;   Out: RESULT b0 = trimmed line length; buffer filled (no trailing NUL);
+;        LIB_STATUS = LERR_OK
 ; ===========================================================================
+srl_winL = EB_SRCL
+srl_winH = EB_SRCH
+srl_dstL = EB_DSTL
+srl_dstH = EB_DSTH
+
 sys_screen_readline:
-      STZ   LIB_RESULT+0               ; length 0 (skeleton: nothing read yet)
-      STZ   LIB_RESULT+1               ; reserved exit reason = 0
+      ; --- marshal the destination buffer ptr + max length from ARG0 ---
+      LDA   LIB_ARG0+0
+      STA   srl_dstL
+      LDA   LIB_ARG0+1
+      STA   srl_dstH
+      LDA   LIB_ARG0+2
+      STA   srl_maxlen
+
+      ; --- the editor reads/writes through the char plane window ---
+      LDA   #VGC_SCREENWIN_CHAR
+      STA   VGC_SCREENWIN_PLANE
+
+      ; --- poll keys until ENTER ($0D). 0 = empty queue -> keep polling. ---
+@poll:
+      LDA   VGC_CHARIN
+      BEQ   @poll
+      CMP   #$0D
+      BNE   @poll                      ; (echo/arrows/backspace handled in later chunks)
+
+      ; --- ENTER: read the physical row under the cursor into the buffer ---
+      ; Window row base = VGC_CURSY*80 -> srl_winL/H (= $A200 + CURSY*80).
+      LDA   VGC_CURSY
+      JSR   screen_row_base
+
+      ; Pass 1: scan cols 0..min(maxlen,80)-1 for the trimmed length (last
+      ; non-space col + 1). Read-only; the buffer is not touched yet so any cell
+      ; past the line stays at the caller's value (no padding, no NUL).
+      STZ   srl_trim                   ; trimmed length so far
+      LDY   #$00                       ; column index
+@scan:
+      CPY   srl_maxlen
+      BCS   @copy                      ; reached the buffer capacity -> stop scanning
+      CPY   #NOVA_SCREEN_COLS          ; reached the right edge (80 cols)
+      BCS   @copy
+      LDA   (srl_winL),Y               ; row cell at $A200 + base + Y
+      CMP   #$20
+      BEQ   @scan_next                 ; space: does not extend the trimmed length
+      INY
+      STY   srl_trim                   ; non-space -> trimmed length = Y+1
+      DEY
+@scan_next:
+      INY
+      BRA   @scan
+
+      ; Pass 2: copy exactly srl_trim bytes (the trimmed line) into the buffer.
+@copy:
+      LDY   #$00
+@copy_loop:
+      CPY   srl_trim
+      BCS   @done_copy
+      LDA   (srl_winL),Y
+      STA   (srl_dstL),Y
+      INY
+      BRA   @copy_loop
+
+@done_copy:
+      LDA   srl_trim                   ; trailing spaces already trimmed off
+      STA   LIB_RESULT+0
+      STZ   LIB_RESULT+1               ; reserved exit reason = 0 (ENTER)
       STZ   LIB_RESULT+2
       STZ   LIB_RESULT+3
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
 
+; screen_row_base — A = screen row (0..49) -> srl_winL/H = VGC_SCREENWIN + row*80.
+; 16-bit math: row*80 = (row<<6) + (row<<4). Reused by the read/echo/backspace/
+; scroll paths in later chunks (it always yields the $A200 cell-0 address of a row).
+screen_row_base:
+      STA   srb_row                    ; save row
+      ; row<<6 (16-bit) -> srl_winL/H
+      STZ   srl_winH
+      ASL   A                          ; <<1
+      ROL   srl_winH
+      ASL   A                          ; <<2
+      ROL   srl_winH
+      ASL   A                          ; <<3
+      ROL   srl_winH
+      ASL   A                          ; <<4
+      ROL   srl_winH
+      ASL   A                          ; <<5
+      ROL   srl_winH
+      ASL   A                          ; <<6
+      ROL   srl_winH
+      STA   srl_winL                   ; srl_winL/H = row*64
+      ; + row<<4 (16-bit) in srb_t L/H
+      LDA   srb_row
+      STZ   srb_tH
+      ASL   A
+      ROL   srb_tH
+      ASL   A
+      ROL   srb_tH
+      ASL   A
+      ROL   srb_tH
+      ASL   A
+      ROL   srb_tH                     ; srb_tL(=A)/srb_tH = row*16
+      CLC
+      ADC   srl_winL
+      STA   srl_winL
+      LDA   srb_tH
+      ADC   srl_winH
+      STA   srl_winH                   ; srl_winL/H = row*80
+      ; + VGC_SCREENWIN base ($A200)
+      LDA   srl_winL
+      CLC
+      ADC   #<VGC_SCREENWIN
+      STA   srl_winL
+      LDA   srl_winH
+      ADC   #>VGC_SCREENWIN
+      STA   srl_winH
+      RTS
+
       .segment "BSS"
+srl_maxlen:       .res 1               ; destination buffer capacity (ARG0 b2)
+srl_trim:         .res 1               ; trimmed line length (last non-space col + 1)
+srb_row:          .res 1               ; screen_row_base: saved row
+srb_tH:           .res 1               ; screen_row_base: row<<4 high byte
 se_saved_mode:    .res 1
 se_saved_palette: .res 1
 se_saved_bgcol:   .res 1
