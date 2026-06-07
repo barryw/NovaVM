@@ -946,6 +946,16 @@ sys_screen_readline:
       BRA   @copy_loop
 
 @done_copy:
+      ; --- advance to the start of the next line, REUSING the VGC's own CR/LF +
+      ; scroll. Emit $0D ($A00E -> col 0) then $0A (advance row; at the bottom row
+      ; the VGC ScrollUps exactly as BASIC's output does, so the editor and BASIC
+      ; agree on scrolling). HandleCharOut reads CURSX/CURSY straight from the
+      ; cursor regs we keep live, so no extra re-sync is needed. ---
+      LDA   #$0D
+      STA   VGC_CHAROUT                ; carriage return -> CURSX = 0
+      LDA   #$0A
+      STA   VGC_CHAROUT                ; line feed -> CURSY++ / scroll at the bottom
+
       LDA   srl_trim                   ; trailing spaces already trimmed off
       STA   LIB_RESULT+0
       STZ   LIB_RESULT+1               ; reserved exit reason = 0 (ENTER)

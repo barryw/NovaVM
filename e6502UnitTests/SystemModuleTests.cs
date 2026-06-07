@@ -223,7 +223,9 @@ public class SystemModuleTests
 
     /// <summary>
     /// Task 4 — arrows move the cursor and clamp at the screen edges. From (5,5):
-    /// Up,Up,Left,Right,Down -> (5,4). From a corner, Up/Left stay put.
+    /// Up,Up,Left,Right,Down -> (5,4). The arrow-driven cursor position is verified
+    /// by typing a marker char and asserting the cell it lands in (ENTER's CR/LF
+    /// advance, added in Task 6, would otherwise mask the post-arrow cursor regs).
     /// </summary>
     [TestMethod]
     public void ScreenReadline_ArrowsMoveCursorClamped()
@@ -233,6 +235,7 @@ public class SystemModuleTests
         bus.Vgc.SetScreenEditor(editor);
 
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        for (int r = 0; r < ScreenRows; r++) BlankScreenWindowRow(bus, r);
         bus.Write(VGC_CURSX, 5);
         bus.Write(VGC_CURSY, 5);
 
@@ -240,18 +243,22 @@ public class SystemModuleTests
         SetArg(bus, ARG0, buf | (0x7F << 16));
 
         // 30=Up, 28=Left, 29=Right, 31=Down. (5,5)->Up(5,4)->Up(5,3)->Left(4,3)
-        // ->Right(5,3)->Down(5,4).
+        // ->Right(5,3)->Down(5,4). A typed 'X' must land at cell (5,4).
         QueueKeys(editor, 30, 30, 28, 29, 31);
+        editor.QueueInput((byte)'X');
         editor.QueueInput(0x0D);
 
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        Assert.AreEqual(5, bus.Read(VGC_CURSX), "final cursor X after arrow moves");
-        Assert.AreEqual(4, bus.Read(VGC_CURSY), "final cursor Y after arrow moves");
+        Assert.AreEqual("X", ReadScreenWindowRow(bus, 4, 5, 1),
+            "arrows must land the cursor at (5,4): the marker char proves it");
+        Assert.AreEqual(" ", ReadScreenWindowRow(bus, 5, 5, 1),
+            "the starting cell (5,5) must be untouched");
     }
 
     /// <summary>
-    /// Task 4 — clamp at the top-left corner: Up and Left from (0,0) stay at (0,0).
+    /// Task 4 — clamp at the top-left corner: Up and Left from (0,0) stay at (0,0),
+    /// proven by a typed marker landing at cell (0,0).
     /// </summary>
     [TestMethod]
     public void ScreenReadline_ArrowsClampAtTopLeft()
@@ -261,19 +268,22 @@ public class SystemModuleTests
         bus.Vgc.SetScreenEditor(editor);
 
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        BlankScreenWindowRow(bus, 0);
+        BlankScreenWindowRow(bus, 1);
         bus.Write(VGC_CURSX, 0);
         bus.Write(VGC_CURSY, 0);
 
         const ushort buf = 0x0275;
         SetArg(bus, ARG0, buf | (0x7F << 16));
 
-        QueueKeys(editor, 30, 28);   // Up, Left -- both clamp
+        QueueKeys(editor, 30, 28);   // Up, Left -- both clamp at the corner
+        editor.QueueInput((byte)'X');
         editor.QueueInput(0x0D);
 
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        Assert.AreEqual(0, bus.Read(VGC_CURSX), "Left clamps at column 0");
-        Assert.AreEqual(0, bus.Read(VGC_CURSY), "Up clamps at row 0");
+        Assert.AreEqual("X", ReadScreenWindowRow(bus, 0, 0, 1),
+            "Up/Left clamp at (0,0): the marker char proves it");
     }
 
     /// <summary>
@@ -313,6 +323,77 @@ public class SystemModuleTests
         var got = new char[5];
         for (int i = 0; i < 5; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
         Assert.AreEqual("PRINT", new string(got), "buffer must hold PRINT");
+    }
+
+    /// <summary>
+    /// Task 6 — after ENTER on a row above the bottom, the cursor advances to
+    /// column 0 of the next row (via the VGC's own CR/LF, the same path BASIC's
+    /// output uses).
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_EnterAdvancesToNextLine()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        const int row = 10;
+        BlankScreenWindowRow(bus, row);
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)row);
+
+        const ushort buf = 0x0275;
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        QueueText(editor, "AB");
+        editor.QueueInput(0x0D);
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        Assert.AreEqual(0, bus.Read(VGC_CURSX), "cursor returns to column 0 after ENTER");
+        Assert.AreEqual(row + 1, bus.Read(VGC_CURSY), "cursor advances to the next row after ENTER");
+    }
+
+    /// <summary>
+    /// Task 6 — ENTER on the bottom row scrolls the screen up one row through the
+    /// VGC's own ScrollUp (the same mechanism BASIC's output uses), leaving the
+    /// cursor at (0, last row) and the prior content shifted up by one physical row.
+    /// </summary>
+    [TestMethod]
+    public void ScreenReadline_ScrollsAtBottom()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
+        int last = ScreenRows - 1;           // physical bottom row = 49
+        BlankScreenWindowRow(bus, last - 1); // row 48
+        BlankScreenWindowRow(bus, last);     // row 49
+        WriteScreenWindowRow(bus, last - 1, 0, "LINE48");
+        WriteScreenWindowRow(bus, last, 0, "LINE49");
+
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)last);    // cursor on the bottom row
+
+        const ushort buf = 0x0275;
+        SetArg(bus, ARG0, buf | (0x7F << 16));
+
+        editor.QueueInput(0x0D);             // submit row 49
+
+        RunFn(bus, SYS_SCREEN_READLINE);
+
+        // The submitted row was read correctly.
+        Assert.AreEqual("LINE49", ReadScreenWindowRow(bus, last - 1, 0, 6),
+            "after scroll, the submitted bottom row is now one row up (48)");
+        Assert.AreEqual("LINE48", ReadScreenWindowRow(bus, last - 2, 0, 6),
+            "after scroll, the prior row 48 content moved up to row 47");
+        Assert.AreEqual("      ", ReadScreenWindowRow(bus, last, 0, 6),
+            "the newly exposed bottom row is cleared to spaces");
+        // Cursor stays at the bottom row, column 0.
+        Assert.AreEqual(0, bus.Read(VGC_CURSX), "cursor at column 0 after scroll");
+        Assert.AreEqual(last, bus.Read(VGC_CURSY), "cursor stays on the bottom row after scroll");
     }
 
     private static string RepoPath(params string[] parts)
