@@ -27,19 +27,15 @@ public static partial class BrowserInput
         {
             case "ArrowLeft":
                 _editor.QueueInput(28);
-                _editor.CursorLeft();
                 return true;
             case "ArrowRight":
                 _editor.QueueInput(29);
-                _editor.CursorRight();
                 return true;
             case "ArrowUp":
                 _editor.QueueInput(30);
-                _editor.CursorUp();
                 return true;
             case "ArrowDown":
                 _editor.QueueInput(31);
-                _editor.CursorDown();
                 return true;
             case "Enter":
                 _quoteMode = false;
