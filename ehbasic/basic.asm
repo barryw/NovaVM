@@ -66,6 +66,7 @@ Itemph            = Itempl+1  ; temporary integer high byte
       .include "libnet.inc"       ; MODULE_ID_NET + NET_* ids
       .include "libfiles.inc"     ; MODULE_ID_FILES + FILE_* ids
       .include "copper.inc"       ; COPPER_REG_* register indices for LAB_COPPER
+      .include "input.inc"        ; BOARD_BUTTONS/SWITCHES + JOY_*/SW_* masks (board input NDK)
       .include "fio.inc"          ; FIO_ARG_* (zp) pseudo-regs + FIO_NAME_LIMIT /
                                   ; FIO_RESULT_* equates for the inline name helpers
 
@@ -568,6 +569,8 @@ XTK_VPOKE          = $6F              ; VPOKE plane,addr,value — write VGC mem
 XTK_VPEEK          = $70              ; VPEEK(plane,addr) — read VGC memory
 XTK_FIOCLR         = $71              ; FIOCLR — clear FIO error/status latch
 XTK_ADDR           = $72              ; ADDR("label") — runtime label address
+XTK_JOY            = $73              ; JOY — board button bitmask (direct MMIO reporter)
+XTK_SW             = $74              ; SW  — board DIP-switch nibble (direct MMIO reporter)
 XTK_DIROPEN        = $2B              ; DIROPEN "pattern"
 XTK_DIRNEXT        = $2C              ; DIRNEXT — numeric function
 XTK_DIRNAM         = $2D              ; DIRNAM$ — string function
@@ -2098,6 +2101,8 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_VPEEK      ($70) — function only
       .word LAB_FIOCLR-1      ; XTK_FIOCLR     ($71)
       .word LAB_15D9-1        ; XTK_ADDR       ($72) — function only
+      .word LAB_15D9-1        ; XTK_JOY        ($73) — function only
+      .word LAB_15D9-1        ; XTK_SW         ($74) — function only
 
 ; CTRL-C check jump. this is called as a subroutine but exits back via a jump if a
 ; key press is detected.
@@ -3815,6 +3820,7 @@ LAB_1BEE
       .byte XTK_MDOTS16L, XTK_MDOTS16H
       .byte XTK_MCROSSL, XTK_MCROSSH
       .byte XTK_VPEEK, XTK_ADDR
+      .byte XTK_JOY, XTK_SW
 @FUNC_TBL_SZ = * - @func_ids
 @func_addrs
       .word @xtk_playing-1, @xtk_mnote-1, @xtk_xpeek-1
@@ -3829,6 +3835,24 @@ LAB_1BEE
       .word @xtk_mdots16l-1, @xtk_mdots16h-1
       .word @xtk_mcrossl-1, @xtk_mcrossh-1
       .word @xtk_vpeek-1, @xtk_addr-1
+      .word @xtk_joy-1, @xtk_sw-1
+
+; JOY — board joystick/button bitmask ($BA9C, PWR bit masked off). Bare reporter
+; (no parens), direct MMIO — the hot-path input read. See input.inc / @xtk_playing.
+@xtk_joy
+      JSR   LAB_IGBY          ; consume extension token id
+      LDA   BOARD_BUTTONS     ; $BA9C joystick + fire buttons
+      AND   #JOY_MASK         ; drop PWR bit0
+      TAY
+      JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
+
+; SW — board DIP-switch nibble ($BA9D). Bare reporter, direct MMIO.
+@xtk_sw
+      JSR   LAB_IGBY          ; consume extension token id
+      LDA   BOARD_SWITCHES    ; $BA9D DIP switches
+      AND   #SW_MASK          ; low nibble
+      TAY
+      JMP   @ret_0ay          ; return AY (A=0, Y=byte) as FAC1
 
 @xtk_xpeek
       LDA   #EXT_CMD_XPEEK
@@ -8847,7 +8871,7 @@ LAB_PI
 ; shared keyword string table for extended tokens
 ; used by cruncher, LIST decoder; indexed by (token_id - 1)
 
-XTK_COUNT = 114
+XTK_COUNT = 116
 
 TAB_XTKSTR
       .word @s_dir, @s_del, @s_xmem, @s_xbank, @s_xpoke
@@ -8892,6 +8916,7 @@ TAB_XTKSTR
       .endrepeat
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
       .word @s_vpoke, @s_vpeek, @s_fioclr, @s_addr
+      .word @s_joy, @s_sw
 
 @s_dir:    .byte "DIR",0
 @s_del:    .byte "DEL",0
@@ -8976,6 +9001,8 @@ TAB_XTKSTR
 @s_vpeek:   .byte "VPEEK(",0
 @s_fioclr:  .byte "FIOCLR",0
 @s_addr:    .byte "ADDR(",0
+@s_joy:     .byte "JOY",0
+@s_sw:      .byte "SW",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up

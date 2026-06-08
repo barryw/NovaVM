@@ -1648,6 +1648,52 @@ public class BasicRegressionTests
         return SnapshotScreen(bus.Vgc);
     }
 
+    [TestMethod]
+    public void BasicJoy_ReadsBoardButtonMask()
+    {
+        // JOY is a bare reporter that reads the board button register ($BA9C)
+        // masked to directions+fires (drops the PWR bit). UP|FIRE1 = 0x08|0x02.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        bus.BoardButtonState = (byte)(VgcConstants.BoardButtonUp | VgcConstants.BoardButtonFire1);
+
+        QueueLine(editor, "PRINT \"JV\";JOY");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("JV 10", StringComparison.Ordinal),
+            $"PRINT JOY should output 10 (UP|FIRE1 = 8|2).\n{screen}");
+    }
+
+    [TestMethod]
+    public void BasicSw_ReadsBoardSwitchNibble()
+    {
+        // SW is a bare reporter that reads the DIP-switch register ($BA9D)
+        // masked to the low nibble. SW1|SW3 = 0x01|0x04 = 5.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        bus.BoardSwitchState = (byte)(VgcConstants.BoardSwitch1 | VgcConstants.BoardSwitch3);
+
+        QueueLine(editor, "PRINT \"SV\";SW");
+        RunUntilEditorIdle(cpu, bus, editor, 40_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("SV 5", StringComparison.Ordinal),
+            $"PRINT SW should output 5 (SW1|SW3 = 1|4).\n{screen}");
+    }
+
     private static void EnterProgramLines(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string[] lines)
     {
         foreach (string line in lines)
