@@ -1131,8 +1131,16 @@ module vgc (
 
     wire vram_data_read = read_active && vram_reg_sel && vram_reg_off == VR_DATA;
     // A direct-window read reuses the VRAM read latch pipeline: same plane BRAM,
-    // same 2-stage capture, but the space/addr come from the window decode and a
-    // single CPU read returns the byte (no VDC-style two-read handshake).
+    // same multi-stage capture (cpu_raddr -> vram_port_read_active ->
+    // vram_cpu_read_pending -> vram_cpu_read_latch), and the space/addr come from
+    // the window decode. IMPORTANT: this port has the SAME read latency as VDATA —
+    // the byte is valid ~3 pixel cycles after the address, NOT within a single CPU
+    // read cycle. A 6502 LDA latches the bus ~2 cycles after presenting the
+    // address, so a single LDA returns the PREVIOUS window cell (off-by-one).
+    // CPU-side readers (the SYSTEM module line editor) MUST settle/double-read each
+    // cell — see srl_read_cell in modules/system/system.s. (An earlier version of
+    // this comment wrongly claimed a single read returns the byte; that assumption
+    // garbled BASIC's line input on hardware while the zero-latency emulator hid it.)
     wire screen_win_read = read_active && screen_win_sel;
     wire vram_char_read = vram_port_read_active && vram_port_read_space == SPACE_CHAR   && vram_port_read_addr < TEXT_SIZE;
     wire vram_color_read= vram_port_read_active && vram_port_read_space == SPACE_COLOR  && vram_port_read_addr < TEXT_SIZE;

@@ -947,7 +947,7 @@ sys_screen_readline:
       DEC   A                          ; A = row above the current start row
       JSR   screen_row_base            ; srl_winL/H = base of the row above
       LDY   #(NOVA_SCREEN_COLS-1)      ; col 79 of that row
-      LDA   (srl_winL),Y
+      JSR   srl_read_cell              ; latency-settled $A200 read (off-by-one on HW otherwise)
       CMP   #$20
       BEQ   @start_found               ; row above NOT full -> start row is correct
       DEC   srl_startrow               ; row above wrapped into us -> climb higher
@@ -977,7 +977,7 @@ sys_screen_readline:
       BCS   @rows_done                 ; destination buffer full -> stop entirely
       CPY   #NOVA_SCREEN_COLS
       BCS   @row_end                   ; consumed all 80 columns of this row
-      LDA   (srl_winL),Y               ; row cell
+      JSR   srl_read_cell              ; row cell (latency-settled $A200 read)
       CMP   #$20
       BNE   @emit_char                 ; non-space -> flush pending blanks, then write
       INC   srl_pend                   ; space -> defer it (might be trailing)
@@ -1019,7 +1019,7 @@ sys_screen_readline:
       ; Note: a full row's col-79 char is non-space, so it was already written and
       ; srl_pend is 0 here; deferred spaces only ever exist on the final row.
       LDY   #(NOVA_SCREEN_COLS-1)
-      LDA   (srl_winL),Y               ; col 79 of the row just copied
+      JSR   srl_read_cell              ; col 79 of the row just copied (latency-settled read)
       CMP   #$20
       BEQ   @rows_done                 ; not full -> end of the logical line
       LDA   srl_cur
@@ -1099,6 +1099,24 @@ screen_row_base:
       CLC
       ADC   #>VGC_SCREENWIN
       STA   srl_winH
+      RTS
+
+; srl_read_cell — read ONE cell through the $A200 screen window, accounting for
+; the plane-BRAM read latency. On the FPGA the window read is a latency-pipelined
+; port (the address propagates address-reg -> port read -> latch over ~3 pixel
+; cycles, exactly like the VDATA port), so a single LDA (srl_winL),Y latches the
+; data for the PREVIOUSLY-read window cell, not this one. Read sequentially that
+; shifts the whole line right by one with a stale leading byte -> garbled input
+; (intermittent Syntax Error when the stale byte isn't a space). A priming read
+; presents this cell's address into the pipeline; the second read, issued many
+; CPU cycles later, returns this cell. The emulator's window is zero-latency, so
+; the prime read just returns the same byte there (idempotent) and the existing
+; SystemModuleTests stay green.
+;   In:  Y = column, srl_winL/H = row base ($A200 + row*80).
+;   Out: A = the cell. X and Y are preserved.
+srl_read_cell:
+      LDA   (srl_winL),Y               ; prime: present the address to the read pipeline
+      LDA   (srl_winL),Y               ; settled: returns THIS cell on HW
       RTS
 
 ; srl_dst_adv — advance the multi-row read destination: bump the 16-bit dest

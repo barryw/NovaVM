@@ -33,6 +33,84 @@ module test_vgc_screen_window;
         data = cpu_rdata;
     endtask
 
+    // Model a 6502 loop read of the window: present the address for the CPU's
+    // active read cycle, then SAMPLE EARLY — with only the register-read settle
+    // the CPU gives — so the multi-stage plane-BRAM pipeline has NOT delivered
+    // this cell yet. The trailing cycles model the editor loop's per-cell overhead
+    // (CMP/INY/branch/next-LDA fetch), during which the pipeline settles to THIS
+    // address before the next read. Result: sequential reads are off by one — each
+    // returns the PREVIOUSLY addressed cell, exactly the HW garbling that corrupted
+    // BASIC line input (Ibuffs held " 1234567" for a typed "1234567").
+    task automatic cpu_loop_read(input int off, output logic [7:0] data);
+        @(posedge clk);
+        cpu_addr <= win_addr(off);
+        cpu_we   <= 0;
+        cpu_re   <= 1;
+        cpu_ce   <= 1;
+        @(posedge clk);
+        cpu_re   <= 0;
+        cpu_ce   <= 0;
+        @(posedge clk);
+        data = cpu_rdata;          // CPU latches here — too early for the window pipeline
+        repeat(6) @(posedge clk);  // editor per-cell overhead: pipeline settles to this addr
+    endtask
+
+    // The srl_read_cell fix (modules/system/system.s): a priming read presents the
+    // address; the second read — issued after the loop overhead — returns it.
+    task automatic cpu_loop_read2(input int off, output logic [7:0] data);
+        logic [7:0] junk;
+        cpu_loop_read(off, junk);  // prime: pushes this address into the read pipeline
+        cpu_loop_read(off, data);  // settled: returns THIS cell
+    endtask
+
+    // HAZARD: a single CPU-timed read per cell returns the previous cell.
+    task automatic test_window_read_offbyone_hazard();
+        logic [7:0] v0, v1, v2, v3, v4;
+        int base;
+        do_reset();
+        bus_write(WIN_PLANE, 8'd0);            // char plane
+        base = 20 * COLS_TB;                    // row 20, cols 0..4
+        bus_write(win_addr(base + 0), 8'h41);   // 'A'
+        bus_write(win_addr(base + 1), 8'h42);   // 'B'
+        bus_write(win_addr(base + 2), 8'h43);   // 'C'
+        bus_write(win_addr(base + 3), 8'h44);   // 'D'
+        bus_write(win_addr(base + 4), 8'h45);   // 'E'
+        cpu_loop_read(base + 0, v0);            // seed (indeterminate — not asserted)
+        cpu_loop_read(base + 1, v1);
+        cpu_loop_read(base + 2, v2);
+        cpu_loop_read(base + 3, v3);
+        cpu_loop_read(base + 4, v4);
+        // Off-by-one: the read at col i returns col (i-1)'s byte.
+        check_eq("single read col1 returns col0 ('A') — off-by-one", v1, 8'h41);
+        check_eq("single read col2 returns col1 ('B') — off-by-one", v2, 8'h42);
+        check_eq("single read col3 returns col2 ('C') — off-by-one", v3, 8'h43);
+        check_eq("single read col4 returns col3 ('D') — off-by-one", v4, 8'h44);
+    endtask
+
+    // FIX: srl_read_cell's double read returns each cell correctly.
+    task automatic test_window_read_double_read_fix();
+        logic [7:0] v0, v1, v2, v3, v4;
+        int base;
+        do_reset();
+        bus_write(WIN_PLANE, 8'd0);
+        base = 30 * COLS_TB;
+        bus_write(win_addr(base + 0), 8'h50);   // 'P'
+        bus_write(win_addr(base + 1), 8'h51);   // 'Q'
+        bus_write(win_addr(base + 2), 8'h52);   // 'R'
+        bus_write(win_addr(base + 3), 8'h53);   // 'S'
+        bus_write(win_addr(base + 4), 8'h54);   // 'T'
+        cpu_loop_read2(base + 0, v0);
+        cpu_loop_read2(base + 1, v1);
+        cpu_loop_read2(base + 2, v2);
+        cpu_loop_read2(base + 3, v3);
+        cpu_loop_read2(base + 4, v4);
+        check_eq("double read col0 == 'P'", v0, 8'h50);
+        check_eq("double read col1 == 'Q'", v1, 8'h51);
+        check_eq("double read col2 == 'R'", v2, 8'h52);
+        check_eq("double read col3 == 'S'", v3, 8'h53);
+        check_eq("double read col4 == 'T'", v4, 8'h54);
+    endtask
+
     task automatic test_char_write();
         int off;
         do_reset();
@@ -90,6 +168,8 @@ module test_vgc_screen_window;
         test_last_cell();
         test_plane_select_readback();
         test_window_read_roundtrip();
+        test_window_read_offbyone_hazard();
+        test_window_read_double_read_fix();
         summary();
         $finish;
     end
