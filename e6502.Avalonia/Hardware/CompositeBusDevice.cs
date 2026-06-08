@@ -103,7 +103,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         bool enableSound = false,
         int cpuHz = VgcConstants.DefaultCpuHz,
         int frameRateHz = VgcConstants.FrameRateHz,
-        ActiveRom bootRom = ActiveRom.Basic)
+        ActiveRom bootRom = ActiveRom.Basic,
+        string? saveDir = null)
     {
         _cpuHz = cpuHz > 0 ? cpuHz : VgcConstants.DefaultCpuHz;
         _frameRateHz = frameRateHz > 0 ? frameRateHz : VgcConstants.FrameRateHz;
@@ -149,7 +150,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _fio = new FileIoController(
             addr => _ram[addr],
             (addr, data) => _ram[addr] = data,
-            saveDir: null,
+            saveDir: saveDir,
             vgcRead: (space, offset) => _vgc.TryReadMemorySpace(space, offset, out byte value) ? value : (byte)0,
             vgcWrite: (space, offset, value) => _vgc.TryWriteMemorySpace(space, offset, value),
             vgcSpaceLength: space => _vgc.GetMemorySpaceLength(space),
