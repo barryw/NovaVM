@@ -113,7 +113,7 @@ public sealed class EmulatorTcpServer : IDisposable
         return ProcessRequest(json);
     }
 
-    private string ProcessRequest(string json)
+    internal string ProcessRequest(string json)
     {
         try
         {
@@ -136,6 +136,7 @@ public sealed class EmulatorTcpServer : IDisposable
                 "peek" => CmdPeek(req),
                 "peek_block" => CmdPeekBlock(req),
                 "poke" => CmdPoke(req),
+                "board_input" => CmdBoardInput(req),
                 "read_vram" => CmdReadVram(req),
                 "fill_vram" => CmdFillVram(req),
                 "read_graphics" => CmdReadGraphics(),
@@ -540,6 +541,20 @@ public sealed class EmulatorTcpServer : IDisposable
         if (value is null) return Error("Missing 'value'");
 
         _bus.Write((ushort)address.Value, (byte)value.Value);
+        return Ok();
+    }
+
+    // Inject board joystick/switch state ($BA9C/$BA9D are read-only to bus
+    // writes, so set the logical state). Lets nova CLI / MCP / integration
+    // tests drive JOY()/SW() without physical buttons.
+    private string CmdBoardInput(JsonNode req)
+    {
+        int? buttons = req["buttons"]?.GetValue<int>();
+        int? switches = req["switches"]?.GetValue<int>();
+        if (buttons is null && switches is null)
+            return Error("Missing 'buttons' or 'switches'");
+        if (buttons is not null) _bus.BoardButtonState = (byte)buttons.Value;
+        if (switches is not null) _bus.BoardSwitchState = (byte)switches.Value;
         return Ok();
     }
 
