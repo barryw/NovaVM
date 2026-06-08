@@ -20,6 +20,7 @@ public class EmulatorCanvas : Control
     private readonly VirtualGraphicsController _vgc;
     private readonly BitmapFont _font;
     private readonly ScreenEditor _editor;
+    private readonly CompositeBusDevice? _boardInput;   // null in headless/test contexts
     private readonly object _renderLock = new();
     private bool _cursorVisible = true;
     private readonly byte[] _lineBehind = new byte[VgcConstants.SpritePlaneWidth];
@@ -35,11 +36,13 @@ public class EmulatorCanvas : Control
     public void AddEditor(ScreenTextEditor editor) => _editors.Add(editor);
 
 
-    public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor)
+    public EmulatorCanvas(VirtualGraphicsController vgc, BitmapFont font, ScreenEditor editor,
+        CompositeBusDevice? boardInput = null)
     {
         _vgc = vgc;
         _font = font;
         _editor = editor;
+        _boardInput = boardInput;
         Focusable = true;
         _framebuffer = new WriteableBitmap(
             new PixelSize(NativeWidth, NativeHeight),
@@ -86,6 +89,12 @@ public class EmulatorCanvas : Control
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Mirror joystick/fire keys into the board-input register ($BA9C) for
+        // JOY(). Additive — never consumes the event, so arrows still move the
+        // editor cursor and Z/X still type. KeyUp clears the bit.
+        if (_boardInput != null && BoardInputKeyMap.TryMap(e.Key, out byte downBit))
+            _boardInput.BoardButtonState |= downBit;
+
         // Route to the first active editor that is not in Running mode
         var activeEditor = _editors.FirstOrDefault(ed => ed.IsActive && ed.Mode != EditorMode.Running);
         if (activeEditor != null)
@@ -188,6 +197,14 @@ public class EmulatorCanvas : Control
                 break;
         }
         base.OnKeyDown(e);
+    }
+
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        // Release the mirrored joystick/fire bit (see OnKeyDown). Additive.
+        if (_boardInput != null && BoardInputKeyMap.TryMap(e.Key, out byte upBit))
+            _boardInput.BoardButtonState &= (byte)~upBit;
+        base.OnKeyUp(e);
     }
 
     protected override void OnTextInput(TextInputEventArgs e)

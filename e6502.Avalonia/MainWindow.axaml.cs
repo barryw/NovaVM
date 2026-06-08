@@ -107,7 +107,7 @@ public partial class MainWindow : Window
             font.SetKeymap(2, FontKeymap.PetsciiLower);
 
         _bus.Vgc.SetFont(font);
-        _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor);
+        _canvas = new EmulatorCanvas(_bus.Vgc, font, _editor, _bus);
         Content = _canvas;
 
         // Debugger service
