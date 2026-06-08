@@ -1956,6 +1956,7 @@ static int DoRuntime(string[] args, string? host)
         "add"          => DoRuntimeAdd(args[1..], host),
         "remove" or "rm" => DoRuntimeRemove(args[1..], host),
         "deploy"       => DoRuntimeDeploy(args[1..], host),
+        "boot-floppy" or "bootfloppy" => DoRuntimeBootFloppy(args[1..], host),
         _              => UnknownRuntimeCommand(args[0]),
     };
 }
@@ -2257,6 +2258,35 @@ static void PrintRuntimeUsage()
     Console.Error.WriteLine("  nova runtime add <name> --rom <sd-path> [--ext <sd-path>] --remote <host>");
     Console.Error.WriteLine("  nova runtime remove <name> --remote <host>");
     Console.Error.WriteLine("  nova runtime deploy <name> --rom <local-file> [--ext <local-file>] --remote <host>");
+    Console.Error.WriteLine("  nova runtime boot-floppy <name> [remote-path] --remote <host>");
+}
+
+// Create a boot floppy: write an AUTOBOOT.bin launcher that swaps BASIC for the
+// named /roms runtime and cold-boots it. Defaults the remote path to AUTOBOOT.bin.
+static int DoRuntimeBootFloppy(string[] args, string? host)
+{
+    var rest = args.ToList();
+    if (host is null || rest.Count < 1)
+    {
+        Console.Error.WriteLine("Usage: nova --remote=<host> runtime boot-floppy <runtime-name> [remote-path]");
+        return 1;
+    }
+
+    string runtime = rest[0];
+    string remote = (rest.Count > 1) ? NormalizeSdRelativePath(rest[1]) : "AUTOBOOT.bin";
+
+    byte[] bytes;
+    try { bytes = RuntimeLauncher.Build(runtime); }
+    catch (ArgumentException ex) { Console.Error.WriteLine(ex.Message); return 1; }
+
+    string tmp = Path.Combine(Path.GetTempPath(), "nova-autoboot-" + Guid.NewGuid().ToString("N") + ".bin");
+    try
+    {
+        File.WriteAllBytes(tmp, bytes);
+        Console.WriteLine($"boot floppy: AUTOBOOT launches runtime '{runtime}' ({bytes.Length} bytes) -> {remote}");
+        return PutFile(tmp, remote, host);
+    }
+    finally { try { File.Delete(tmp); } catch { /* best effort */ } }
 }
 
 static int DoLs(string[] args, string? host)
