@@ -156,7 +156,9 @@ public class FileIoControllerTests
             byte[] runtime = new byte[VgcConstants.RomSize];
             runtime[0] = 0xA9;
             runtime[^1] = 0x42;
-            File.WriteAllBytes(Path.Combine(dir, "runtime.bin"), runtime);
+            // Runtimes resolve from <saveDir>/roms/ (mirrors NovaHost SD /roms/).
+            Directory.CreateDirectory(Path.Combine(dir, "roms"));
+            File.WriteAllBytes(Path.Combine(dir, "roms", "runtime.bin"), runtime);
 
             byte[]? loaded = null;
             var memory = new byte[65536];
@@ -1296,5 +1298,36 @@ public class FileIoControllerTests
             Assert.IsTrue(dur > 0, $"Duration should be > 0, got {dur}");
         }
         finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void LoadRuntime_ResolvesFromRomsSubdir()
+    {
+        // Runtimes live in <saveDir>/roms/ (mirrors NovaHost's SD /roms/), so the
+        // autoboot launcher can name a runtime by its bare name.
+        string tmp = Path.Combine(Path.GetTempPath(), "novaroms_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(tmp, "roms"));
+        try
+        {
+            var rom = new byte[16384];
+            rom[0] = 0xA9;
+            File.WriteAllBytes(Path.Combine(tmp, "roms", "STUB.bin"), rom);
+
+            byte[]? loaded = null;
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                tmp,
+                loadRuntimeRom: data => loaded = data);
+
+            SetFilename(fio, "STUB");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoadRuntime);
+
+            Assert.IsNotNull(loaded, "runtime should load from <saveDir>/roms/STUB.bin");
+            Assert.AreEqual(16384, loaded!.Length);
+            Assert.AreEqual(0xA9, loaded[0]);
+        }
+        finally { Directory.Delete(tmp, true); }
     }
 }

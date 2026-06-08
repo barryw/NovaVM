@@ -553,12 +553,16 @@ public sealed partial class FileIoController
                 return;
             }
 
-            byte[]? data = LoadDataFile(filename, ".bin", out bool notFound);
-            if (data is null)
+            // Runtimes live in <saveDir>/roms/ (mirrors NovaHost's SD /roms/), so the
+            // autoboot launcher names a runtime by its bare name.
+            var (baseName, extension) = SplitDataFilename(filename, ".bin");
+            string romPath = Path.Combine(_saveDir, "roms", baseName + extension);
+            if (!File.Exists(romPath))
             {
-                SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+                SetError(VgcConstants.FioErrNotFound);
                 return;
             }
+            byte[] data = File.ReadAllBytes(romPath);
             if (data.Length != VgcConstants.RomSize)
             {
                 SetError(VgcConstants.FioErrIo);
