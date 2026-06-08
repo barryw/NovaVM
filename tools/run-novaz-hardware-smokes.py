@@ -17,7 +17,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
-from novahost_client import DEFAULT_HOST, NovaHostClient, NovaHostError  # noqa: E402
+from novahost_client import (  # noqa: E402
+    DEFAULT_HOST,
+    NovaHostClient,
+    NovaHostError,
+    cli_drive_mount,
+    cli_drive_unmount,
+    cli_reboot,
+    cli_upload,
+    cli_wait_for_health,
+)
 
 
 SCREEN_COLS = 80
@@ -440,46 +449,27 @@ def find_text(screen: str, text: str) -> tuple[int, int] | None:
     return None
 
 
-def http_request(host: str, method: str, path: str, data: bytes | None = None,
-                 content_type: str = "application/octet-stream",
-                 timeout: float = 60.0) -> bytes:
-    url = f"http://{host}{path}"
-    headers = {}
-    if data is not None:
-        headers["Content-Type"] = content_type
-    request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {url} failed: HTTP {exc.code}: {body}") from exc
-
-
+# NovaHost setup (upload/mount/reboot/health) over TCP via the nova CLI; the old
+# HTTP file/drive/device endpoints were removed (NovaHost is TCP-only).
 def put_file(host: str, src: Path, dest: str) -> None:
-    http_request(host, "PUT", f"/sd{dest}", src.read_bytes(), timeout=120.0)
+    cli_upload(host, src, dest)
 
 
 def post_json(host: str, path: str, payload: dict[str, object] | None = None) -> dict[str, object]:
-    data = json.dumps(payload or {}, separators=(",", ":")).encode("utf-8")
-    body = http_request(host, "POST", path, data, content_type="application/json")
-    return json.loads(body.decode("utf-8"))
+    payload = payload or {}
+    if path == "/drives/fd0/unmount":
+        cli_drive_unmount(host, "fd0")
+    elif path == "/drives/fd0/mount":
+        cli_drive_mount(host, "fd0", str(payload["path"]))
+    elif path == "/reboot":
+        cli_reboot(host)
+    else:
+        raise NovaHostError(f"unsupported management path over TCP: {path}")
+    return {"ok": True}
 
 
 def wait_for_health(host: str, timeout: float) -> None:
-    deadline = time.monotonic() + timeout
-    last_error = ""
-    while time.monotonic() < deadline:
-        try:
-            body = http_request(host, "GET", "/health", timeout=2.0)
-            health = json.loads(body.decode("utf-8"))
-            if health.get("ok") and health.get("fpgaBridgeAvailable", True):
-                return
-            last_error = str(health)
-        except Exception as exc:  # noqa: BLE001 - polling should tolerate reboot transport churn.
-            last_error = str(exc)
-        time.sleep(0.5)
-    raise TimeoutError(f"NovaHost health did not recover within {timeout}s: {last_error}")
+    cli_wait_for_health(host, timeout)
 
 
 def build_images(selected: list[HardwareSmoke]) -> None:
@@ -706,9 +696,15 @@ def run_smoke(
         for command in load_commands(smoke):
             if command.text.lower() == ".reboot":
                 print("> .reboot", flush=True)
-                client.cold_start(wait_ready=False)
+                try:
+                    client.cold_start(wait_ready=False)
+                except (NovaHostError, OSError):
+                    # cold_start reloads ROMs and re-autoboots (~seconds); the
+                    # debug-bridge connection is expected to drop mid-reload.
+                    # wait_for_game_prompt reconnects below.
+                    pass
                 client.close()
-                time.sleep(0.5)
+                time.sleep(1.5)
                 screen = wait_for_game_prompt(
                     client,
                     smoke,
@@ -818,7 +814,7 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001 - hardware test runner should continue.
             failed = True
             print(f"=== {smoke.name}: FAILED: {exc}", file=sys.stderr, flush=True)
-            break
+            continue
 
     if not args.leave_mounted:
         try:

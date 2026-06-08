@@ -69,6 +69,8 @@ void DebugServer::loop() {
             if (_client)
                 _client.stop();
             _client = newClient;
+            _client.setNoDelay(true);  // flush replies promptly; pairs with the
+                                       // bounded non-blocking respond() writes.
             _rxBuf = "";
             _asyncOp = ASYNC_NONE;
             logLn("Debug client connected from %s",
@@ -1017,9 +1019,49 @@ void DebugServer::handleAsync() {
 // Response helpers
 // =========================================================================
 
+// Bounded, non-blocking send. A plain blocking _client.println() here can stall
+// the shared g_bridge_task — which also runs fioDispatcher.poll_pending(). If a
+// test client lags or dies mid-response (common on a ~6 KB read_screen reply over
+// WiFi), the stalled write starves the FIO dispatcher; the Nova CPU's in-flight
+// SD op then never completes and the whole board wedges ("storage busy" + the
+// client sees a connection reset). Mirror SdHttpServer::write_all: cap the write
+// to DEBUG_WRITE_TIMEOUT_MS using availableForWrite(), and drop a client that
+// can't keep up so the bridge task keeps servicing the CPU.
+static constexpr uint32_t DEBUG_WRITE_TIMEOUT_MS = 750;
+
+static bool debugWriteAllBounded(WiFiClient& client, const uint8_t* data, size_t len) {
+    size_t off = 0;
+    uint32_t deadline = millis() + DEBUG_WRITE_TIMEOUT_MS;
+    while (off < len && client.connected() && millis() < deadline) {
+        int avail = client.availableForWrite();
+        size_t chunk = len - off;
+        if (avail > 0 && chunk > (size_t)avail)
+            chunk = (size_t)avail;
+        else if (avail <= 0 && chunk > 64)
+            chunk = 64;
+        size_t wrote = client.write(data + off, chunk);
+        if (wrote == 0) {
+            delay(1);
+            continue;
+        }
+        off += wrote;
+        deadline = millis() + DEBUG_WRITE_TIMEOUT_MS;  // reset on forward progress
+    }
+    return off == len;
+}
+
 void DebugServer::respond(const char* json) {
-    if (_client && _client.connected()) {
-        _client.println(json);
+    if (!_client || !_client.connected())
+        return;
+
+    static const uint8_t newline = '\n';
+    bool ok = debugWriteAllBounded(_client, (const uint8_t*)json, strlen(json)) &&
+              debugWriteAllBounded(_client, &newline, 1);
+    if (!ok && _client.connected()) {
+        // The client could not absorb the reply within the timeout (lagging or
+        // half-dead). Drop it now so the shared bridge task stops blocking on a
+        // wedged socket and a fresh connection can take over.
+        _client.stop();
     }
 }
 

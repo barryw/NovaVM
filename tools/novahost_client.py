@@ -9,9 +9,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
+import subprocess
+import tempfile
+import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 
@@ -23,6 +28,118 @@ DEFAULT_TIMEOUT = float(os.environ.get("DEBUG_RESPONSE_TIMEOUT", "15"))
 
 class NovaHostError(RuntimeError):
     """Raised when NovaHost transport or protocol handling fails."""
+
+
+# ---------------------------------------------------------------------------
+# NovaHost management over TCP via the `nova` CLI.
+#
+# NovaHost is TCP-only: the old HTTP file/drive/device endpoints (/sd, /drives,
+# /reboot, /health) were removed. File/drive/device-management operations now go
+# through the `nova` CLI (management TCP), the same path used interactively.
+# These helpers shell out to that binary so the hardware test runners do not
+# depend on the dead HTTP API.
+# ---------------------------------------------------------------------------
+
+_NOVA_CLI_CACHE: str | None = None
+
+
+def find_nova_cli() -> str:
+    """Locate the published `nova` CLI binary (TCP management client)."""
+    global _NOVA_CLI_CACHE
+    if _NOVA_CLI_CACHE:
+        return _NOVA_CLI_CACHE
+    override = os.environ.get("NOVA_CLI")
+    if override and Path(override).is_file():
+        _NOVA_CLI_CACHE = override
+        return override
+    repo = Path(__file__).resolve().parents[1]
+    patterns = (
+        "e6502.Nova/bin/Release/net*/*/native/nova",
+        "e6502.Nova/bin/*/net*/*/native/nova",
+        "e6502.Nova/bin/*/net*/nova",
+    )
+    for pattern in patterns:
+        for cand in sorted(repo.glob(pattern)):
+            if cand.is_file() and os.access(cand, os.X_OK):
+                _NOVA_CLI_CACHE = str(cand)
+                return _NOVA_CLI_CACHE
+    found = shutil.which("nova")
+    if found:
+        _NOVA_CLI_CACHE = found
+        return found
+    raise NovaHostError(
+        "nova CLI binary not found; build it "
+        "(`dotnet publish e6502.Nova -c Release`) or set NOVA_CLI / add `nova` to PATH"
+    )
+
+
+def nova_cli(host: str, *args: str, timeout: float = 180.0, check: bool = True) -> str:
+    """Run the nova CLI against `host` over TCP and return stdout."""
+    cmd = [find_nova_cli(), "--remote", host, *args]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise NovaHostError(f"nova {' '.join(args)} timed out after {timeout}s") from exc
+    if check and proc.returncode != 0:
+        detail = proc.stderr.strip() or proc.stdout.strip() or f"rc={proc.returncode}"
+        raise NovaHostError(f"nova {' '.join(args)} failed: {detail}")
+    return proc.stdout
+
+
+def _sd_path(path: str) -> str:
+    """Normalize an HTTP-era `/sd/...` path to an SD-root-relative nova path."""
+    if path.startswith("/sd/"):
+        path = path[3:]
+    elif path == "/sd":
+        path = "/"
+    if not path.startswith("/"):
+        path = "/" + path
+    return path
+
+
+def cli_upload(host: str, src: str | os.PathLike[str], dest: str, timeout: float = 180.0) -> None:
+    nova_cli(host, "put", str(src), _sd_path(dest), timeout=timeout)
+
+
+def cli_download_bytes(host: str, remote: str, timeout: float = 120.0) -> bytes:
+    with tempfile.TemporaryDirectory() as tmp:
+        local = Path(tmp) / "download.bin"
+        nova_cli(host, "get", _sd_path(remote), str(local), timeout=timeout)
+        return local.read_bytes()
+
+
+def cli_drive_mount(host: str, slot: str, path: str, timeout: float = 60.0) -> None:
+    nova_cli(host, "drive", "mount", slot, _sd_path(path), timeout=timeout)
+
+
+def cli_drive_unmount(host: str, slot: str, timeout: float = 60.0) -> None:
+    # Unmounting an already-empty slot must not fail the run.
+    nova_cli(host, "drive", "unmount", slot, timeout=timeout, check=False)
+
+
+def cli_reboot(host: str, timeout: float = 60.0) -> None:
+    nova_cli(host, "device", "reboot", timeout=timeout, check=False)
+
+
+def cli_health(host: str, timeout: float = 8.0) -> dict[str, Any]:
+    data = json.loads(nova_cli(host, "device", "status", timeout=timeout))
+    health = data.get("health", data)
+    return health if isinstance(health, dict) else data
+
+
+def cli_wait_for_health(host: str, timeout: float) -> None:
+    deadline = time.monotonic() + timeout
+    last = ""
+    while time.monotonic() < deadline:
+        try:
+            health = cli_health(host, timeout=6.0)
+            if health.get("ok") and health.get("fpgaBridgeAvailable", True):
+                return
+            last = str(health)
+        except Exception as exc:  # noqa: BLE001 - polling tolerates reboot churn.
+            last = str(exc)
+        time.sleep(1.0)
+    raise TimeoutError(f"NovaHost health did not recover within {timeout}s: {last}")
 
 
 class NovaHostClient:

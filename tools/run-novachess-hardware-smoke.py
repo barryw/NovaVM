@@ -5,16 +5,29 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from novahost_client import DEFAULT_HOST, NovaHostClient, NovaHostError
+from novahost_client import (
+    DEFAULT_HOST,
+    NovaHostClient,
+    NovaHostError,
+    cli_download_bytes,
+    cli_drive_mount,
+    cli_drive_unmount,
+    cli_health,
+    cli_reboot,
+    cli_upload,
+    cli_wait_for_health,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -46,61 +59,44 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def http_url(host: str, path: str) -> str:
-    return f"http://{host}{path}"
-
-
-def http_request(
-    host: str,
-    method: str,
-    path: str,
-    data: bytes | None = None,
-    content_type: str = "application/octet-stream",
-    timeout: float = 120.0,
-) -> bytes:
-    headers = {}
-    if data is not None:
-        headers["Content-Type"] = content_type
-    request = urllib.request.Request(http_url(host, path), data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"{method} {http_url(host, path)} failed: HTTP {exc.code}: {body}") from exc
-
-
+# NovaHost setup/config over TCP via the nova CLI; the HTTP file/drive/device
+# API was removed (NovaHost is TCP-only).
 def get_json(host: str, path: str, timeout: float = 120.0) -> dict[str, object]:
-    return json.loads(http_request(host, "GET", path, timeout=timeout).decode("utf-8"))
+    if path in ("/health", "/sd-status"):
+        return cli_health(host)
+    return json.loads(cli_download_bytes(host, path, timeout=timeout).decode("utf-8"))
 
 
 def put_json(host: str, path: str, value: dict[str, object]) -> None:
-    data = json.dumps(value, indent=2).encode("utf-8") + b"\n"
-    http_request(host, "PUT", path, data, content_type="application/json")
+    data = json.dumps(value, indent=2) + "\n"
+    fd, tmp_path = tempfile.mkstemp(suffix=".json")
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(data)
+        cli_upload(host, tmp_path, path)
+    finally:
+        os.unlink(tmp_path)
 
 
 def post_json(host: str, path: str, payload: dict[str, object] | None = None) -> dict[str, object]:
-    data = json.dumps(payload or {}, separators=(",", ":")).encode("utf-8")
-    return json.loads(http_request(host, "POST", path, data, content_type="application/json").decode("utf-8"))
+    payload = payload or {}
+    if path == "/drives/fd0/unmount":
+        cli_drive_unmount(host, "fd0")
+    elif path == "/drives/fd0/mount":
+        cli_drive_mount(host, "fd0", str(payload["path"]))
+    elif path == "/reboot":
+        cli_reboot(host)
+    else:
+        raise NovaHostError(f"unsupported management path over TCP: {path}")
+    return {"ok": True}
 
 
 def put_file(host: str, src: Path, dest: str) -> None:
-    http_request(host, "PUT", f"/sd{dest}", src.read_bytes(), timeout=180.0)
+    cli_upload(host, src, dest)
 
 
 def wait_for_health(host: str, timeout: float) -> None:
-    deadline = time.monotonic() + timeout
-    last_error = ""
-    while time.monotonic() < deadline:
-        try:
-            health = get_json(host, "/health", timeout=2.0)
-            if health.get("ok") and health.get("fpgaBridgeAvailable", True):
-                return
-            last_error = str(health)
-        except Exception as exc:  # noqa: BLE001 - polling must tolerate reboot churn.
-            last_error = str(exc)
-        time.sleep(0.5)
-    raise TimeoutError(f"NovaHost health did not recover within {timeout}s: {last_error}")
+    cli_wait_for_health(host, timeout)
 
 
 def build_image(image: Path) -> None:
@@ -162,7 +158,12 @@ def cold_start_to_menu(client: NovaHostClient, timeout: float) -> str:
         client.fill_vram(VGC_PLANE_CHAR, 0, 0x20, SCREEN_COLS * 25)
     except Exception:
         pass
-    client.cold_start(wait_ready=False)
+    try:
+        client.cold_start(wait_ready=False)
+    except (NovaHostError, OSError):
+        # cold_start reloads ROMs and re-autoboots (~seconds); the debug-bridge
+        # connection is expected to drop mid-reload. wait_screen reconnects below.
+        pass
     client.close()
     time.sleep(2.0)
     screen = wait_screen(client, ("SELECT A MODE", "4  NETWORK GAME"), timeout)
