@@ -42,6 +42,7 @@
 #define CAP_POKE_MULTI     0x01
 #define CAP_WTS_EVENT_STREAM 0x02
 #define CAP_KEY_STREAM     0x04
+#define CAP_RX_RESYNC      0x08
 
 #define EVENT_MARKER       0xFE
 
@@ -89,6 +90,7 @@ bool FpgaBridge::beginSpi(SPIClass& spi, uint8_t csPin, uint32_t hz,
     _supportsPokeMulti = false;
     _supportsWtsEventStream = false;
     _supportsKeyStream = false;
+    _supportsRxResync = false;
     pinMode(_spiCsPin, OUTPUT);
     digitalWrite(_spiCsPin, HIGH);
     if (_spiPeerCsPin != 255) {
@@ -152,6 +154,7 @@ bool FpgaBridge::probeCapabilities() {
     _supportsPokeMulti = false;
     _supportsWtsEventStream = false;
     _supportsKeyStream = false;
+    _supportsRxResync = false;
 
     drain();
     writeByte(CMD_BRIDGE_CAPS);
@@ -165,6 +168,7 @@ bool FpgaBridge::probeCapabilities() {
     _supportsPokeMulti = (((uint8_t)caps) & CAP_POKE_MULTI) != 0;
     _supportsWtsEventStream = (((uint8_t)caps) & CAP_WTS_EVENT_STREAM) != 0;
     _supportsKeyStream = (((uint8_t)caps) & CAP_KEY_STREAM) != 0;
+    _supportsRxResync = (((uint8_t)caps) & CAP_RX_RESYNC) != 0;
     return true;
 }
 
@@ -187,6 +191,13 @@ bool FpgaBridge::supportsKeyStream() {
     if (!_capabilitiesKnown)
         probeCapabilities();
     return _supportsKeyStream;
+}
+
+bool FpgaBridge::supportsRxResync() {
+    FPGA_LOCK_OR_RETURN_FALSE();
+    if (!_capabilitiesKnown)
+        probeCapabilities();
+    return _supportsRxResync;
 }
 
 void FpgaBridge::drain() {
@@ -888,7 +899,6 @@ bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
                               const uint8_t* data, uint16_t count) {
     FPGA_LOCK_OR_RETURN_FALSE();
     if (count > 256) return false;
-    drain();
     uint8_t header[5] = {
         CMD_POKE_VGC_BLK,
         (uint8_t)(space & 0x07),
@@ -896,8 +906,20 @@ bool FpgaBridge::pokeVgcBlock(uint8_t space, uint16_t start_addr,
         (uint8_t)(start_addr & 0xFF),
         (uint8_t)(count & 0xFF)            // 256 encodes as 0
     };
-    writeBytes(header, 5, data, (count == 0) ? 256 : count);
-    return recvStatus();
+    // A flaky SPI link can corrupt or truncate a command, desyncing the
+    // bridge's command parser. Retry only when the bitstream advertises the
+    // RX-resync watchdog (CAP_RX_RESYNC): then a failed write is safe to
+    // resend because the bridge re-frames to idle before the next attempt, so
+    // the resend lands on a clean parser. Without that capability a resend
+    // would compound the desync (observed on hardware), so issue it once.
+    int attempts = supportsRxResync() ? VGC_WRITE_ATTEMPTS : 1;
+    for (int a = 0; a < attempts; a++) {
+        drain();
+        writeBytes(header, 5, data, (count == 0) ? 256 : count);
+        if (recvStatus())
+            return true;
+    }
+    return false;
 }
 
 bool FpgaBridge::fillVgcBlock(uint8_t space, uint16_t start_addr, uint8_t value) {

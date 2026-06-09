@@ -451,6 +451,7 @@ module test_debug_bridge;
         wait_tx(b); check_eq8("bridge caps poke_multi bit", b & 8'h01, 8'h01);
         check_eq8("bridge caps wts_event_stream bit", b & 8'h02, 8'h02);
         check_eq8("bridge caps key_stream bit", b & 8'h04, 8'h04);
+        check_eq8("bridge caps rx_resync bit", b & 8'h08, 8'h08);
     endtask
 
     task automatic test_key_stream();

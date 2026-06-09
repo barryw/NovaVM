@@ -17,6 +17,9 @@ class FpgaBridgeCommandGuard;
 #ifndef FPGA_SPI_READ_HZ
 // Classic ESP32 full-duplex reads over GPIO matrix are only reliable through
 // the 80MHz/3 divider. Faster bulk writes can still use FPGA_SPI_HZ.
+// 2026-06-08: 80/3 = 26.67 MHz. Tested 80/6 (13.3 MHz) — same ERR_IO miss rate
+// (2/12), so the chess-splash miss is NOT clock-rate-dependent MOSI corruption.
+// 80/16 (5 MHz) was too slow (boot "degraded"/"storage busy"). Reverted to 80/3.
 #define FPGA_SPI_READ_HZ (80000000UL / 3UL)
 #endif
 
@@ -37,6 +40,10 @@ public:
     bool supportsPokeMulti();
     bool supportsWtsEventStream();
     bool supportsKeyStream();
+    // True when the bitstream advertises the bridge RX-resync watchdog, which
+    // makes a failed write safe to retry (the bridge re-frames to idle after a
+    // stuck/corrupted command, so a resend lands on a clean parser).
+    bool supportsRxResync();
     bool lockSharedBus();
     void unlockSharedBus();
 
@@ -199,6 +206,7 @@ private:
     bool _supportsPokeMulti = false;
     bool _supportsWtsEventStream = false;
     bool _supportsKeyStream = false;
+    bool _supportsRxResync = false;
 #if defined(ARDUINO)
     SemaphoreHandle_t _commandMutex = nullptr;
 #endif
@@ -213,6 +221,10 @@ private:
     static constexpr uint8_t SPI_TOKEN_DATA = 0x01;
     static constexpr int SPI_DRAIN_LIMIT = 512;
     static constexpr uint8_t SPI_READ_POLL_BYTES = 8;
+    // Total attempts for a VGC block write when the bridge supports RX-resync.
+    // A flaky SPI link corrupts a write rarely; the resend lands on a re-framed
+    // parser. Each failed attempt costs one recvStatus timeout, so keep small.
+    static constexpr int VGC_WRITE_ATTEMPTS = 3;
     // The SPI slave has a 512-byte RX FIFO and MOSI cannot be backpressured.
     // Keep each unpaced write transaction comfortably below that depth so
     // SDRAM/WTS consumers can drain the FIFO after CS rises without losing

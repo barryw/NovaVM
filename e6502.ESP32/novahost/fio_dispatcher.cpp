@@ -208,6 +208,20 @@ bool clear_vgc_gfx(FpgaBridge& bridge, uint8_t* zero_buf) {
     return true;
 }
 
+// While the 6502 busy-waits in fio_exec for an FIO command to complete, it
+// monopolizes the RAM/VGC bus: ESP writes to 6502 RAM and VGC memory are starved
+// and do NOT land (only the dedicated FIO control registers the CPU is polling do).
+// The fix: halt the 6502 (CMD_PAUSE) around the handler's memory writes so the ESP
+// owns the bus, then resume. RAII so the CPU always resumes, even on an early
+// error return. (Boot-time loads were never affected — the CPU is held in reset.)
+struct CpuPauseGuard {
+    FpgaBridge& _bridge;
+    bool _active;
+    explicit CpuPauseGuard(FpgaBridge& bridge) : _bridge(bridge), _active(bridge.pause()) {}
+    ~CpuPauseGuard() { if (_active) _bridge.resume(); }
+    bool active() const { return _active; }
+};
+
 bool has_extension(const char* name) {
     return name && strrchr(name, '.') != nullptr;
 }
@@ -3949,6 +3963,12 @@ void FioDispatcher::handle_nvgload() {
         respond_err(ERR_IO);
         return;
     }
+
+    // Halt the 6502 so the ESP owns the bus and the VGC writes below actually
+    // land (see CpuPauseGuard). The CPU is busy-waiting in fio_exec anyway; the
+    // guard resumes it on every return path. respond_ok/err pokes (FIO registers)
+    // still land while paused, then the guard resumes and the CPU reads FIO_STATUS.
+    CpuPauseGuard pauseGuard(_bridge);
 
     if (!clear_vgc_gfx(_bridge, pixels)) {
         respond_err(ERR_IO);

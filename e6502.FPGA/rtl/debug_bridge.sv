@@ -16,7 +16,20 @@ module debug_bridge #(
     // CPU reset after this many clk cycles. The synthesis ROM BRAMs are now
     // initialized from rom/*.hex, so this gives the board a standalone boot
     // path after FPGA flash/power-cycle even when ESP is stale or absent.
-    parameter integer BOOT_AUTO_RELEASE_CYCLES = 50_000_000
+    parameter integer BOOT_AUTO_RELEASE_CYCLES = 50_000_000,
+    // RX-resync watchdog. The ESP delivers every command as one SPI WRITE
+    // transaction, with all bytes back-to-back. If a physical-layer glitch
+    // drops or adds a byte on the SPI link, the slave hands the bridge a
+    // command shorter/longer than the bridge expects, leaving the parser
+    // stuck mid-command waiting for bytes the ESP has stopped sending (it has
+    // moved on to read-only status polling). With no transaction awareness the
+    // bridge would stay byte-desynced forever, corrupting every later command.
+    // If the bridge sits in an RX-consuming state with no incoming byte for
+    // this many clocks, abort the partial command back to S_IDLE so the next
+    // WRITE transaction re-synchronizes. Legitimate commands never gap this
+    // long (whole command < ~100 us); the ESP's own status timeout is 200 ms,
+    // so resync always completes before the host gives up.
+    parameter integer RX_RESYNC_STALL_CYCLES = 2_000_000
 ) (
     input  logic        clk,
     input  logic        rst,
@@ -212,6 +225,10 @@ module debug_bridge #(
     localparam [7:0] CAP_POKE_MULTI=8'h01;
     localparam [7:0] CAP_WTS_EVENT_STREAM=8'h02;
     localparam [7:0] CAP_KEY_STREAM=8'h04;
+    // Bridge auto-recovers a byte-desynced command stream (RX-resync watchdog),
+    // so the host may safely retry a failed write — a resend lands on a clean,
+    // re-framed parser instead of compounding the desync.
+    localparam [7:0] CAP_RX_RESYNC=8'h08;
 
     localparam [5:0] CPU_STATE_DECODE = 6'd12;
     localparam int TRACE_DEPTH = 64;
@@ -329,6 +346,26 @@ module debug_bridge #(
     logic nic_event_pending;
     wire any_event_pending = fio_event_pending | nic_event_pending;
 
+    // RX-resync watchdog: true only while the parser genuinely waits for an
+    // incoming command byte (no staged byte, not blocked on a consumer's
+    // back-pressure). Streaming states that legitimately stall on a downstream
+    // ready (audio/wts/key FIFOs) only count when that consumer IS ready, so
+    // real back-pressure never trips the watchdog.
+    wire rx_waiting = !rx_buf_valid && (
+        state == S_RECV              ||
+        state == S_ROM_BULK_WRITE    ||
+        state == S_SDRAM_RECV        ||
+        state == S_RAM_BULK_WRITE    ||
+        state == S_NIC_BULK_WRITE    ||
+        state == S_VGC_BULK_WRITE    ||
+        state == S_MULTI_POKE_ADDR_HI||
+        state == S_MULTI_POKE_ADDR_LO||
+        state == S_MULTI_POKE_DATA   ||
+        (state == S_AUDIO_BULK_WRITE && audio_pcm_ready)  ||
+        (state == S_WTS_EVENT_WRITE  && wts_event_ready)  ||
+        (state == S_KEY_BULK_WRITE   && key_inject_ready)
+    );
+
     // 1-byte RX staging register between the ready/valid source and the
     // command state machine. External FIFOing owns burst absorption; this
     // register gives the parser a stable byte until the current state
@@ -387,6 +424,10 @@ module debug_bridge #(
 
     // Error flag
     logic status_err;
+
+    // RX-resync watchdog counter (see RX_RESYNC_STALL_CYCLES). Sized to the
+    // parameter to keep the comparator off the pixel-clock critical path.
+    logic [$clog2(RX_RESYNC_STALL_CYCLES)-1:0] rx_stall_cnt;
 
     logic [7:0] trace_byte_mux;
     assign trace_word = trace_mem[trace_read_idx];
@@ -467,7 +508,8 @@ module debug_bridge #(
                     case (resp_idx)
                         4'd1:    tx_byte_mux = CAP_POKE_MULTI |
                                                 CAP_WTS_EVENT_STREAM |
-                                                CAP_KEY_STREAM;
+                                                CAP_KEY_STREAM |
+                                                CAP_RX_RESYNC;
                         default: tx_byte_mux = 8'h00;
                     endcase
                 end
@@ -556,6 +598,7 @@ module debug_bridge #(
             trace_byte_idx   <= 0;
             trace_remaining  <= 0;
             status_err       <= 0;
+            rx_stall_cnt     <= 0;
             dbg_peek_en      <= 0;
             dbg_peek_addr    <= 0;
             dbg_poke_en      <= 0;
@@ -1609,6 +1652,29 @@ module debug_bridge #(
                 default: state <= S_IDLE;
 
             endcase
+
+            // -------------------------------------------------------------
+            // RX-resync watchdog. `rx_waiting` is high only when the parser
+            // is stuck in an RX-consuming state with no staged byte and no
+            // legitimate consumer back-pressure — i.e. genuinely waiting for
+            // a command byte the desynced ESP will never send. Counting such
+            // clocks and forcing S_IDLE on overflow drops the malformed
+            // partial command so the next WRITE transaction re-frames cleanly.
+            // This assignment runs after the case, so it overrides whatever
+            // state the case selected for the stuck cycle.
+            // -------------------------------------------------------------
+            if (rx_waiting) begin
+                if (rx_stall_cnt >= RX_RESYNC_STALL_CYCLES - 1) begin
+                    state        <= S_IDLE;
+                    rx_stall_cnt <= 0;
+                    recv_cnt     <= 0;
+                    status_err   <= 0;
+                end else begin
+                    rx_stall_cnt <= rx_stall_cnt + 1'b1;
+                end
+            end else begin
+                rx_stall_cnt <= 0;
+            end
         end
     end
 

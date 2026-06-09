@@ -247,7 +247,6 @@ input_idle_hook_l:   .res 1
 input_idle_hook_h:   .res 1
 title_wait_l:        .res 1
 title_wait_h:        .res 1
-splash_loaded:       .res 1
 piece_buffer:        .res PIECE_SIZE * PIECE_SIZE
 anim_bg_buffer:      .res PIECE_SIZE * PIECE_SIZE
 castle_king_buffer:  .res PIECE_SIZE * PIECE_SIZE
@@ -260,6 +259,10 @@ board_state:         .res 64
 panel_line:          .res PANEL_LINE_LEN
 move_history:        .res PANEL_MOVE_ROWS * PANEL_LINE_LEN
 input_buffer:        .res INPUT_BUFFER_LEN + 1
+; Keep the menu splash latch in high runtime BSS. BASIC cold-start clears
+; $0900+, while NovaHost deliberately preserves the resident loader band
+; at $0320-$041F across resets.
+splash_loaded:       .res 1
 
 .include "../Pieces.inc"
 
@@ -286,6 +289,11 @@ reset:
         CLD
         LDX #$FF
         TXS
+
+        ; 6502 RAM is not zeroed on reset/cold-start, so latch state must be
+        ; cleared explicitly. splash_loaded gates the one-shot title-splash load;
+        ; if it survives a reboot the menu skips the splash forever.
+        STZ splash_loaded
 
         JSR init_video
         JSR clear_text
@@ -1885,9 +1893,15 @@ show_title_menu:
         RTS
 
 show_menu_backdrop:
+        ; Always reload the title splash on menu entry. The old splash_loaded
+        ; one-shot gate is never cleared on cold-start (cmdColdStart does not
+        ; re-run reset:/STZ splash_loaded), so the splash was loaded once per
+        ; firmware boot and only survived via gfx-plane persistence — which
+        ; intermittently (~12% of cold-starts) failed, blanking the splash with
+        ; no reload to recover. Reloading unconditionally is deterministic and
+        ; immune to cold-start reset reliability. (HW-confirmed via fioDiag
+        ; nvgEnter discriminator, 2026-06-09: all misses were 6502-side skips.)
         JSR clear_text
-        LDA splash_loaded
-        BNE @ready
         STZ VGC_DIMMER
         JSR load_title_splash
         BEQ @show
@@ -1896,7 +1910,6 @@ show_menu_backdrop:
 @show:
         LDA #$0F
         STA VGC_DIMMER
-@ready:
         RTS
 
 wait_splash_or_key:
