@@ -144,8 +144,8 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_TEXT_STYLE + 1
-        BCS nz6_bug             ; reserved VAR ids $0A-$1F are never routed
+        CMP #NZ6_OP_NEWLINE + 1
+        BCS nz6_bug             ; reserved VAR ids $0B-$1F are never routed
         ASL
         TAX
         JMP (nz6_var_table,X)
@@ -1050,6 +1050,58 @@ nz6_apply_colour_style:
 @store:
         LDA nz6_clr_tmp
         STA VTEXT_COLOR
+        RTS
+
+; ROM newline hook (NZ6_OP_NEWLINE): the V6 carriage-return interrupt
+; (YZIP "CRCNT/CRFUNC", window props 9/8). A non-zero countdown decrements
+; on every newline printed to the live window; reaching 0 calls the prop-8
+; routine with no arguments — AFTER the newline went out, the Frotz r393
+; ordering Zork Zero's drop-cap margin release (RESET-MARGIN) was tuned
+; against. $FFFF decrements harmlessly. While the countdown sits at 0 the
+; feature is off, which also keeps a printing CR routine from recursing.
+; NOTE: runs inside the print path — clobbers nz6_tmp_win (reset to the
+; current window) and nz6_unit, and the fired routine may run arbitrary
+; Z-code (audited callers: nz_screen_flush_word sites set their state
+; after flushing).
+nz6_op_cr_newline:
+        LDA nz6_win_current
+        STA nz6_tmp_win
+        LDX #9
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_lo
+        ORA nz6_unit_hi
+        BEQ @rts                        ; 0 = disarmed
+        LDA nz6_unit_lo
+        BNE :+
+        DEC nz6_unit_hi
+:
+        DEC nz6_unit_lo
+        LDX #9
+        JSR nz6_write_prop_unit
+        LDA nz6_unit_lo
+        ORA nz6_unit_hi
+        BNE @rts                        ; still counting
+        LDX #8
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_lo
+        ORA nz6_unit_hi
+        BEQ @rts                        ; no routine armed
+        ; The fire happens MID-FLUSH: the word that triggered the wrap is
+        ; still in the ROM's word buffer, and the routine's geometry ops
+        ; flush it themselves (geom_prologue) — emitting it at the OLD
+        ; cursor, where the region rebuild then overwrites it. Shield the
+        ; buffer: the routine sees it empty, the outer flush emits the word
+        ; at the rebuilt cursor. (A CR routine that PRINTS would interleave
+        ; with the shielded word — Zork Zero's RESET-MARGIN does not.)
+        LDA nz_word_len
+        PHA
+        STZ nz_word_len
+        LDA nz6_unit_lo
+        LDX nz6_unit_hi
+        JSR nz_call_z_routine           ; packed routine, no args
+        PLA
+        STA nz_word_len
+@rts:
         RTS
 
 ; EGA indices for Z-machine colour codes 2-9 (spec section 8.3.1):
@@ -1975,7 +2027,8 @@ nz6_var_table:                  ; ids $00-$07
         .word nz6_var_pull      ; $07 pull (V6 store form, optional user stack)
         .word nz6_apply_current_window ; $08 select (zvm_select_active_window V6 path)
         .word nz6_op_text_style ; $09 set_text_style (colour-relative styles)
-.assert (* - nz6_var_table) / 2 = NZ6_OP_TEXT_STYLE + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_TEXT_STYLE"
+        .word nz6_op_cr_newline ; $0A newline hook (CR-interrupt countdown)
+.assert (* - nz6_var_table) / 2 = NZ6_OP_NEWLINE + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_NEWLINE"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)

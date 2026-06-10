@@ -25,7 +25,10 @@ NZ6_OP_SELECT       = $08    ; ROM-only id (no Z opcode): rebuild the live
 NZ6_OP_TEXT_STYLE   = $09    ; set_text_style (VAR:17): V6 derives bold/
                              ; reverse from the current colour pair instead
                              ; of the ROM's fixed Nova-palette style table.
-; Ids $0A-$1F are reserved for future VAR-op routing; EXT ids start at $20
+NZ6_OP_NEWLINE      = $0A    ; ROM-only id: a newline went out to the live
+                             ; window (nz_screen_linefeed) — run the V6
+                             ; carriage-return-interrupt countdown.
+; Ids $0B-$1F are reserved for future VAR-op routing; EXT ids start at $20
 ; so the two ranges can never collide.
 NZ6_EXT_BASE        = $20    ; ext dispatch id = NZ6_EXT_BASE + ext opnum
 NZ6_EXT_COUNT       = 30     ; ext opnums 0-29; nz6_ext_table length asserted

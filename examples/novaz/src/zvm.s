@@ -3969,6 +3969,25 @@ nz_call_z_routine:
         STZ zvm_value_hi
         LDA zvm_store_var       ; preserve the in-progress read's store var
         PHA
+        LDA zvm_timed_depth     ; reentrant: a CR interrupt can fire inside
+        PHA                     ; a sound/timed routine's own output
+        ; The CR interrupt fires MID-OUTPUT (between two lines of a wrapped
+        ; print): preserve the string-decode state — the ztext block and the
+        ; shared zstory_addr cursor — so the outer print resumes exactly
+        ; where it stopped after the routine's Z-code ran.
+        LDX #0
+@save_ztext:
+        LDA ztext_word_limit,X
+        PHA
+        INX
+        CPX #15
+        BNE @save_ztext
+        LDA zstory_addr_l
+        PHA
+        LDA zstory_addr_m
+        PHA
+        LDA zstory_addr_h
+        PHA
         LDA #$01
         STA zvm_operand_count   ; routine only, no arguments
         LDA #$FF
@@ -3985,6 +4004,20 @@ nz_call_z_routine:
         JSR zvm_step
         BRA @run
 @done:
+        PLA
+        STA zstory_addr_h
+        PLA
+        STA zstory_addr_m
+        PLA
+        STA zstory_addr_l
+        LDX #14
+@restore_ztext:
+        PLA
+        STA ztext_word_limit,X
+        DEX
+        BPL @restore_ztext
+        PLA
+        STA zvm_timed_depth
         PLA
         STA zvm_store_var
         RTS

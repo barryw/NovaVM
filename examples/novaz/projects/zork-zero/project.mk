@@ -21,12 +21,15 @@ PROJECT_IMAGE := $(DIST_DIR)/$(PROJECT)/fd0.ndi
 # answers at all. The prompt sits at (18,41): the drop-cap margin is still
 # armed because the CR interrupt never fires — Task 6 releases it; Task 7
 # re-pins the final layout with border art.
+# Task 6: the CR interrupt fires and RESET-MARGIN releases the drop-cap
+# margins — the prompt lands at (11,34) inside the real 40x58 playfield the
+# game sizes from border-art metrics (move_window 0,11,12 in the trace).
 PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check \
 	--expect-at "9,2=>Banquet Hall" \
 	--expect-at "61,2=>Flatheadia" \
 	--expect-at "9,3=>Moves:  0" \
 	--expect-at "61,3=>Score:   0" \
-	--expect-at "18,41=>>"
+	--expect-at "11,34=>>"
 # The 65K-newline boot storm died with real picture metrics; 80M steps is
 # plenty for boot + three turns now.
 NOVAZ_SMOKE_MAX_STEPS ?= 80000000

@@ -426,6 +426,21 @@ nz_screen_linefeed:
         JSR vtext_put_char
         BNE @done
         JSR nz_screen_count_line
+        ; V6 carriage-return interrupt: a real newline reached the live
+        ; window. Guard on the segment magic — version 6 is known from the
+        ; header before NOVAZ6.BIN is resident, and boot messages print in
+        ; that gap.
+        LDA zstory_version
+        CMP #$06
+        BNE @done
+        LDA NZ6_BASE
+        CMP #NZ6_MAGIC0
+        BNE @done
+        LDA NZ6_BASE+1
+        CMP #NZ6_MAGIC1
+        BNE @done
+        LDA #NZ6_OP_NEWLINE
+        JSR NZ6_ENTRY
 @done:
         RTS
 

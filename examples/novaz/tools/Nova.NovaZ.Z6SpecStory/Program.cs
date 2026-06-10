@@ -385,6 +385,26 @@ static void EmitSpecProgram(ZCode z)
     // derailing; fully off-screen draw (y cell 59) is a clean no-op.
     z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(80));
     z.ExtOp(5, Operand.Small(3), Operand.Small(60), Operand.Small(1));
+
+    // --- CR interrupt (window props 8/9): each newline printed to the
+    // window decrements the countdown; reaching 0 fires the prop-8 routine
+    // exactly once, AFTER the newline (the Frotz r393 ordering Zork Zero
+    // was tuned against). $FFFF decrements harmlessly forever.
+    z.Store(0x60, 0);                                  // fired counter
+    z.ExtOp(25, Operand.Small(0), Operand.Small(9), Operand.Small(3));
+    z.ExtOpWithPackedRoutine(25, Operand.Small(0), Operand.Small(8), "cr_routine");
+    z.NewLine();
+    z.NewLine();
+    z.AssertVarEquals(0x60, 0, "cr-early");            // 2 of 3: not yet
+    z.NewLine();
+    z.AssertVarEquals(0x60, 1, "cr-fired");            // exactly once
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(9));
+    z.AssertVarEquals(0x12, 0, "cr-count0");
+    z.ExtOp(25, Operand.Small(0), Operand.Small(9), Operand.Large(0xFFFF));
+    z.NewLine();
+    z.AssertVarEquals(0x60, 1, "cr-never");
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(9));
+    z.AssertVarEquals(0x12, 0xFFFE, "cr-ffff-dec");
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");
@@ -718,6 +738,14 @@ static void EmitSpecProgram(ZCode z)
     z.Label("routine_return_42");
     z.Byte(0);
     z.OneOp(11, Operand.Small(42));
+
+    // CR-interrupt routine: bump the fired counter (global var $60), no
+    // printing (a printing CR routine would re-enter the newline path).
+    z.Align(4);
+    z.Label("cr_routine");
+    z.Byte(0);
+    z.OneOp(5, Operand.Small(0x60));   // inc
+    z.ZeroOp(0);                       // rtrue
 }
 
 static void WriteBE16(byte[] data, int offset, int value)
@@ -879,6 +907,17 @@ sealed class ZCode
         Emit(TypeByte(operands));
         foreach (var operand in operands)
             EmitOperand(operand);
+    }
+
+    /// <summary>EXT op whose LAST operand is the packed address of a routine.</summary>
+    public void ExtOpWithPackedRoutine(int op, Operand a, Operand b, string routineLabel)
+    {
+        Emit(0xBE);
+        Emit(op & 0xFF);
+        Emit(TypeByte([a, b, Operand.Large(0)]));
+        EmitOperand(a);
+        EmitOperand(b);
+        EmitPackedAddressPatch(routineLabel);
     }
 
     public void ExtOpStore(int op, byte store, params Operand[] operands)
