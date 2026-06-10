@@ -330,3 +330,6 @@ e6502.FPGA/**/obj_dir*/
 e6502.ESP32/novahost/test/test_shelf_alloc
 # Stray scratch screenshots in the repo root.
 /*.png
+
+# Git worktrees
+.worktrees/
