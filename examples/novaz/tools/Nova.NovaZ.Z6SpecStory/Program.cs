@@ -26,9 +26,10 @@ const int Dictionary = 0x0480;
 const int PicTable = 0x0500;                       // scratch: picture_data table
 const int UserStack = 0x0520;                      // scratch: user-stack table (Task 8)
 const int CursorArray = 0x0540;                    // scratch: get_cursor result words
+const int MouseTable = 0x0560;                     // scratch: read_mouse result words (Task 9)
 const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
-const int PackedStrings = 0x0C00;                  // strings region;  packed (0xC00-0x400)/4
+const int PackedStrings = 0x0E00;                  // strings region;  packed (0xE00-0x400)/4
 
 (string outputPath, int version) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
@@ -132,6 +133,14 @@ static void WriteScratchTables(byte[] story)
 {
     // User stack (Task 8): word 0 = 4 free slots, value slots zeroed.
     WriteBE16(story, UserStack, 4);
+
+    // picture_data / read_mouse tables (Task 9): poisoned with $BEEF so the
+    // zero-asserts prove the handlers actually WROTE, instead of passing on
+    // zero-initialized memory.
+    WriteBE16(story, PicTable, 0xBEEF);
+    WriteBE16(story, PicTable + 2, 0xBEEF);
+    for (int i = 0; i < 4; i++)
+        WriteBE16(story, MouseTable + i * 2, 0xBEEF);
 }
 
 static void WriteDictionaryEntry(byte[] story, int offset, string text)
@@ -172,14 +181,25 @@ static void EmitSpecProgram(ZCode z)
     // mis-consumed store byte derails the instruction stream.
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
     z.AssertVarEquals(0x12, 1, "windprop-default");
-    // picture_data 0, table (EXT:6, branch): stub decodes the branch bytes
-    // and applies "false". If the branch is wrongly taken we hit the fail
-    // block; fall-through is the good path.
-    z.ExtOpBranch(6, "fail_pic", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
-    z.Jump("pic_ok");
-    z.Label("fail_pic");
+    // picture_data N table ?(label) (EXT:6): no pictures in M1. PicTable is
+    // baked with $BEEF words so the write-asserts below prove real writes.
+    // N>0 first: queries a specific picture — writes NOTHING, branches false.
+    z.ExtOpBranch(6, "picn_taken", branchIf: true, Operand.Small(6), Operand.Large(PicTable));
+    z.Jump("picn_ok");
+    z.Label("picn_taken");
+    z.Fail("picn-branch");
+    z.Label("picn_ok");
+    z.AssertWordEquals(PicTable, 0, 0xBEEF, "picn-nowrite0");
+    z.AssertWordEquals(PicTable, 1, 0xBEEF, "picn-nowrite1");
+    // N=0: writes word 0 = picture count (0) and word 1 = release (0), and
+    // still branches false — the branch means "any pictures available".
+    z.ExtOpBranch(6, "pic0_taken", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
+    z.Jump("pic0_ok");
+    z.Label("pic0_taken");
     z.Fail("pic-branch");
-    z.Label("pic_ok");
+    z.Label("pic0_ok");
+    z.AssertWordEquals(PicTable, 0, 0, "piccount");
+    z.AssertWordEquals(PicTable, 1, 0, "picrel");
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");
@@ -219,6 +239,33 @@ static void EmitSpecProgram(ZCode z)
     z.Label("us_full_ok");
     z.AssertWordEquals(UserStack, 0, 0, "us-full-free");   // count untouched
     z.AssertWordEquals(UserStack, 1, 3, "us-full-nowrite"); // last value intact
+
+    // --- Task 9: honest no-capability graphics/mouse/menu stubs ---
+    // read_mouse table (EXT:22): no mouse — y, x, buttons, menu word all 0.
+    // MouseTable is baked with $BEEF words to prove the writes happen.
+    z.ExtOp(22, Operand.Large(MouseTable));
+    z.AssertWordEquals(MouseTable, 0, 0, "mouse0");
+    z.AssertWordEquals(MouseTable, 1, 0, "mouse1");
+    z.AssertWordEquals(MouseTable, 2, 0, "mouse2");
+    z.AssertWordEquals(MouseTable, 3, 0, "mouse3");
+    // make_menu N table ?(label) (EXT:27): menus unsupported — branch FALSE.
+    z.ExtOpBranch(27, "menu_taken", branchIf: true, Operand.Small(1), Operand.Large(PicTable));
+    z.Jump("menu_ok");
+    z.Label("menu_taken");
+    z.Fail("menu-branch");
+    z.Label("menu_ok");
+    // Visual/deferred no-ops (no store, no branch): draw_picture,
+    // erase_picture, picture_table, scroll_window, mouse_window. Executing
+    // them in sequence and reaching the next assert proves each consumed
+    // exactly its operands and left the instruction stream intact.
+    // (print_form EXT:26 is deliberately NOT exercised until M2 gives it
+    // semantics — its operand is a formatted table.)
+    z.ExtOp(5, Operand.Small(1));                       // draw_picture 1
+    z.ExtOp(7, Operand.Small(1));                       // erase_picture 1
+    z.ExtOp(28, Operand.Large(PicTable));               // picture_table
+    z.ExtOp(20, Operand.Small(0), Operand.Small(8));    // scroll_window 0,8
+    z.ExtOp(23, Operand.Small(1));                      // mouse_window 1
+    z.AssertWordEquals(UserStack, 0, 0, "noop-stream"); // stream still aligned
 
     // --- Task 7: minimal 8-window model ---
     // Window property round-trip: put_wind_prop 1,4,21 then read it back.

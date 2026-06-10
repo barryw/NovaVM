@@ -994,6 +994,47 @@ nz6_ext_pop_stack:
 @game_stack:
         JMP zvm_unsupported
 
+; --- No-capability graphics/mouse stubs ---------------------------------------
+
+; Write a zero word at zstory_addr (zstory_write16 advances the address by
+; two, so calls chain across consecutive table words).
+nz6_write_zero_word:
+        STZ zstory_word_lo
+        STZ zstory_word_hi
+        JMP zstory_write16
+
+; picture_data N table ?(label) (EXT:6). M1 ships no picture file: with N=0
+; ("how many pictures?") the spec requires word 0 := picture count and
+; word 1 := release number — both 0 here. With N>0 (a specific picture)
+; nothing is written. Either way no picture data is available, so the
+; branch — "is there data?" — is always FALSE.
+nz6_ext_picture_data:
+        LDA zvm_operand_lo
+        ORA zvm_operand_hi
+        BNE @branch
+        JSR nz6_ustack_addr             ; table = operand 1, same idiom
+        JSR nz6_write_zero_word         ; word 0: picture count = 0
+        JSR nz6_write_zero_word         ; word 1: release number = 0
+@branch:
+        JMP zvm_branch_false
+
+; read_mouse table (EXT:22). No mouse hardware: y, x, buttons and menu word
+; all read back 0. No store, no branch.
+nz6_ext_read_mouse:
+        LDA zvm_operand_lo
+        STA zstory_addr_l
+        LDA zvm_operand_hi
+        STA zstory_addr_m
+        STZ zstory_addr_h
+        LDX #4
+@loop:
+        PHX
+        JSR nz6_write_zero_word
+        PLX
+        DEX
+        BNE @loop
+        RTS
+
 ; --- Dispatch tables ---------------------------------------------------------
 
 nz6_var_table:                  ; ids $00-$06
@@ -1011,9 +1052,9 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  2 log_shift (ROM handles)
         .word nz6_bug           ;  3 art_shift (ROM handles)
         .word nz6_bug           ;  4 set_font (ROM handles)
-        .word nz6_stub          ;  5 draw_picture
-        .word nz6_branch_false  ;  6 picture_data (branch)
-        .word nz6_stub          ;  7 erase_picture
+        .word nz6_stub          ;  5 draw_picture (no pictures: drawing nothing is correct)
+        .word nz6_ext_picture_data ;  6 picture_data (N=0 writes count/release; branch false)
+        .word nz6_stub          ;  7 erase_picture (no pictures: nothing was ever drawn)
         .word nz6_ext_set_margins ;  8 set_margins
         .word nz6_bug           ;  9 save_undo (ROM handles)
         .word nz6_bug           ; 10 restore_undo (ROM handles)
@@ -1026,14 +1067,14 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_ext_window_size   ; 17 window_size
         .word nz6_ext_window_style  ; 18 window_style
         .word nz6_ext_get_wind_prop ; 19 get_wind_prop (store)
-        .word nz6_stub          ; 20 scroll_window (M1: no-op)
+        .word nz6_stub          ; 20 scroll_window (pixel scroll deferred past M1)
         .word nz6_ext_pop_stack ; 21 pop_stack (discards items, no store/branch)
-        .word nz6_stub          ; 22 read_mouse
-        .word nz6_stub          ; 23 mouse_window
+        .word nz6_ext_read_mouse ; 22 read_mouse (no mouse: four zero words)
+        .word nz6_stub          ; 23 mouse_window (meaningless without a mouse)
         .word nz6_ext_push_stack ; 24 push_stack (branches true on success)
         .word nz6_ext_put_wind_prop ; 25 put_wind_prop
-        .word nz6_stub          ; 26 print_form
-        .word nz6_branch_false  ; 27 make_menu (branch)
-        .word nz6_stub          ; 28 picture_table
-        .word nz6_store_zero    ; 29 buffer_screen (store)
+        .word nz6_stub          ; 26 print_form (formatted-table print: M2)
+        .word nz6_branch_false  ; 27 make_menu (no menu capability: branch always false)
+        .word nz6_stub          ; 28 picture_table (cache hint only; no pictures to cache)
+        .word nz6_store_zero    ; 29 buffer_screen (store; always reports unbuffered mode 0)
 .assert (* - nz6_ext_table) / 2 = NZ6_EXT_COUNT, error, "nz6_ext_table must have NZ6_EXT_COUNT entries"
