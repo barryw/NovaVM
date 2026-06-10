@@ -997,7 +997,7 @@ zvm_call_common:
         INC zvm_frame_count
         STZ zvm_sp
 
-        JSR zvm_unpack_operand_packed_addr
+        JSR zvm_unpack_routine_addr
         LDA zstory_addr_l
         STA zvm_pc_l
         LDA zstory_addr_m
@@ -1092,6 +1092,34 @@ zvm_unpack_operand_packed_addr:
 @done:
         RTS
 
+; zvm_unpack_routine_addr / zvm_unpack_string_addr: unpack the packed address
+; in zvm_operand_lo/hi into zstory_addr_l/m/h, then (V6 only) add the 8x
+; routines/strings byte offset read from the header. The offsets live in a
+; contiguous BSS block (routine l/m/h then string l/m/h), so X=0 selects the
+; routine offset and X=3 the string offset -- same convention as zstory.s.
+zvm_unpack_routine_addr:
+        LDX #$00
+        BRA zvm_unpack_offset_addr
+zvm_unpack_string_addr:
+        LDX #$03
+zvm_unpack_offset_addr:
+        JSR zvm_unpack_operand_packed_addr
+        LDA zstory_version
+        CMP #$06
+        BNE @done
+        CLC
+        LDA zstory_addr_l
+        ADC zstory_routine_off_l,X
+        STA zstory_addr_l
+        LDA zstory_addr_m
+        ADC zstory_routine_off_m,X
+        STA zstory_addr_m
+        LDA zstory_addr_h
+        ADC zstory_routine_off_h,X
+        STA zstory_addr_h
+@done:
+        RTS
+
 zvm_print:
         LDA zvm_pc_l
         STA zstory_addr_l
@@ -1126,7 +1154,7 @@ zvm_print_addr:
         JMP ztext_print_packed
 
 zvm_print_paddr:
-        JSR zvm_unpack_operand_packed_addr
+        JSR zvm_unpack_string_addr
         LDA #ZTEXT_UNLIMITED
         STA ztext_word_limit
         JMP ztext_print_packed
