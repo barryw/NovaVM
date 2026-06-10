@@ -29,7 +29,15 @@ PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check \
 	--expect-at "61,2=>Flatheadia" \
 	--expect-at "9,3=>Moves:  0" \
 	--expect-at "61,3=>Score:   0" \
-	--expect-at "11,34=>>"
+	--expect-at "11,34=>>" \
+	--expect-gfx-color "0,0=>06" \
+	--expect-gfx-color "44,44=>04" \
+	--expect-gfx-color "65,61=>04" \
+	--expect-gfx-color "44,84=>06"
+# The gfx probes read picture pixels straight from the plane: title art
+# pic 5 at (0,0), border art pic 2 at cells (11,11) -> px (44,44), and the
+# per-refresh border pic \$D8 at px (44,84) — values derived from the blorb
+# PNGs through the packer's EGA quantizer.
 # The 65K-newline boot storm died with real picture metrics; 80M steps is
 # plenty for boot + three turns now.
 NOVAZ_SMOKE_MAX_STEPS ?= 80000000

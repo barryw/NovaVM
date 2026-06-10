@@ -330,3 +330,48 @@ pinned blank cells (the stale-text regression trap — those cells held
 longer inventory text one turn earlier), prompt at the window bottom. A
 trailing `|` in a `.expect-at` script line protects trailing spaces from
 the script reader's trim.
+
+## Post-M3 capture (2026-06-10)
+
+Regenerated with M3 shipped (PICS.PAK on the image, picture_data answering
+from the real index, draw_picture blitting, EGA palette, CR interrupt
+firing). Raw trace committed beside the earlier two:
+`docs/plans/data/2026-06-10-nz6-trace-zork-zero-post-m3.txt` (650 lines).
+Same 20-turn capture script, still bit-deterministic.
+
+### Stats vs the post-M2 capture
+
+- **483 game ops + 142 `cr_newline` hook dispatches** (the NZ6_OP_NEWLINE
+  ROM hook now traces alongside the Z ops). Game-op mix is comparable;
+  the engine bookkeeping (pull/push_stack) is unchanged.
+- **draw_picture is real: 15 draws** (14 boot + 1 in-turn `$D8` refresh).
+  The title sequence composites pics 5/1F1/1F2 + the drop-cap row
+  (11,A,B,14,D,16,F,18 at y=1,x=36) and 1E1; border pic 2 draws at
+  window-rel (2,1) and `$D8` at (12,1)/(27,1).
+- **The layout is picture-derived now:** `move_window 0,11,12` +
+  `window_size 0,40,58` — a 40x58 playfield at (11,12) sized from real
+  border metrics, replacing the text-only 45x70 at (6,6). The banner is
+  10 rows (`window_size 1,10,80`).
+- **morePrompts = 0** (was 1489): with `picture_data` returning real
+  heights, `MARGINAL-PIC` arms the CR countdown with the drop-cap height
+  and `CLEAR-CRCNT` prints a handful of newlines, not ~65.5K. The
+  finding-5/finding-9 storm chain is fully closed.
+- **The CR interrupt is load-bearing and fires:** `put_wind_prop 0,9,...`
+  arms real countdowns, the newline hook decrements them, and
+  `RESET-MARGIN` releases the drop-cap margins mid-prologue. Two
+  interpreter fixes fell out of making the fire safe mid-output:
+  `nz_call_z_routine` preserves the ztext decode state + `zstory_addr`
+  (and `zvm_timed_depth` for nesting), and the hook shields the pending
+  word buffer so the routine's own `set_margins` flush cannot emit the
+  in-flight word at the stale cursor (the lost-"carries" bug).
+- **Banner garble resolved** (game-side artifact of missing metrics, as
+  diagnosed post-M2): "Banquet Hall … Flatheadia" / "Moves: … Score:" lay
+  out exactly as designed.
+
+### Still open after M3
+
+- The game never erases the gfx layer post-title (no erase_window/
+  erase_picture in the capture); stale title art can peek outside text
+  regions. Candidate M4 quirk: window-scoped gfx erase semantics.
+- `set_margins` now runs per-turn (6 calls vs 3 post-M2) — margin
+  round-trips are exercised by RESET-MARGIN; prop 6/7 semantics held.

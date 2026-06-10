@@ -24,7 +24,8 @@ static class Nz6Trace
     static readonly string[] VarOpNames =
     [
         "reset", "split_window", "set_window", "erase_window",
-        "set_cursor", "get_cursor", "set_colour", "pull"
+        "set_cursor", "get_cursor", "set_colour", "pull",
+        "select", "set_text_style", "cr_newline"
     ];
 
     // EXT opnum -> name; indices mirror nz6_ext_table in src/zvm6.s.

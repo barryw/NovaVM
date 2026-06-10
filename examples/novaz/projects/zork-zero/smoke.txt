@@ -1,8 +1,18 @@
-# Zork Zero (V6) smoke — M3 Task 4 interim (picture_data live, no blits yet).
-# Boot layout is pinned by --expect-at in project.mk. The turns below pin
-# response text; positional .expect-at re-pins follow in Task 7 once
-# draw_picture (Task 5) and the CR-interrupt margin release (Task 6) settle
-# the final layout.
+# Zork Zero (V6) smoke — M3: pictures live (PICS.PAK on the image).
+# Boot layout, banner metrics, and gfx-plane picture probes are pinned by
+# the --expect-at / --expect-gfx-color args in project.mk. The turns below
+# pin response text, then absolute-cell layout after three turns:
+#   - the picture-metric banner survives turns ("Moves:" counts to 3),
+#   - the left gutter outside the playfield stays blank (trailing '|'
+#     protects the spaces from the script reader's trim).
+# Exact response rows are NOT pinned: the game's event pump polls between
+# output paragraphs, so the settle point varies by a row (README's
+# premature-ready caveat) — the response-text expectations cover content.
+# The prologue is interlude-clocked: only the first three turns are
+# scripted (the fireball lands later; plan risk 4).
 look=>Banquet Hall
 inventory=>platter of hellhound bones
 wait=>Time passes
+.expect-at 9,2=>Banquet Hall
+.expect-at 9,3=>Moves:  3
+.expect-at 0,33=>           |
