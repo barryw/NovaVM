@@ -31,7 +31,7 @@ const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x0E00;                  // strings region;  packed (0xE00-0x400)/4
 
-(string outputPath, int version) = ParseArgs(args);
+(string outputPath, int version, bool mainReturns) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -42,7 +42,10 @@ WriteScratchTables(story);
 WritePackedText(story, PackedStrings, "ok");
 
 var code = new ZCode(CodeBase, packedAddressScale: 4, routinesByteOffset: RoutinesByteOffset);
-EmitSpecProgram(code);
+if (mainReturns)
+    EmitMainReturnsProgram(code);
+else
+    EmitSpecProgram(code);
 byte[] codeBytes = code.ToArray();
 if (CodeBase + codeBytes.Length >= PackedStrings)
     throw new InvalidOperationException($"Z6 spec program overlaps packed strings: {codeBytes.Length} bytes.");
@@ -52,10 +55,11 @@ WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, code {codeBytes.Length} bytes, version {version})");
 
-static (string Output, int Version) ParseArgs(string[] args)
+static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
 {
     string output = "build/z6-spec.z6";
     int version = 6;
+    bool mainReturns = false;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
@@ -70,6 +74,9 @@ static (string Output, int Version) ParseArgs(string[] args)
                     throw new ArgumentException($"--version must be 1-8: {value}");
                 i++;
                 break;
+            case "--main-returns":
+                mainReturns = true;
+                break;
             case "-h" or "--help":
                 PrintUsage();
                 Environment.Exit(0);
@@ -82,7 +89,7 @@ static (string Output, int Version) ParseArgs(string[] args)
         }
     }
 
-    return (output, version);
+    return (output, version, mainReturns);
 }
 
 static void PrintUsage()
@@ -90,6 +97,7 @@ static void PrintUsage()
     Console.Error.WriteLine("Nova.NovaZ.Z6SpecStory");
     Console.Error.WriteLine("  --output <story.z6>");
     Console.Error.WriteLine("  --version <n>   header version byte only (default 6; 7 for rejection tests)");
+    Console.Error.WriteLine("  --main-returns  main routine is a bare rtrue (frame-0 return quit test)");
 }
 
 static void WriteHeader(byte[] story, int version)
@@ -153,6 +161,15 @@ static void WritePackedText(byte[] story, int offset, string text)
 {
     byte[] encoded = ZString.Pack(text);
     Array.Copy(encoded, 0, story, offset, encoded.Length);
+}
+
+// --main-returns: the smallest possible V6 story — the main routine is a
+// bare rtrue. Returning from frame 0 must halt the machine cleanly with
+// ZVM_STOP_QUIT (the smoke target asserts the stop reason directly).
+static void EmitMainReturnsProgram(ZCode z)
+{
+    z.Byte(0);       // locals count
+    z.ZeroOp(0);     // rtrue
 }
 
 static void EmitSpecProgram(ZCode z)

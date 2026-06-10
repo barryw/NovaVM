@@ -10,7 +10,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--skip-manifest-check]");
     return 1;
 }
 
@@ -30,6 +30,7 @@ bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringCo
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
+int? expectStop = LoadExpectStop(args);
 List<ExpectedAt> expectedAts = LoadExpectedAts(args);
 List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
@@ -58,6 +59,32 @@ try
 
     int maxSteps = ReadEnvInt("NOVAZ_SMOKE_MAX_STEPS", 80_000_000);
     int morePrompts = 0;
+
+    // --expect-stop: run until the runtime parks in its post-game halt loop,
+    // then pin zvm_stop_reason. This is the only mode that works for stories
+    // which halt without ever reaching a read prompt (e.g. a V6 main routine
+    // that returns): the prompt path would time out and the screen-only path
+    // cannot tell a clean ZVM_STOP_QUIT from a bad-target wedge. The CPU PC
+    // is the readiness signal — NOT zvm_stop_reason itself, which holds boot
+    // residue (the disk loader stages through BSS) until zvm_run_until_read
+    // clears it.
+    if (expectStop is { } expectedStopReason)
+    {
+        int stopAddress = TryReadRuntimeSymbol("zvm_stop_reason")
+            ?? throw new InvalidOperationException("--expect-stop requires zvm_stop_reason in build/runtime.sym.");
+        int haltAddress = TryReadRuntimeSymbol("halt")
+            ?? throw new InvalidOperationException("--expect-stop requires halt in build/runtime.sym.");
+        RunUntilCpuHalt(cpu, bus, maxSteps, haltAddress);
+        byte actualStop = bus.Read((ushort)stopAddress);
+        string stopScreen = SnapshotScreen(bus.Vgc);
+        if (actualStop != expectedStopReason)
+            throw new InvalidOperationException($"Expected zvm_stop_reason={expectedStopReason}, saw {actualStop}.\n{stopScreen}");
+        foreach (string expected in expectedScreens)
+            RequireContains(stopScreen, expected);
+        Console.WriteLine($"NovaZ stop smoke passed. stop={actualStop}");
+        Console.WriteLine(stopScreen);
+        return 0;
+    }
 
     if (screenOnly)
     {
@@ -337,6 +364,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
                     throw new ArgumentException("--expect-text-color requires text=>hex.");
                 i++;
                 break;
+            case "--expect-stop":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-stop requires a byte value.");
+                i++;
+                break;
             case "--script":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--script requires a file path.");
@@ -410,6 +442,20 @@ static SmokeCommand ParseCommandSpec(string spec)
         ? parts[1].Split("&&", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
         : [];
     return new SmokeCommand(command, expected, mode, waitForPrompt);
+}
+
+static int? LoadExpectStop(string[] args)
+{
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-stop", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length || !byte.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte value))
+            throw new ArgumentException("--expect-stop requires a byte value.");
+        return value;
+    }
+
+    return null;
 }
 
 static List<string> LoadExpectedScreens(string[] args)
@@ -899,6 +945,23 @@ static string ReadRamBytes(CompositeBusDevice bus, int address, int count)
         sb.Append(bus.Read((ushort)(address + i)).ToString("X2"));
     }
     return sb.ToString();
+}
+
+// Step until the CPU parks in the runtime's terminal halt loop (halt: WAI /
+// BRA halt — a 3-byte window the PC can never leave), then return. Sampling
+// between chunks is safe: once parked, every later sample sees the window.
+static void RunUntilCpuHalt(Cpu cpu, CompositeBusDevice bus, int maxSteps, int haltAddress)
+{
+    const int chunk = 10_000;
+    for (int executed = 0; executed < maxSteps; executed += chunk)
+    {
+        RunForSteps(cpu, bus, chunk);
+        // halt: is WAI + BRA (3 bytes); halt+3 is already the next routine.
+        if (cpu.Pc >= haltAddress && cpu.Pc < haltAddress + 3)
+            return;
+    }
+
+    throw new TimeoutException($"Timed out waiting for the runtime halt loop at ${haltAddress:X4}; cpu=PC${cpu.Pc:X4}.\n{SnapshotScreen(bus.Vgc)}");
 }
 
 static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)

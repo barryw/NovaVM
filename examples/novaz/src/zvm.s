@@ -929,6 +929,21 @@ zvm_return:
         STA zvm_pc_h
         LDA zvm_frame_ret_bank,X
         STA zvm_pc_b
+        ; V6: frame 0 carries the all-zero sentinel return PC planted by
+        ; zvm_run_until_read — restoring it means the MAIN ROUTINE returned,
+        ; which halts the machine cleanly (it must not reach the bad-target
+        ; diagnostic below).
+        CPX #$00
+        BNE @check_target
+        LDA zstory_version
+        CMP #$06
+        BNE @check_target
+        LDA zvm_pc_l
+        ORA zvm_pc_h
+        ORA zvm_pc_b
+        BNE @check_target
+        BRA @main_returned
+@check_target:
         JSR zvm_check_code_target
         LDA zvm_stop_reason
         BEQ :+

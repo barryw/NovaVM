@@ -47,9 +47,11 @@ Z5_SPEC_SOUND := $(BUILD_DIR)/z5-spec-sound.pak
 Z5_SPEC_IMAGE := $(DIST_DIR)/z5-spec/fd0.ndi
 Z6_SPEC_STORY := $(BUILD_DIR)/z6-spec.z6
 Z6_SPEC_V7_STORY := $(BUILD_DIR)/z6-spec-v7.z6
+Z6_MAIN_RET_STORY := $(BUILD_DIR)/z6-main-returns.z6
 Z6_SPEC_IMAGE := $(DIST_DIR)/z6-spec/fd0.ndi
 Z6_SPEC_V7_IMAGE := $(DIST_DIR)/z6-spec-v7/fd0.ndi
 Z6_SPEC_NOSEG_IMAGE := $(DIST_DIR)/z6-nosegment/fd0.ndi
+Z6_MAIN_RET_IMAGE := $(DIST_DIR)/z6-main-returns/fd0.ndi
 PROJECT ?=
 STORY_NAME ?= story.bin
 RUNTIME_NAME ?= novaz.bin
@@ -159,6 +161,9 @@ $(Z6_SPEC_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
 $(Z6_SPEC_V7_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
 	$(DOTNET) run --project $(Z6_SPEC) -- --output "$@" --version 7
 
+$(Z6_MAIN_RET_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
+	$(DOTNET) run --project $(Z6_SPEC) -- --output "$@" --main-returns
+
 test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z3_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z3SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z3_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z3_SPEC_IMAGE)" --generic-boot --expect-screen "addrpaddrA-12" --expect-screen "abbr@" --expect-screen "upper window ok" --expect-screen "buffer off ok" --expect-screen "z3 window ok" --expect-screen "z3 spec ok" --skip-manifest-check "take red,key=>z3 input ok"
@@ -182,6 +187,13 @@ test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_STORY
 test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_V7_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "UNSUPPORTED Z-MACHINE VERSION: 7"
+
+# V6 frame-0 return: a main routine that returns must halt the machine
+# cleanly with ZVM_STOP_QUIT (3) — not wedge through the bad-target path
+# (which would leave ZVM_STOP_UNSUPPORTED, 2).
+test-z6-main-returns: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_MAIN_RET_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_MAIN_RET_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6MAINRT" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_MAIN_RET_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_MAIN_RET_IMAGE)" --generic-boot --skip-manifest-check --expect-stop 3
 
 # Negative test: a v6 story packed WITHOUT the NOVAZ6.BIN asset must abort the
 # boot with the runtime's missing-segment message. Deliberately the only
@@ -280,4 +292,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
