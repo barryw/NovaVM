@@ -7,6 +7,19 @@
 .ifndef NOVA_NOVAZ_ZSTORY_INC_INCLUDED
 NOVA_NOVAZ_ZSTORY_INC_INCLUDED = 1
 
+; XRAM staging address for the NOVAZ6.BIN segment image (8KB), used by the
+; runtime boot loader before DMA-copying it to CPU $2000. Rationale: the
+; fixed XRAM layout (runtime/asm/xram.inc) claims $000000-$03FFFF (user
+; heap), $040000-$04FFFF (dynamic story), $050000-$053FFF (static page
+; cache), $054000+ (save/restore staging: save header + VM state,
+; ZVM_SAVE_TOTAL_SIZE — a few KB), and $070000-$07F9FF (NVG stage).
+; $060000-$061FFF sits in the documented hole between the save staging
+; region and the NVG stage, leaving 48KB of growth room for save staging
+; below and touching nothing above.
+ZSTORY_XRAM_NOVAZ6_STAGE_L = $00       ; 24-bit XRAM address $060000,
+ZSTORY_XRAM_NOVAZ6_STAGE_M = $00       ; decomposed low/mid/high.
+ZSTORY_XRAM_NOVAZ6_STAGE_H = $06
+
 ZSTORY_ERR_NONE        = $00
 ZSTORY_ERR_IO          = $01
 ZSTORY_ERR_UNSUPPORTED = $02

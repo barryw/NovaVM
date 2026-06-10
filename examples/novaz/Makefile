@@ -28,6 +28,11 @@ SMOKE_ARGS ?=
 PROJECT_SMOKE_ARGS ?= --generic-boot
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/novaz.bin
+NOVAZ6_BIN := $(BUILD_DIR)/novaz6.bin
+RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
+# Explicit ROM ABI surface exported to the RAM-resident segment. Task 6+ grows
+# this list; the awk rule fails the build if a symbol vanishes from the ROM.
+RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zstory_version
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4
@@ -41,6 +46,7 @@ Z6_SPEC_STORY := $(BUILD_DIR)/z6-spec.z6
 Z6_SPEC_V7_STORY := $(BUILD_DIR)/z6-spec-v7.z6
 Z6_SPEC_IMAGE := $(DIST_DIR)/z6-spec/fd0.ndi
 Z6_SPEC_V7_IMAGE := $(DIST_DIR)/z6-spec-v7/fd0.ndi
+Z6_SPEC_NOSEG_IMAGE := $(DIST_DIR)/z6-nosegment/fd0.ndi
 PROJECT ?=
 STORY_NAME ?= story.bin
 RUNTIME_NAME ?= novaz.bin
@@ -81,7 +87,7 @@ LABEL ?= NOVAZ
 SIZE_KB ?= 1440
 endif
 
-PACK_ARGS := --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)" --story-name "$(STORY_NAME)"
+PACK_ARGS := --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)" --story-name "$(STORY_NAME)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 ifneq ($(strip $(STORY)),)
 PACK_ARGS += --story "$(STORY)"
 endif
@@ -89,15 +95,28 @@ ifneq ($(strip $(SOUNDS)),)
 PACK_ARGS += --sounds "$(SOUNDS)"
 endif
 
-all: $(AUTOBOOT) $(RUNTIME)
+all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN)
 
 $(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR)
 	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
 	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o
 
-$(RUNTIME): src/runtime.s src/runtime.cfg src/zstory.inc src/zstory.s src/ztext.inc src/ztext.s src/zobject.inc src/zobject.s src/zvm.inc src/zvm.s $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/dma.inc $(NOVA_LIB)/dma.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/rng.inc $(NOVA_LIB)/rng.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s | $(BUILD_DIR)
-	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/runtime.o src/runtime.s
+$(RUNTIME): src/runtime.s src/runtime.cfg src/zstory.inc src/zstory.s src/ztext.inc src/ztext.s src/zobject.inc src/zobject.s src/zvm.inc src/zvm.s src/zvm6.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/dma.inc $(NOVA_LIB)/dma.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/rng.inc $(NOVA_LIB)/rng.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s | $(BUILD_DIR)
+	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -o $(BUILD_DIR)/runtime.o src/runtime.s
 	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(BUILD_DIR)/runtime.sym -o $@ $(BUILD_DIR)/runtime.o
+
+# ROM ABI for the RAM-resident segment: pin each needed runtime label to its
+# linked address. Requires ca65 -g on the runtime so unexported labels appear
+# in the -Ln symbol file (lines: "al 00XXXX .symname", exported ones twice).
+$(RUNTIME_ABI): $(RUNTIME)
+	awk -v syms='$(RUNTIME_ABI_SYMS)' 'BEGIN { n = split(syms, want, " "); for (i = 1; i <= n; i++) need[want[i]] = 1 } \
+	    $$1 == "al" { name = substr($$3, 2); if (name in need && !(name in done)) { done[name] = 1; printf "%s := $$%s\n", name, substr($$2, 3) } } \
+	    END { for (i = 1; i <= n; i++) if (!(want[i] in done)) { printf "runtime_abi: symbol %s missing from runtime.sym\n", want[i] > "/dev/stderr"; exit 1 } }' \
+	    $(BUILD_DIR)/runtime.sym > $@ || { rm -f $@; exit 1; }
+
+$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg $(RUNTIME_ABI) | $(BUILD_DIR)
+	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/zvm6.o src/zvm6.s
+	$(LD65) -C src/novaz6.cfg -m $(BUILD_DIR)/novaz6.map -Ln $(BUILD_DIR)/novaz6.sym -o $@ $(BUILD_DIR)/zvm6.o
 
 ndi: $(IMAGE)
 
@@ -137,29 +156,36 @@ $(Z6_SPEC_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
 $(Z6_SPEC_V7_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
 	$(DOTNET) run --project $(Z6_SPEC) -- --output "$@" --version 7
 
-test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z3_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z3SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z3_SPEC_STORY)"
+test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z3_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z3SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z3_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z3_SPEC_IMAGE)" --generic-boot --expect-screen "addrpaddrA-12" --expect-screen "abbr@" --expect-screen "upper window ok" --expect-screen "buffer off ok" --expect-screen "z3 window ok" --expect-screen "z3 spec ok" --skip-manifest-check "take red,key=>z3 input ok"
 
-test-z4-styles: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z4_STYLE_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_STYLE_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4STYLE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_STYLE_STORY)"
+test-z4-styles: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z4_STYLE_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_STYLE_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4STYLE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_STYLE_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z4_STYLE_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "style fixture done" --expect-text-color "normal text uses color 12=>0C" --expect-text-color "bold text uses white=>0F" --expect-text-color "bold phrase survives reset=>0F" --expect-text-color "reverse text uses color c0=>C0" --expect-text-color "bold reverse uses color f0=>F0" --expect-text-color "italic request is ignored=>0C" --expect-text-color "fixed request is ignored=>0C" --expect-text-color "stacked styles use color f0=>F0"
 
-test-z4-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z4_SPEC_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_SPEC_STORY)"
+test-z4-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z4_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z4_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z4SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z4_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z4_SPEC_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "z4 caps ok" --expect-screen "z4 timed ok" --expect-screen "z4 spec ok"
 
-test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z5_SPEC_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z5_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z5SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z5_SPEC_STORY)" --asset "$(Z5_SPEC_SOUND):SOUND.PAK"
+test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z5_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z5_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z5SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z5_SPEC_STORY)" --asset "$(Z5_SPEC_SOUND):SOUND.PAK" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z5_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z5 sound ok" --expect-screen "z5 spec ok" "take silver,key=>z5 input ok"
 
-test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)"
+test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z6 m1 ok" "look=>z6 input ok"
 
-test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
-	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)"
+test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_V7_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "UNSUPPORTED Z-MACHINE VERSION: 7"
+
+# Negative test: a v6 story packed WITHOUT the NOVAZ6.BIN asset must abort the
+# boot with the runtime's missing-segment message. Deliberately the only
+# packer invocation with no --asset "$(NOVAZ6_BIN):NOVAZ6.BIN".
+test-z6-no-segment: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_NOSEG_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6NOSEG" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_NOSEG_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "NOVAZ6.BIN MISSING OR INVALID"
 
 # --- Sound jukebox (mount-and-run "Infocom sound museum" showcase images) ----
 LURKING_SOUND_NUMS  := 3,4,6,7,8,9,10,11,12,13,15,16,17,18
@@ -170,18 +196,18 @@ SHERLOCK_SOUND_NUMS := 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
 # so this is CI-safe; it proves the jukebox loop and the sound_effect trigger.
 JUKEBOX_TEST_STORY := $(BUILD_DIR)/jukebox-test.z3
 JUKEBOX_TEST_IMAGE := $(DIST_DIR)/jukebox-test/fd0.ndi
-test-jukebox: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC) $(SMOKE_DLL)
+test-jukebox: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(JUKEBOX_SRC) $(SMOKE_DLL)
 	$(DOTNET) run --project $(JUKEBOX) -- --output "$(JUKEBOX_TEST_STORY)" --title "Test Jukebox" --numbers "3,4,5"
-	$(DOTNET) run --project $(PACKER) -- --output "$(JUKEBOX_TEST_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "JUKETEST" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(JUKEBOX_TEST_STORY)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(JUKEBOX_TEST_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "JUKETEST" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(JUKEBOX_TEST_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(JUKEBOX_TEST_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "Sound #3" "go=>Sound #4" "go=>Sound #5" "go=>Sound #3"
 
-jukebox-lurking: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC)
+jukebox-lurking: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(JUKEBOX_SRC)
 	$(DOTNET) run --project $(JUKEBOX) -- --output "$(BUILD_DIR)/jukebox-lurking.z3" --title "Lurking Horror Sounds" --numbers "$(LURKING_SOUND_NUMS)"
-	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-lurking/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "LURKJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-lurking.z3" --sounds "$(LURKING_SOUNDS)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-lurking/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "LURKJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-lurking.z3" --sounds "$(LURKING_SOUNDS)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 
-jukebox-sherlock: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(JUKEBOX_SRC)
+jukebox-sherlock: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(JUKEBOX_SRC)
 	$(DOTNET) run --project $(JUKEBOX) -- --output "$(BUILD_DIR)/jukebox-sherlock.z3" --title "Sherlock Sounds" --numbers "$(SHERLOCK_SOUND_NUMS)"
-	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-sherlock/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "SHERJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-sherlock.z3" --sounds "$(SHERLOCK_SOUNDS)"
+	$(DOTNET) run --project $(PACKER) -- --output "$(DIST_DIR)/jukebox-sherlock/fd0.ndi" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "SHERJUKE" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(BUILD_DIR)/jukebox-sherlock.z3" --sounds "$(SHERLOCK_SOUNDS)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 
 # Build the full clearly-named Infocom collection (one .ndi per game) into
 # dist/collection/, auto-discovering supported games under $(INFOCOM_ROOT),
@@ -236,7 +262,7 @@ test-infocom-z5-longplays:
 	$(MAKE) test-project-longplay PROJECT=sherlock STORY="$(SHERLOCK_STORY)"
 	$(MAKE) test-project-longplay PROJECT=ztuu STORY="$(ZTUU_STORY)"
 
-$(IMAGE): FORCE $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) | $(DIST_DIR)
+$(IMAGE): FORCE $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) | $(DIST_DIR)
 	mkdir -p "$(dir $(IMAGE))"
 	$(DOTNET) run --project $(PACKER) -- $(PACK_ARGS)
 
@@ -251,4 +277,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
