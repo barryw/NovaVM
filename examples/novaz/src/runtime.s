@@ -33,6 +33,7 @@ nz_raw_input_mode:     .res 1
 nz_more_enabled:       .res 1
 nz_more_line_count:    .res 1
 nz_auto_wrap:          .res 1
+nz_lf_scrolled:        .res 1  ; last linefeed scrolled the live region (V6 gfx follows)
 nz_saved_x:            .res 1
 nz_saved_y:            .res 1
 nz_saved_color:        .res 1
@@ -421,6 +422,19 @@ nz_screen_put_raw:
 nz_screen_linefeed:
         STZ nz_auto_wrap
         JSR nz_screen_maybe_more
+        ; record whether this linefeed will scroll the live region (mirrors
+        ; vtext_advance_line: bottom row + scroll attribute) — the V6 hook
+        ; scrolls the gfx rect along with the text
+        STZ nz_lf_scrolled
+        LDA VTEXT_FLAGS
+        AND #VTEXT_FLAG_SCROLL
+        BEQ :+
+        LDA VTEXT_HEIGHT
+        DEC A
+        CMP VTEXT_CURY
+        BNE :+
+        INC nz_lf_scrolled
+:
         LDA #$0A
         STA VTEXT_CHAR
         JSR vtext_put_char

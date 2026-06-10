@@ -1915,6 +1915,13 @@ public sealed partial class FileIoController
 
                     bool transparent = (flags & 0x01) != 0;
                     byte transparentIndex = (byte)(flags >> 4);
+                    // Transparent source pixels normally skip, preserving art
+                    // drawn earlier; when the destination is still EMPTY
+                    // (colour 0 = the display-transparent index) the
+                    // underpaint colour (FioSizeL, read before the size
+                    // registers are rewritten) fills it instead — the MCGA
+                    // framebuffer would have held the parchment field there.
+                    byte underpaint = _regs[VgcConstants.FioSizeL - VgcConstants.FioBase];
                     int widthPx = rowBytes * 2 - ((flags & 0x02) != 0 ? 1 : 0);
                     int x0 = startPixel % VgcConstants.GfxWidth;
                     int y0 = startPixel / VgcConstants.GfxWidth;
@@ -1932,9 +1939,15 @@ public sealed partial class FileIoController
                                 break;
                             byte pair = data[src + p / 2];
                             byte color = (p & 1) == 0 ? (byte)(pair >> 4) : (byte)(pair & 0x0F);
+                            int dst = y * VgcConstants.GfxWidth + x;
                             if (transparent && color == transparentIndex)
+                            {
+                                if (underpaint != 0 && _vgcRead is not null &&
+                                    _vgcRead(VgcConstants.MemSpaceGfx, dst) == 0)
+                                    _vgcWrite(VgcConstants.MemSpaceGfx, dst, underpaint);
                                 continue;
-                            _vgcWrite(VgcConstants.MemSpaceGfx, y * VgcConstants.GfxWidth + x, color);
+                            }
+                            _vgcWrite(VgcConstants.MemSpaceGfx, dst, color);
                         }
                     }
                     break;

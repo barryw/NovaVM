@@ -973,11 +973,22 @@ nz6_op_set_colour:
         RTS
 
 ; Z colour code in operand X -> EGA index in A with C=1, or C=0 for "keep
-; the current nibble" (code 0, the V6 -1 idiom, and anything unmapped).
-; Code 1 = default: fg white ($F), bg black ($0) — X selects which.
+; the current nibble" (code 0 and anything unmapped). Code 1 = default:
+; fg white ($F), bg black ($0) — X selects which. Code -1 = the colour of
+; the gfx pixel under the cursor (spec 8.3.1 V6, the Frotz os_peek_colour
+; behaviour Zork Zero's banner is tuned to: text blends into the ribbon
+; art instead of punching solid boxes).
 nz6_map_colour_operand:
         LDA zvm_operand_hi,X
-        BNE @keep                       ; negative/large: keep (covers -1)
+        CMP #$FF
+        BNE :+
+        LDA zvm_operand_lo,X
+        CMP #$FF
+        BNE @keep                       ; other negatives: keep
+        JMP nz6_sample_cursor_pixel     ; -1: A = pixel colour, C=1
+:
+        LDA zvm_operand_hi,X
+        BNE @keep                       ; large: keep
         LDA zvm_operand_lo,X
         BEQ @keep                       ; 0 = current colour
         CMP #1
@@ -1064,6 +1075,14 @@ nz6_apply_colour_style:
 ; Z-code (audited callers: nz_screen_flush_word sites set their state
 ; after flushing).
 nz6_op_cr_newline:
+        ; the MCGA framebuffer is one surface: when the newline scrolled the
+        ; text, the gfx rect under the live window scrolls with it
+        LDA nz_lf_scrolled
+        BEQ :+
+        STZ nz_lf_scrolled
+        LDA #1
+        JSR nz6_gfx_scroll_live
+:
         LDA nz6_win_current
         STA nz6_tmp_win
         LDX #9
@@ -1102,6 +1121,46 @@ nz6_op_cr_newline:
         PLA
         STA nz_word_len
 @rts:
+        RTS
+
+; A := the gfx pixel colour under the live cursor (the cursor cell's
+; top-left pixel), C=1. Uses the VGC MEMREAD command (P0=space, P1/P2=addr,
+; P3=result); pixel addr = cellrow*4*320 + cellcol*4, same 16-bit shape as
+; the draw destination (row*1280 lands wholly in the high byte as row*5).
+nz6_sample_cursor_pixel:
+        LDA VTEXT_LEFT
+        CLC
+        ADC VTEXT_CURX                  ; abs cell col
+        STZ VGC_P1
+        STZ VGC_P2
+        ASL A
+        ROL VGC_P2
+        ASL A
+        ROL VGC_P2
+        STA VGC_P1                      ; col*4 (16-bit across P1/P2)
+        LDA VTEXT_TOP
+        CLC
+        ADC VTEXT_CURY
+        STA nz6_clr_tmp
+        ASL A
+        ASL A
+        CLC
+        ADC nz6_clr_tmp                 ; row*5 (max 245)
+        CLC
+        ADC VGC_P2
+        STA VGC_P2                      ; + row*1280 in the high byte
+        LDA #$03                        ; MemSpaceGfx
+        STA VGC_P0
+        STZ VGC_P4
+        LDA #VCMD_MEMREAD
+        STA VGC_CMD
+@wait:
+        LDA VGC_CMD
+        AND #$01
+        BNE @wait
+        LDA VGC_P3
+        AND #$0F
+        SEC
         RTS
 
 ; EGA indices for Z-machine colour codes 2-9 (spec section 8.3.1):
@@ -1220,6 +1279,9 @@ nz6_ext_scroll_window:
         LDA zvm_operand_lo+1
         CMP VTEXT_HEIGHT
         BCS @clear                      ; >= height: ditto (height 0 too)
+        PHA
+        JSR nz6_gfx_scroll_live         ; art scrolls with the text
+        PLA
         TAX
 @loop:
         PHX
@@ -1230,6 +1292,10 @@ nz6_ext_scroll_window:
 @restore:
         JMP nz6_apply_current_window
 @clear:
+        LDA VTEXT_HEIGHT
+        BEQ :+
+        JSR nz6_gfx_scroll_live         ; rows >= height: clears the gfx rect
+:
         JSR vtext_clear_region
         BRA @restore
 @negative:
@@ -1714,6 +1780,12 @@ nz6_ext_draw_picture:
         STA FIO_GLENL
         LDA nz6_pic_len_hi
         STA FIO_GLENH
+        LDA nz6_colour                  ; underpaint: transparent art pixels
+        LSR A                           ; over EMPTY gfx take the window
+        LSR A                           ; background (the MCGA framebuffer
+        LSR A                           ; would hold the parchment there)
+        LSR A
+        STA FIO_SIZEL
         LDA #$03                        ; FioPageTargetGfx4
         STA FIO_DIRTYPE
         LDA #FIO_CMD_XPAGE
@@ -2012,6 +2084,139 @@ nz6_pic_clip_rect:
 @empty:
         CLC
         RTS
+
+; Scroll the LIVE vtext region's gfx rect up by A cell rows (art follows
+; the text — on MCGA they share one framebuffer). A >= height clears the
+; whole rect. Clobbers the nz6_blt_* scratch (no draw is ever in flight
+; when text scrolls).
+nz6_gfx_scroll_live:
+        STA nz6_pic_tmp                 ; rows to scroll (cells)
+        LDA VTEXT_HEIGHT
+        BEQ @rts
+        LDA VTEXT_WIDTH
+        BNE @go
+@rts:
+        RTS
+@go:
+        ; dst px addr = top*1280 + left*4 (top*5 in the high byte)
+        LDA VTEXT_LEFT
+        STA nz6_blt_dst_lo
+        STZ nz6_blt_dst_hi
+        ASL nz6_blt_dst_lo
+        ROL nz6_blt_dst_hi
+        ASL nz6_blt_dst_lo
+        ROL nz6_blt_dst_hi
+        LDA VTEXT_TOP
+        ASL A
+        ASL A
+        CLC
+        ADC VTEXT_TOP                   ; top*5
+        CLC
+        ADC nz6_blt_dst_hi
+        STA nz6_blt_dst_hi
+        ; width px = W*4 (16-bit)
+        LDA VTEXT_WIDTH
+        STA nz6_blt_wclip
+        STZ nz6_blt_wclip_hi
+        ASL nz6_blt_wclip
+        ROL nz6_blt_wclip_hi
+        ASL nz6_blt_wclip
+        ROL nz6_blt_wclip_hi
+        ; copy rows = (H - rows) cells; <= 0 means clear the whole rect
+        LDA VTEXT_HEIGHT
+        SEC
+        SBC nz6_pic_tmp
+        BCC @fill_all
+        BEQ @fill_all
+        STA nz6_blt_hclip               ; cells to copy
+        ; blitter copy: src = dst + rows*1280 (rows*5 in the high byte)
+        LDA #NZ6_SPACE_GFX
+        STA BLT_SRCSPACE
+        STA BLT_DSTSPACE
+        LDA nz6_blt_dst_lo
+        STA BLT_SRCL
+        STA BLT_DSTL
+        LDA nz6_pic_tmp
+        ASL A
+        ASL A
+        CLC
+        ADC nz6_pic_tmp                 ; rows*5
+        CLC
+        ADC nz6_blt_dst_hi
+        STA BLT_SRCM
+        LDA nz6_blt_dst_hi
+        STA BLT_DSTM
+        STZ BLT_SRCH
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_SRCSTRL
+        STA BLT_DSTSTRL
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_SRCSTRH
+        STA BLT_DSTSTRH
+        LDA nz6_blt_wclip
+        STA BLT_WIDTHL
+        LDA nz6_blt_wclip_hi
+        STA BLT_WIDTHH
+        LDA nz6_blt_hclip               ; (H-rows) cells -> *4 px rows
+        ASL A
+        ASL A
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        STZ BLT_MODE_REG
+        STZ BLT_CKEY
+        STZ BLT_FILLVALUE
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JSR blitter_wait
+        ; fill the vacated strip: dst += (H-rows)*1280, height rows*4
+        LDA nz6_blt_hclip
+        ASL A
+        ASL A
+        CLC
+        ADC nz6_blt_hclip               ; (H-rows)*5
+        CLC
+        ADC nz6_blt_dst_hi
+        STA nz6_blt_dst_hi
+        LDA nz6_pic_tmp
+        BRA @fill
+@fill_all:
+        LDA VTEXT_HEIGHT
+@fill:
+        ASL A
+        ASL A
+        STA nz6_blt_hclip               ; strip height in px rows
+        STZ BLT_SRCSPACE
+        STZ BLT_SRCL
+        STZ BLT_SRCM
+        STZ BLT_SRCH
+        STZ BLT_SRCSTRL
+        STZ BLT_SRCSTRH
+        LDA #NZ6_SPACE_GFX
+        STA BLT_DSTSPACE
+        LDA nz6_blt_dst_lo
+        STA BLT_DSTL
+        LDA nz6_blt_dst_hi
+        STA BLT_DSTM
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRL
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRH
+        LDA nz6_blt_wclip
+        STA BLT_WIDTHL
+        LDA nz6_blt_wclip_hi
+        STA BLT_WIDTHH
+        LDA nz6_blt_hclip
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        LDA #BLT_MODE_FILL
+        STA BLT_MODE_REG
+        STZ BLT_CKEY
+        STZ BLT_FILLVALUE
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JMP blitter_wait
 
 ; Clear the whole 320x200 gfx plane to color 0 (the global display
 ; transparent color: the text background shows through).

@@ -1316,6 +1316,50 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void XPage_Gfx4Target_UnderpaintFillsTransparentOverEmptyGfx()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // 4x1 px, transparent index 1: E 1 1 E. Destination: pixel 1 has
+            // art ($3), pixel 2 is empty ($0). With underpaint $F the empty
+            // transparent pixel becomes parchment, the art one survives.
+            byte[] pak = [0xE1, 0x1E];
+            File.WriteAllBytes(Path.Combine(dir, "pics.bin"), pak);
+
+            var gfx = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+            int start = 50 * VgcConstants.GfxWidth + 100;
+            gfx[start + 1] = 0x03; // existing art under the first transparent px
+
+            var fio = MakeControllerWithGfx(dir, gfx);
+            SetFilename(fio, "pics.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0);
+            fio.Write((ushort)VgcConstants.FioEndL, 0);
+            fio.Write((ushort)VgcConstants.FioEndH, 0x11); // transparent, index 1
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetGfx4);
+            fio.Write((ushort)VgcConstants.FioGSpace, 2);
+            fio.Write((ushort)VgcConstants.FioGAddrL, (byte)start);
+            fio.Write((ushort)VgcConstants.FioGAddrH, (byte)(start >> 8));
+            fio.Write((ushort)VgcConstants.FioGLenL, 2);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0);
+            fio.Write((ushort)VgcConstants.FioSizeL, 0x0F); // underpaint colour
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(0x0E, gfx[start], "opaque");
+            Assert.AreEqual(0x03, gfx[start + 1], "transparent over art survives");
+            Assert.AreEqual(0x0F, gfx[start + 2], "transparent over empty underpaints");
+            Assert.AreEqual(0x0E, gfx[start + 3], "opaque");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
     public void XPage_Gfx4Target_OddWidthSkipsPadAndClipsAtEdges()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");

@@ -297,8 +297,9 @@ static void EmitColoursProgram(ZCode z)
     z.TwoOp(27, Operand.Small(0), Operand.Small(0));          // 0,0 = keep
     z.Print("egakeep");                                       // -> F0
     z.NewLine();
-    z.TwoOpVar(27, Operand.Small(3), Operand.Large(0xFFFF));  // red fg, -1 keeps bg
-    z.Print("egaredkeep");                                    // -> F4
+    z.TwoOpVar(27, Operand.Small(3), Operand.Large(0xFFFF));  // red fg; bg -1 =
+    z.Print("egaredkeep");                                    // pixel under cursor
+    // (no art here -> 0) -> 04
     z.NewLine();
     z.TwoOp(27, Operand.Small(1), Operand.Small(1));          // 1,1 = defaults
     z.Print("egadflt");                                       // -> 0F
@@ -368,23 +369,6 @@ static void EmitSpecProgram(ZCode z)
     z.TwoOpStore(16, Operand.Large(0), Operand.Small(1), 0x11); // loadb hdr $01
     z.TwoOpStore(9, Operand.Var(0x11), Operand.Small(2), 0x11); // and #2
     z.AssertVarEquals(0x11, 2, "flags1-pics");
-
-    // --- draw_picture / erase_picture blits (window 0 still at its reset
-    // default origin (1,1), so abs cell = coord-1; 1 cell = 4x4 gfx px).
-    // Pic 3 at cells (20,10) -> px x 40-47, y 80-87, solid magenta ($5).
-    z.ExtOp(5, Operand.Small(3), Operand.Small(21), Operand.Small(11));
-    // Pic 9 (4x4, E 1 1 E rows, transparent index 1) over its top-left
-    // corner: opaque yellow edges land, the transparent middle keeps the
-    // magenta underneath — the nibble-granular keying fixture.
-    z.ExtOp(5, Operand.Small(9), Operand.Small(21), Operand.Small(11));
-    // Pic 7 (6x10 cyan) at cells (30,40) -> px x 160-165, y 120-129, then
-    // erased: the rect refills with the window background (black).
-    z.ExtOp(5, Operand.Small(7), Operand.Small(31), Operand.Small(41));
-    z.ExtOp(7, Operand.Small(7), Operand.Small(31), Operand.Small(41));
-    // Clipping: pic 3 at x cell 79 -> px 316-323 clips at 320 without
-    // derailing; fully off-screen draw (y cell 59) is a clean no-op.
-    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(80));
-    z.ExtOp(5, Operand.Small(3), Operand.Small(60), Operand.Small(1));
 
     // --- CR interrupt (window props 8/9): each newline printed to the
     // window decrements the countdown; reaching 0 fires the prop-8 routine
@@ -727,6 +711,26 @@ static void EmitSpecProgram(ZCode z)
     z.Label("objins-sib");
     z.AssertVarEquals(0x12, 2, "objins-sib4");                 // sibling(4) == 2
 
+    // --- draw_picture / erase_picture blits. This block runs at the TAIL:
+    // newline scrolls now move the gfx layer with the text (MCGA semantics),
+    // so art drawn early would scroll away with the program's output. The
+    // px targets are unchanged; coords are window-0-relative to the final
+    // inset origin (6,6): rel = abs_cell - 4.
+    // Pic 3 at cells (20,10) -> px x 40-47, y 80-87, solid magenta ($5).
+    z.ExtOp(5, Operand.Small(3), Operand.Small(16), Operand.Small(6));
+    // Pic 9 (4x4, E 1 1 E rows, transparent index 1) over its top-left
+    // corner: opaque yellow edges land, the transparent middle keeps the
+    // magenta underneath — the nibble-keyed unpack fixture.
+    z.ExtOp(5, Operand.Small(9), Operand.Small(16), Operand.Small(6));
+    // Pic 7 (6x10 cyan) at cells (30,40) -> px x 160-165, y 120-129, then
+    // erased: the rect refills with the window background (black).
+    z.ExtOp(5, Operand.Small(7), Operand.Small(26), Operand.Small(36));
+    z.ExtOp(7, Operand.Small(7), Operand.Small(26), Operand.Small(36));
+    // Clipping: pic 3 at x cell 79 -> px 316-323 clips at 320 without
+    // derailing; fully off-screen draw (y cell 59) is a clean no-op.
+    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(75));
+    z.ExtOp(5, Operand.Small(3), Operand.Small(56), Operand.Small(1));
+
     // MCGA-faithful compositing: drawing a picture overwrites the text
     // pixels under it, so the blit blanks the covered cells (space, bg 0 =
     // the global background -> the art shows through in mode 2). This runs
@@ -746,6 +750,10 @@ static void EmitSpecProgram(ZCode z)
     // draw from window 4 itself (coords are window-relative; window 0 is
     // the inset here): rel (1,1) = window 4's origin = cell (1,30)
     z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(1));
+    // Art scrolls WITH the text (the MCGA framebuffer is one surface):
+    // scroll_window 4 by one cell row moves QQ up to row 35 AND shifts the
+    // picture's gfx rows up 4px — its old bottom rows go empty.
+    z.ExtOp(20, Operand.Small(4), Operand.Small(1));
     z.VarOp(11, Operand.Small(0));                                      // back to window 0
 
 
