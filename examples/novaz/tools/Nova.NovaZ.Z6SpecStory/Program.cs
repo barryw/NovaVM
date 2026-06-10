@@ -31,7 +31,7 @@ const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x1600;                  // strings region;  packed (0x1600-0x400)/4
 
-(string outputPath, int version, bool mainReturns, string? fixture) = ParseArgs(args);
+(string outputPath, int version, bool mainReturns, string? fixture, string? picturesPakPath) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -56,14 +56,21 @@ Array.Copy(codeBytes, 0, story, CodeBase, codeBytes.Length);
 
 WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
+if (picturesPakPath is not null)
+{
+    byte[] pak = BuildSyntheticPicturesPak();
+    File.WriteAllBytes(picturesPakPath, pak);
+    Console.WriteLine($"Wrote {picturesPakPath} ({pak.Length} bytes)");
+}
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, code {codeBytes.Length} bytes, version {version})");
 
-static (string Output, int Version, bool MainReturns, string? Fixture) ParseArgs(string[] args)
+static (string Output, int Version, bool MainReturns, string? Fixture, string? PicturesPak) ParseArgs(string[] args)
 {
     string output = "build/z6-spec.z6";
     int version = 6;
     bool mainReturns = false;
     string? fixture = null;
+    string? picturesPak = null;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
@@ -80,6 +87,10 @@ static (string Output, int Version, bool MainReturns, string? Fixture) ParseArgs
                 break;
             case "--main-returns":
                 mainReturns = true;
+                break;
+            case "--pictures-pak" when value is not null:
+                picturesPak = value;
+                i++;
                 break;
             case "--fixture" when value is not null:
                 if (value != "colours")
@@ -99,7 +110,7 @@ static (string Output, int Version, bool MainReturns, string? Fixture) ParseArgs
         }
     }
 
-    return (output, version, mainReturns, fixture);
+    return (output, version, mainReturns, fixture, picturesPak);
 }
 
 static void PrintUsage()
@@ -109,6 +120,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  --version <n>   header version byte only (default 6; 7 for rejection tests)");
     Console.Error.WriteLine("  --main-returns  main routine is a bare rtrue (frame-0 return quit test)");
     Console.Error.WriteLine("  --fixture colours  V6 colour/style fixture (EGA mapping asserts)");
+    Console.Error.WriteLine("  --pictures-pak <pics.pak>  also emit the synthetic 2-picture PICS.PAK");
 }
 
 static void WriteHeader(byte[] story, int version)
@@ -203,6 +215,40 @@ static void WritePackedText(byte[] story, int offset, string text)
 // --main-returns: the smallest possible V6 story — the main routine is a
 // bare rtrue. Returning from frame 0 must halt the machine cleanly with
 // ZVM_STOP_QUIT (the smoke target asserts the stop reason directly).
+// Synthetic PICS.PAK for the spec image (format mirrors BlorbPictures):
+// "NZPK" v1, count=2, release=7. Pic 3 = 8x8 px solid magenta ($5), pic 7 =
+// 6x10 px solid cyan ($3) — ceil-divide by 4 gives 2x2 and 2(w)x3(h) cells.
+// Offsets are absolute within the pak; rows pack two pixels per byte.
+static byte[] BuildSyntheticPicturesPak()
+{
+    const int headerSize = 9, entrySize = 15;
+    int dataStart = headerSize + 2 * entrySize;
+    int len3 = 4 * 8;      // 8 px = 4 bytes/row, 8 rows
+    int len7 = 3 * 10;     // 6 px = 3 bytes/row, 10 rows
+    var pak = new byte[dataStart + len3 + len7];
+    pak[0] = (byte)'N'; pak[1] = (byte)'Z'; pak[2] = (byte)'P'; pak[3] = (byte)'K';
+    pak[4] = 1;
+    pak[5] = 2; pak[6] = 0;          // count
+    pak[7] = 7; pak[8] = 0;          // release
+    WriteEntry(pak, headerSize, z: 3, w: 8, h: 8, offset: dataStart, len: len3);
+    WriteEntry(pak, headerSize + entrySize, z: 7, w: 6, h: 10, offset: dataStart + len3, len: len7);
+    for (int i = 0; i < len3; i++) pak[dataStart + i] = 0x55;
+    for (int i = 0; i < len7; i++) pak[dataStart + len3 + i] = 0x33;
+    return pak;
+
+    static void WriteEntry(byte[] pak, int at, int z, int w, int h, int offset, int len)
+    {
+        pak[at] = (byte)z; pak[at + 1] = (byte)(z >> 8);
+        pak[at + 2] = (byte)w; pak[at + 3] = (byte)(w >> 8);
+        pak[at + 4] = (byte)h; pak[at + 5] = (byte)(h >> 8);
+        pak[at + 6] = 0;
+        pak[at + 7] = (byte)offset; pak[at + 8] = (byte)(offset >> 8);
+        pak[at + 9] = (byte)(offset >> 16); pak[at + 10] = (byte)(offset >> 24);
+        pak[at + 11] = (byte)len; pak[at + 12] = (byte)(len >> 8);
+        pak[at + 13] = (byte)(len >> 16); pak[at + 14] = (byte)(len >> 24);
+    }
+}
+
 static void EmitMainReturnsProgram(ZCode z)
 {
     z.Byte(0);       // locals count
@@ -277,25 +323,42 @@ static void EmitSpecProgram(ZCode z)
     // mis-consumed store byte derails the instruction stream.
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
     z.AssertVarEquals(0x12, 1, "windprop-default");
-    // picture_data N table ?(label) (EXT:6): no pictures in M1. PicTable is
-    // baked with $BEEF words so the write-asserts below prove real writes.
-    // N>0 first: queries a specific picture — writes NOTHING, branches false.
-    z.ExtOpBranch(6, "picn_taken", branchIf: true, Operand.Small(6), Operand.Large(PicTable));
+    // picture_data N table ?(label) (EXT:6) against the synthetic PICS.PAK
+    // on the spec image (pic 3 = 8x8 px, pic 7 = 6x10 px, release 7; see
+    // BuildSyntheticPicturesPak). Dimensions come back in CELLS — pixel dims
+    // divided by 4 and rounded UP, so layout reservations never overflow.
+    z.ExtOpBranch(6, "pic3_known", branchIf: true, Operand.Small(3), Operand.Large(PicTable));
+    z.Fail("pic3-branch");
+    z.Label("pic3_known");
+    z.AssertWordEquals(PicTable, 0, 2, "pic3-h");
+    z.AssertWordEquals(PicTable, 1, 2, "pic3-w");
+    z.ExtOpBranch(6, "pic7_known", branchIf: true, Operand.Small(7), Operand.Large(PicTable));
+    z.Fail("pic7-branch");
+    z.Label("pic7_known");
+    z.AssertWordEquals(PicTable, 0, 3, "pic7-h"); // ceil(10/4)
+    z.AssertWordEquals(PicTable, 1, 2, "pic7-w"); // ceil(6/4)
+    // Unknown picture: writes NOTHING (the $BEEF poison survives), branch
+    // false. Re-poison first — pic3/pic7 above overwrote the table.
+    z.VarOp(1, Operand.Large(PicTable), Operand.Small(0), Operand.Large(0xBEEF));
+    z.VarOp(1, Operand.Large(PicTable), Operand.Small(1), Operand.Large(0xBEEF));
+    z.ExtOpBranch(6, "picn_taken", branchIf: true, Operand.Small(99), Operand.Large(PicTable));
     z.Jump("picn_ok");
     z.Label("picn_taken");
     z.Fail("picn-branch");
     z.Label("picn_ok");
     z.AssertWordEquals(PicTable, 0, 0xBEEF, "picn-nowrite0");
     z.AssertWordEquals(PicTable, 1, 0xBEEF, "picn-nowrite1");
-    // N=0: writes word 0 = picture count (0) and word 1 = release (0), and
-    // still branches false — the branch means "any pictures available".
+    // N=0: word 0 = picture count, word 1 = release; branch TRUE because
+    // pictures exist on this image.
     z.ExtOpBranch(6, "pic0_taken", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
-    z.Jump("pic0_ok");
+    z.Fail("pic0-branch");
     z.Label("pic0_taken");
-    z.Fail("pic-branch");
-    z.Label("pic0_ok");
-    z.AssertWordEquals(PicTable, 0, 0, "piccount");
-    z.AssertWordEquals(PicTable, 1, 0, "picrel");
+    z.AssertWordEquals(PicTable, 0, 2, "piccount");
+    z.AssertWordEquals(PicTable, 1, 7, "picrel");
+    // Flags1 bit 1 (pictures available) must be set once the pak loaded.
+    z.TwoOpStore(16, Operand.Large(0), Operand.Small(1), 0x11); // loadb hdr $01
+    z.TwoOpStore(9, Operand.Var(0x11), Operand.Small(2), 0x11); // and #2
+    z.AssertVarEquals(0x11, 2, "flags1-pics");
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");

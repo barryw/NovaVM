@@ -1,27 +1,8 @@
-# Zork Zero (V6) smoke — M2 real-window-rendering milestone.
-# Boot reaches the Banquet Hall prompt; boot-screen layout (banner rows,
-# playfield inset, prompt position) is pinned by the --expect-at args in
-# project.mk. The commands below pin response text plus, after the last
-# turn, absolute-cell layout via .expect-at:
-#   - the banner survives three turns of playfield scrolling untouched,
-#   - the echoed command + response render inside the 45x70 inset at (5,5)
-#     (+1 col left margin from the game's set_margins => text column 6),
-#   - "Time passes..." ends in blank cells (trailing '|' pins the spaces):
-#     those cells held longer inventory-response text one turn earlier, so
-#     this is the stale-text regression trap,
-#   - the prompt sits at the window bottom row (abs row 49, col 6),
-#   - the left gutter (cols 0-5) outside the inset stays blank.
-# Rows are deterministic: the run is bit-for-bit reproducible (no wall-clock
-# inputs) and only stable early prologue turns are scripted — the fireball
-# interlude lands later (plan risk 4).
-# "Moves:Sc3" on banner row 1 is the game's own text-only artifact (it lays
-# the banner out from picture metadata; see README).
+# Zork Zero (V6) smoke — M3 Task 4 interim (picture_data live, no blits yet).
+# Boot layout is pinned by --expect-at in project.mk. The turns below pin
+# response text; positional .expect-at re-pins follow in Task 7 once
+# draw_picture (Task 5) and the CR-interrupt margin release (Task 6) settle
+# the final layout.
 look=>Banquet Hall
 inventory=>platter of hellhound bones
 wait=>Time passes
-.expect-at 0,0=>Banquet Hall                   Flatheadia
-.expect-at 0,1=>Moves:Sc3
-.expect-at 0,5=>      |
-.expect-at 6,35=>>wait
-.expect-at 6,36=>Time passes...      |
-.expect-at 6,49=>>

@@ -13,13 +13,21 @@ PROJECT_IMAGE := $(DIST_DIR)/$(PROJECT)/fd0.ndi
 # on row 1, a blank row in the banner/playfield gap, the room title inside the
 # 45x70 playfield inset at origin (5,5) + 1-col left margin (text col 6, with
 # blank gutter cols 0-5), and the prompt at the window bottom row 49.
+# M3 interim pins (Task 4: picture_data answers from PICS.PAK): the banner
+# now lays out from real picture metrics — "Banquet Hall ... Flatheadia" on
+# row 2, "Moves:  0 ... Score:   0" on row 3, the M2 "Moves:Sc1" garble is
+# gone — and the boot CLEAR-CRCNT newline storm self-limited (the countdown
+# is armed with a real picture height instead of -1), so boot needs no MORE
+# answers at all. The prompt sits at (18,41): the drop-cap margin is still
+# armed because the CR interrupt never fires — Task 6 releases it; Task 7
+# re-pins the final layout with border art.
 PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check \
-	--expect-at "0,0=>Banquet Hall                   Flatheadia" \
-	--expect-at "0,1=>Moves:" \
-	--expect-at "0,4=>      " \
-	--expect-at "0,37=>      Banquet Hall" \
-	--expect-at "6,49=>>"
-# 300KB V6 story: the boot prologue ends in the game's own ~65K-newline
-# CLEAR-CRCNT storm (see README), which dominates the step budget.
-NOVAZ_SMOKE_MAX_STEPS ?= 480000000
+	--expect-at "9,2=>Banquet Hall" \
+	--expect-at "61,2=>Flatheadia" \
+	--expect-at "9,3=>Moves:  0" \
+	--expect-at "61,3=>Score:   0" \
+	--expect-at "18,41=>>"
+# The 65K-newline boot storm died with real picture metrics; 80M steps is
+# plenty for boot + three turns now.
+NOVAZ_SMOKE_MAX_STEPS ?= 80000000
 export NOVAZ_SMOKE_MAX_STEPS

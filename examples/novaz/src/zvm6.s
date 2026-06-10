@@ -90,6 +90,22 @@ nz6_pics_count_lo: .res 1       ; picture count from the pak header (LE)
 nz6_pics_count_hi: .res 1
 nz6_pics_release_lo: .res 1     ; pak release number (LE)
 nz6_pics_release_hi: .res 1
+nz6_pics_cur_l:  .res 1         ; 24-bit XRAM cursor over the index
+nz6_pics_cur_m:  .res 1
+nz6_pics_cur_h:  .res 1
+nz6_pics_rem_lo: .res 1         ; entries left to scan
+nz6_pics_rem_hi: .res 1
+nz6_pic_w_lo:    .res 1         ; matched entry: width px (LE)
+nz6_pic_w_hi:    .res 1
+nz6_pic_h_lo:    .res 1         ; height px
+nz6_pic_h_hi:    .res 1
+nz6_pic_flags:   .res 1         ; bit 0 transparency, bits 4-7 transparent index
+nz6_pic_off_l:   .res 1         ; bitmap offset in the pak (24 bits used)
+nz6_pic_off_m:   .res 1
+nz6_pic_off_h:   .res 1
+nz6_pic_len_lo:  .res 1         ; bitmap length (<= 32000)
+nz6_pic_len_hi:  .res 1
+nz6_pic_tmp:     .res 1         ; entry-scan scratch (z_number low byte)
 
 .segment "CODE"
 
@@ -555,6 +571,24 @@ nz6_pics_preload:
         LDA #1
         STA nz6_pics_avail
 @done:
+        ; reflect availability in Flags1 bit 1 ("pictures available?") —
+        ; header config ran before the segment loaded, so the bit is set
+        ; here, where the pak truth is known. Runs on restart too.
+        LDA #ZHEADER_FLAGS1
+        STA zstory_addr_l
+        STZ zstory_addr_m
+        STZ zstory_addr_h
+        JSR zstory_read8
+        BNE @rts
+        LDA XRAM_DATA
+        AND #%11111101
+        LDX nz6_pics_avail
+        BEQ :+
+        ORA #%00000010
+:
+        STA XRAM_DATA
+        JSR zstory_write8
+@rts:
         RTS
 @next:                                  ; read header byte X, A = value
         STX XRAM_ADDRL
@@ -1410,20 +1444,159 @@ nz6_write_zero_word:
         STZ zstory_word_hi
         JMP zstory_write16
 
-; picture_data N table ?(label) (EXT:6). M1 ships no picture file: with N=0
-; ("how many pictures?") the spec requires word 0 := picture count and
-; word 1 := release number — both 0 here. With N>0 (a specific picture)
-; nothing is written. Either way no picture data is available, so the
-; branch — "is there data?" — is always FALSE.
+; picture_data N table ?(label) (EXT:6), answered from the XRAM-resident
+; PICS.PAK index. N=0: word 0 := picture count, word 1 := release; branch
+; TRUE iff any pictures (no pak: 0/0 and branch false — the M2 behavior).
+; N>0: index lookup — found: word 0 := height, word 1 := width, both in
+; CELLS (pixel dims /4 rounded UP so layout reservations never overflow),
+; branch TRUE; unknown: nothing written, branch FALSE.
 nz6_ext_picture_data:
         LDA zvm_operand_lo
         ORA zvm_operand_hi
-        BNE @branch
+        BNE @specific
         JSR nz6_ustack_addr             ; table = operand 1, same idiom
-        JSR nz6_write_zero_word         ; word 0: picture count = 0
-        JSR nz6_write_zero_word         ; word 1: release number = 0
-@branch:
+        LDA nz6_pics_count_hi
+        STA zstory_word_hi
+        LDA nz6_pics_count_lo
+        STA zstory_word_lo
+        JSR zstory_write16              ; word 0: count (addr advances)
+        LDA nz6_pics_release_hi
+        STA zstory_word_hi
+        LDA nz6_pics_release_lo
+        STA zstory_word_lo
+        JSR zstory_write16              ; word 1: release
+        LDA nz6_pics_avail
+        BEQ @false
+        JMP zvm_branch_true
+@specific:
+        JSR nz6_pics_find
+        BCC @false
+        JSR nz6_ustack_addr
+        LDA nz6_pic_h_lo                ; word 0: height cells
+        LDX nz6_pic_h_hi
+        JSR nz6_px_to_cells
+        JSR zstory_write16
+        LDA nz6_pic_w_lo                ; word 1: width cells
+        LDX nz6_pic_w_hi
+        JSR nz6_px_to_cells
+        JSR zstory_write16
+        JMP zvm_branch_true
+@false:
         JMP zvm_branch_false
+
+; A/X = pixel dims lo/hi -> zstory_word := (px+3)>>2 (cells, ceil). Max pixel
+; dim is 320 px = 80 cells, so the high byte of the result is always 0.
+nz6_px_to_cells:
+        CLC
+        ADC #3
+        STA zstory_word_lo
+        TXA
+        ADC #0
+        LSR A
+        ROR zstory_word_lo
+        LSR A
+        ROR zstory_word_lo
+        STZ zstory_word_hi
+        RTS
+
+; Look up picture N (operand 0) in the index: C=1 found with the entry
+; fields cached in nz6_pic_*, C=0 unknown picture or no pak. The index is
+; sorted by z_number ascending, so the scan stops early at the first entry
+; past N.
+nz6_pics_find:
+        LDA nz6_pics_avail
+        BNE :+
+        CLC
+        RTS
+:
+        LDA #ZSTORY_XRAM_PICS_INDEX_L + 9       ; cursor := first entry
+        STA nz6_pics_cur_l
+        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        STA nz6_pics_cur_m
+        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        STA nz6_pics_cur_h
+        LDA nz6_pics_count_lo
+        STA nz6_pics_rem_lo
+        LDA nz6_pics_count_hi
+        STA nz6_pics_rem_hi
+@loop:
+        LDA nz6_pics_rem_lo
+        ORA nz6_pics_rem_hi
+        BEQ @notfound
+        JSR nz6_pics_next_byte          ; entry z_number lo
+        STA nz6_pic_tmp
+        JSR nz6_pics_next_byte          ; entry z_number hi
+        CMP zvm_operand_hi
+        BNE @hi_differs
+        LDA nz6_pic_tmp
+        CMP zvm_operand_lo
+        BEQ @found
+        BCS @notfound                   ; entry > N: sorted, stop
+        BRA @skip
+@hi_differs:
+        BCS @notfound                   ; entry hi > N hi: sorted, stop
+@skip:
+        CLC                             ; skip the 13 remaining entry bytes
+        LDA nz6_pics_cur_l
+        ADC #13
+        STA nz6_pics_cur_l
+        BCC :+
+        INC nz6_pics_cur_m
+        BNE :+
+        INC nz6_pics_cur_h
+:
+        LDA nz6_pics_rem_lo
+        BNE :+
+        DEC nz6_pics_rem_hi
+:
+        DEC nz6_pics_rem_lo
+        BRA @loop
+@found:
+        JSR nz6_pics_next_byte
+        STA nz6_pic_w_lo
+        JSR nz6_pics_next_byte
+        STA nz6_pic_w_hi
+        JSR nz6_pics_next_byte
+        STA nz6_pic_h_lo
+        JSR nz6_pics_next_byte
+        STA nz6_pic_h_hi
+        JSR nz6_pics_next_byte
+        STA nz6_pic_flags
+        JSR nz6_pics_next_byte
+        STA nz6_pic_off_l
+        JSR nz6_pics_next_byte
+        STA nz6_pic_off_m
+        JSR nz6_pics_next_byte
+        STA nz6_pic_off_h
+        JSR nz6_pics_next_byte          ; offset byte 3: pak < 16MB, ignore
+        JSR nz6_pics_next_byte
+        STA nz6_pic_len_lo
+        JSR nz6_pics_next_byte
+        STA nz6_pic_len_hi
+        ; len bytes 2-3 ignored: bitmaps cap at 32000 (320x200 4bpp)
+        SEC
+        RTS
+@notfound:
+        CLC
+        RTS
+
+; Read the index byte at the 24-bit cursor -> A; cursor += 1.
+nz6_pics_next_byte:
+        LDA nz6_pics_cur_l
+        STA XRAM_ADDRL
+        LDA nz6_pics_cur_m
+        STA XRAM_ADDRM
+        LDA nz6_pics_cur_h
+        STA XRAM_ADDRH
+        JSR xram_read8
+        INC nz6_pics_cur_l
+        BNE :+
+        INC nz6_pics_cur_m
+        BNE :+
+        INC nz6_pics_cur_h
+:
+        LDA XRAM_DATA
+        RTS
 
 ; read_mouse table (EXT:22). No mouse hardware: y, x, buttons and menu word
 ; all read back 0. No store, no branch.
