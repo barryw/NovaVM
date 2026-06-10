@@ -182,6 +182,13 @@ Quirks get fixed against scripted longplays per project — no global hacks.
    `docs/plans/2026-06-10-novaz-z6-m2.md`.
 3. **M3 — pictures on Avalonia**: packer `PICS.PAK`, `FIO_CMD_ZPICT`,
    draw/erase/data; Zork Zero border + minigames render.
+   **Shipped 2026-06-10** on branch `novaz-z6-m3` (see git log): the FIO
+   region loader ended up being the existing XPAGE command (a new
+   `FioPageTargetGfx4` unpacks 4bpp pak rows into the 1-byte-per-pixel
+   Avalonia gfx plane host-side — no `FIO_CMD_ZPICT` needed), EGA palette
+   + mode 2 + colour mapping, the CR interrupt, and the blitter's
+   nibble-granular colour key for the packed FPGA domain (M6). Plan:
+   `docs/plans/2026-06-10-novaz-z6-m3.md`.
 4. **M4 — Zork Zero playable**: longplay green, save/restore, quirks fixed.
 5. **M5 — remaining three games** with their own projects/longplays.
 6. **M6 — hardware**: ESP32 `ZPICT` dispatch, EGA palette mode on FPGA
