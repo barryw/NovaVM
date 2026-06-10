@@ -18,7 +18,8 @@ NZ6_OP_ERASE_WINDOW = $03
 NZ6_OP_SET_CURSOR   = $04
 NZ6_OP_GET_CURSOR   = $05
 NZ6_OP_SET_COLOUR   = $06
-; Ids $07-$1F are reserved for future VAR-op routing; EXT ids start at $20
+NZ6_OP_PULL         = $07
+; Ids $08-$1F are reserved for future VAR-op routing; EXT ids start at $20
 ; so the two ranges can never collide.
 NZ6_EXT_BASE        = $20    ; ext dispatch id = NZ6_EXT_BASE + ext opnum
 NZ6_EXT_COUNT       = 30     ; ext opnums 0-29; nz6_ext_table length asserted

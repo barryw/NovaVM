@@ -11,7 +11,7 @@ using System.Text;
 // Header $06 in V6 is the packed address of the MAIN ROUTINE (locals-count
 // byte first), called with no arguments; it is not a raw initial PC.
 
-const int StorySize = 0x1000;
+const int StorySize = 0x1800;
 
 const int RoutinesOffsetWords = 0x0040;            // header $28 -> byte offset 0x200
 const int StringsOffsetWords = 0x0080;             // header $2A -> byte offset 0x400
@@ -29,7 +29,7 @@ const int CursorArray = 0x0540;                    // scratch: get_cursor result
 const int MouseTable = 0x0560;                     // scratch: read_mouse result words (Task 9)
 const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
-const int PackedStrings = 0x0E00;                  // strings region;  packed (0xE00-0x400)/4
+const int PackedStrings = 0x1600;                  // strings region;  packed (0x1600-0x400)/4
 
 (string outputPath, int version, bool mainReturns) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
@@ -256,6 +256,48 @@ static void EmitSpecProgram(ZCode z)
     z.Label("us_full_ok");
     z.AssertWordEquals(UserStack, 0, 0, "us-full-free");   // count untouched
     z.AssertWordEquals(UserStack, 1, 3, "us-full-nowrite"); // last value intact
+    // --- pull (VAR:9) in V6 is a STORE op (Task 10: Zork Zero derails on it
+    // at the very first prompt). With a nonzero user-stack operand it is the
+    // exact reverse of push_stack: word 0 (the free count) increments and the
+    // value comes back from word[new count]. The stack here is full from the
+    // pushes above: [free=0, 3, 2, 1, 7].
+    z.VarOpStore(9, 0x13, Operand.Large(UserStack));
+    z.AssertVarEquals(0x13, 3, "pull-user1");
+    z.AssertWordEquals(UserStack, 0, 1, "pull-user1-free");
+    z.VarOpStore(9, 0x13, Operand.Large(UserStack));
+    z.AssertVarEquals(0x13, 2, "pull-user2");
+    z.AssertWordEquals(UserStack, 0, 2, "pull-user2-free");
+    // With the operand absent (types $FF) V6 pull pops the GAME stack — and
+    // still consumes the store byte (this is exactly Zork Zero's `E9 FF 00`).
+    z.VarOp(8, Operand.Large(0x1234));                     // push 0x1234
+    z.VarOpStore(9, 0x13);                                 // pull -> g3
+    z.AssertVarEquals(0x13, 0x1234, "pull-game");
+    // An operand that is present but ZERO also means the game stack.
+    z.VarOp(8, Operand.Large(0x4321));
+    z.VarOpStore(9, 0x13, Operand.Small(0));
+    z.AssertVarEquals(0x13, 0x4321, "pull-game0");
+    // Refill the user stack to FULL (free=0) so the noop-stream assert below
+    // keeps checking what it always checked.
+    z.ExtOpBranch(24, "pull_refill1", branchIf: true, Operand.Small(2), Operand.Large(UserStack));
+    z.Fail("pull-refill1");
+    z.Label("pull_refill1");
+    z.ExtOpBranch(24, "pull_refill2", branchIf: true, Operand.Small(3), Operand.Large(UserStack));
+    z.Fail("pull-refill2");
+    z.Label("pull_refill2");
+    // The Zork Zero "peek" idiom (routine $EADC there): pull with a VARIABLE
+    // operand holding the stack address, value parked in a variable, pushed
+    // through the game stack, then push_stack'd back from sp. The user stack
+    // must come back bit-identical. Stack here: [free=0, 3, 2, 1, 7].
+    z.Store(0x14, UserStack);                              // g4 := stack addr
+    z.VarOpStore(9, 0x15, Operand.Var(0x14));              // pull [g4] -> g5
+    z.AssertVarEquals(0x15, 3, "peek-val");
+    z.VarOp(8, Operand.Var(0x15));                         // push g5
+    z.VarOpStore(9, 0x00);                                 // pull -> sp
+    z.ExtOpBranch(24, "peek_ok", branchIf: true, Operand.Var(0), Operand.Var(0x14));
+    z.Fail("peek-push");
+    z.Label("peek_ok");
+    z.AssertWordEquals(UserStack, 0, 0, "peek-free");      // count restored
+    z.AssertWordEquals(UserStack, 1, 3, "peek-top");       // top intact
 
     // --- Task 9: honest no-capability graphics/mouse/menu stubs ---
     // read_mouse table (EXT:22): no mouse — y, x, buttons, menu word all 0.

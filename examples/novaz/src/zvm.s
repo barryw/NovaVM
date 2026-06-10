@@ -564,6 +564,13 @@ zvm_set_raw_first:
 @not_2op:
         CMP #$03
         BNE @done
+        ; pull (VAR:9) takes an indirect variable reference in v1-5 ("pull
+        ; (variable)"), but in V6 its optional operand is a real VALUE — the
+        ; user-stack address — so a variable-type operand must be evaluated,
+        ; not kept raw (Zork Zero peeks its input stack via "pull L00 -> L03").
+        LDA zstory_version
+        CMP #$06
+        BCS @done
         LDA zvm_opnum
         CMP #$09
         BEQ @raw
@@ -2464,7 +2471,14 @@ zvm_push:
         STA zvm_value_hi
         JMP zvm_stack_push
 
+; pull (VAR:9). v<6: "pull (variable)" — pop the game stack into the named
+; variable, no store byte. V6: "pull stack -> (result)" — a STORE op with an
+; optional user-stack operand; routed to the segment, which MUST consume the
+; store byte or the instruction stream derails (Zork Zero hits this at its
+; first prompt).
 zvm_pull:
+        LDX #NZ6_OP_PULL
+        JSR zvm_v6_maybe_route
         JSR zvm_stack_pop
         LDA zvm_operand_lo
         JMP zvm_set_var_indirect

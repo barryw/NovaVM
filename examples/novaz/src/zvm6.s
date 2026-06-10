@@ -77,8 +77,8 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_SET_COLOUR + 1
-        BCS nz6_bug             ; reserved VAR ids $07-$1F are never routed
+        CMP #NZ6_OP_PULL + 1
+        BCS nz6_bug             ; reserved VAR ids $08-$1F are never routed
         ASL
         TAX
         JMP (nz6_var_table,X)
@@ -90,7 +90,7 @@ nz6_dispatch:
         TAX
         JMP (nz6_ext_table,X)
 
-; Ids the ROM never routes here (VAR ids > $06; ext opnums 0-4 and 9-15 stay
+; Ids the ROM never routes here (VAR ids > $07; ext opnums 0-4 and 9-15 stay
 ; in the ROM's own table). Reaching this is an ROM<->segment ABI contract
 ; violation — fail loudly through the ROM's unsupported-opcode path rather
 ; than silently no-opping a routing bug.
@@ -994,6 +994,71 @@ nz6_ext_pop_stack:
 @game_stack:
         JMP zvm_unsupported
 
+; pull stack -> (result) (VAR:9, routed here only for V6). The V6 form is a
+; STORE op. With a nonzero user-stack operand it is the exact reverse of
+; push_stack: word 0 (the FREE-slot count) is incremented and the value is
+; read back from word[new count]. With the operand absent (types $FF) or
+; zero, it pops the game main stack, exactly like the classic op — but the
+; result still goes through the store byte. NOTE: pull's user-stack operand
+; is its FIRST operand (push_stack's is its second), so nz6_ustack_addr is
+; not reusable here.
+nz6_var_pull:
+        LDA zvm_operand_count
+        BEQ @game
+        LDA zvm_operand_lo
+        ORA zvm_operand_hi
+        BEQ @game
+        ; word 0 -> free count
+        JSR @stack_addr
+        JSR zstory_read16
+        INC zstory_word_lo
+        BNE :+
+        INC zstory_word_hi
+:
+        LDA zstory_word_lo              ; keep free+1 for the slot address
+        STA nz6_stk_lo
+        LDA zstory_word_hi
+        STA nz6_stk_hi
+        JSR @stack_addr                 ; read16 advanced the address
+        JSR zstory_write16              ; word 0 := free + 1
+        ; zstory_addr := table + 2*(free+1) — the slot holding the value
+        LDA nz6_stk_lo
+        ASL A
+        STA nz6_unit_lo
+        LDA nz6_stk_hi
+        ROL A
+        STA nz6_unit_hi
+        STZ zstory_addr_h
+        ROL zstory_addr_h               ; bit 16 of 2*(free+1)
+        CLC
+        LDA zvm_operand_lo
+        ADC nz6_unit_lo
+        STA zstory_addr_l
+        LDA zvm_operand_hi
+        ADC nz6_unit_hi
+        STA zstory_addr_m
+        LDA zstory_addr_h
+        ADC #0
+        STA zstory_addr_h
+        JSR zstory_read16
+        LDA zstory_word_lo
+        STA zvm_value_lo
+        LDA zstory_word_hi
+        STA zvm_value_hi
+        BRA @store
+@game:
+        JSR zvm_stack_pop               ; value -> zvm_value_lo/hi
+@store:
+        JSR zvm_fetch                   ; store byte -> A
+        JMP zvm_set_var
+@stack_addr:                            ; zstory_addr := operand 1 (table base)
+        LDA zvm_operand_lo
+        STA zstory_addr_l
+        LDA zvm_operand_hi
+        STA zstory_addr_m
+        STZ zstory_addr_h
+        RTS
+
 ; --- No-capability graphics/mouse stubs ---------------------------------------
 
 ; Write a zero word at zstory_addr (zstory_write16 advances the address by
@@ -1037,7 +1102,7 @@ nz6_ext_read_mouse:
 
 ; --- Dispatch tables ---------------------------------------------------------
 
-nz6_var_table:                  ; ids $00-$06
+nz6_var_table:                  ; ids $00-$07
         .word nz6_op_reset      ; $00 reset (ROM invokes per game start)
         .word nz6_op_split      ; $01 split_window
         .word nz6_op_set_window ; $02 set_window
@@ -1045,6 +1110,8 @@ nz6_var_table:                  ; ids $00-$06
         .word nz6_op_set_cursor ; $04 set_cursor
         .word nz6_op_get_cursor ; $05 get_cursor (table operand, no store)
         .word nz6_op_set_colour ; $06 set_colour
+        .word nz6_var_pull      ; $07 pull (V6 store form, optional user stack)
+.assert (* - nz6_var_table) / 2 = NZ6_OP_PULL + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_PULL"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)
