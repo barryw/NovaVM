@@ -175,6 +175,11 @@ Quirks get fixed against scripted longplays per project — no global hacks.
    round-trips.
 2. **M2 — window model complete**: full EXT block + property semantics;
    `test-z6-spec` green.
+   **Shipped 2026-06-10** on branch `novaz-z6` (see git log): units = cells
+   (design amended per the capture), windows drive vtext regions, in-window
+   scroll/wrap with blanking, real `scroll_window`; Zork Zero renders its
+   banner/playfield layout. Capture-driven plan:
+   `docs/plans/2026-06-10-novaz-z6-m2.md`.
 3. **M3 — pictures on Avalonia**: packer `PICS.PAK`, `FIO_CMD_ZPICT`,
    draw/erase/data; Zork Zero border + minigames render.
 4. **M4 — Zork Zero playable**: longplay green, save/restore, quirks fixed.

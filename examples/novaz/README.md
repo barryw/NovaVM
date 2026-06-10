@@ -229,7 +229,7 @@ Nova save files through the shared XRAM/FIO path. The generated Z3/Z4/Z5/Z6
 compliance smokes and Z4 style fixture guard opcode-focused behavior that game
 transcripts do not reliably cover.
 
-The version gate now accepts Versions 1-6. V6 support (M1, text-only) lives in
+The version gate now accepts Versions 1-6. V6 support (M2, text-only) lives in
 a RAM-resident segment, `NOVAZ6.BIN`, linked at `$2000` and loaded by the
 runtime when a V6 story boots: the 16K `$C000` ROM is full, so V6-only code
 (window routing, user stacks, the V6 `pull` form, no-graphics stubs) moves to
@@ -240,5 +240,10 @@ every image; a V6 story booted from an image without it aborts with
 mapped onto the existing text path, user stacks in dynamic memory, and honest
 no-graphics stubs: `picture_data` branches "not available" and
 `draw_picture`/`erase_picture` are no-ops, so well-behaved V6 games fall back
-to text. Zork Zero boots to its first prompt and accepts commands in
-text-only mode; pictures are M3 scope (see `projects/zork-zero/README.md`).
+to text. As of M2, V6 units are cells (matching the advertised header
+metrics) and the window property table drives real vtext regions: windows
+render as true rectangles with per-window cursors, margins, in-window
+scrolling (vacated rows blanked), and a working `scroll_window`. Zork Zero
+renders its own layout — 5-row banner, 45x70 inset playfield — and plays
+cleanly in text-only mode; pictures are M3 scope (see
+`projects/zork-zero/README.md` for remaining game-side artifacts).
