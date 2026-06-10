@@ -14,7 +14,7 @@ Z5_SPEC := tools/Nova.NovaZ.Z5SpecStory/Nova.NovaZ.Z5SpecStory.csproj
 Z6_SPEC := tools/Nova.NovaZ.Z6SpecStory/Nova.NovaZ.Z6SpecStory.csproj
 JUKEBOX := tools/Nova.NovaZ.Jukebox/Nova.NovaZ.Jukebox.csproj
 SMOKE_DLL := tools/Nova.NovaZ.Smoke/bin/Release/net10.0/Nova.NovaZ.Smoke.dll
-PACKER_SRC := $(PACKER) tools/Nova.NovaZ.Packer/Program.cs
+PACKER_SRC := $(PACKER) tools/Nova.NovaZ.Packer/Program.cs tools/Nova.NovaZ.Packer/BlorbSounds.cs tools/Nova.NovaZ.Packer/BlorbPictures.cs
 SMOKE_SRC := $(SMOKE) tools/Nova.NovaZ.Smoke/Program.cs
 SMOKE_HOST_SRC := ../../e6502.Avalonia/Hardware/FileIoController.cs ../../e6502.Avalonia/Hardware/VgcConstants.cs
 Z3_SPEC_SRC := $(Z3_SPEC) tools/Nova.NovaZ.Z3SpecStory/Program.cs
@@ -84,6 +84,7 @@ LABEL ?= $(PROJECT_LABEL)
 SIZE_KB ?= $(PROJECT_SIZE_KB)
 STORY ?= $(PROJECT_STORY)
 SOUNDS ?= $(PROJECT_SOUNDS)
+PICTURES ?= $(PROJECT_PICTURES)
 PROJECT_SMOKE ?= $(PROJECT_DIR)/smoke.txt
 PROJECT_LONGPLAY ?= $(PROJECT_DIR)/longplay.txt
 else
@@ -98,6 +99,9 @@ PACK_ARGS += --story "$(STORY)"
 endif
 ifneq ($(strip $(SOUNDS)),)
 PACK_ARGS += --sounds "$(SOUNDS)"
+endif
+ifneq ($(strip $(PICTURES)),)
+PACK_ARGS += --pictures "$(PICTURES)"
 endif
 
 all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN)

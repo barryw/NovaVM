@@ -97,6 +97,13 @@ if (options.SoundsPath is not null)
     }
 }
 
+if (options.PicturesPath is not null)
+{
+    var pics = BlorbPictures.BuildPack(options.PicturesPath);
+    image.WriteFile("PICS.PAK", NdiFileType.Bin, 0xFFFF, pics);
+    Console.WriteLine($"Imported PICS.PAK ({pics.Length} bytes, {BlorbPictures.Summary(pics)})");
+}
+
 Console.WriteLine($"Wrote {options.OutputPath}");
 return 0;
 
@@ -113,7 +120,8 @@ internal sealed record Options(
     int SizeKb,
     IReadOnlyList<AssetOption> Assets,
     string? SoundsPath,
-    string? SoundfontOutPath)
+    string? SoundfontOutPath,
+    string? PicturesPath)
 {
     public static Options? Parse(string[] args)
     {
@@ -128,6 +136,7 @@ internal sealed record Options(
         var assets = new List<AssetOption>();
         string? sounds = null;
         string? soundfontOut = null;
+        string? pictures = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -184,6 +193,10 @@ internal sealed record Options(
                     soundfontOut = value;
                     i++;
                     break;
+                case "--pictures" when value is not null:
+                    pictures = value;
+                    i++;
+                    break;
                 case "-h" or "--help":
                     return null;
                 default:
@@ -211,7 +224,13 @@ internal sealed record Options(
             return null;
         }
 
-        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets, sounds, soundfontOut);
+        if (pictures is not null && !File.Exists(pictures))
+        {
+            Console.Error.WriteLine($"Pictures file not found: {pictures}");
+            return null;
+        }
+
+        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets, sounds, soundfontOut, pictures);
     }
 
     private static bool TryParseAsset(string value, out AssetOption asset)
@@ -233,7 +252,7 @@ internal sealed record Options(
     public static void PrintUsage()
     {
         Console.Error.WriteLine("Nova.NovaZ.Packer");
-        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--label NOVAZ] [--size-kb 1440]");
+        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--sounds <file.blb>] [--pictures <file.blb>] [--label NOVAZ] [--size-kb 1440]");
     }
 }
 

@@ -2,6 +2,9 @@ PROJECT_TITLE := Zork Zero
 PROJECT_LABEL := ZORK0
 PROJECT_SIZE_KB := 1440
 PROJECT_STORY := $(PROJECT_DIR)/STORY.BIN
+# User-supplied local copy of the Zork Zero graphics blorb (gitignored, like
+# STORY.BIN): cp ".../Zork Zero - The Revenge of Megaboz/Zork0.blb" PICS.BLB
+PROJECT_PICTURES := $(PROJECT_DIR)/PICS.BLB
 PROJECT_IMAGE := $(DIST_DIR)/$(PROJECT)/fd0.ndi
 # V6 has no v3-style status line, and the banner scrolls off before the first
 # prompt, so release/serial never survive on screen for the manifest check.
