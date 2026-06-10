@@ -39,6 +39,7 @@ WriteHeader(story, version);
 WriteDictionary(story);
 WriteBuffers(story);
 WriteScratchTables(story);
+WriteObjectTable(story);
 WritePackedText(story, PackedStrings, "ok");
 
 var code = new ZCode(CodeBase, packedAddressScale: 4, routinesByteOffset: RoutinesByteOffset);
@@ -135,6 +136,32 @@ static void WriteBuffers(byte[] story)
     story[TextBuffer] = 78;
     story[TextBuffer + 1] = 0;
     story[ParseBuffer] = 8;
+}
+
+static void WriteObjectTable(byte[] story)
+{
+    // v4+ object table: 63 default-property words (zeros), then 14-byte
+    // entries: attrs[6], parent, sibling, child, propTableAddr. Five objects:
+    // object 1 parents the chain 2 -> 3 -> 4 -> 5. Removing a MIDDLE child
+    // (object 4) exercises zobject_remove's previous-sibling scan path — the
+    // path the v4+ get_entry scratch clobber corrupted (Zork Zero wedge).
+    int entries = ObjectTable + 126;
+    int propsBlob = entries + 5 * 14;           // shared empty prop table
+    story[propsBlob] = 0;                       // short-name length 0
+    WriteBE16(story, propsBlob + 1, 0);         // prop terminator
+    void Obj(int n, int parent, int sibling, int child)
+    {
+        int e = entries + (n - 1) * 14;
+        WriteBE16(story, e + 6, parent);
+        WriteBE16(story, e + 8, sibling);
+        WriteBE16(story, e + 10, child);
+        WriteBE16(story, e + 12, propsBlob);
+    }
+    Obj(1, 0, 0, 2);
+    Obj(2, 1, 3, 0);
+    Obj(3, 1, 4, 0);
+    Obj(4, 1, 5, 0);
+    Obj(5, 1, 0, 0);
 }
 
 static void WriteScratchTables(byte[] story)
@@ -510,6 +537,32 @@ static void EmitSpecProgram(ZCode z)
     // rel 40 = "ZLAST ok", rel 41-44 blank (41 was blank already; 42-44
     // vacated and blanked by the scroll).
     z.ExtOp(20, Operand.Small(0), Operand.Small(3));        // scroll_window 0,3
+
+    // Object-tree integrity across remove_obj of a MIDDLE child (the
+    // zobject_remove previous-sibling scan path). Baked tree: 1 parents
+    // 2 -> 3 -> 4 -> 5. remove_obj(4) must rewrite sibling(3) := 5 and leave
+    // every other link alone; the historic v4+ scratch clobber wrote object
+    // 2*(3-1)=4's sibling instead, leaving 3 -> 4 stale (circular-walk wedge).
+    z.OneOp(9, Operand.Small(4));                              // remove_obj 4
+    z.OneOpStoreBranch(1, Operand.Small(3), 0x12, "objrm-sib3", branchIf: true);
+    z.Label("objrm-sib3");
+    z.AssertVarEquals(0x12, 5, "objrm-prev");                  // sibling(3) == 5
+    z.OneOpStoreBranch(1, Operand.Small(2), 0x12, "objrm-sib2", branchIf: true);
+    z.Label("objrm-sib2");
+    z.AssertVarEquals(0x12, 3, "objrm-sib2v");                 // sibling(2) == 3
+    z.OneOpStoreBranch(2, Operand.Small(1), 0x12, "objrm-ch1", branchIf: true);
+    z.Label("objrm-ch1");
+    z.AssertVarEquals(0x12, 2, "objrm-child");                 // child(1) == 2
+    z.OneOpStore(3, Operand.Small(4), 0x12);                   // get_parent 4
+    z.AssertVarEquals(0x12, 0, "objrm-parent");                // detached
+    // insert_obj round-trip: 4 back under 1 as new first child.
+    z.TwoOp(14, Operand.Small(4), Operand.Small(1));           // insert_obj 4,1
+    z.OneOpStoreBranch(2, Operand.Small(1), 0x12, "objins-ch", branchIf: true);
+    z.Label("objins-ch");
+    z.AssertVarEquals(0x12, 4, "objins-child");                // child(1) == 4
+    z.OneOpStoreBranch(1, Operand.Small(4), 0x12, "objins-sib", branchIf: true);
+    z.Label("objins-sib");
+    z.AssertVarEquals(0x12, 2, "objins-sib4");                 // sibling(4) == 2
 
     z.Label("prompt");
     z.Print(">");

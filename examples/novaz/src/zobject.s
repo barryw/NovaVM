@@ -24,6 +24,13 @@ zobject_name_words:    .res 1
 zobject_prop_len:      .res 1
 zobject_tmp:           .res 1
 zobject_tmp2:          .res 1
+; Previous-sibling cursor for zobject_remove's scan. MUST NOT alias
+; zobject_tmp/tmp2: zobject_get_entry's v4+ offset math clobbers those on
+; every get_* call, which corrupted the unlink target (wrote the sibling
+; field of object 2*(prev-1) instead of prev — circular-chain wedge,
+; found via Zork Zero's Banquet Hall crowd).
+zobject_prev:          .res 1
+zobject_prev_hi:       .res 1
 zobject_mask:          .res 1
 zobject_child_tmp:     .res 1
 zobject_child_tmp_hi:  .res 1
@@ -463,16 +470,16 @@ zobject_remove:
 
 @scan_siblings:
         LDA zobject_value_lo
-        STA zobject_tmp          ; current sibling
+        STA zobject_prev         ; current sibling (survives get_* scratch)
         LDA zobject_value_hi
-        STA zobject_tmp2
+        STA zobject_prev_hi
 @scan_loop:
-        LDA zobject_tmp
-        ORA zobject_tmp2
+        LDA zobject_prev
+        ORA zobject_prev_hi
         BEQ @clear_target
-        LDA zobject_tmp2
+        LDA zobject_prev_hi
         STA zobject_num_hi
-        LDA zobject_tmp
+        LDA zobject_prev
         JSR zobject_get_sibling
         BNE @done
         LDA zobject_value_hi
@@ -483,15 +490,15 @@ zobject_remove:
         BEQ @unlink_after_current
 @next_sibling:
         LDA zobject_value_hi
-        STA zobject_tmp2
+        STA zobject_prev_hi
         LDA zobject_value_lo
-        STA zobject_tmp
+        STA zobject_prev
         BRA @scan_loop
 
 @unlink_after_current:
-        LDA zobject_tmp
+        LDA zobject_prev
         STA zobject_num
-        LDA zobject_tmp2
+        LDA zobject_prev_hi
         STA zobject_num_hi
         LDA zobject_child_tmp
         STA zobject_value_lo
