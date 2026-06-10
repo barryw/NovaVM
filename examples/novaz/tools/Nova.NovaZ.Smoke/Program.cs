@@ -9,8 +9,8 @@ using KDS.e6502;
 if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|])");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--skip-manifest-check]");
     return 1;
 }
 
@@ -30,6 +30,8 @@ bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringCo
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
+int? expectStop = LoadExpectStop(args);
+List<ExpectedAt> expectedAts = LoadExpectedAts(args);
 List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
 List<ExpectedGfxColor> expectedGfxColors = LoadExpectedGfxColors(args);
@@ -53,22 +55,51 @@ try
     Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
     Environment.SetEnvironmentVariable("NOAUTO", null);
 
+    Nz6Trace.Init();
     (bus, cpu, editor) = StartMachine();
 
     int maxSteps = ReadEnvInt("NOVAZ_SMOKE_MAX_STEPS", 80_000_000);
     int morePrompts = 0;
 
+    // --expect-stop: run until the runtime parks in its post-game halt loop,
+    // then pin zvm_stop_reason. This is the only mode that works for stories
+    // which halt without ever reaching a read prompt (e.g. a V6 main routine
+    // that returns): the prompt path would time out and the screen-only path
+    // cannot tell a clean ZVM_STOP_QUIT from a bad-target wedge. The CPU PC
+    // is the readiness signal — NOT zvm_stop_reason itself, which holds boot
+    // residue (the disk loader stages through BSS) until zvm_run_until_read
+    // clears it.
+    if (expectStop is { } expectedStopReason)
+    {
+        int stopAddress = TryReadRuntimeSymbol("zvm_stop_reason")
+            ?? throw new InvalidOperationException("--expect-stop requires zvm_stop_reason in build/runtime.sym.");
+        int haltAddress = TryReadRuntimeSymbol("halt")
+            ?? throw new InvalidOperationException("--expect-stop requires halt in build/runtime.sym.");
+        RunUntilCpuHalt(cpu, bus, maxSteps, haltAddress);
+        byte actualStop = bus.Read((ushort)stopAddress);
+        string stopScreen = SnapshotScreen(bus.Vgc);
+        if (actualStop != expectedStopReason)
+            throw new InvalidOperationException($"Expected zvm_stop_reason={expectedStopReason}, saw {actualStop}.\n{stopScreen}");
+        foreach (string expected in expectedScreens)
+            RequireContains(stopScreen, expected);
+        Console.WriteLine($"NovaZ stop smoke passed. stop={actualStop}");
+        Console.WriteLine(stopScreen);
+        return 0;
+    }
+
     if (screenOnly)
     {
-        if (expectedScreens.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
-            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-text-color, or --expect-gfx-color check.");
+        if (expectedScreens.Count == 0 && expectedAts.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
+            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-at, --expect-text-color, or --expect-gfx-color check.");
 
         foreach (string input in screenInputs)
             SendRaw(cpu, bus, editor, input);
 
-        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedTextColors, expectedGfxColors, ref morePrompts);
+        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedGfxColors, ref morePrompts);
         foreach (string expected in expectedScreens)
             RequireContains(screenOnlySnapshot, expected);
+        foreach (var expected in expectedAts)
+            RequireAt(screenOnlySnapshot, expected);
         foreach (var expected in expectedTextColors)
             RequireTextColor(bus.Vgc, screenOnlySnapshot, expected);
         foreach (var expected in expectedGfxColors)
@@ -84,6 +115,7 @@ try
     }
 
     string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+    Nz6Trace.Marker("--- boot: first prompt");
     RunForSteps(cpu, bus, 200_000);
     screen = SnapshotScreen(bus.Vgc);
 
@@ -104,6 +136,8 @@ try
         RequireTimeStatusLine(screen);
     foreach (string expected in expectedScreens)
         RequireContains(screen, expected);
+    foreach (var expected in expectedAts)
+        RequireAt(screen, expected);
     RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
     if (expectSoundfont)
         RequireSoundfontLoaded(bus, screen);
@@ -140,6 +174,13 @@ try
             RunForSteps(cpu, bus, steps);
             continue;
         }
+        if (command.Mode == SmokeInputMode.ExpectAt)
+        {
+            // Pure assertion: snapshot the live screen, no input, no CPU steps.
+            Console.WriteLine($".expect-at {command.Text}");
+            RequireAt(SnapshotScreen(bus.Vgc), ParseExpectedAtSpec(command.Text));
+            continue;
+        }
         if (command.Mode == SmokeInputMode.ExpectStop)
         {
             if (!byte.TryParse(command.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out byte expectedStop))
@@ -163,11 +204,17 @@ try
         {
             screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
         }
+        else if (command.Expected.Count > 0)
+        {
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], ref morePrompts);
+        }
         else
         {
-            if (command.Expected.Count == 0)
-                throw new InvalidOperationException($"No-prompt command '{command.Text}' requires expected screen text.");
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], ref morePrompts);
+            // Expectation-free no-prompt line ("!cmd"): fire and settle on a
+            // fixed step budget. Capture scripts (capture-z6-trace) need this
+            // because the M1 stale-prompt bug leaves debris on the prompt row,
+            // defeating strict ready detection after some turns.
+            RunForSteps(cpu, bus, 4_000_000);
         }
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
@@ -214,6 +261,7 @@ try
 }
 finally
 {
+    Nz6Trace.Close();
     bus?.Dispose();
 
     Environment.SetEnvironmentVariable("NOAUTO", null);
@@ -222,6 +270,21 @@ finally
 
     if (Directory.Exists(storageRoot))
         Directory.Delete(storageRoot, recursive: true);
+}
+
+static bool AtMorePrompt(Cpu cpu)
+{
+    if (!MoreGate.Resolved)
+    {
+        MoreGate.Address = TryReadRuntimeSymbol("nz_more_key_wait");
+        MoreGate.Resolved = true;
+    }
+    // Fallback when the symbol is missing (older runtime.sym): preserve the
+    // historic always-answer behavior.
+    if (MoreGate.Address is not int wait)
+        return true;
+    // The wait loop is LDA/BEQ/CMP/BEQ/CMP/BNE — 12 bytes of spin window.
+    return cpu.Pc >= wait && cpu.Pc < wait + 12;
 }
 
 static (CompositeBusDevice Bus, Cpu Cpu, ScreenEditor Editor) StartMachine()
@@ -317,6 +380,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
                     throw new ArgumentException("--expect-screen requires text.");
                 i++;
                 break;
+            case "--expect-at":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-at requires <col>,<row>=><text>.");
+                i++;
+                break;
             case "--screen-input":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--screen-input requires text.");
@@ -325,6 +393,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
             case "--expect-text-color":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--expect-text-color requires text=>hex.");
+                i++;
+                break;
+            case "--expect-stop":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-stop requires a byte value.");
                 i++;
                 break;
             case "--script":
@@ -356,6 +429,22 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
 
 static SmokeCommand ParseCommandSpec(string spec)
 {
+    // ".expect-at <col>,<row>=><text>" asserts the live screen without sending
+    // any input (and without running the CPU): the "=>" belongs to the position
+    // spec, so it must be carved off before the command/expectation split. A
+    // single trailing '|' is stripped from <text> so scripts can pin trailing
+    // spaces (the script reader trims line ends) — "6,36=>Time passes...   |"
+    // proves the cells after the text are blank.
+    const string expectAtPrefix = ".expect-at ";
+    if (spec.StartsWith(expectAtPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string atSpec = spec[expectAtPrefix.Length..].TrimStart();
+        if (atSpec.Length == 0)
+            throw new ArgumentException($".expect-at requires <col>,<row>=><text> in '{spec}'.");
+        ParseExpectedAtSpec(atSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(atSpec, [], SmokeInputMode.ExpectAt, WaitForPrompt: false);
+    }
+
     string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
     string command = parts[0];
     if (string.IsNullOrWhiteSpace(command))
@@ -402,6 +491,20 @@ static SmokeCommand ParseCommandSpec(string spec)
     return new SmokeCommand(command, expected, mode, waitForPrompt);
 }
 
+static int? LoadExpectStop(string[] args)
+{
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-stop", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length || !byte.TryParse(args[i + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte value))
+            throw new ArgumentException("--expect-stop requires a byte value.");
+        return value;
+    }
+
+    return null;
+}
+
 static List<string> LoadExpectedScreens(string[] args)
 {
     var expected = new List<string>();
@@ -415,6 +518,74 @@ static List<string> LoadExpectedScreens(string[] args)
     }
 
     return expected;
+}
+
+// --expect-at <col>,<row>=><text>: the screen snapshot at 0-based cell
+// (col,row) must START with <text>, whitespace-exact — no normalization.
+static List<ExpectedAt> LoadExpectedAts(string[] args)
+{
+    var expected = new List<ExpectedAt>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-at", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException("--expect-at requires <col>,<row>=><text>.");
+
+        expected.Add(ParseExpectedAtSpec(args[++i]));
+    }
+
+    return expected;
+}
+
+// Shared by the --expect-at CLI flag and the ".expect-at" script directive.
+// A single trailing '|' is stripped from <text> (trailing-space protection for
+// script lines, harmless for quoted CLI args that don't use it).
+static ExpectedAt ParseExpectedAtSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.None);
+    if (parts.Length != 2 || parts[1].Length == 0)
+        throw new ArgumentException($"Expected position check must be '<col>,<row>=><text>': {spec}");
+
+    string text = parts[1];
+    if (text.Length > 1 && text.EndsWith('|'))
+        text = text[..^1];
+
+    string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+    if (xy.Length != 2 ||
+        !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int col) ||
+        !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int row))
+        throw new ArgumentException($"Expected position must be '<col>,<row>': {spec}");
+    if ((uint)col >= VgcConstants.ScreenCols || (uint)row >= VgcConstants.ScreenRows)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"--expect-at cell out of range in '{spec}'.");
+    if (col + text.Length > VgcConstants.ScreenCols)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"--expect-at text runs past column {VgcConstants.ScreenCols} in '{spec}'.");
+
+    return new ExpectedAt(col, row, text);
+}
+
+static bool MatchesAt(string screen, ExpectedAt expected)
+{
+    string[] lines = screen.Split('\n');
+    if (expected.Row >= lines.Length || expected.Col + expected.Text.Length > lines[expected.Row].Length)
+        return false;
+    return lines[expected.Row].Substring(expected.Col, expected.Text.Length)
+        .Equals(expected.Text, StringComparison.Ordinal);
+}
+
+static void RequireAt(string screen, ExpectedAt expected)
+{
+    if (MatchesAt(screen, expected))
+        return;
+
+    string[] lines = screen.Split('\n');
+    string actual = expected.Row < lines.Length
+        ? lines[expected.Row].Substring(
+            Math.Min(expected.Col, lines[expected.Row].Length),
+            Math.Min(expected.Text.Length, Math.Max(0, lines[expected.Row].Length - expected.Col)))
+        : "";
+    throw new InvalidOperationException(
+        $"Expected screen cell {expected.Col},{expected.Row} to start with '{expected.Text}'; saw '{actual}'.\n{screen}");
 }
 
 static List<string> LoadScreenInputs(string[] args)
@@ -548,6 +719,7 @@ static string RunUntilScreenMatches(
     ScreenEditor editor,
     int maxSteps,
     IReadOnlyList<string> expectedScreens,
+    IReadOnlyList<ExpectedAt> expectedAts,
     IReadOnlyList<ExpectedTextColor> expectedTextColors,
     IReadOnlyList<ExpectedGfxColor> expectedGfxColors,
     ref int morePrompts)
@@ -561,6 +733,7 @@ static string RunUntilScreenMatches(
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
 
         if ((i & snapshotMask) != 0)
             continue;
@@ -570,7 +743,16 @@ static string RunUntilScreenMatches(
             throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
+            // Answer only while the CPU is parked in the MORE key-wait loop:
+            // a CR sent on stale label text leaks into the next read as an
+            // empty command ("I beg your pardon?" spam).
+            if (!AtMorePrompt(cpu))
+            {
+                RunForSteps(cpu, bus, 8_000);
+                continue;
+            }
             morePrompts++;
+            Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
             lastMatchSnapshot = null;
@@ -582,9 +764,10 @@ static string RunUntilScreenMatches(
             continue;
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
+        bool hasExpectedAts = expectedAts.All(expected => MatchesAt(screen, expected));
         bool hasExpectedColorText = expectedTextColors.All(expected => FindText(screen, expected.Text) is not null);
         bool hasExpectedGfxColors = expectedGfxColors.All(expected => bus.Vgc.GetGfxPixelColor(expected.X, expected.Y) == expected.Color);
-        if (hasExpectedScreens && hasExpectedColorText && hasExpectedGfxColors)
+        if (hasExpectedScreens && hasExpectedAts && hasExpectedColorText && hasExpectedGfxColors)
             return screen;
     }
 
@@ -632,12 +815,21 @@ static string RunUntilReadyPrompt(
     var cursorTrace = new Queue<string>();
     int lastCx = -1, lastCy = -1;
     string? lastReadySnapshot = null;
+    var probePcs = new HashSet<int>(
+        (Environment.GetEnvironmentVariable("NOVAZ_SMOKE_PROBE_PC") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => Convert.ToInt32(s, 16)));
+    int opcodePcLoAddress = TryReadRuntimeSymbol("zvm_opcode_pc_l") ?? 0x0091;
+    int opcodePcHiAddress = TryReadRuntimeSymbol("zvm_opcode_pc_h") ?? 0x0092;
+    int opcodePcBankAddress = TryReadRuntimeSymbol("zvm_opcode_pc_b") ?? 0x00B3;
+    int opcodeAddress = TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093;
 
     for (int i = 0; i < maxSteps; i++)
     {
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
 
         if (traceCursor)
         {
@@ -647,19 +839,35 @@ static string RunUntilReadyPrompt(
             {
                 lastCx = cx;
                 lastCy = cy;
-                int zpc = ReadWord(bus, 0x008E, 0x008D);
-                cursorTrace.Enqueue($"({cx},{cy})@pc${cpu.Pc:X4}|zpc${zpc:X4}|op${bus.Read(0x008F):X2}");
+                int zpc = ReadWord(bus, opcodePcHiAddress, opcodePcLoAddress);
+                cursorTrace.Enqueue($"({cx},{cy})@pc${cpu.Pc:X4}|zpc${zpc:X4}|op${bus.Read((ushort)opcodeAddress):X2}");
                 while (cursorTrace.Count > 60)
                     cursorTrace.Dequeue();
             }
         }
 
-        int opcodePc = ReadWord(bus, 0x008E, 0x008D);
+        int opcodePc = ReadWord(bus, opcodePcHiAddress, opcodePcLoAddress);
         if (opcodePc != lastOpcodePc)
         {
             lastOpcodePc = opcodePc;
-            trace.Enqueue($"${bus.Read(0x00AF):X2}{opcodePc:X4}:${bus.Read(0x008F):X2}");
-            while (trace.Count > 24)
+            if (probePcs.Contains(opcodePc))
+            {
+                int lo = TryReadRuntimeSymbol("zvm_locals_lo") ?? 0x0314;
+                int hi = TryReadRuntimeSymbol("zvm_locals_hi") ?? 0x0324;
+                int spAddr = TryReadRuntimeSymbol("zvm_sp") ?? 0;
+                int stkLo = TryReadRuntimeSymbol("zvm_stack_lo") ?? 0;
+                int stkHi = TryReadRuntimeSymbol("zvm_stack_hi") ?? 0;
+                int sp = spAddr > 0 ? bus.Read((ushort)spAddr) : -1;
+                string top = sp > 0 && stkLo > 0
+                    ? $"{bus.Read((ushort)(stkHi + sp - 1)):X2}{bus.Read((ushort)(stkLo + sp - 1)):X2}"
+                    : "----";
+                var locals = new List<string>();
+                for (int li = 0; li < 6; li++)
+                    locals.Add($"{ReadWord(bus, hi + li, lo + li):X4}");
+                Console.Error.WriteLine($"probe pc=${opcodePc:X4} sp={sp:X2} top=${top} locals={string.Join(",", locals)}");
+            }
+            trace.Enqueue($"${bus.Read((ushort)opcodePcBankAddress):X2}{opcodePc:X4}:${bus.Read((ushort)opcodeAddress):X2}");
+            while (trace.Count > 400)
                 trace.Dequeue();
             if (traceTopRow)
             {
@@ -686,10 +894,17 @@ static string RunUntilReadyPrompt(
 
         string screen = SnapshotScreen(bus.Vgc);
         if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
-            throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
+            throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)} recent={string.Join(" ", trace)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
+            // See RunUntilScreen: only answer a genuine MORE wait.
+            if (!AtMorePrompt(cpu))
+            {
+                RunForSteps(cpu, bus, 8_000);
+                continue;
+            }
             morePrompts++;
+            Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
             lastReadySnapshot = null;
@@ -730,7 +945,14 @@ static string RunUntilReadyPrompt(
 static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
 {
     int globals = ReadWord(bus, 0x0051, 0x0052);
-    int opcodePc = ReadWord(bus, 0x008E, 0x008D);
+    int opcodePcLo = TryReadRuntimeSymbol("zvm_opcode_pc_l") ?? 0x0091;
+    int opcodePcHi = TryReadRuntimeSymbol("zvm_opcode_pc_h") ?? 0x0092;
+    int opcodePcBank = TryReadRuntimeSymbol("zvm_opcode_pc_b") ?? 0x00B3;
+    int opcodeAddr = TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093;
+    int pcLo = TryReadRuntimeSymbol("zvm_pc_l") ?? 0x008F;
+    int pcHi = TryReadRuntimeSymbol("zvm_pc_h") ?? 0x0090;
+    int pcBank = TryReadRuntimeSymbol("zvm_pc_b") ?? 0x00B2;
+    int opcodePc = ReadWord(bus, opcodePcHi, opcodePcLo);
     int objectTable = ReadWord(bus, 0x004F, 0x0050);
     int operandLoAddress = TryReadRuntimeSymbol("zvm_operand_lo") ?? 0x0304;
     int operandHiAddress = TryReadRuntimeSymbol("zvm_operand_hi") ?? 0x030C;
@@ -791,8 +1013,8 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
     var state = cpu.GetState();
     return
         $"cpu=PC${cpu.Pc:X4}/A${state.A:X2}/X${state.X:X2}/Y${state.Y:X2} " +
-        $"zvm_pc=${bus.Read(0x00AE):X2}{bus.Read(0x008C):X2}{bus.Read(0x008B):X2} " +
-        $"op_pc=${bus.Read(0x00AF):X2}{opcodePc:X4} op_bytes=${ReadXramWord(bus, (bus.Read(0x00AF) << 16) | opcodePc):X4} " +
+        $"zvm_pc=${bus.Read((ushort)pcBank):X2}{bus.Read((ushort)pcHi):X2}{bus.Read((ushort)pcLo):X2} " +
+        $"op_pc=${bus.Read((ushort)opcodePcBank):X2}{opcodePc:X4} op_bytes=${ReadXramWord(bus, (bus.Read((ushort)opcodePcBank) << 16) | opcodePc):X4} " +
         $"globals=${globals:X4} g10=${global10:X4} g11=${global11:X4} g12=${global12:X4} g13=${global13:X4} " +
         $"obj=${operand0:X4} objEntry=${objectEntry:X4} objParent=${objectParent:X4} objSibling=${objectSibling:X4} objChild=${objectChild:X4} " +
         $"zaddr=${bus.Read(0x0042):X2}{bus.Read(0x0041):X2}{bus.Read(0x0040):X2} " +
@@ -800,7 +1022,7 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         $"fio=${bus.Read(VgcConstants.FioCmd):X2}/${bus.Read(VgcConstants.FioStatus):X2}/${bus.Read(VgcConstants.FioErrCode):X2} " +
         $"xmc=${bus.Read(VgcConstants.XmcStatus):X2}/${bus.Read(VgcConstants.XmcErrCode):X2} " +
         $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}{vtext} " +
-        $"zvm_opcode=${bus.Read(0x008F):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
+        $"zvm_opcode=${bus.Read((ushort)opcodeAddr):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
         $"ops={ReadWord(bus, operandHiAddress, operandLoAddress):X4},{ReadWord(bus, operandHiAddress + 1, operandLoAddress + 1):X4},{ReadWord(bus, operandHiAddress + 2, operandLoAddress + 2):X4},{ReadWord(bus, operandHiAddress + 3, operandLoAddress + 3):X4} " +
         $"locals={ReadWord(bus, localsHiAddress, localsLoAddress):X4},{ReadWord(bus, localsHiAddress + 1, localsLoAddress + 1):X4},{ReadWord(bus, localsHiAddress + 2, localsLoAddress + 2):X4},{ReadWord(bus, localsHiAddress + 3, localsLoAddress + 3):X4}";
 }
@@ -832,6 +1054,23 @@ static string ReadRamBytes(CompositeBusDevice bus, int address, int count)
     return sb.ToString();
 }
 
+// Step until the CPU parks in the runtime's terminal halt loop (halt: WAI /
+// BRA halt — a 3-byte window the PC can never leave), then return. Sampling
+// between chunks is safe: once parked, every later sample sees the window.
+static void RunUntilCpuHalt(Cpu cpu, CompositeBusDevice bus, int maxSteps, int haltAddress)
+{
+    const int chunk = 10_000;
+    for (int executed = 0; executed < maxSteps; executed += chunk)
+    {
+        RunForSteps(cpu, bus, chunk);
+        // halt: is WAI + BRA (3 bytes); halt+3 is already the next routine.
+        if (cpu.Pc >= haltAddress && cpu.Pc < haltAddress + 3)
+            return;
+    }
+
+    throw new TimeoutException($"Timed out waiting for the runtime halt loop at ${haltAddress:X4}; cpu=PC${cpu.Pc:X4}.\n{SnapshotScreen(bus.Vgc)}");
+}
+
 static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)
 {
     for (int i = 0; i < steps; i++)
@@ -841,6 +1080,7 @@ static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
     }
 }
 
@@ -852,6 +1092,7 @@ static void YieldHostHardware(int step)
 
 static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
 {
+    Nz6Trace.Marker($"--- turn: {text}");
     bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
     foreach (char ch in text)
     {
@@ -868,6 +1109,7 @@ static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, strin
 
 static void SendRaw(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
 {
+    Nz6Trace.Marker($"--- turn (raw): {text}");
     bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
     foreach (char ch in text)
     {
@@ -883,6 +1125,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     if (screen.Contains("Hit any key", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("Press any key", StringComparison.OrdinalIgnoreCase))
     {
+        Nz6Trace.Marker("--- key: <space> (any-key gate)");
         editor.QueueInput(0x20);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -940,31 +1183,44 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         RunForSteps(cpu, bus, 1_000_000);
         if (SnapshotScreen(bus.Vgc) != screen)
             return true;   // advanced on its own — not a keypress gate
+        Nz6Trace.Marker("--- key: <space> (title gate)");
         editor.QueueInput(0x20);
         RunForSteps(cpu, bus, 500_000);
         return true;
     }
 
-    if (screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase))
-    {
-        editor.QueueInput(0x0D);
-        RunForSteps(cpu, bus, 500_000);
-        return true;
-    }
+    // A begin/continue gate is a single-key read, never a live line prompt.
+    // ZTUU's boulder scene ("As you enter the tunnel... Your only option is
+    // to continue...") proves the phrase heuristics CAN appear at a live
+    // line prompt — pressing there leaks empty commands ("I beg your
+    // pardon?" spam). nz_raw_input_mode != 0 while a LINE read is pumping.
+    int? lineModeAddr = TryReadRuntimeSymbol("nz_raw_input_mode");
+    bool atLinePrompt = lineModeAddr is int lineA && bus.Read((ushort)lineA) != 0;
 
-    if ((screen.Contains("RETURN", StringComparison.OrdinalIgnoreCase) ||
+    bool continueGate = screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase);
+    bool beginGate =
+        (screen.Contains("RETURN", StringComparison.OrdinalIgnoreCase) ||
          screen.Contains("ENTER", StringComparison.OrdinalIgnoreCase)) &&
         (screen.Contains("to begin", StringComparison.OrdinalIgnoreCase) ||
          screen.Contains("to start", StringComparison.OrdinalIgnoreCase) ||
-         screen.Contains("to continue", StringComparison.OrdinalIgnoreCase)))
+         screen.Contains("to continue", StringComparison.OrdinalIgnoreCase));
+
+    if (!atLinePrompt && screenStable && (continueGate || beginGate))
     {
-        // Many titles park on an intro screen before the first ">" prompt, e.g.
-        // "Hit the RETURN/ENTER key to begin!" (Leather Goddesses) or
-        // "[Press RETURN or ENTER to begin.]" (Plundered Hearts). These are
-        // single-key reads (raw input mode), so press unconditionally like the
-        // "Press any key" gate above; the "to begin/start/continue" phrasing
-        // cannot appear on a live command prompt, so there is no live read to
-        // corrupt.
+        // Same confirm-by-waiting discipline as the banner gate above: a real
+        // key gate parks forever; mid-print pauses advance on their own, and a
+        // game heading into a line read raises nz_raw_input_mode. Pressing
+        // without this proof leaks CRs into the next read as empty commands.
+        RunForSteps(cpu, bus, 1_000_000);
+        if (SnapshotScreen(bus.Vgc) != screen)
+            return true;   // advanced on its own — not a keypress gate
+        if (lineModeAddr is int lineB && bus.Read((ushort)lineB) != 0)
+            return false;  // arrived at a live line prompt — never press
+
+        // Many titles park on an intro screen before the first ">" prompt,
+        // e.g. "Hit the RETURN/ENTER key to begin!" (Leather Goddesses) or
+        // "Type [RETURN] to continue" chapter cards — single-key reads.
+        Nz6Trace.Marker(continueGate ? "--- key: <cr> (continue gate)" : "--- key: <cr> (begin gate)");
         editor.QueueInput(0x0D);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1165,7 +1421,7 @@ static void RequireReadyPrompt(
     if (!IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
     {
         throw new InvalidOperationException(
-            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read(0x008F):X2}. " +
+            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read((ushort)(TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093)):X2}. " +
             $"{FormatPromptDiagnostics(bus.Vgc, screen)}\n{screen}");
     }
 }
@@ -1233,22 +1489,27 @@ static bool SettledAtReadLoop(
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
     }
     return IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress);
 }
 
 static bool HasCursorBarePrompt(VirtualGraphicsController vgc, string[] lines)
 {
+    // A bare prompt is '>' immediately left of the cursor with the rest of
+    // the cursor row blank. The '>' is not anchored to column 0: V6 windows
+    // put the prompt at the playfield's left edge (e.g. Zork Zero's inset
+    // playfield starts at column 5). The PC-at-read-loop and raw-input-mode
+    // gates in the callers carry the real "waiting for input" signal; this
+    // check only confirms the prompt has finished drawing.
     int actualX = vgc.GetCursorX();
     int actualY = vgc.GetCursorY();
-    if (actualY >= 0 && actualY < Math.Min(lines.Length, VgcConstants.ScreenRows) && actualX == 1)
-    {
-        string line = lines[actualY];
-        if (line.Length > 0 && line[0] == '>')
-            return line[1..].All(ch => ch == ' ');
-    }
-
-    return false;
+    if (actualX < 1 || actualY < 0 || actualY >= Math.Min(lines.Length, VgcConstants.ScreenRows))
+        return false;
+    string line = lines[actualY];
+    if (actualX > line.Length || line[actualX - 1] != '>')
+        return false;
+    return line[..(actualX - 1)].All(ch => ch == ' ') && line[actualX..].All(ch => ch == ' ');
 }
 
 static string FormatPromptDiagnostics(VirtualGraphicsController vgc, string screen)
@@ -1295,7 +1556,8 @@ enum SmokeInputMode
     Line,
     Raw,
     Wait,
-    ExpectStop
+    ExpectStop,
+    ExpectAt
 }
 
 sealed record SmokeCommand(
@@ -1304,4 +1566,13 @@ sealed record SmokeCommand(
     SmokeInputMode Mode = SmokeInputMode.Line,
     bool WaitForPrompt = true);
 sealed record ExpectedTextColor(string Text, byte Color);
+sealed record ExpectedAt(int Col, int Row, string Text);
 sealed record ExpectedGfxColor(int X, int Y, byte Color);
+
+// Cached nz_more_key_wait symbol for AtMorePrompt (top-level statements
+// cannot host static fields).
+static class MoreGate
+{
+    public static int? Address;
+    public static bool Resolved;
+}

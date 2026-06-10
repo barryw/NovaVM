@@ -1,7 +1,7 @@
 # HHGG V5 startup, parser, inventory, and status-window smoke.
 look=>It is pitch black
 turn on light=>Bedroom&&light is now on
-get up=>on your feet
+get up=>manage it
 look=>Bedroom&&flathead screwdriver
 get gown=>notice something in the pocket
 i=>gown&&no tea

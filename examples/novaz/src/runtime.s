@@ -15,6 +15,7 @@
 .include "ztext.inc"
 .include "zobject.inc"
 .include "zvm.inc"
+.include "zvm6.inc"
 .include "zstory.s"
 .include "ztext.s"
 .include "zobject.s"
@@ -101,6 +102,16 @@ reset:
         BRA halt
 
 @header_ok:
+        LDA zstory_version
+        CMP #$06
+        BNE @run_game            ; not V6: no segment needed
+        JSR nz6_load_segment
+        BEQ @run_game            ; A=0: segment live at $2000
+        LDA #<msg_novaz6_missing
+        LDY #>msg_novaz6_missing
+        JSR print_line
+        JMP halt
+@run_game:
         JSR nz_sound_preload
         JSR init_game_screen
         JSR zvm_run_until_read
@@ -109,6 +120,61 @@ reset:
 halt:
         WAI
         BRA halt
+
+; Load the NOVAZ6.BIN segment image (fixed 8KB, see src/novaz6.cfg) from the
+; mounted image into XRAM staging, DMA it to CPU $2000, and verify the 'N','6'
+; magic word. Mirrors zstory_load_default's xram_xload idiom for the file
+; stream and zvm save/restore's xram_copy_to_ram idiom for the bulk copy.
+; Returns A=0 on success, A=1 on any FIO/DMA error or bad magic.
+nz6_segment_name:
+        .byte "NOVAZ6.BIN"
+nz6_segment_name_end:
+
+nz6_load_segment:
+        LDA #<nz6_segment_name
+        STA XRAM_NAMEPTR_L
+        LDA #>nz6_segment_name
+        STA XRAM_NAMEPTR_H
+        LDA #(nz6_segment_name_end - nz6_segment_name)
+        STA XRAM_NAMELEN
+
+        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_L
+        STA XRAM_ADDRL
+        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_M
+        STA XRAM_ADDRM
+        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_H
+        STA XRAM_ADDRH
+        LDA #<NZ6_SIZE
+        STA XRAM_LENL
+        LDA #>NZ6_SIZE
+        STA XRAM_LENH
+        JSR xram_xload
+        BNE @fail
+
+        ; xram_xload preserves XRAM_ADDR* but overwrites XRAM_LEN* with the
+        ; loaded size; reset the length and aim the copy at CPU $2000.
+        LDA #<NZ6_SIZE
+        STA XRAM_LENL
+        LDA #>NZ6_SIZE
+        STA XRAM_LENH
+        LDA #<NZ6_BASE
+        STA XRAM_RAML
+        LDA #>NZ6_BASE
+        STA XRAM_RAMH
+        JSR xram_copy_to_ram
+        BNE @fail
+
+        LDA NZ6_BASE
+        CMP #NZ6_MAGIC0
+        BNE @fail
+        LDA NZ6_BASE + 1
+        CMP #NZ6_MAGIC1
+        BNE @fail
+        LDA #$00
+        RTS
+@fail:
+        LDA #$01
+        RTS
 
 init_screen:
         JSR init_video_colors
@@ -463,13 +529,16 @@ nz_screen_more_prompt:
 
 @draw_done:
         JSR nz_screen_restore_saved
-@wait:
+        ; Exported wait label: the smoke harness PC-matches it so a MORE
+        ; answer is only injected while the CPU is genuinely parked here
+        ; (prevents surplus CRs leaking into the next read as empty commands).
+nz_more_key_wait:
         LDA VGC_CHARIN
-        BEQ @wait
+        BEQ nz_more_key_wait
         CMP #$0D
         BEQ @erase
         CMP #$0A
-        BNE @wait
+        BNE nz_more_key_wait
 
 @erase:
         LDA nz_saved_color
@@ -704,8 +773,11 @@ msg_header_failed:
         .byte "STORY HEADER READ FAILED.", 0
 msg_unsupported:
         .byte "UNSUPPORTED Z-MACHINE VERSION: ", 0
+msg_novaz6_missing:
+        .byte "NOVAZ6.BIN MISSING OR INVALID", 0
 msg_more:
         .byte "[ MORE ]", 0
+
 
 .include "xram.s"
 .include "pager.s"

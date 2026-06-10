@@ -8,6 +8,7 @@
 .include "ztext.inc"
 .include "zobject.inc"
 .include "zvm.inc"
+.include "zvm6.inc"
 .include "vtext.inc"
 .include "xram.inc"
 
@@ -278,6 +279,35 @@ zvm_run_until_read:
         STA zvm_rng_hi
         JSR zvm_clear_locals
         JSR zvm_select_active_window
+        LDA zstory_version
+        CMP #$06
+        BNE @direct_pc
+        ; V6: reset the segment's 8-window model. Fresh boots AND restarts
+        ; both come through here, and the segment is already resident (the
+        ; boot path loads it before zvm_run_until_read).
+        LDA #NZ6_OP_RESET
+        JSR NZ6_ENTRY
+        ; V6: header $06 is the packed address of the main routine. Call it
+        ; with no arguments through the normal call machinery; if it ever
+        ; returns (frame 0), zvm_return stops with ZVM_STOP_QUIT.
+        LDA zstory_initial_pc_lo
+        STA zvm_operand_lo
+        LDA zstory_initial_pc_hi
+        STA zvm_operand_hi
+        LDA #$01
+        STA zvm_operand_count    ; counts the packed-addr operand itself:
+                                 ; 1 = address only -> arg_count = 0.
+                                 ; (0 would trip the null-call guard.)
+        LDA #$FF
+        STA zvm_store_var        ; call_vn semantics: no store
+        STZ zvm_pc_l             ; sentinel return PC (frame 0 return = quit);
+                                 ; never dispatched, so zvm_check_code_target
+                                 ; never validates it
+        STZ zvm_pc_h
+        STZ zvm_pc_b
+        JSR zvm_call_common
+        BRA @loop
+@direct_pc:
         LDA zstory_initial_pc_lo
         STA zvm_pc_l
         LDA zstory_initial_pc_hi
@@ -414,6 +444,11 @@ zvm_decode_variable:
         LDA #$04
         BRA @set_limit
 :
+        CMP #$1B              ; V6 set_colour: fg bg [window] — 3 operands.
+        BNE :+
+        LDA #$03
+        BRA @set_limit
+:
         LDA #$02
 @set_limit:
         STA zvm_operand_limit
@@ -529,6 +564,13 @@ zvm_set_raw_first:
 @not_2op:
         CMP #$03
         BNE @done
+        ; pull (VAR:9) takes an indirect variable reference in v1-5 ("pull
+        ; (variable)"), but in V6 its optional operand is a real VALUE — the
+        ; user-stack address — so a variable-type operand must be evaluated,
+        ; not kept raw (Zork Zero peeks its input stack via "pull L00 -> L03").
+        LDA zstory_version
+        CMP #$06
+        BCS @done
         LDA zvm_opnum
         CMP #$09
         BEQ @raw
@@ -874,7 +916,15 @@ zvm_return:
         STA zvm_ret_hi
         LDA zvm_frame_count
         BNE @have_frame
+        LDA zstory_version
+        CMP #$06
+        BEQ @main_returned
         LDA #ZVM_STOP_UNSUPPORTED
+        STA zvm_stop_reason
+        RTS
+@main_returned:
+        ; V6: the main routine returned -- the machine halts cleanly.
+        LDA #ZVM_STOP_QUIT
         STA zvm_stop_reason
         RTS
 @have_frame:
@@ -886,6 +936,21 @@ zvm_return:
         STA zvm_pc_h
         LDA zvm_frame_ret_bank,X
         STA zvm_pc_b
+        ; V6: frame 0 carries the all-zero sentinel return PC planted by
+        ; zvm_run_until_read — restoring it means the MAIN ROUTINE returned,
+        ; which halts the machine cleanly (it must not reach the bad-target
+        ; diagnostic below).
+        CPX #$00
+        BNE @check_target
+        LDA zstory_version
+        CMP #$06
+        BNE @check_target
+        LDA zvm_pc_l
+        ORA zvm_pc_h
+        ORA zvm_pc_b
+        BNE @check_target
+        BRA @main_returned
+@check_target:
         JSR zvm_check_code_target
         LDA zvm_stop_reason
         BEQ :+
@@ -997,7 +1062,7 @@ zvm_call_common:
         INC zvm_frame_count
         STZ zvm_sp
 
-        JSR zvm_unpack_operand_packed_addr
+        JSR zvm_unpack_routine_addr
         LDA zstory_addr_l
         STA zvm_pc_l
         LDA zstory_addr_m
@@ -1092,6 +1157,34 @@ zvm_unpack_operand_packed_addr:
 @done:
         RTS
 
+; zvm_unpack_routine_addr / zvm_unpack_string_addr: unpack the packed address
+; in zvm_operand_lo/hi into zstory_addr_l/m/h, then (V6 only) add the 8x
+; routines/strings byte offset read from the header. The offsets live in a
+; contiguous BSS block (routine l/m/h then string l/m/h), so X=0 selects the
+; routine offset and X=3 the string offset -- same convention as zstory.s.
+zvm_unpack_routine_addr:
+        LDX #$00
+        BRA zvm_unpack_offset_addr
+zvm_unpack_string_addr:
+        LDX #$03
+zvm_unpack_offset_addr:
+        JSR zvm_unpack_operand_packed_addr
+        LDA zstory_version
+        CMP #$06
+        BNE @done
+        CLC
+        LDA zstory_addr_l
+        ADC zstory_routine_off_l,X
+        STA zstory_addr_l
+        LDA zstory_addr_m
+        ADC zstory_routine_off_m,X
+        STA zstory_addr_m
+        LDA zstory_addr_h
+        ADC zstory_routine_off_h,X
+        STA zstory_addr_h
+@done:
+        RTS
+
 zvm_print:
         LDA zvm_pc_l
         STA zstory_addr_l
@@ -1126,7 +1219,7 @@ zvm_print_addr:
         JMP ztext_print_packed
 
 zvm_print_paddr:
-        JSR zvm_unpack_operand_packed_addr
+        JSR zvm_unpack_string_addr
         LDA #ZTEXT_UNLIMITED
         STA ztext_word_limit
         JMP ztext_print_packed
@@ -2378,7 +2471,14 @@ zvm_push:
         STA zvm_value_hi
         JMP zvm_stack_push
 
+; pull (VAR:9). v<6: "pull (variable)" — pop the game stack into the named
+; variable, no store byte. V6: "pull stack -> (result)" — a STORE op with an
+; optional user-stack operand; routed to the segment, which MUST consume the
+; store byte or the instruction stream derails (Zork Zero hits this at its
+; first prompt).
 zvm_pull:
+        LDX #NZ6_OP_PULL
+        JSR zvm_v6_maybe_route
         JSR zvm_stack_pop
         LDA zvm_operand_lo
         JMP zvm_set_var_indirect
@@ -3217,6 +3317,8 @@ zvm_print_global_u16:
         JMP print_u16_dec
 
 zvm_split_window:
+        LDX #NZ6_OP_SPLIT_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         JSR zvm_window_save_cursor
         LDA zvm_operand_lo
@@ -3239,6 +3341,8 @@ zvm_split_window:
         JMP zvm_select_active_window
 
 zvm_set_window:
+        LDX #NZ6_OP_SET_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         JSR zvm_window_save_cursor
         LDA zvm_operand_lo
@@ -3288,6 +3392,15 @@ zvm_window_save_cursor:
         RTS
 
 zvm_select_active_window:
+        LDA zstory_version
+        CMP #$06
+        BNE @classic
+        ; V6: the NOVAZ6 segment owns the live vtext region — windows are
+        ; real rectangles built from the segment's prop table, not the
+        ; classic lower/upper split (zvm_split_lines stays v1-5-only).
+        LDA #NZ6_OP_SELECT
+        JMP NZ6_ENTRY
+@classic:
         LDA zvm_window_current
         BEQ zvm_select_lower_window
         LDA zvm_split_lines
@@ -3451,6 +3564,8 @@ zvm_set_text_style:
         RTS
 
 zvm_set_colour:
+        LDX #NZ6_OP_SET_COLOUR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_operand_lo
         JSR zvm_map_z_colour
@@ -3873,6 +3988,8 @@ nz_call_z_routine:
         RTS
 
 zvm_erase_window:
+        LDX #NZ6_OP_ERASE_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_operand_hi
         CMP #$FF
@@ -3990,6 +4107,8 @@ zvm_erase_line:
         RTS
 
 zvm_set_cursor:
+        LDX #NZ6_OP_SET_CURSOR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_window_current
         BNE @selected_upper
@@ -4026,6 +4145,8 @@ zvm_set_cursor:
         RTS
 
 zvm_get_cursor:
+        LDX #NZ6_OP_GET_CURSOR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         LDA VTEXT_CURY
         CLC
         ADC #$01
@@ -4640,6 +4761,45 @@ zvm_bad_target:
         STA zvm_stop_reason
         RTS
 
+; --- V6 dispatch routing into the RAM-resident NOVAZ6 segment ---------------
+;
+; zvm_ext_v6: EXT-table entry for opcodes that only exist (or only change
+; meaning) in V6. For V6 stories the decoded opcode is forwarded to the
+; segment at NZ6_ENTRY with A = NZ6_EXT_BASE + ext opnum; the segment RTSes
+; back to the dispatcher exactly like a ROM handler. For v<6 the opcode is
+; unsupported, same as before the table grew.
+zvm_ext_v6:
+        LDA zstory_version
+        CMP #$06
+        BNE @unsup
+        LDA zvm_opnum
+        CLC
+        ADC #NZ6_EXT_BASE
+        JMP NZ6_ENTRY
+@unsup:
+        JMP zvm_unsupported
+
+; zvm_v6_maybe_route: shared prologue helper for the six VAR screen handlers
+; whose semantics change in V6. Call with X = NZ6_OP_* id immediately on
+; handler entry. STACK PRECONDITION: must be the handler's FIRST instruction
+; pair (LDX #id / JSR here) — the V6 path pops exactly one return address,
+; assuming the only frame above the handler's caller is this JSR. Any code
+; (or JSR) inserted before the prologue breaks that and corrupts the stack:
+;   - v<6: plain RTS — the classic handler body runs as always.
+;   - V6:  pop the prologue's JSR return address (so the segment's RTS goes
+;          to the handler's caller, like any handler RTS) and JMP into the
+;          segment with A = id.
+zvm_v6_maybe_route:
+        LDA zstory_version
+        CMP #$06
+        BEQ @route
+        RTS
+@route:
+        PLA                     ; drop the JSR return address (lo)
+        PLA                     ; (hi) — segment now returns to handler's caller
+        TXA
+        JMP NZ6_ENTRY
+
 zvm_unsupported:
         LDA #<msg_unsupported_opcode
         LDY #>msg_unsupported_opcode
@@ -4770,12 +4930,31 @@ zvm_ext_table:
         .word zvm_log_shift
         .word zvm_art_shift
         .word zvm_set_font
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_false_store      ; save_undo: report unavailable.
-        .word zvm_false_store      ; restore_undo: report unavailable.
+        .word zvm_ext_v6           ;  5 draw_picture (V6 only; v<6 unsupported)
+        .word zvm_ext_v6           ;  6 picture_data (V6 only, branches)
+        .word zvm_ext_v6           ;  7 erase_picture (V6 only)
+        .word zvm_ext_v6           ;  8 set_margins (V6 only)
+        .word zvm_false_store      ;  9 save_undo: report unavailable.
+        .word zvm_false_store      ; 10 restore_undo: report unavailable.
+        .word zvm_unsupported      ; 11 print_unicode (unsupported here)
+        .word zvm_unsupported      ; 12 check_unicode
+        .word zvm_unsupported      ; 13 set_true_colour
+        .word zvm_unsupported      ; 14 (unassigned)
+        .word zvm_unsupported      ; 15 (unassigned)
+        .word zvm_ext_v6           ; 16 move_window
+        .word zvm_ext_v6           ; 17 window_size
+        .word zvm_ext_v6           ; 18 window_style
+        .word zvm_ext_v6           ; 19 get_wind_prop (stores)
+        .word zvm_ext_v6           ; 20 scroll_window
+        .word zvm_ext_v6           ; 21 pop_stack
+        .word zvm_ext_v6           ; 22 read_mouse
+        .word zvm_ext_v6           ; 23 mouse_window
+        .word zvm_ext_v6           ; 24 push_stack (branches)
+        .word zvm_ext_v6           ; 25 put_wind_prop
+        .word zvm_ext_v6           ; 26 print_form
+        .word zvm_ext_v6           ; 27 make_menu (branches)
+        .word zvm_ext_v6           ; 28 picture_table
+        .word zvm_ext_v6           ; 29 buffer_screen (stores)
 zvm_ext_count = (* - zvm_ext_table) / 2
 
 zvm_style_color_table:

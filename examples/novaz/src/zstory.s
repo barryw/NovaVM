@@ -59,6 +59,15 @@ zstory_dynamic_base_h: .res 1
 zstory_cache_base_l:   .res 1
 zstory_cache_base_m:   .res 1
 zstory_cache_base_h:   .res 1
+; V6 packed-address byte offsets: header offset word x 8, 24-bit.
+; The two l/m/h triples must stay contiguous — zstory_store_packed_offset
+; indexes them from zstory_routine_off_l with X=0 (routines) or X=3 (strings).
+zstory_routine_off_l:  .res 1
+zstory_routine_off_m:  .res 1
+zstory_routine_off_h:  .res 1
+zstory_string_off_l:   .res 1
+zstory_string_off_m:   .res 1
+zstory_string_off_h:   .res 1
 
 .segment "CODE"
 
@@ -173,6 +182,10 @@ zstory_read_header:
         BEQ :+
         JMP @io_error
 :
+        JSR zstory_configure_flags2
+        BEQ :+
+        JMP @io_error
+:
 
         LDA #ZHEADER_ABBREVIATIONS
         JSR zstory_read_header_word
@@ -213,6 +226,28 @@ zstory_read_header:
         CPX #$06
         BCC @serial
 
+        JSR zstory_clear_packed_offsets
+        LDA zstory_version
+        CMP #$06
+        BNE @offsets_done
+
+        LDA #ZHEADER_ROUTINES_OFF
+        JSR zstory_read_header_word
+        BEQ :+
+        JMP @io_error
+:
+        LDX #$00
+        JSR zstory_store_packed_offset
+
+        LDA #ZHEADER_STRINGS_OFF
+        JSR zstory_read_header_word
+        BEQ :+
+        JMP @io_error
+:
+        LDX #$03
+        JSR zstory_store_packed_offset
+@offsets_done:
+
         LDA #ZSTORY_ERR_NONE
 @done:
         RTS
@@ -225,7 +260,7 @@ zstory_validate_version:
         LDA zstory_version
         CMP #$01
         BCC @unsupported
-        CMP #$06
+        CMP #$07
         BCS @unsupported
         LDA #ZSTORY_ERR_NONE
         RTS
@@ -322,6 +357,35 @@ zstory_configure_flags1:
         RTS
 @ok:
         LDA #ZSTORY_ERR_NONE
+        RTS
+
+; V6 only: clear Flags2 capability bits this interpreter does not provide.
+; Flags2 is a big-endian word at $10: bit 8 (menus) lives in the high byte
+; ($10 bit 0); bit 3 (pictures) and bit 5 (mouse) live in the low byte ($11).
+zstory_configure_flags2:
+        LDA zstory_version
+        CMP #$06
+        BEQ @v6
+        LDA #ZSTORY_ERR_NONE
+        RTS
+@v6:
+        LDA #ZHEADER_FLAGS2
+        JSR zstory_read_header_word
+        BNE @done
+        LDA zstory_word_hi
+        AND #%11111110          ; Clear bit 8: no menus.
+        TAX
+        LDA #ZHEADER_FLAGS2
+        JSR zstory_write_header_byte_value
+        BNE @done
+        LDA zstory_word_lo
+        AND #%11010111          ; Clear bit 3 (pictures) and bit 5 (mouse).
+        TAX
+        LDA #ZHEADER_FLAGS2 + 1
+        JSR zstory_write_header_byte_value
+        BNE @done
+        LDA #ZSTORY_ERR_NONE
+@done:
         RTS
 
 zstory_write_header_byte_value:
@@ -722,6 +786,10 @@ zstory_store_filelen:
         CMP #$04
         BCC :+
         JSR zstory_shift_filebytes
+        LDA zstory_version
+        CMP #$06
+        BCC :+
+        JSR zstory_shift_filebytes      ; v6+: header stores length/8
 :
         RTS
 
@@ -736,6 +804,32 @@ zstory_store_checksum:
         STA zstory_checksum_hi
         LDA zstory_word_lo
         STA zstory_checksum_lo
+        RTS
+
+; Zero both V6 packed-address offset triples (v<6 stories use none).
+zstory_clear_packed_offsets:
+        LDX #$05
+@loop:
+        STZ zstory_routine_off_l,X
+        DEX
+        BPL @loop
+        RTS
+
+; Store zstory_word_hi/lo x 8 as a 24-bit byte offset into the triple at
+; zstory_routine_off_l+X (X=0 for routines, X=3 for strings).
+zstory_store_packed_offset:
+        LDA zstory_word_lo
+        STA zstory_routine_off_l,X
+        LDA zstory_word_hi
+        STA zstory_routine_off_m,X
+        STZ zstory_routine_off_h,X
+        LDY #$03
+@shift:
+        ASL zstory_routine_off_l,X
+        ROL zstory_routine_off_m,X
+        ROL zstory_routine_off_h,X
+        DEY
+        BNE @shift
         RTS
 
 .segment "RODATA"
