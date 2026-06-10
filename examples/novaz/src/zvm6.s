@@ -48,6 +48,7 @@
 .setcpu "65c02"
 
 .include "zvm6.inc"
+.include "nova.inc"             ; VGC register equates (VGC_PALETTE)
 .include "runtime_abi.inc"      ; ROM ABI addresses; must follow zvm6.inc
 
 ; Screen geometry (cells). Mirrors VTEXT_SCREEN_COLS/ROWS (runtime/asm/
@@ -55,9 +56,11 @@
 NZ6_SCREEN_ROWS = 50
 NZ6_SCREEN_COLS = 80
 
-; Keep in sync with ZVM_COLOR_NORMAL in src/zvm.s (equates do not appear in
-; runtime.sym, so it cannot ride the generated ABI include).
-NZ6_COLOR_NORMAL = $0C
+; V6 boots in the VGC's EGA palette mode (the art in PICS.PAK is quantized
+; to EGA; the Z colour codes below map onto EGA indices). The default text
+; colour is EGA white-on-black — NOT the ROM's Nova-palette ZVM_COLOR_NORMAL
+; ($0C = grey there, bright red under EGA).
+NZ6_COLOR_DEFAULT = $0F
 
 .segment "BSS"
 
@@ -77,6 +80,8 @@ nz6_marg_l:      .res 1         ; apply: left/right margin cells in flight
 nz6_marg_r:      .res 1
 nz6_stk_lo:      .res 1         ; push_stack/pull: free-slot count in flight
 nz6_stk_hi:      .res 1
+nz6_colour:      .res 1         ; live set_colour state: bg high nibble, fg low
+nz6_clr_tmp:     .res 1         ; scratch for style/nibble math
 
 .segment "CODE"
 
@@ -95,8 +100,8 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_SELECT + 1
-        BCS nz6_bug             ; reserved VAR ids $09-$1F are never routed
+        CMP #NZ6_OP_TEXT_STYLE + 1
+        BCS nz6_bug             ; reserved VAR ids $0A-$1F are never routed
         ASL
         TAX
         JMP (nz6_var_table,X)
@@ -459,9 +464,17 @@ nz6_reset_windows:
         RTS
 
 ; Dispatch id NZ6_OP_RESET: the ROM invokes this from zvm_run_until_read's
-; V6 branch on every game (re)start.
+; V6 branch on every game (re)start. V6 owns the VGC's EGA palette mode for
+; the whole boot: v1-5 and BASIC never come through here, and a full system
+; RESET restores the power-on Nova palette before any non-V6 code runs.
 nz6_op_reset:
         JSR nz6_reset_windows
+        LDA #$01                        ; VGC PaletteModeEga
+        STA VGC_PALETTE
+        LDA #NZ6_COLOR_DEFAULT
+        STA nz6_colour
+        STA VTEXT_COLOR
+        STZ zvm_text_style
         JMP nz6_apply_current_window
 
 ; --- VAR screen ops -----------------------------------------------------------
@@ -645,7 +658,7 @@ nz6_op_erase:
         STA VTEXT_WIDTH
         LDA nz6_rect_h
         STA VTEXT_HEIGHT
-        LDA #NZ6_COLOR_NORMAL
+        LDA nz6_colour                  ; erase fills with the game's colours
         STA VTEXT_COLOR
         STZ VTEXT_ATTR
         JSR vtext_clear_region
@@ -744,11 +757,15 @@ nz6_op_get_cursor:
         STA zstory_word_hi
         JMP zstory_write16
 
-; set_colour fg bg [window] (2OP:27). M1 records the colour data in prop 11
-; ((bg<<8)|fg) without touching the live VGC palette. An absent or
-; out-of-range window operand (including the -3 "current window" idiom)
-; targets the current window.
+; set_colour fg bg [window] (2OP:27). Records the raw colour data in prop 11
+; ((bg<<8)|fg) and, when the target is the live window, maps the Z colour
+; codes onto EGA indices and drives the live text colour: codes 2-9 are the
+; spec table, 1 restores the default nibble, 0 and anything out of range
+; (including the V6 -1 "pixel under cursor" idiom) keep the current nibble.
+; An absent or out-of-range window operand (including the -3 "current
+; window" idiom) targets the current window.
 nz6_op_set_colour:
+        JSR nz_screen_flush_word        ; pending text keeps the OLD colour
         LDA nz6_win_current
         STA nz6_tmp_win
         LDA zvm_operand_count
@@ -764,7 +781,122 @@ nz6_op_set_colour:
         LDA zvm_operand_lo+1            ; bg -> high byte
         STA nz6_unit_hi
         LDX #11
-        JMP nz6_write_prop_unit
+        JSR nz6_write_prop_unit
+        LDA nz6_tmp_win                 ; live colour only for the current window
+        CMP nz6_win_current
+        BNE @rts
+        ; fg nibble
+        LDX #0
+        JSR nz6_map_colour_operand
+        BCC :+
+        STA nz6_clr_tmp
+        LDA nz6_colour
+        AND #$F0
+        ORA nz6_clr_tmp
+        STA nz6_colour
+:
+        ; bg nibble
+        LDX #1
+        JSR nz6_map_colour_operand
+        BCC :+
+        ASL A
+        ASL A
+        ASL A
+        ASL A
+        STA nz6_clr_tmp
+        LDA nz6_colour
+        AND #$0F
+        ORA nz6_clr_tmp
+        STA nz6_colour
+:
+        JMP nz6_apply_colour_style
+@rts:
+        RTS
+
+; Z colour code in operand X -> EGA index in A with C=1, or C=0 for "keep
+; the current nibble" (code 0, the V6 -1 idiom, and anything unmapped).
+; Code 1 = default: fg white ($F), bg black ($0) — X selects which.
+nz6_map_colour_operand:
+        LDA zvm_operand_hi,X
+        BNE @keep                       ; negative/large: keep (covers -1)
+        LDA zvm_operand_lo,X
+        BEQ @keep                       ; 0 = current colour
+        CMP #1
+        BEQ @default
+        CMP #10
+        BCS @keep                       ; 10+ unmapped: keep
+        TAY
+        LDA nz6_colour_table-2,Y        ; codes 2-9
+        SEC
+        RTS
+@default:
+        CPX #0
+        BNE :+
+        LDA #(NZ6_COLOR_DEFAULT & $0F)  ; default fg
+        SEC
+        RTS
+:
+        LDA #(NZ6_COLOR_DEFAULT >> 4)   ; default bg
+        SEC
+        RTS
+@keep:
+        CLC
+        RTS
+
+; set_text_style n (VAR:17), V6 path (dispatch id NZ6_OP_TEXT_STYLE). Styles
+; accumulate like the ROM handler (0 resets), but the colour cell derives
+; from the live colour pair: bold brightens the foreground (EGA +8), reverse
+; swaps the nibbles — the ROM's fixed style table assumes the Nova palette.
+nz6_op_text_style:
+        JSR nz_screen_flush_word
+        LDA zvm_operand_lo
+        BNE @accumulate
+        STZ zvm_text_style
+        BRA nz6_apply_colour_style
+@accumulate:
+        ORA zvm_text_style
+        STA zvm_text_style
+        ; FALL THROUGH to nz6_apply_colour_style
+
+; VTEXT_COLOR := nz6_colour with the active style bits applied (bit 1 bold
+; -> fg | 8, bit 0 reverse -> nibble swap). Italic/fixed accumulate in
+; zvm_text_style but render as roman, same as the ROM path.
+nz6_apply_colour_style:
+        LDA zvm_text_style
+        AND #$02
+        BEQ @no_bold
+        LDA nz6_colour
+        ORA #$08
+        BRA @styled
+@no_bold:
+        LDA nz6_colour
+@styled:
+        STA nz6_clr_tmp
+        LDA zvm_text_style
+        AND #$01
+        BEQ @store
+        LDA nz6_clr_tmp                 ; reverse: swap fg/bg nibbles
+        ASL A
+        ASL A
+        ASL A
+        ASL A
+        STA VTEXT_COLOR
+        LDA nz6_clr_tmp
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        ORA VTEXT_COLOR
+        STA nz6_clr_tmp
+@store:
+        LDA nz6_clr_tmp
+        STA VTEXT_COLOR
+        RTS
+
+; EGA indices for Z-machine colour codes 2-9 (spec section 8.3.1):
+; black red green yellow blue magenta cyan white.
+nz6_colour_table:
+        .byte $00, $04, $02, $0E, $01, $05, $03, $0F
 
 ; --- EXT window ops -----------------------------------------------------------
 
@@ -1224,7 +1356,8 @@ nz6_var_table:                  ; ids $00-$07
         .word nz6_op_set_colour ; $06 set_colour
         .word nz6_var_pull      ; $07 pull (V6 store form, optional user stack)
         .word nz6_apply_current_window ; $08 select (zvm_select_active_window V6 path)
-.assert (* - nz6_var_table) / 2 = NZ6_OP_SELECT + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_SELECT"
+        .word nz6_op_text_style ; $09 set_text_style (colour-relative styles)
+.assert (* - nz6_var_table) / 2 = NZ6_OP_TEXT_STYLE + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_TEXT_STYLE"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)

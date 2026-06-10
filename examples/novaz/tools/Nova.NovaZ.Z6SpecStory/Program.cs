@@ -31,7 +31,7 @@ const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x1600;                  // strings region;  packed (0x1600-0x400)/4
 
-(string outputPath, int version, bool mainReturns) = ParseArgs(args);
+(string outputPath, int version, bool mainReturns, string? fixture) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -45,6 +45,8 @@ WritePackedText(story, PackedStrings, "ok");
 var code = new ZCode(CodeBase, packedAddressScale: 4, routinesByteOffset: RoutinesByteOffset);
 if (mainReturns)
     EmitMainReturnsProgram(code);
+else if (fixture == "colours")
+    EmitColoursProgram(code);
 else
     EmitSpecProgram(code);
 byte[] codeBytes = code.ToArray();
@@ -56,11 +58,12 @@ WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, code {codeBytes.Length} bytes, version {version})");
 
-static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
+static (string Output, int Version, bool MainReturns, string? Fixture) ParseArgs(string[] args)
 {
     string output = "build/z6-spec.z6";
     int version = 6;
     bool mainReturns = false;
+    string? fixture = null;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
@@ -78,6 +81,12 @@ static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
             case "--main-returns":
                 mainReturns = true;
                 break;
+            case "--fixture" when value is not null:
+                if (value != "colours")
+                    throw new ArgumentException($"Unknown fixture: {value}");
+                fixture = value;
+                i++;
+                break;
             case "-h" or "--help":
                 PrintUsage();
                 Environment.Exit(0);
@@ -90,7 +99,7 @@ static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
         }
     }
 
-    return (output, version, mainReturns);
+    return (output, version, mainReturns, fixture);
 }
 
 static void PrintUsage()
@@ -99,6 +108,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  --output <story.z6>");
     Console.Error.WriteLine("  --version <n>   header version byte only (default 6; 7 for rejection tests)");
     Console.Error.WriteLine("  --main-returns  main routine is a bare rtrue (frame-0 return quit test)");
+    Console.Error.WriteLine("  --fixture colours  V6 colour/style fixture (EGA mapping asserts)");
 }
 
 static void WriteHeader(byte[] story, int version)
@@ -197,6 +207,50 @@ static void EmitMainReturnsProgram(ZCode z)
 {
     z.Byte(0);       // locals count
     z.ZeroOp(0);     // rtrue
+}
+
+// V6 colour fixture (M3 Task 2): set_colour drives the live text colour
+// through the segment's Z->EGA mapping, set_text_style derives bold/reverse
+// from the current colour pair, and the V6 boot default is EGA white-on-black
+// ($0F). Asserted by test-z6-colours via --expect-text-color (colour RAM
+// bytes, palette-mode independent).
+static void EmitColoursProgram(ZCode z)
+{
+    z.Byte(0); // locals count
+
+    z.Print("egadef");                                        // boot default 0F
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(4), Operand.Small(6));          // green on blue
+    z.Print("egagrnblu");                                     // -> 12
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(9), Operand.Small(2));          // white on black
+    z.Print("egawhite");                                      // -> 0F
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(2), Operand.Small(9));          // Zork Zero's pair
+    z.Print("egaparch");                                      // -> F0
+    z.NewLine();
+    z.VarOp(17, Operand.Small(1));                            // reverse
+    z.Print("egarev");                                        // -> 0F
+    z.NewLine();
+    z.VarOp(17, Operand.Small(0));
+    z.Print("egaroman");                                      // -> F0
+    z.NewLine();
+    z.VarOp(17, Operand.Small(2));                            // bold: fg|8
+    z.Print("egabold");                                       // -> F8
+    z.NewLine();
+    z.VarOp(17, Operand.Small(0));
+    z.TwoOp(27, Operand.Small(0), Operand.Small(0));          // 0,0 = keep
+    z.Print("egakeep");                                       // -> F0
+    z.NewLine();
+    z.TwoOpVar(27, Operand.Small(3), Operand.Large(0xFFFF));  // red fg, -1 keeps bg
+    z.Print("egaredkeep");                                    // -> F4
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(1), Operand.Small(1));          // 1,1 = defaults
+    z.Print("egadflt");                                       // -> 0F
+    z.NewLine();
+    z.Print("colour fixture done");
+    z.NewLine();
+    z.ZeroOp(10); // quit
 }
 
 static void EmitSpecProgram(ZCode z)

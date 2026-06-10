@@ -3545,6 +3545,8 @@ zvm_clear_upper_window:
         RTS
 
 zvm_set_text_style:
+        LDX #NZ6_OP_TEXT_STYLE
+        JSR zvm_v6_maybe_route  ; V6: colour-relative styles in the segment
         JSR nz_screen_flush_word
         ; Styles are cumulative: style 0 resets, any other value adds its bits.
         ; Only roman/reverse (bit0) and bold (bit1) change the colour cell;
@@ -4042,8 +4044,12 @@ zvm_clear_whole_screen:
         STA VTEXT_WIDTH
         LDA #50
         STA VTEXT_HEIGHT
+        LDA zstory_version
+        CMP #$06
+        BEQ :+                  ; V6: clear in the game's live colours
         LDA #ZVM_COLOR_NORMAL
         STA VTEXT_COLOR
+:
         STZ VTEXT_ATTR
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
         STA VTEXT_FLAGS
