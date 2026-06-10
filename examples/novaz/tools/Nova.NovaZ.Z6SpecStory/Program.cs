@@ -727,6 +727,28 @@ static void EmitSpecProgram(ZCode z)
     z.Label("objins-sib");
     z.AssertVarEquals(0x12, 2, "objins-sib4");                 // sibling(4) == 2
 
+    // MCGA-faithful compositing: drawing a picture overwrites the text
+    // pixels under it, so the blit blanks the covered cells (space, bg 0 =
+    // the global background -> the art shows through in mode 2). This runs
+    // LAST: earlier program output scrolls the full-screen window. The
+    // markers live in the left gutter (col 1, rows 30/36) outside the final
+    // 45x70 inset, which later scrolling never touches. PP's cell must go
+    // blank under the draw; the uncovered control QQ must survive (it
+    // proves window-4 printing landed at all; window 2 is unusable here —
+    // the earlier set_margins fixture left it with margins 8+12).
+    z.ExtOp(16, Operand.Small(4), Operand.Small(31), Operand.Small(2)); // move_window 4 -> (31,2)
+    z.ExtOp(17, Operand.Small(4), Operand.Small(10), Operand.Small(4)); // window_size 4: 10x4
+    z.VarOp(11, Operand.Small(4));                                      // set_window 4
+    z.VarOp(15, Operand.Small(1), Operand.Small(1));                    // cursor home
+    z.Print("PP");
+    z.VarOp(15, Operand.Small(7), Operand.Small(1));                    // cursor row 7 -> abs row 36
+    z.Print("QQ");
+    // draw from window 4 itself (coords are window-relative; window 0 is
+    // the inset here): rel (1,1) = window 4's origin = cell (1,30)
+    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(1));
+    z.VarOp(11, Operand.Small(0));                                      // back to window 0
+
+
     z.Label("prompt");
     z.Print(">");
     z.VarOpStore(4, 0x11, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // read

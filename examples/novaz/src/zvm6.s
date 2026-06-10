@@ -1717,7 +1717,72 @@ nz6_ext_draw_picture:
         LDA #$03                        ; FioPageTargetGfx4
         STA FIO_DIRTYPE
         LDA #FIO_CMD_XPAGE
-        JMP fio_exec
+        JSR fio_exec
+        BNE @rts2
+        ; MCGA-faithful compositing: on the original hardware a picture
+        ; overwrites the text pixels under it, so blank the text cells the
+        ; bitmap fully covers (space, bg 0 = the global background colour —
+        ; transparent under the mode-2 rule, letting the art show through).
+        ; Text printed afterwards re-covers the art, exactly like MCGA.
+        ; Partial edge cells (non-multiple-of-4 dims) stay text-owned.
+        LDA nz6_pic_w_hi                ; cols = w_px / 4 (floor)
+        LSR A
+        STA nz6_pic_tmp
+        LDA nz6_pic_w_lo
+        ROR A
+        LSR nz6_pic_tmp
+        ROR A
+        BEQ @rts2                       ; less than one full cell wide
+        ; clip to the screen's right edge
+        STA nz6_blt_wclip
+        LDA #NZ6_SCREEN_COLS
+        SEC
+        SBC nz6_blt_cellx
+        CMP nz6_blt_wclip
+        BCS :+
+        STA nz6_blt_wclip
+:
+        LDA nz6_blt_wclip
+        BEQ @rts2
+        ; rows = h_px / 4 (floor), clipped to the bottom edge
+        LDA nz6_pic_h_hi
+        LSR A
+        STA nz6_pic_tmp
+        LDA nz6_pic_h_lo
+        ROR A
+        LSR nz6_pic_tmp
+        ROR A
+        BEQ @rts2
+        STA nz6_blt_hclip
+        LDA #NZ6_SCREEN_ROWS
+        SEC
+        SBC nz6_blt_celly
+        CMP nz6_blt_hclip
+        BCS :+
+        STA nz6_blt_hclip
+:
+        LDA nz6_blt_hclip
+        BEQ @rts2
+        ; borrow the live vtext region for the rect clear (the same idiom
+        ; as erase_window n), then rebuild the current window's region
+        LDA nz6_blt_cellx
+        STA VTEXT_LEFT
+        LDA nz6_blt_celly
+        STA VTEXT_TOP
+        LDA nz6_blt_wclip
+        STA VTEXT_WIDTH
+        LDA nz6_blt_hclip
+        STA VTEXT_HEIGHT
+        LDA VTEXT_COLOR
+        PHA
+        LDA #NZ6_COLOR_DEFAULT          ; bg 0: cells go display-transparent
+        STA VTEXT_COLOR
+        JSR vtext_clear_region
+        PLA
+        STA VTEXT_COLOR
+        JMP nz6_apply_current_window
+@rts2:
+        RTS
 
 ; erase_picture N [y x] (EXT:7): fill the picture's (clipped) rect with the
 ; current window background colour on the gfx layer.
