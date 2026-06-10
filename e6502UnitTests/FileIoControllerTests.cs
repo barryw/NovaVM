@@ -1330,4 +1330,58 @@ public class FileIoControllerTests
         }
         finally { Directory.Delete(tmp, true); }
     }
+
+    [TestMethod]
+    public void LoadRuntime_ResolvesFromMountedFloppy()
+    {
+        // NovaHost resolves LOADRUNTIME through the DeviceManager, so a runtime
+        // shipped on the inserted floppy (the NovaZ AUTOBOOT contract) must load
+        // even when <saveDir>/roms/ does not contain it.
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            var rom = new byte[VgcConstants.RomSize];
+            rom[0] = 0xA9;
+            rom[^1] = 0x42;
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "NOVAZ", 1440);
+            using (var image = NdiImage.Open(imagePath))
+                image.WriteFile("NOVAZ.BIN", NdiFileType.Bin, 0xFFFF, rom);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            byte[]? loaded = null;
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                loadRuntimeRom: data => loaded = data,
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "NOVAZ.BIN");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoadRuntime);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsNotNull(loaded, "runtime should load from the mounted floppy");
+            Assert.AreEqual(VgcConstants.RomSize, loaded!.Length);
+            Assert.AreEqual(0xA9, loaded[0]);
+            Assert.AreEqual(0x42, loaded[^1]);
+        }
+        finally
+        {
+            try { deviceManager?.GetDevice("FD0").Unmount(); } catch { }
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
 }
