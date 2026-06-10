@@ -80,15 +80,17 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void GfxTransparentColor_UsesLowNibbleOnly()
+    public void GfxTransparentColor_StoresRawByte_Above15DisablesTransparency()
     {
         _vgc.Write(VgcConstants.RegGfxTransparentColor, 2);
         Assert.AreEqual(2, _vgc.Read(VgcConstants.RegGfxTransparentColor));
         Assert.AreEqual(2, _vgc.GetGfxTransparentColor());
 
+        // Values above 15 can never match a 4bpp pixel: transparency OFF.
+        // NovaZ V6 parks the register at $FF so opaque black art renders.
         _vgc.Write(VgcConstants.RegGfxTransparentColor, 0xFE);
-        Assert.AreEqual(14, _vgc.Read(VgcConstants.RegGfxTransparentColor));
-        Assert.AreEqual(14, _vgc.GetGfxTransparentColor());
+        Assert.AreEqual(0xFE, _vgc.Read(VgcConstants.RegGfxTransparentColor));
+        Assert.AreEqual(0xFE, _vgc.GetGfxTransparentColor());
     }
 
     [TestMethod]

@@ -519,6 +519,10 @@ nz6_op_reset:
         STA VGC_MODE                    ; show wherever cells keep the global
                                         ; background colour (mode-2 rule in
                                         ; the VGC compositor)
+        LDA #$FF                        ; gfx transparency OFF: the plane is
+        STA VGC_GFXTRANS                ; the whole MCGA framebuffer, and
+                                        ; opaque BLACK art (index 0) must
+                                        ; render, not punch holes
         LDA #NZ6_COLOR_DEFAULT
         STA nz6_colour
         STA VTEXT_COLOR
@@ -1781,12 +1785,10 @@ nz6_ext_draw_picture:
         STA FIO_GLENL
         LDA nz6_pic_len_hi
         STA FIO_GLENH
-        LDA nz6_colour                  ; underpaint: transparent art pixels
-        LSR A                           ; over EMPTY gfx take the window
-        LSR A                           ; background (the MCGA framebuffer
-        LSR A                           ; would hold the parchment there)
-        LSR A
-        STA FIO_SIZEL
+        STZ FIO_SIZEL                   ; no underpaint: the gfx plane always
+                                        ; holds real framebuffer content now
+                                        ; (erase fills the parchment), so
+                                        ; transparent pixels simply skip
         LDA #$03                        ; FioPageTargetGfx4
         STA FIO_DIRTYPE
         LDA #FIO_CMD_XPAGE

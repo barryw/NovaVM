@@ -357,7 +357,11 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegGfxTransparentColor)
         {
-            _gfxTransparentColor = (byte)(data & 0x0F);
+            // Values above 15 disable gfx transparency entirely (no 4-bit
+            // pixel can match): NovaZ V6 parks it at $FF so opaque BLACK
+            // art pixels (index 0) render instead of punching holes. (M6
+            // note: the RTL comparison must be byte-wide for parity.)
+            _gfxTransparentColor = data;
             return;
         }
 
