@@ -154,6 +154,10 @@ Quirks get fixed against scripted longplays per project — no global hacks.
 1. **M1 — V6 boots, text only**: version gate, packed offsets, main-routine
    start, minimal 8-window model mapped to existing text path. Zork Zero
    reaches its first prompt (ugly is fine).
+   **Shipped 2026-06-10** on branch `novaz-z6` (see git log for the commit
+   trail): NOVAZ6.BIN RAM segment at `$2000`, user stacks + V6 `pull`,
+   no-graphics stubs, `test-z6-suite` green, Zork Zero text-only prompt
+   round-trips.
 2. **M2 — window model complete**: full EXT block + property semantics;
    `test-z6-spec` green.
 3. **M3 — pictures on Avalonia**: packer `PICS.PAK`, `FIO_CMD_ZPICT`,

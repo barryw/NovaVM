@@ -163,6 +163,51 @@ make -C examples/novaz test-z5-spec
 layout, selected memory/table operations, output stream handling, and parser
 input through the same Nova runtime path.
 
+Run the generated Version 4 compliance smoke:
+
+```sh
+make -C examples/novaz test-z4-spec
+```
+
+`test-z4-spec` builds a tiny synthetic Z4 story covering V4 capability header
+bits and timed input through the same Nova runtime path.
+
+Run the generated Version 6 suite:
+
+```sh
+make -C examples/novaz test-z6-suite
+```
+
+`test-z6-suite` runs four V6 targets. `test-z6-spec` builds a synthetic V6
+story that exercises packed routine/string offsets, the 8-window model, user
+stacks, the V6 `pull` form, and cursor/window text placement verified through
+VGC text cells. `test-z6-v7-rejected` checks that a Version 7 header is
+refused with the unsupported-version message. `test-z6-no-segment` packs a V6
+story without `NOVAZ6.BIN` and expects the runtime to abort with the
+missing-segment message. `test-z6-main-returns` checks that a V6 main routine
+that returns halts the machine cleanly instead of wedging.
+
+Run every generated spec suite in one shot:
+
+```sh
+make -C examples/novaz test-spec-suites
+```
+
+`test-spec-suites` aggregates `test-z3-spec`, `test-z4-styles`,
+`test-z4-spec`, `test-z5-spec`, and `test-z6-suite`. None of these need
+external story files, so this is the local regression gate for runtime
+changes.
+
+Build and smoke the Zork Zero (V6) project with a local story file:
+
+```sh
+cp /path/to/your/zork0.z6 examples/novaz/projects/zork-zero/STORY.BIN
+make -C examples/novaz test-project PROJECT=zork-zero
+```
+
+See `projects/zork-zero/README.md` for the M1 text-only status and known
+layout limitations.
+
 The smoke runner boots the generated `fd0.ndi` in the Avalonia hardware model,
 lets BASIC run `AUTOBOOT.bin`, swaps in `novaz.bin` at `$C000`, and verifies the
 runtime screen against `STORY.MANIFEST`. Scripted runs use visible command
@@ -180,6 +225,20 @@ text decoding, line input, dictionary/tokenizer support, the
 core opcode loop, object/property operations, calls/returns, Z3 screen handling
 with word-boundary wrapping and `[ MORE ]` pagination, and enough V4/V5 support
 to boot and script representative Infocom games. Z3 save/restore uses native
-Nova save files through the shared XRAM/FIO path. The generated Z3/Z5
+Nova save files through the shared XRAM/FIO path. The generated Z3/Z4/Z5/Z6
 compliance smokes and Z4 style fixture guard opcode-focused behavior that game
 transcripts do not reliably cover.
+
+The version gate now accepts Versions 1-6. V6 support (M1, text-only) lives in
+a RAM-resident segment, `NOVAZ6.BIN`, linked at `$2000` and loaded by the
+runtime when a V6 story boots: the 16K `$C000` ROM is full, so V6-only code
+(window routing, user stacks, the V6 `pull` form, no-graphics stubs) moves to
+RAM and calls back into the ROM through a pinned ABI (`runtime_abi.inc`,
+generated from `runtime.sym` at build time). The packer adds `NOVAZ6.BIN` to
+every image; a V6 story booted from an image without it aborts with
+`NOVAZ6.BIN MISSING OR INVALID`. The segment provides the 8-window model
+mapped onto the existing text path, user stacks in dynamic memory, and honest
+no-graphics stubs: `picture_data` branches "not available" and
+`draw_picture`/`erase_picture` are no-ops, so well-behaved V6 games fall back
+to text. Zork Zero boots to its first prompt and accepts commands in
+text-only mode; pictures are M3 scope (see `projects/zork-zero/README.md`).

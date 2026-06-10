@@ -202,6 +202,12 @@ test-z6-no-segment: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOK
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_NOSEG_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6NOSEG" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)"
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_NOSEG_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "NOVAZ6.BIN MISSING OR INVALID"
 
+# Aggregate V6 suite: positive spec story + the three negative/edge stories.
+test-z6-suite: test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns
+
+# Umbrella for every synthetic spec-story suite (no external story files needed).
+test-spec-suites: test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-suite
+
 # --- Sound jukebox (mount-and-run "Infocom sound museum" showcase images) ----
 LURKING_SOUND_NUMS  := 3,4,6,7,8,9,10,11,12,13,15,16,17,18
 SHERLOCK_SOUND_NUMS := 3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
@@ -292,4 +298,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
