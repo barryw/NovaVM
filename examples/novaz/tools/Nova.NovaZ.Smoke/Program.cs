@@ -1423,16 +1423,20 @@ static bool SettledAtReadLoop(
 
 static bool HasCursorBarePrompt(VirtualGraphicsController vgc, string[] lines)
 {
+    // A bare prompt is '>' immediately left of the cursor with the rest of
+    // the cursor row blank. The '>' is not anchored to column 0: V6 windows
+    // put the prompt at the playfield's left edge (e.g. Zork Zero's inset
+    // playfield starts at column 5). The PC-at-read-loop and raw-input-mode
+    // gates in the callers carry the real "waiting for input" signal; this
+    // check only confirms the prompt has finished drawing.
     int actualX = vgc.GetCursorX();
     int actualY = vgc.GetCursorY();
-    if (actualY >= 0 && actualY < Math.Min(lines.Length, VgcConstants.ScreenRows) && actualX == 1)
-    {
-        string line = lines[actualY];
-        if (line.Length > 0 && line[0] == '>')
-            return line[1..].All(ch => ch == ' ');
-    }
-
-    return false;
+    if (actualX < 1 || actualY < 0 || actualY >= Math.Min(lines.Length, VgcConstants.ScreenRows))
+        return false;
+    string line = lines[actualY];
+    if (actualX > line.Length || line[actualX - 1] != '>')
+        return false;
+    return line[..(actualX - 1)].All(ch => ch == ' ') && line[actualX..].All(ch => ch == ' ');
 }
 
 static string FormatPromptDiagnostics(VirtualGraphicsController vgc, string screen)

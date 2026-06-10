@@ -3392,6 +3392,15 @@ zvm_window_save_cursor:
         RTS
 
 zvm_select_active_window:
+        LDA zstory_version
+        CMP #$06
+        BNE @classic
+        ; V6: the NOVAZ6 segment owns the live vtext region — windows are
+        ; real rectangles built from the segment's prop table, not the
+        ; classic lower/upper split (zvm_split_lines stays v1-5-only).
+        LDA #NZ6_OP_SELECT
+        JMP NZ6_ENTRY
+@classic:
         LDA zvm_window_current
         BEQ zvm_select_lower_window
         LDA zvm_split_lines

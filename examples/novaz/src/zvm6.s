@@ -19,7 +19,7 @@
 ; verifies the magic after loading and aborts the boot if it is wrong.
 ;
 ; ----------------------------------------------------------------------------
-; Window model (M1, Z-Machine Standard 1.1 section 8.8):
+; Window model (M2, Z-Machine Standard 1.1 section 8.8):
 ;   - 8 windows, 16 word-sized properties each, stored little-endian in
 ;     nz6_win_props (offset = window*32 + prop*2).
 ;   - Coordinates/cursors are 1-based UNITS, and 1 unit = 1 TEXT CELL: the
@@ -27,19 +27,33 @@
 ;     games compute and send cell coordinates (Zork Zero capture finding 1).
 ;     cell = unit-1, unit = cell+1; M3 converts cells to gfx pixels (x4,
 ;     exact) at the picture-blit boundary only.
-;   - Mapping onto the ROM's two-window text path: window 0 drives the
-;     classic LOWER window (region-relative cell cursor zvm_lower_x/y,
-;     region top = zvm_split_lines); windows 1-7 drive the classic UPPER
-;     window (absolute cell cursor zvm_upper_x/y, no scroll). The table is
-;     the source of truth for cursors of non-live windows; the live ROM
-;     cursor is synced back into the table at window switches and reads.
-;   - Out of M1 scope (stored but not acted on): margins, newline
-;     interrupts, transcript bit, line counts, colour data, font props.
+;   - The CURRENT window owns the live vtext region: every geometry/cursor
+;     op on it recomputes VTEXT_LEFT/TOP/WIDTH/HEIGHT/CURX/CURY/FLAGS from
+;     the prop table (nz6_apply_current_window). The ROM's classic
+;     lower/upper split machinery (zvm_split_lines, zvm_lower_*/zvm_upper_*)
+;     is v1-5-only: zvm_select_active_window's V6 branch routes here with
+;     dispatch id NZ6_OP_SELECT instead. Cursor props 4/5 of the current
+;     window are freshened from the live vtext cursor whenever the table is
+;     consulted (window switch, get_cursor, get_wind_prop 4/5) or its
+;     geometry changes; non-current windows live purely in the table.
+;   - The NovaZ word-buffer/wrap/[MORE] layer in the ROM (nz_screen_*) reads
+;     the LIVE vtext state, so it follows whatever rectangle is applied;
+;     zvm_window_current degenerates to a buffer gate (0 = buffered window 0
+;     output, 1 = raw) and carries no geometry.
+;   - Out of M2 scope (stored but not acted on): newline interrupts (props
+;     8/9 round-trip but never fire — Zork Zero arms countdown -1),
+;     transcript bit, line counts, colour data (prop 11), font props,
+;     window_style rendering beyond wrap/scroll attributes.
 
 .setcpu "65c02"
 
 .include "zvm6.inc"
 .include "runtime_abi.inc"      ; ROM ABI addresses; must follow zvm6.inc
+
+; Screen geometry (cells). Mirrors VTEXT_SCREEN_COLS/ROWS (runtime/asm/
+; vtext.inc); single change point if the text grid ever reparameterizes.
+NZ6_SCREEN_ROWS = 50
+NZ6_SCREEN_COLS = 80
 
 ; Keep in sync with ZVM_COLOR_NORMAL in src/zvm.s (equates do not appear in
 ; runtime.sym, so it cannot ride the generated ABI include).
@@ -59,6 +73,8 @@ nz6_rect_left:   .res 1         ; erase_window: cell rect
 nz6_rect_top:    .res 1
 nz6_rect_w:      .res 1
 nz6_rect_h:      .res 1
+nz6_marg_l:      .res 1         ; apply: left/right margin cells in flight
+nz6_marg_r:      .res 1
 nz6_stk_lo:      .res 1         ; push_stack/pull: free-slot count in flight
 nz6_stk_hi:      .res 1
 
@@ -79,8 +95,8 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_PULL + 1
-        BCS nz6_bug             ; reserved VAR ids $08-$1F are never routed
+        CMP #NZ6_OP_SELECT + 1
+        BCS nz6_bug             ; reserved VAR ids $09-$1F are never routed
         ASL
         TAX
         JMP (nz6_var_table,X)
@@ -165,7 +181,7 @@ nz6_unit_one:
         RTS
 
 nz6_unit_80:
-        LDA #80
+        LDA #NZ6_SCREEN_COLS
         STA nz6_unit_lo
         STZ nz6_unit_hi
         RTS
@@ -223,9 +239,11 @@ nz6_cell_to_unit:
 :
         RTS
 
-; span cells = size_units (sizes are exact cell counts) for nz6_unit -> A,
-; clamped to $FF.
-nz6_units_to_span:
+; Prop X of window nz6_tmp_win -> A, saturated to $FF when the stored word
+; exceeds one byte (screen geometry fits in a byte; the table may legally
+; hold any 16-bit value). Preserves X.
+nz6_prop_byte:
+        JSR nz6_read_prop_unit
         LDA nz6_unit_hi
         BEQ :+
         LDA #$FF
@@ -234,121 +252,161 @@ nz6_units_to_span:
         LDA nz6_unit_lo
         RTS
 
-; A = absolute cell, X = origin prop (0 = y, 1 = x) of window nz6_tmp_win.
-; -> nz6_unit = window-relative 1-based unit: cell+1 - origin + 1, min 1.
-nz6_abs_cell_to_rel_unit:
-        PHX
-        JSR nz6_cell_to_unit            ; nz6_unit = abs unit (cell+1)
-        PLX
-        JSR nz6_off_for_prop            ; Y -> origin prop of nz6_tmp_win
-        SEC
-        LDA nz6_unit_lo
-        SBC nz6_win_props,Y
-        STA nz6_unit_lo
-        LDA nz6_unit_hi
-        SBC nz6_win_props+1,Y
-        STA nz6_unit_hi
-        BCC @floor                      ; abs < origin: clamp to unit 1
-        INC nz6_unit_lo
-        BNE :+
-        INC nz6_unit_hi
-:
-        RTS
-@floor:
-        LDA #1
-        STA nz6_unit_lo
-        STZ nz6_unit_hi
-        RTS
-
-; X = cursor prop (4 = y, 5 = x) of window nz6_tmp_win; the matching origin
-; prop is X-4. -> A = absolute cell: origin + rel - 2 (window-relative
-; 1-based unit to absolute 0-based cell).
-nz6_rel_prop_to_abs_cell:
-        JSR nz6_read_prop_unit          ; nz6_unit = relative unit
-        TXA
-        SEC
-        SBC #4
-        TAX
-        JSR nz6_off_for_prop            ; Y -> origin prop
-        CLC
-        LDA nz6_unit_lo
-        ADC nz6_win_props,Y
-        STA nz6_unit_lo
-        LDA nz6_unit_hi
-        ADC nz6_win_props+1,Y
-        STA nz6_unit_hi
-        ; nz6_unit = origin + rel; subtract 1 so nz6_unit_to_cell's own -1
-        ; yields origin + rel - 2.
-        LDA nz6_unit_lo
-        ORA nz6_unit_hi
-        BEQ @zero
-        SEC
-        LDA nz6_unit_lo
-        SBC #1
-        STA nz6_unit_lo
-        LDA nz6_unit_hi
-        SBC #0
-        STA nz6_unit_hi
+; Prop X (a 1-based unit) of window nz6_tmp_win -> A = 0-based cell,
+; saturated to $FF. Preserves X.
+nz6_prop_cell:
+        JSR nz6_read_prop_unit
         JMP nz6_unit_to_cell
-@zero:
-        LDA #0
-        RTS
 
-; --- live ROM cursor <-> window table sync ------------------------------------
+; --- the current window IS the live vtext region -------------------------------
 
-; Copy the live ROM cursor vars into the CURRENT window's cursor props 4/5
-; (cells -> 1-based units). Callers run zvm_window_save_cursor first so the
-; vars reflect the live VTEXT cursor.
-nz6_sync_live_to_table:
+; Rebuild the live vtext region from the CURRENT window's props and
+; reposition the visible cursor. This replaces the ROM's lower/upper split
+; logic for V6: zvm_select_active_window routes here (NZ6_OP_SELECT), and
+; every segment op that changes the current window's geometry or cursor
+; tail-calls it. Mapping (units are cells):
+;   VTEXT_TOP    = prop0 - 1                        clamped onto the screen
+;   VTEXT_LEFT   = prop1 - 1 + left margin (prop6)  clamped onto the screen
+;   VTEXT_HEIGHT = prop2                  clamped to the rows below TOP
+;   VTEXT_WIDTH  = prop3 - both margins   clamped to the cols right of LEFT
+;   VTEXT_FLAGS  = attr (prop14) & 3 — Z attribute bit 0 (wrap) and bit 1
+;                  (scroll) line up exactly with VTEXT_FLAG_WRAP/SCROLL.
+;                  Window 0 defaults to both, windows 1-7 to neither.
+;   VTEXT_CURX/Y = props 5/4 - 1, clamped inside WIDTH/HEIGHT.
+; Cursor props 4/5 are 1-based and relative to the margin-shrunk writable
+; area. A zero-sized window leaves an invalid region: vtext drops output
+; until the game sizes it (games size windows before drawing into them).
+nz6_apply_current_window:
         LDA nz6_win_current
         STA nz6_tmp_win
-        BNE @upper
-        ; window 0 = lower window: zvm_lower_x/y are already relative to the
-        ; lower region, whose top tracks window 0's origin.
-        LDA zvm_lower_y
-        JSR nz6_cell_to_unit
-        LDX #4
-        JSR nz6_write_prop_unit
-        LDA zvm_lower_x
-        JSR nz6_cell_to_unit
-        LDX #5
-        JMP nz6_write_prop_unit
-@upper:
-        ; windows 1-7 = upper window: zvm_upper_x/y are absolute cells.
-        LDA zvm_upper_y
+        ; TOP
         LDX #0
-        JSR nz6_abs_cell_to_rel_unit
+        JSR nz6_prop_cell
+        CMP #NZ6_SCREEN_ROWS
+        BCC :+
+        LDA #NZ6_SCREEN_ROWS-1
+:
+        STA VTEXT_TOP
+        ; margins
+        LDX #6
+        JSR nz6_prop_byte
+        STA nz6_marg_l
+        LDX #7
+        JSR nz6_prop_byte
+        STA nz6_marg_r
+        ; LEFT = origin cell + left margin
+        LDX #1
+        JSR nz6_prop_cell
+        CLC
+        ADC nz6_marg_l
+        BCS @left_clamp
+        CMP #NZ6_SCREEN_COLS
+        BCC :+
+@left_clamp:
+        LDA #NZ6_SCREEN_COLS-1
+:
+        STA VTEXT_LEFT
+        ; HEIGHT = prop2, clamped to the rows below TOP
+        LDX #2
+        JSR nz6_prop_byte
+        STA VTEXT_HEIGHT
+        LDA #NZ6_SCREEN_ROWS
+        SEC
+        SBC VTEXT_TOP
+        CMP VTEXT_HEIGHT
+        BCS :+
+        STA VTEXT_HEIGHT
+:
+        ; WIDTH = prop3 - margins (floor 0), clamped to the cols right of LEFT
+        LDX #3
+        JSR nz6_prop_byte
+        SEC
+        SBC nz6_marg_l
+        BCC @width_zero
+        SBC nz6_marg_r          ; carry still set when the first SBC held
+        BCS @width_have
+@width_zero:                            ; reached by the BCC above AND by
+        LDA #0                          ; fall-through when marg_r borrows
+@width_have:
+        STA VTEXT_WIDTH
+        LDA #NZ6_SCREEN_COLS
+        SEC
+        SBC VTEXT_LEFT
+        CMP VTEXT_WIDTH
+        BCS :+
+        STA VTEXT_WIDTH
+:
+        ; FLAGS from the window attributes
+        LDX #14
+        JSR nz6_prop_byte
+        AND #$03
+        STA VTEXT_FLAGS
+        ; cursor (skip for a degenerate region — vtext rejects it anyway)
+        LDA VTEXT_HEIGHT
+        BEQ @done
+        LDA VTEXT_WIDTH
+        BEQ @done
+        LDX #4
+        JSR nz6_prop_cell
+        CMP VTEXT_HEIGHT
+        BCC :+
+        LDA VTEXT_HEIGHT
+        DEC A
+:
+        STA VTEXT_CURY
+        LDX #5
+        JSR nz6_prop_cell
+        CMP VTEXT_WIDTH
+        BCC :+
+        LDA VTEXT_WIDTH
+        DEC A
+:
+        STA VTEXT_CURX
+        JMP vtext_set_cursor
+@done:
+        RTS
+
+; Freshen the CURRENT window's cursor props 4/5 from the live vtext cursor
+; (region-relative cells -> 1-based units). Only valid while the live region
+; belongs to the current window — i.e. anywhere except inside an
+; erase/clear region borrow, which always ends in nz6_apply_current_window.
+nz6_sync_live_cursor:
+        LDA nz6_win_current
+        STA nz6_tmp_win
+nz6_sync_live_cursor_tmpwin:            ; PRECONDITION: nz6_tmp_win already
+                                        ; set to nz6_win_current
+        LDA VTEXT_CURY
+        JSR nz6_cell_to_unit
         LDX #4
         JSR nz6_write_prop_unit
-        LDA zvm_upper_x
-        LDX #1
-        JSR nz6_abs_cell_to_rel_unit
+        LDA VTEXT_CURX
+        JSR nz6_cell_to_unit
         LDX #5
         JMP nz6_write_prop_unit
 
-; Load the CURRENT window's cursor props 4/5 into the live ROM cursor vars
-; (units -> cells). The caller follows with zvm_select_active_window, which
-; clamps and repositions the VTEXT cursor.
-nz6_load_table_to_live:
-        LDA nz6_win_current
-        STA nz6_tmp_win
-        BNE @upper
-        LDX #4
-        JSR nz6_read_prop_unit
-        JSR nz6_unit_to_cell
-        STA zvm_lower_y
-        LDX #5
-        JSR nz6_read_prop_unit
-        JSR nz6_unit_to_cell
-        STA zvm_lower_x
+; Shared pre/post for ops that change window nz6_tmp_win's geometry
+; (move_window / window_size / set_margins): when the target is the LIVE
+; window, flush pending buffered text into the old geometry and freshen its
+; cursor props first (prologue), then rebuild the live region from the new
+; props (epilogue). Non-live targets are pure table updates.
+nz6_geom_prologue:
+        LDA nz6_tmp_win
+        CMP nz6_win_current
+        BNE @rts
+        JSR nz_screen_flush_word
+        BRA nz6_sync_live_cursor_tmpwin
+@rts:
         RTS
-@upper:
-        LDX #4
-        JSR nz6_rel_prop_to_abs_cell
-        STA zvm_upper_y
-        LDX #5
-        JSR nz6_rel_prop_to_abs_cell
-        STA zvm_upper_x
+
+; Counterpart of nz6_geom_prologue: after a geometry op, re-apply the live
+; vtext region ONLY when the op targeted the current window (table-only
+; updates for non-live windows take effect at their next select).
+nz6_geom_epilogue:
+        LDA nz6_tmp_win
+        CMP nz6_win_current
+        BNE @rts
+        JMP nz6_apply_current_window
+@rts:
         RTS
 
 ; --- reset --------------------------------------------------------------------
@@ -382,47 +440,42 @@ nz6_reset_windows:
         STA nz6_win_props+27,Y
         DEX
         BPL @win
-        LDA #50
+        LDA #NZ6_SCREEN_ROWS
         STA nz6_win_props+4            ; window 0 prop 2: y-size = 50
-        LDA #80
+        LDA #NZ6_SCREEN_COLS
         STA nz6_win_props+6            ; window 0 prop 3: x-size = 80
         LDA #%00001011
         STA nz6_win_props+28           ; window 0 prop 14: wrap+scroll+buffer
         STZ nz6_win_current
-        ; ROM text-path sync: unsplit, lower window live, cursors home.
-        STZ zvm_window_current
-        STZ zvm_split_lines
-        STZ zvm_lower_x
-        STZ zvm_lower_y
-        STZ zvm_upper_x
-        STZ zvm_upper_y
+        STZ zvm_window_current         ; word-buffer gate: window 0 live
         RTS
 
 ; Dispatch id NZ6_OP_RESET: the ROM invokes this from zvm_run_until_read's
 ; V6 branch on every game (re)start.
 nz6_op_reset:
         JSR nz6_reset_windows
-        JMP zvm_select_active_window
+        JMP nz6_apply_current_window
 
 ; --- VAR screen ops -----------------------------------------------------------
 
-; split_window lines (VAR:10). Window 1 becomes the top 'lines' cell rows
-; (full width); window 0 starts below it. Does NOT clear, does NOT move
-; cursors beyond the clamping zvm_select_active_window applies.
+; split_window lines (VAR:10). A pure table op in V6 (Zork Zero builds its
+; layout with move_window/window_size and never calls this): window 1
+; becomes the top 'lines' cell rows (full width) and window 0 starts below
+; it. Does NOT clear; the live region is rebuilt only when the current
+; window's geometry changed as a result.
 nz6_op_split:
         JSR nz_screen_flush_word
-        JSR zvm_window_save_cursor
-        JSR nz6_sync_live_to_table
+        JSR nz6_sync_live_cursor
         ; clamp the requested rows to the 50-row screen height
         LDA zvm_operand_hi
         BEQ :+
-        LDA #50
+        LDA #NZ6_SCREEN_ROWS
         BRA @have
 :
         LDA zvm_operand_lo
         CMP #51
         BCC @have
-        LDA #50
+        LDA #NZ6_SCREEN_ROWS
 @have:
         STA nz6_tmp_lines
         ; window 1: origin 1,1, y-size = lines, x-size = 80
@@ -449,7 +502,7 @@ nz6_op_split:
         STZ nz6_unit_hi
         LDX #0
         JSR nz6_write_prop_unit
-        LDA #50
+        LDA #NZ6_SCREEN_ROWS
         SEC
         SBC nz6_tmp_lines
         STA nz6_unit_lo
@@ -462,51 +515,42 @@ nz6_op_split:
         JSR nz6_unit_80
         LDX #3
         JSR nz6_write_prop_unit
-        ; ROM bookkeeping: split cells = lines (units are cells), clamped
-        ; like the classic path (max 48 keeps at least two lower-window rows)
+        ; the classic unsplit idiom collapses onto window 0
         LDA nz6_tmp_lines
-        CMP #49
-        BCC :+
-        LDA #48
-:
-        STA zvm_split_lines
         BNE :+
-        STZ zvm_window_current          ; unsplit collapses onto window 0
         STZ nz6_win_current
+        STZ zvm_window_current
 :
-        JMP zvm_select_active_window
+        ; window 0 and 1 geometry both changed; rebuild whatever is live
+        JMP nz6_apply_current_window
 
-; set_window n (VAR:11). Saves the live cursor into the old window's props,
-; restores the new window's cursor, and flips the ROM lower/upper mapping.
+; set_window n (VAR:11). Flushes pending text into the old window, saves its
+; cursor into the table, switches, and rebuilds the live region from the new
+; window's props.
 nz6_op_set_window:
         LDX #0
         JSR nz6_window_from_operand
         BCC @rts
         PHA
         JSR nz_screen_flush_word
-        JSR zvm_window_save_cursor
-        JSR nz6_sync_live_to_table
+        JSR nz6_sync_live_cursor
         PLA
         STA nz6_win_current
-        BEQ @lower
+        ; ROM word-buffer gate: buffered word-wrap output is a window 0
+        ; behaviour (Z attr bit 3); other windows print raw.
+        TAX
+        BEQ :+
         LDA #1
+:
         STA zvm_window_current
-        BRA @load
-@lower:
-        STZ zvm_window_current
-@load:
-        JSR nz6_load_table_to_live
-        JMP zvm_select_active_window
+        JMP nz6_apply_current_window
 @rts:
         RTS
 
 ; erase_window n (VAR:13). -1: reset windows + clear all + window 0 live.
-; -2: clear all, windows untouched. 0-7: clear that window's cell rect to
-; the background and home its cursor.
-; M1 SIMPLIFICATION: -2 routes through zvm_clear_whole_screen, which homes
-; the live cursor — Z-spec says -2 must leave the cursor alone. Acceptable
-; until a game visibly cares. TODO(m2): give -2 a clear path that saves and
-; restores the live cursor around zvm_clear_whole_screen.
+; -2: clear all, windows AND cursor untouched (the pre-clear cursor is
+; synced into the table and the closing apply restores it exactly). 0-7:
+; clear that window's cell rect to the background and home its cursor.
 nz6_op_erase:
         JSR nz_screen_flush_word
         LDA zvm_operand_hi
@@ -516,14 +560,18 @@ nz6_op_erase:
         CMP #$FF
         BNE :+
         JSR nz6_reset_windows           ; -1
-        JMP zvm_clear_whole_screen
+        JMP zvm_clear_whole_screen      ; (tail-calls the V6 select -> apply)
 :
         CMP #$FE
         BNE @rts
-        JMP zvm_clear_whole_screen      ; -2
+        JSR nz6_sync_live_cursor        ; -2 must leave the cursor alone
+        JMP zvm_clear_whole_screen
 @rts:
         RTS
 @positive:
+        ; the tail rebuilds the live region from the table — keep the
+        ; current window's cursor exact before anything is borrowed
+        JSR nz6_sync_live_cursor
         LDX #0
         JSR nz6_window_from_operand
         BCC @rts
@@ -537,26 +585,23 @@ nz6_op_erase:
         ; cell rect from props 0-3; skip the fill if it lies off-grid or is
         ; empty
         LDX #1
-        JSR nz6_read_prop_unit
-        JSR nz6_unit_to_cell
-        CMP #80
+        JSR nz6_prop_cell
+        CMP #NZ6_SCREEN_COLS
         BCC :+
-        JMP @home
+        JMP @apply
 :
         STA nz6_rect_left
         LDX #0
-        JSR nz6_read_prop_unit
-        JSR nz6_unit_to_cell
-        CMP #50
+        JSR nz6_prop_cell
+        CMP #NZ6_SCREEN_ROWS
         BCC :+
-        JMP @home
+        JMP @apply
 :
         STA nz6_rect_top
         LDX #3
-        JSR nz6_read_prop_unit
-        JSR nz6_units_to_span
+        JSR nz6_prop_byte
         STA nz6_rect_w
-        LDA #80
+        LDA #NZ6_SCREEN_COLS
         SEC
         SBC nz6_rect_left
         CMP nz6_rect_w
@@ -564,12 +609,11 @@ nz6_op_erase:
         STA nz6_rect_w
 :
         LDA nz6_rect_w
-        BEQ @home
+        BEQ @apply
         LDX #2
-        JSR nz6_read_prop_unit
-        JSR nz6_units_to_span
+        JSR nz6_prop_byte
         STA nz6_rect_h
-        LDA #50
+        LDA #NZ6_SCREEN_ROWS
         SEC
         SBC nz6_rect_top
         CMP nz6_rect_h
@@ -577,10 +621,10 @@ nz6_op_erase:
         STA nz6_rect_h
 :
         LDA nz6_rect_h
-        BEQ @home
+        BEQ @apply
         ; fill the rect with spaces in the background colour, preserving the
-        ; caller-visible text colour/attr (zvm_select_active_window restores
-        ; the region registers afterwards)
+        ; caller-visible text colour/attr (the closing apply restores the
+        ; region geometry)
         LDA VTEXT_COLOR
         PHA
         LDA VTEXT_ATTR
@@ -601,14 +645,11 @@ nz6_op_erase:
         STA VTEXT_ATTR
         PLA
         STA VTEXT_COLOR
-@home:
-        ; live cursor home only when the erased window is the current one
-        LDA nz6_tmp_win
-        CMP nz6_win_current
-        BNE @select
-        JSR nz6_load_table_to_live
-@select:
-        JMP zvm_select_active_window
+@apply:
+        ; the rect fill borrowed the live vtext region: always rebuild it.
+        ; When the erased window IS the current one its cursor home comes
+        ; straight from the freshly homed table props.
+        JMP nz6_apply_current_window
 
 ; set_cursor y x [window] (VAR:15). Units (= cells), relative to the window
 ; origin. Row/col 0 clamps to 1: Zork Zero sends set_cursor 0,1 in its
@@ -654,17 +695,17 @@ nz6_op_set_cursor:
         LDA nz6_tmp_win
         CMP nz6_win_current
         BNE @rts
-        JSR nz6_load_table_to_live
-        JMP zvm_select_active_window
+        JMP nz6_apply_current_window
 @rts:
         RTS
 
 ; get_cursor array (VAR:16). Writes the CURRENT window's cursor as two
 ; words (y then x, units = cells, window-relative, exactly as stored in
-; props 4/5) into Z-memory.
+; props 4/5) into Z-memory. Pending buffered text is flushed first — it
+; will occupy cells from the reported position onward.
 nz6_op_get_cursor:
-        JSR zvm_window_save_cursor
-        JSR nz6_sync_live_to_table      ; leaves nz6_tmp_win = current window
+        JSR nz_screen_flush_word
+        JSR nz6_sync_live_cursor        ; leaves nz6_tmp_win = current window
         LDX #4
         JSR nz6_read_prop_unit
         LDA zvm_operand_lo
@@ -719,8 +760,9 @@ nz6_op_set_colour:
 
 ; --- EXT window ops -----------------------------------------------------------
 
-; set_margins left right [window] (EXT:8). Stored in props 6/7; M1 does not
-; act on margins.
+; set_margins left right [window] (EXT:8). Stored in props 6/7; margins
+; shrink the writable region (LEFT moves right, WIDTH loses both margins),
+; so a live target rebuilds the region.
 nz6_ext_set_margins:
         LDA nz6_win_current
         STA nz6_tmp_win
@@ -732,6 +774,7 @@ nz6_ext_set_margins:
         BCC @rts
         STA nz6_tmp_win
 :
+        JSR nz6_geom_prologue
         LDA zvm_operand_lo
         STA nz6_unit_lo
         LDA zvm_operand_hi
@@ -743,7 +786,8 @@ nz6_ext_set_margins:
         LDA zvm_operand_hi+1
         STA nz6_unit_hi
         LDX #7
-        JMP nz6_write_prop_unit
+        JSR nz6_write_prop_unit
+        JMP nz6_geom_epilogue
 @rts:
         RTS
 
@@ -762,25 +806,32 @@ nz6_yx_from_ops12:
         STA nz6_unit_hi
         JMP nz6_write_prop_unit
 
-; move_window window y x (EXT:16): position -> props 0/1.
+; move_window window y x (EXT:16): position -> props 0/1. Zork Zero moves
+; the LIVE window 0 at boot (capture seq 15), so a live target rebuilds the
+; region.
 nz6_ext_move_window:
         LDX #0
         JSR nz6_window_from_operand
         BCC @rts
         STA nz6_tmp_win
+        JSR nz6_geom_prologue
         LDX #0
-        JMP nz6_yx_from_ops12
+        JSR nz6_yx_from_ops12
+        JMP nz6_geom_epilogue
 @rts:
         RTS
 
-; window_size window y x (EXT:17): size -> props 2/3.
+; window_size window y x (EXT:17): size -> props 2/3. Same live-target
+; rebuild as move_window (capture seq 16).
 nz6_ext_window_size:
         LDX #0
         JSR nz6_window_from_operand
         BCC @rts
         STA nz6_tmp_win
+        JSR nz6_geom_prologue
         LDX #2
-        JMP nz6_yx_from_ops12
+        JSR nz6_yx_from_ops12
+        JMP nz6_geom_epilogue
 @rts:
         RTS
 
@@ -840,7 +891,9 @@ nz6_ext_window_style:
         RTS
 
 ; get_wind_prop window prop (EXT:19, store). Out-of-range window or prop
-; stores 0. The store byte MUST be consumed on every path.
+; stores 0. The store byte MUST be consumed on every path. Cursor props 4/5
+; of the LIVE window are freshened (flush + sync) before the read — Zork
+; Zero measures prop 5 (x-cursor) every turn to lay out its input line.
 nz6_ext_get_wind_prop:
         STZ zvm_value_lo
         STZ zvm_value_hi
@@ -854,6 +907,19 @@ nz6_ext_get_wind_prop:
         CMP #16
         BCS @store
         TAX
+        LDA nz6_tmp_win
+        CMP nz6_win_current
+        BNE @read
+        CPX #4
+        BEQ @fresh
+        CPX #5
+        BNE @read
+@fresh:
+        PHX
+        JSR nz_screen_flush_word
+        JSR nz6_sync_live_cursor        ; re-stores nz6_tmp_win = current
+        PLX
+@read:
         JSR nz6_read_prop_unit
         LDA nz6_unit_lo
         STA zvm_value_lo
@@ -1098,7 +1164,8 @@ nz6_var_table:                  ; ids $00-$07
         .word nz6_op_get_cursor ; $05 get_cursor (table operand, no store)
         .word nz6_op_set_colour ; $06 set_colour
         .word nz6_var_pull      ; $07 pull (V6 store form, optional user stack)
-.assert (* - nz6_var_table) / 2 = NZ6_OP_PULL + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_PULL"
+        .word nz6_apply_current_window ; $08 select (zvm_select_active_window V6 path)
+.assert (* - nz6_var_table) / 2 = NZ6_OP_SELECT + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_SELECT"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)
