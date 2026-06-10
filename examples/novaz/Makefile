@@ -241,6 +241,15 @@ test-project: $(IMAGE) $(SMOKE_DLL)
 	@if [ ! -f "$(PROJECT_SMOKE)" ]; then echo "project smoke script not found: $(PROJECT_SMOKE)" >&2; exit 2; fi
 	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" $(PROJECT_SMOKE_ARGS) --script "$(PROJECT_SMOKE)" $(SMOKE_ARGS)
 
+# One-off NZ6 dispatch capture (M2 window-model research): runs the project's
+# capture.txt with the dispatch trace enabled. Per-instruction sampling makes
+# this slower than test-project; it is not a test target. Output log:
+# build/nz6-trace-$(PROJECT).log (see docs/plans/2026-06-10-zork-zero-window-ops.md).
+capture-z6-trace: $(IMAGE) $(SMOKE_DLL)
+	@if [ -z "$(PROJECT)" ]; then echo "PROJECT is required, e.g. PROJECT=zork-zero" >&2; exit 2; fi
+	@if [ ! -f "$(PROJECT_DIR)/capture.txt" ]; then echo "capture script not found: $(PROJECT_DIR)/capture.txt" >&2; exit 2; fi
+	NOVAZ_SMOKE_TRACE_NZ6="$(BUILD_DIR)/nz6-trace-$(PROJECT).log" $(DOTNET) $(SMOKE_DLL) "$(IMAGE)" $(PROJECT_SMOKE_ARGS) --script "$(PROJECT_DIR)/capture.txt" $(SMOKE_ARGS)
+
 test-project-longplay: $(IMAGE) $(SMOKE_DLL)
 	@if [ -z "$(PROJECT)" ]; then echo "PROJECT is required, e.g. PROJECT=zork-iii" >&2; exit 2; fi
 	@if [ ! -f "$(PROJECT_LONGPLAY)" ]; then echo "project longplay script not found: $(PROJECT_LONGPLAY)" >&2; exit 2; fi

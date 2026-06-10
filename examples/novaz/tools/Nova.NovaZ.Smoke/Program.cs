@@ -55,6 +55,7 @@ try
     Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
     Environment.SetEnvironmentVariable("NOAUTO", null);
 
+    Nz6Trace.Init();
     (bus, cpu, editor) = StartMachine();
 
     int maxSteps = ReadEnvInt("NOVAZ_SMOKE_MAX_STEPS", 80_000_000);
@@ -114,6 +115,7 @@ try
     }
 
     string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+    Nz6Trace.Marker("--- boot: first prompt");
     RunForSteps(cpu, bus, 200_000);
     screen = SnapshotScreen(bus.Vgc);
 
@@ -195,11 +197,17 @@ try
         {
             screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
         }
+        else if (command.Expected.Count > 0)
+        {
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], ref morePrompts);
+        }
         else
         {
-            if (command.Expected.Count == 0)
-                throw new InvalidOperationException($"No-prompt command '{command.Text}' requires expected screen text.");
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], ref morePrompts);
+            // Expectation-free no-prompt line ("!cmd"): fire and settle on a
+            // fixed step budget. Capture scripts (capture-z6-trace) need this
+            // because the M1 stale-prompt bug leaves debris on the prompt row,
+            // defeating strict ready detection after some turns.
+            RunForSteps(cpu, bus, 4_000_000);
         }
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
@@ -246,6 +254,7 @@ try
 }
 finally
 {
+    Nz6Trace.Close();
     bus?.Dispose();
 
     Environment.SetEnvironmentVariable("NOAUTO", null);
@@ -675,6 +684,7 @@ static string RunUntilScreenMatches(
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
 
         if ((i & snapshotMask) != 0)
             continue;
@@ -685,6 +695,7 @@ static string RunUntilScreenMatches(
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
             morePrompts++;
+            Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
             lastMatchSnapshot = null;
@@ -761,6 +772,7 @@ static string RunUntilReadyPrompt(
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
 
         if (traceCursor)
         {
@@ -829,6 +841,7 @@ static string RunUntilReadyPrompt(
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
             morePrompts++;
+            Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
             RunForSteps(cpu, bus, 8_000);
             lastReadySnapshot = null;
@@ -1004,6 +1017,7 @@ static void RunForSteps(Cpu cpu, CompositeBusDevice bus, int steps)
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
     }
 }
 
@@ -1015,6 +1029,7 @@ static void YieldHostHardware(int step)
 
 static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
 {
+    Nz6Trace.Marker($"--- turn: {text}");
     bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
     foreach (char ch in text)
     {
@@ -1031,6 +1046,7 @@ static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, strin
 
 static void SendRaw(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
 {
+    Nz6Trace.Marker($"--- turn (raw): {text}");
     bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
     foreach (char ch in text)
     {
@@ -1046,6 +1062,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     if (screen.Contains("Hit any key", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("Press any key", StringComparison.OrdinalIgnoreCase))
     {
+        Nz6Trace.Marker("--- key: <space> (any-key gate)");
         editor.QueueInput(0x20);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1103,6 +1120,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         RunForSteps(cpu, bus, 1_000_000);
         if (SnapshotScreen(bus.Vgc) != screen)
             return true;   // advanced on its own — not a keypress gate
+        Nz6Trace.Marker("--- key: <space> (title gate)");
         editor.QueueInput(0x20);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1110,6 +1128,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
 
     if (screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase))
     {
+        Nz6Trace.Marker("--- key: <cr> (continue gate)");
         editor.QueueInput(0x0D);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1128,6 +1147,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         // "Press any key" gate above; the "to begin/start/continue" phrasing
         // cannot appear on a live command prompt, so there is no live read to
         // corrupt.
+        Nz6Trace.Marker("--- key: <cr> (begin gate)");
         editor.QueueInput(0x0D);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1396,6 +1416,7 @@ static bool SettledAtReadLoop(
         int cycles = cpu.ClocksForNext();
         cpu.ExecuteNext();
         bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
     }
     return IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress);
 }
