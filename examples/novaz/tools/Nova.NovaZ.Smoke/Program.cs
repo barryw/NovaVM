@@ -272,6 +272,21 @@ finally
         Directory.Delete(storageRoot, recursive: true);
 }
 
+static bool AtMorePrompt(Cpu cpu)
+{
+    if (!MoreGate.Resolved)
+    {
+        MoreGate.Address = TryReadRuntimeSymbol("nz_more_key_wait");
+        MoreGate.Resolved = true;
+    }
+    // Fallback when the symbol is missing (older runtime.sym): preserve the
+    // historic always-answer behavior.
+    if (MoreGate.Address is not int wait)
+        return true;
+    // The wait loop is LDA/BEQ/CMP/BEQ/CMP/BNE — 12 bytes of spin window.
+    return cpu.Pc >= wait && cpu.Pc < wait + 12;
+}
+
 static (CompositeBusDevice Bus, Cpu Cpu, ScreenEditor Editor) StartMachine()
 {
     var bus = new CompositeBusDevice(enableSound: false);
@@ -728,6 +743,14 @@ static string RunUntilScreenMatches(
             throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
+            // Answer only while the CPU is parked in the MORE key-wait loop:
+            // a CR sent on stale label text leaks into the next read as an
+            // empty command ("I beg your pardon?" spam).
+            if (!AtMorePrompt(cpu))
+            {
+                RunForSteps(cpu, bus, 8_000);
+                continue;
+            }
             morePrompts++;
             Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
@@ -874,6 +897,12 @@ static string RunUntilReadyPrompt(
             throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)} recent={string.Join(" ", trace)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
+            // See RunUntilScreen: only answer a genuine MORE wait.
+            if (!AtMorePrompt(cpu))
+            {
+                RunForSteps(cpu, bus, 8_000);
+                continue;
+            }
             morePrompts++;
             Nz6Trace.Marker("--- key: <cr> ([ MORE ])");
             editor.QueueInput(0x0D);
@@ -1160,28 +1189,38 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         return true;
     }
 
-    if (screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase))
-    {
-        Nz6Trace.Marker("--- key: <cr> (continue gate)");
-        editor.QueueInput(0x0D);
-        RunForSteps(cpu, bus, 500_000);
-        return true;
-    }
+    // A begin/continue gate is a single-key read, never a live line prompt.
+    // ZTUU's boulder scene ("As you enter the tunnel... Your only option is
+    // to continue...") proves the phrase heuristics CAN appear at a live
+    // line prompt — pressing there leaks empty commands ("I beg your
+    // pardon?" spam). nz_raw_input_mode != 0 while a LINE read is pumping.
+    int? lineModeAddr = TryReadRuntimeSymbol("nz_raw_input_mode");
+    bool atLinePrompt = lineModeAddr is int lineA && bus.Read((ushort)lineA) != 0;
 
-    if ((screen.Contains("RETURN", StringComparison.OrdinalIgnoreCase) ||
+    bool continueGate = screen.Contains("Type [RETURN] to continue", StringComparison.OrdinalIgnoreCase);
+    bool beginGate =
+        (screen.Contains("RETURN", StringComparison.OrdinalIgnoreCase) ||
          screen.Contains("ENTER", StringComparison.OrdinalIgnoreCase)) &&
         (screen.Contains("to begin", StringComparison.OrdinalIgnoreCase) ||
          screen.Contains("to start", StringComparison.OrdinalIgnoreCase) ||
-         screen.Contains("to continue", StringComparison.OrdinalIgnoreCase)))
+         screen.Contains("to continue", StringComparison.OrdinalIgnoreCase));
+
+    if (!atLinePrompt && screenStable && (continueGate || beginGate))
     {
-        // Many titles park on an intro screen before the first ">" prompt, e.g.
-        // "Hit the RETURN/ENTER key to begin!" (Leather Goddesses) or
-        // "[Press RETURN or ENTER to begin.]" (Plundered Hearts). These are
-        // single-key reads (raw input mode), so press unconditionally like the
-        // "Press any key" gate above; the "to begin/start/continue" phrasing
-        // cannot appear on a live command prompt, so there is no live read to
-        // corrupt.
-        Nz6Trace.Marker("--- key: <cr> (begin gate)");
+        // Same confirm-by-waiting discipline as the banner gate above: a real
+        // key gate parks forever; mid-print pauses advance on their own, and a
+        // game heading into a line read raises nz_raw_input_mode. Pressing
+        // without this proof leaks CRs into the next read as empty commands.
+        RunForSteps(cpu, bus, 1_000_000);
+        if (SnapshotScreen(bus.Vgc) != screen)
+            return true;   // advanced on its own — not a keypress gate
+        if (lineModeAddr is int lineB && bus.Read((ushort)lineB) != 0)
+            return false;  // arrived at a live line prompt — never press
+
+        // Many titles park on an intro screen before the first ">" prompt,
+        // e.g. "Hit the RETURN/ENTER key to begin!" (Leather Goddesses) or
+        // "Type [RETURN] to continue" chapter cards — single-key reads.
+        Nz6Trace.Marker(continueGate ? "--- key: <cr> (continue gate)" : "--- key: <cr> (begin gate)");
         editor.QueueInput(0x0D);
         RunForSteps(cpu, bus, 500_000);
         return true;
@@ -1529,3 +1568,11 @@ sealed record SmokeCommand(
 sealed record ExpectedTextColor(string Text, byte Color);
 sealed record ExpectedAt(int Col, int Row, string Text);
 sealed record ExpectedGfxColor(int X, int Y, byte Color);
+
+// Cached nz_more_key_wait symbol for AtMorePrompt (top-level statements
+// cannot host static fields).
+static class MoreGate
+{
+    public static int? Address;
+    public static bool Resolved;
+}

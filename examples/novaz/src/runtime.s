@@ -529,13 +529,16 @@ nz_screen_more_prompt:
 
 @draw_done:
         JSR nz_screen_restore_saved
-@wait:
+        ; Exported wait label: the smoke harness PC-matches it so a MORE
+        ; answer is only injected while the CPU is genuinely parked here
+        ; (prevents surplus CRs leaking into the next read as empty commands).
+nz_more_key_wait:
         LDA VGC_CHARIN
-        BEQ @wait
+        BEQ nz_more_key_wait
         CMP #$0D
         BEQ @erase
         CMP #$0A
-        BNE @wait
+        BNE nz_more_key_wait
 
 @erase:
         LDA nz_saved_color
