@@ -21,6 +21,7 @@ NZ6_OP_SET_COLOUR   = $06
 ; Ids $07-$1F are reserved for future VAR-op routing; EXT ids start at $20
 ; so the two ranges can never collide.
 NZ6_EXT_BASE        = $20    ; ext dispatch id = NZ6_EXT_BASE + ext opnum
+NZ6_EXT_COUNT       = 30     ; ext opnums 0-29; nz6_ext_table length asserted
 
 NZ6_BASE            = $2000  ; segment load address (magic word lives here)
 NZ6_ENTRY           = $2002  ; ROM calls JMP/JSR here with A = dispatch id

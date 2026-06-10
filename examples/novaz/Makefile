@@ -32,7 +32,7 @@ NOVAZ6_BIN := $(BUILD_DIR)/novaz6.bin
 RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
 # Explicit ROM ABI surface exported to the RAM-resident segment. Task 6+ grows
 # this list; the awk rule fails the build if a symbol vanishes from the ROM.
-RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zstory_version
+RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4

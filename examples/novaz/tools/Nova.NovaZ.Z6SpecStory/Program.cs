@@ -23,6 +23,8 @@ const int ObjectTable = 0x0220;
 const int TextBuffer = 0x0400;
 const int ParseBuffer = 0x0450;
 const int Dictionary = 0x0480;
+const int PicTable = 0x0500;                       // scratch: picture_data table
+const int UserStack = 0x0520;                      // scratch: user-stack table (Task 8)
 const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x0900;                  // strings region;  packed (0x900-0x400)/4
@@ -147,6 +149,38 @@ static void EmitSpecProgram(ZCode z)
     z.Call1S("routine_return_42", 0x11);
     z.AssertVarEquals(0x11, 42, "v6-call");
     z.NewLine();
+
+    // --- Task 6: V6 dispatch routing into the NOVAZ6 segment (M1 stubs) ---
+    // erase_window -1 (VAR:13): routed to the segment; the M1 stub ignores
+    // it, so the "z6 m1 ok" text already on screen must survive to the end.
+    z.VarOp(13, Operand.Large(0xFFFF));
+    // set_window 0 (VAR:11): routed stub, no-op.
+    z.VarOp(11, Operand.Small(0));
+    // get_wind_prop 1,4 (EXT:19, store): the stub must consume the store
+    // byte and store 0 — a mis-consumed store byte derails the instruction
+    // stream, which is what this assert really pins.
+    z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
+    z.AssertVarEquals(0x12, 0, "windprop-stub");
+    // picture_data 0, table (EXT:6, branch): stub decodes the branch bytes
+    // and applies "false". If the branch is wrongly taken we hit the fail
+    // block; fall-through is the good path.
+    z.ExtOpBranch(6, "fail_pic", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
+    z.Jump("pic_ok");
+    z.Label("fail_pic");
+    z.Fail("pic-branch");
+    z.Label("pic_ok");
+    // buffer_screen 0 (EXT:29, store): stub stores 0.
+    z.ExtOpStore(29, 0x12, Operand.Small(0));
+    z.AssertVarEquals(0x12, 0, "bufscreen-stub");
+    // push_stack 5, stack (EXT:24, branch): the M1 stub always branches
+    // FALSE ("stack full"), so taken = failure, fall-through = stub path.
+    // NOTE(Task 8): this entire block gets rewritten — a real push onto a non-full
+    // stack succeeds and branches TRUE, so this expectation inverts then.
+    z.ExtOpBranch(24, "fail_us", branchIf: true, Operand.Small(5), Operand.Large(UserStack));
+    z.Jump("us_ok");
+    z.Label("fail_us");
+    z.Fail("us-stub");
+    z.Label("us_ok");
 
     z.Label("prompt");
     z.Print(">");
@@ -304,12 +338,25 @@ sealed class ZCode
         Branch(label, branchIf: true);
     }
 
-    public void ExtOpStore(int op, byte store)
+    public void ExtOp(int op, params Operand[] operands)
     {
         Emit(0xBE);
         Emit(op & 0xFF);
-        Emit(0xFF);
+        Emit(TypeByte(operands));
+        foreach (var operand in operands)
+            EmitOperand(operand);
+    }
+
+    public void ExtOpStore(int op, byte store, params Operand[] operands)
+    {
+        ExtOp(op, operands);
         Emit(store);
+    }
+
+    public void ExtOpBranch(int op, string label, bool branchIf = true, params Operand[] operands)
+    {
+        ExtOp(op, operands);
+        Branch(label, branchIf);
     }
 
     public void Call1S(string routineLabel, byte store)

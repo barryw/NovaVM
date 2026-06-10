@@ -8,6 +8,7 @@
 .include "ztext.inc"
 .include "zobject.inc"
 .include "zvm.inc"
+.include "zvm6.inc"
 .include "vtext.inc"
 .include "xram.inc"
 
@@ -3277,6 +3278,8 @@ zvm_print_global_u16:
         JMP print_u16_dec
 
 zvm_split_window:
+        LDX #NZ6_OP_SPLIT_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         JSR zvm_window_save_cursor
         LDA zvm_operand_lo
@@ -3299,6 +3302,8 @@ zvm_split_window:
         JMP zvm_select_active_window
 
 zvm_set_window:
+        LDX #NZ6_OP_SET_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         JSR zvm_window_save_cursor
         LDA zvm_operand_lo
@@ -3511,6 +3516,8 @@ zvm_set_text_style:
         RTS
 
 zvm_set_colour:
+        LDX #NZ6_OP_SET_COLOUR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_operand_lo
         JSR zvm_map_z_colour
@@ -3933,6 +3940,8 @@ nz_call_z_routine:
         RTS
 
 zvm_erase_window:
+        LDX #NZ6_OP_ERASE_WINDOW
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_operand_hi
         CMP #$FF
@@ -4050,6 +4059,8 @@ zvm_erase_line:
         RTS
 
 zvm_set_cursor:
+        LDX #NZ6_OP_SET_CURSOR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         JSR nz_screen_flush_word
         LDA zvm_window_current
         BNE @selected_upper
@@ -4086,6 +4097,8 @@ zvm_set_cursor:
         RTS
 
 zvm_get_cursor:
+        LDX #NZ6_OP_GET_CURSOR
+        JSR zvm_v6_maybe_route  ; V6: handled by the NOVAZ6 segment
         LDA VTEXT_CURY
         CLC
         ADC #$01
@@ -4700,6 +4713,45 @@ zvm_bad_target:
         STA zvm_stop_reason
         RTS
 
+; --- V6 dispatch routing into the RAM-resident NOVAZ6 segment ---------------
+;
+; zvm_ext_v6: EXT-table entry for opcodes that only exist (or only change
+; meaning) in V6. For V6 stories the decoded opcode is forwarded to the
+; segment at NZ6_ENTRY with A = NZ6_EXT_BASE + ext opnum; the segment RTSes
+; back to the dispatcher exactly like a ROM handler. For v<6 the opcode is
+; unsupported, same as before the table grew.
+zvm_ext_v6:
+        LDA zstory_version
+        CMP #$06
+        BNE @unsup
+        LDA zvm_opnum
+        CLC
+        ADC #NZ6_EXT_BASE
+        JMP NZ6_ENTRY
+@unsup:
+        JMP zvm_unsupported
+
+; zvm_v6_maybe_route: shared prologue helper for the six VAR screen handlers
+; whose semantics change in V6. Call with X = NZ6_OP_* id immediately on
+; handler entry. STACK PRECONDITION: must be the handler's FIRST instruction
+; pair (LDX #id / JSR here) — the V6 path pops exactly one return address,
+; assuming the only frame above the handler's caller is this JSR. Any code
+; (or JSR) inserted before the prologue breaks that and corrupts the stack:
+;   - v<6: plain RTS — the classic handler body runs as always.
+;   - V6:  pop the prologue's JSR return address (so the segment's RTS goes
+;          to the handler's caller, like any handler RTS) and JMP into the
+;          segment with A = id.
+zvm_v6_maybe_route:
+        LDA zstory_version
+        CMP #$06
+        BEQ @route
+        RTS
+@route:
+        PLA                     ; drop the JSR return address (lo)
+        PLA                     ; (hi) — segment now returns to handler's caller
+        TXA
+        JMP NZ6_ENTRY
+
 zvm_unsupported:
         LDA #<msg_unsupported_opcode
         LDY #>msg_unsupported_opcode
@@ -4830,12 +4882,31 @@ zvm_ext_table:
         .word zvm_log_shift
         .word zvm_art_shift
         .word zvm_set_font
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_unsupported
-        .word zvm_false_store      ; save_undo: report unavailable.
-        .word zvm_false_store      ; restore_undo: report unavailable.
+        .word zvm_ext_v6           ;  5 draw_picture (V6 only; v<6 unsupported)
+        .word zvm_ext_v6           ;  6 picture_data (V6 only, branches)
+        .word zvm_ext_v6           ;  7 erase_picture (V6 only)
+        .word zvm_ext_v6           ;  8 set_margins (V6 only)
+        .word zvm_false_store      ;  9 save_undo: report unavailable.
+        .word zvm_false_store      ; 10 restore_undo: report unavailable.
+        .word zvm_unsupported      ; 11 print_unicode (unsupported here)
+        .word zvm_unsupported      ; 12 check_unicode
+        .word zvm_unsupported      ; 13 set_true_colour
+        .word zvm_unsupported      ; 14 (unassigned)
+        .word zvm_unsupported      ; 15 (unassigned)
+        .word zvm_ext_v6           ; 16 move_window
+        .word zvm_ext_v6           ; 17 window_size
+        .word zvm_ext_v6           ; 18 window_style
+        .word zvm_ext_v6           ; 19 get_wind_prop (stores)
+        .word zvm_ext_v6           ; 20 scroll_window
+        .word zvm_ext_v6           ; 21 pop_stack
+        .word zvm_ext_v6           ; 22 read_mouse
+        .word zvm_ext_v6           ; 23 mouse_window
+        .word zvm_ext_v6           ; 24 push_stack (branches)
+        .word zvm_ext_v6           ; 25 put_wind_prop
+        .word zvm_ext_v6           ; 26 print_form
+        .word zvm_ext_v6           ; 27 make_menu (branches)
+        .word zvm_ext_v6           ; 28 picture_table
+        .word zvm_ext_v6           ; 29 buffer_screen (stores)
 zvm_ext_count = (* - zvm_ext_table) / 2
 
 zvm_style_color_table:
