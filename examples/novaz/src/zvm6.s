@@ -57,6 +57,8 @@ nz6_rect_left:   .res 1         ; erase_window: cell rect
 nz6_rect_top:    .res 1
 nz6_rect_w:      .res 1
 nz6_rect_h:      .res 1
+nz6_stk_lo:      .res 1         ; push_stack: free-slot count in flight
+nz6_stk_hi:      .res 1
 
 .segment "CODE"
 
@@ -110,11 +112,10 @@ nz6_store_zero:
         JSR zvm_fetch
         JMP zvm_set_var
 
-; Branch-op stub (picture_data EXT:6, push_stack EXT:24, make_menu EXT:27):
-; zvm_branch_false itself runs zvm_branch_decode (consuming the branch
-; byte(s)) and then applies condition "false" — do NOT pre-decode here or
-; the branch bytes would be consumed twice. push_stack branching false means
-; "stack full" until Task 8 implements real user stacks.
+; Branch-op stub (picture_data EXT:6, make_menu EXT:27): zvm_branch_false
+; itself runs zvm_branch_decode (consuming the branch byte(s)) and then
+; applies condition "false" — do NOT pre-decode here or the branch bytes
+; would be consumed twice.
 nz6_branch_false:
         JMP zvm_branch_false
 
@@ -899,6 +900,100 @@ nz6_ext_put_wind_prop:
 @rts:
         RTS
 
+; --- User stacks (EXT:24 push_stack, EXT:21 pop_stack) -------------------------
+; A user stack is a Z-memory word table whose word 0 holds the number of FREE
+; slots; pushed values fill the table DOWNWARD from its far end (the first
+; push on a fresh N-slot stack lands at word index N).
+
+; zstory_addr := user-stack table base (operand 1). Clobbers A.
+nz6_ustack_addr:
+        LDA zvm_operand_lo+1
+        STA zstory_addr_l
+        LDA zvm_operand_hi+1
+        STA zstory_addr_m
+        STZ zstory_addr_h
+        RTS
+
+; push_stack value stack ?(label) (EXT:24): write value at word[free],
+; decrement word 0, branch TRUE. With no free slots: write NOTHING (not even
+; the count) and branch FALSE.
+nz6_ext_push_stack:
+        JSR nz6_ustack_addr
+        JSR zstory_read16               ; word 0 -> zstory_word (free slots)
+        LDA zstory_word_lo
+        ORA zstory_word_hi
+        BEQ @full
+        LDA zstory_word_lo              ; keep the count for the decrement
+        STA nz6_stk_lo
+        LDA zstory_word_hi
+        STA nz6_stk_hi
+        ; zstory_addr := table + 2*free (the slot for the new value)
+        LDA zstory_word_lo
+        ASL A
+        STA nz6_unit_lo
+        LDA zstory_word_hi
+        ROL A
+        STA nz6_unit_hi
+        STZ zstory_addr_h
+        ROL zstory_addr_h               ; bit 16 of 2*free
+        CLC
+        LDA zvm_operand_lo+1
+        ADC nz6_unit_lo
+        STA zstory_addr_l
+        LDA zvm_operand_hi+1
+        ADC nz6_unit_hi
+        STA zstory_addr_m
+        LDA zstory_addr_h
+        ADC #0
+        STA zstory_addr_h
+        LDA zvm_operand_lo              ; value -> word[free]
+        STA zstory_word_lo
+        LDA zvm_operand_hi
+        STA zstory_word_hi
+        JSR zstory_write16
+        ; word 0 := free - 1
+        JSR nz6_ustack_addr
+        LDA nz6_stk_lo
+        BNE :+
+        DEC nz6_stk_hi
+:
+        DEC nz6_stk_lo
+        LDA nz6_stk_lo
+        STA zstory_word_lo
+        LDA nz6_stk_hi
+        STA zstory_word_hi
+        JSR zstory_write16
+        JMP zvm_branch_true
+@full:
+        JMP zvm_branch_false
+
+; pop_stack items stack (EXT:21): throw away 'items' entries by adding them
+; back to the free-slot count (word 0). NO store, NO branch; the discarded
+; values stay in memory — the spec only requires the count to move. The
+; stack-less/zero-stack form pops the GAME stack instead; that form is
+; deferred to M2 (alongside the V6 'pull' variant), so it fails loudly
+; through the ROM's unsupported-opcode path rather than silently no-opping.
+nz6_ext_pop_stack:
+        LDA zvm_operand_count
+        CMP #2
+        BCC @game_stack
+        LDA zvm_operand_lo+1
+        ORA zvm_operand_hi+1
+        BEQ @game_stack
+        JSR nz6_ustack_addr
+        JSR zstory_read16               ; word 0 -> zstory_word
+        JSR nz6_ustack_addr             ; read16 advanced the address
+        CLC
+        LDA zstory_word_lo
+        ADC zvm_operand_lo
+        STA zstory_word_lo
+        LDA zstory_word_hi
+        ADC zvm_operand_hi
+        STA zstory_word_hi
+        JMP zstory_write16
+@game_stack:
+        JMP zvm_unsupported
+
 ; --- Dispatch tables ---------------------------------------------------------
 
 nz6_var_table:                  ; ids $00-$06
@@ -932,10 +1027,10 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_ext_window_style  ; 18 window_style
         .word nz6_ext_get_wind_prop ; 19 get_wind_prop (store)
         .word nz6_stub          ; 20 scroll_window (M1: no-op)
-        .word nz6_stub          ; 21 pop_stack (discards, no store; Task 8)
+        .word nz6_ext_pop_stack ; 21 pop_stack (discards items, no store/branch)
         .word nz6_stub          ; 22 read_mouse
         .word nz6_stub          ; 23 mouse_window
-        .word nz6_branch_false  ; 24 push_stack (branch; false = stack full; Task 8)
+        .word nz6_ext_push_stack ; 24 push_stack (branches true on success)
         .word nz6_ext_put_wind_prop ; 25 put_wind_prop
         .word nz6_stub          ; 26 print_form
         .word nz6_branch_false  ; 27 make_menu (branch)

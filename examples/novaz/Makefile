@@ -35,7 +35,7 @@ RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
 RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version \
 	nz_screen_flush_word zvm_window_current zvm_split_lines zvm_lower_x zvm_lower_y zvm_upper_x zvm_upper_y zvm_window_save_cursor zvm_select_active_window zvm_clear_whole_screen \
 	vtext_clear_region VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_COLOR VTEXT_ATTR \
-	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16
+	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4
@@ -111,7 +111,7 @@ $(RUNTIME): src/runtime.s src/runtime.cfg src/zstory.inc src/zstory.s src/ztext.
 # ROM ABI for the RAM-resident segment: pin each needed runtime label to its
 # linked address. Requires ca65 -g on the runtime so unexported labels appear
 # in the -Ln symbol file (lines: "al 00XXXX .symname", exported ones twice).
-$(RUNTIME_ABI): $(RUNTIME)
+$(RUNTIME_ABI): $(RUNTIME) Makefile
 	awk -v syms='$(RUNTIME_ABI_SYMS)' 'BEGIN { n = split(syms, want, " "); for (i = 1; i <= n; i++) need[want[i]] = 1 } \
 	    $$1 == "al" { name = substr($$3, 2); if (name in need && !(name in done)) { done[name] = 1; printf "%s := $$%s\n", name, substr($$2, 3) } } \
 	    END { for (i = 1; i <= n; i++) if (!(want[i] in done)) { printf "runtime_abi: symbol %s missing from runtime.sym\n", want[i] > "/dev/stderr"; exit 1 } }' \

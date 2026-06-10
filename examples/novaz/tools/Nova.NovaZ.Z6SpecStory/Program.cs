@@ -37,6 +37,7 @@ var story = new byte[StorySize];
 WriteHeader(story, version);
 WriteDictionary(story);
 WriteBuffers(story);
+WriteScratchTables(story);
 WritePackedText(story, PackedStrings, "ok");
 
 var code = new ZCode(CodeBase, packedAddressScale: 4, routinesByteOffset: RoutinesByteOffset);
@@ -127,6 +128,12 @@ static void WriteBuffers(byte[] story)
     story[ParseBuffer] = 8;
 }
 
+static void WriteScratchTables(byte[] story)
+{
+    // User stack (Task 8): word 0 = 4 free slots, value slots zeroed.
+    WriteBE16(story, UserStack, 4);
+}
+
 static void WriteDictionaryEntry(byte[] story, int offset, string text)
 {
     byte[] encoded = ZString.PackDictionaryEntry(text, fixedWords: 3);
@@ -176,15 +183,42 @@ static void EmitSpecProgram(ZCode z)
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");
-    // push_stack 5, stack (EXT:24, branch): the M1 stub always branches
-    // FALSE ("stack full"), so taken = failure, fall-through = stub path.
-    // NOTE(Task 8): this entire block gets rewritten — a real push onto a non-full
-    // stack succeeds and branches TRUE, so this expectation inverts then.
-    z.ExtOpBranch(24, "fail_us", branchIf: true, Operand.Small(5), Operand.Large(UserStack));
-    z.Jump("us_ok");
-    z.Label("fail_us");
-    z.Fail("us-stub");
-    z.Label("us_ok");
+    // --- Task 8: user stacks (push_stack EXT:24, pop_stack EXT:21) ---
+    // UserStack is baked into the image as [4,0,0,0,0]: word 0 holds the
+    // number of FREE slots. push_stack writes the value at word[free] and
+    // decrements word 0, so the table fills DOWNWARD: the first push on a
+    // fresh 4-slot stack lands at word index 4.
+    z.ExtOpBranch(24, "us_push1_ok", branchIf: true, Operand.Small(7), Operand.Large(UserStack));
+    z.Fail("us-push1");
+    z.Label("us_push1_ok");
+    z.ExtOpBranch(24, "us_push2_ok", branchIf: true, Operand.Small(9), Operand.Large(UserStack));
+    z.Fail("us-push2");
+    z.Label("us_push2_ok");
+    z.AssertWordEquals(UserStack, 0, 2, "us-free");        // 4 - 2 pushed
+    z.AssertWordEquals(UserStack, 4, 7, "us-val1");        // first push at word[4]
+    z.AssertWordEquals(UserStack, 3, 9, "us-val2");        // second at word[3]
+    // pop_stack 1: discards one entry by adding 1 to the free count. NO
+    // store, NO branch — reaching the next assert proves stream integrity.
+    z.ExtOp(21, Operand.Small(1), Operand.Large(UserStack));
+    z.AssertWordEquals(UserStack, 0, 3, "us-pop");
+    // Exhaust the stack: three more pushes succeed (free 3 -> 0)...
+    z.ExtOpBranch(24, "us_push3_ok", branchIf: true, Operand.Small(1), Operand.Large(UserStack));
+    z.Fail("us-push3");
+    z.Label("us_push3_ok");
+    z.ExtOpBranch(24, "us_push4_ok", branchIf: true, Operand.Small(2), Operand.Large(UserStack));
+    z.Fail("us-push4");
+    z.Label("us_push4_ok");
+    z.ExtOpBranch(24, "us_push5_ok", branchIf: true, Operand.Small(3), Operand.Large(UserStack));
+    z.Fail("us-push5");
+    z.Label("us_push5_ok");
+    // ...and a push on the now-FULL stack writes nothing and branches FALSE.
+    z.ExtOpBranch(24, "us_full_taken", branchIf: true, Operand.Small(4), Operand.Large(UserStack));
+    z.Jump("us_full_ok");
+    z.Label("us_full_taken");
+    z.Fail("us-full");
+    z.Label("us_full_ok");
+    z.AssertWordEquals(UserStack, 0, 0, "us-full-free");   // count untouched
+    z.AssertWordEquals(UserStack, 1, 3, "us-full-nowrite"); // last value intact
 
     // --- Task 7: minimal 8-window model ---
     // Window property round-trip: put_wind_prop 1,4,21 then read it back.
