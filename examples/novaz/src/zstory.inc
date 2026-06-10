@@ -26,6 +26,8 @@ ZHEADER_SERIAL         = $12
 ZHEADER_ABBREVIATIONS  = $18
 ZHEADER_FILE_LENGTH    = $1A
 ZHEADER_CHECKSUM       = $1C
+ZHEADER_ROUTINES_OFF   = $28
+ZHEADER_STRINGS_OFF    = $2A
 
 .global zstory_addr_l
 .global zstory_addr_m
@@ -41,6 +43,12 @@ ZHEADER_CHECKSUM       = $1C
 .global zstory_filebytes_l
 .global zstory_checksum_hi
 .global zstory_checksum_lo
+.global zstory_routine_off_l
+.global zstory_routine_off_m
+.global zstory_routine_off_h
+.global zstory_string_off_l
+.global zstory_string_off_m
+.global zstory_string_off_h
 .global zstory_read_file8
 .global zstory_set_dynamic_xram_origin
 
