@@ -49,6 +49,9 @@
 
 .include "zvm6.inc"
 .include "nova.inc"             ; VGC register equates (VGC_PALETTE)
+.include "xram.inc"             ; XRAM_ADDR*/XRAM_DATA pseudo-registers
+.include "pager.inc"            ; PAGER_* args for the FIO XPAGE region loader
+.include "zstory.inc"           ; XRAM map (pics index/bounce regions)
 .include "runtime_abi.inc"      ; ROM ABI addresses; must follow zvm6.inc
 
 ; Screen geometry (cells). Mirrors VTEXT_SCREEN_COLS/ROWS (runtime/asm/
@@ -82,6 +85,11 @@ nz6_stk_lo:      .res 1         ; push_stack/pull: free-slot count in flight
 nz6_stk_hi:      .res 1
 nz6_colour:      .res 1         ; live set_colour state: bg high nibble, fg low
 nz6_clr_tmp:     .res 1         ; scratch for style/nibble math
+nz6_pics_avail:  .res 1         ; 1 = PICS.PAK index resident in XRAM
+nz6_pics_count_lo: .res 1       ; picture count from the pak header (LE)
+nz6_pics_count_hi: .res 1
+nz6_pics_release_lo: .res 1     ; pak release number (LE)
+nz6_pics_release_hi: .res 1
 
 .segment "CODE"
 
@@ -475,7 +483,97 @@ nz6_op_reset:
         STA nz6_colour
         STA VTEXT_COLOR
         STZ zvm_text_style
+        JSR nz6_pics_preload
         JMP nz6_apply_current_window
+
+; --- PICS.PAK index -------------------------------------------------------------
+
+; Load the PICS.PAK header + index into XRAM at ZSTORY_XRAM_PICS_INDEX via
+; the FIO XPAGE region loader (one 8KB slice from offset 0; the host clamps
+; at EOF). A missing or malformed pak is NOT an error: nz6_pics_avail stays
+; 0 and the picture ops keep their honest no-pictures answers (the M2
+; text-only path). Runs on every (re)start — idempotent.
+nz6_pics_preload:
+        STZ nz6_pics_avail
+        LDA #<nz6_pics_name
+        STA PAGER_NAMEPTR_L
+        LDA #>nz6_pics_name
+        STA PAGER_NAMEPTR_H
+        LDA #(nz6_pics_name_end - nz6_pics_name)
+        STA PAGER_NAMELEN
+        STZ PAGER_FILEL
+        STZ PAGER_FILEM
+        STZ PAGER_FILEH
+        LDA #ZSTORY_XRAM_PICS_INDEX_L
+        STA PAGER_ADDRL
+        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        STA PAGER_ADDRM
+        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        STA PAGER_ADDRH
+        STZ PAGER_LENL
+        LDA #$20                        ; $2000: the whole 8KB index region
+        STA PAGER_LENH
+        STZ PAGER_TARGET                ; XRAM
+        JSR pager_load_file_page
+        BNE @done                       ; no pak on the image: text-only
+        ; header: "NZPK" version 1, count(2 LE), release(2 LE)
+        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        STA XRAM_ADDRM
+        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        STA XRAM_ADDRH
+        LDX #0
+@magic:
+        STX XRAM_ADDRL
+        JSR xram_read8
+        BNE @done
+        LDA XRAM_DATA
+        CMP nz6_pics_magic,X
+        BNE @done
+        INX
+        CPX #5
+        BCC @magic
+        JSR @next                       ; count lo (X=5 from the loop)
+        STA nz6_pics_count_lo
+        JSR @next
+        STA nz6_pics_count_hi
+        JSR @next
+        STA nz6_pics_release_lo
+        JSR @next
+        STA nz6_pics_release_hi
+        ; index must fit the 8KB region: count <= 545 ($0221)
+        LDA nz6_pics_count_hi
+        CMP #$02
+        BCC @bound_ok
+        BNE @done
+        LDA nz6_pics_count_lo
+        CMP #$22
+        BCS @done
+@bound_ok:
+        LDA nz6_pics_count_lo
+        ORA nz6_pics_count_hi
+        BEQ @done                       ; empty pak: keep no-pictures mode
+        LDA #1
+        STA nz6_pics_avail
+@done:
+        RTS
+@next:                                  ; read header byte X, A = value
+        STX XRAM_ADDRL
+        JSR xram_read8
+        BNE @pop_done
+        INX
+        LDA XRAM_DATA
+        RTS
+@pop_done:
+        PLA                             ; abandon the header mid-read:
+        PLA                             ; drop @next's return, finish @done
+        BRA @done
+
+nz6_pics_magic:
+        .byte 'N', 'Z', 'P', 'K', $01
+
+nz6_pics_name:
+        .byte "PICS.PAK"
+nz6_pics_name_end:
 
 ; --- VAR screen ops -----------------------------------------------------------
 

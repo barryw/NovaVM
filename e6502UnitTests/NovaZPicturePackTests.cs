@@ -248,7 +248,7 @@ public sealed class NovaZPicturePackTests
 
     // --- helpers --------------------------------------------------------------
 
-    private static string FindZorkZeroBlorb()
+    private static string? FindZorkZeroBlorb()
     {
         // Walk up from the test bin dir to the repo root.
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

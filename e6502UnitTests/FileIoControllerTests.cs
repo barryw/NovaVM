@@ -1106,6 +1106,144 @@ public class FileIoControllerTests
         }
     }
 
+    // XPAGE is the region-load primitive the NovaZ picture path depends on
+    // (PICS.PAK index at boot, per-picture bitmap regions at draw_picture):
+    // named file + 24-bit offset + 16-bit length from a MOUNTED image, with
+    // an error past EOF and a clamp at EOF. Pin all three behaviors.
+
+    [TestMethod]
+    public void XPage_MountedNdi_ReadsMidFileRegionExactly()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            byte[] pak = Enumerable.Range(0, 1024).Select(i => (byte)(i * 7)).ToArray();
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "TEST", 800);
+            using (var image = NdiImage.Open(imagePath))
+                image.WriteFile("PICS.PAK", NdiFileType.Bin, 0xFFFF, pak);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            var memory = new byte[65536];
+            var xram = new byte[4096];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                xramRead: address => xram[address],
+                xramWrite: (address, value) =>
+                {
+                    if ((uint)address >= xram.Length)
+                        return false;
+                    xram[address] = value;
+                    return true;
+                },
+                xramCapacity: () => xram.Length,
+                xramRefreshStats: () => { },
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "PICS.PAK");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x23); // file offset $000123
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x80);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 64);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(64, ReadSize(fio));
+            for (int i = 0; i < 64; i++)
+                Assert.AreEqual(pak[0x123 + i], xram[0x80 + i], $"byte {i}");
+        }
+        finally
+        {
+            try { deviceManager?.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_OffsetPastEof_SetsIoError()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), new byte[256]);
+            var xram = new byte[1024];
+            var fio = MakeControllerWithXram(dir, xram);
+
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00); // offset 256 == EOF
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 16);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrIo, fio.Read((ushort)VgcConstants.FioErrCode));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_LengthClampsAtEof()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            byte[] file = Enumerable.Range(0, 512).Select(i => (byte)(255 - (i & 0xFF))).ToArray();
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), file);
+            var xram = new byte[1024];
+            var fio = MakeControllerWithXram(dir, xram);
+
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0xF4); // offset 500 of 512
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 100);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(12, ReadSize(fio), "512 - 500 = 12 bytes remain");
+            for (int i = 0; i < 12; i++)
+                Assert.AreEqual(file[500 + i], xram[i], $"byte {i}");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
     [TestMethod]
     public void GlobMatch_StarMatchesAnything()
     {

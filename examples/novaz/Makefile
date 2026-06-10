@@ -35,7 +35,7 @@ RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
 RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version \
 	nz_screen_flush_word zvm_window_current zvm_clear_whole_screen \
 	vtext_clear_region vtext_set_cursor vtext_scroll_up VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
-	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style
+	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style pager_load_file_page xram_read8
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4
@@ -125,7 +125,7 @@ $(RUNTIME_ABI): $(RUNTIME) Makefile
 	    END { for (i = 1; i <= n; i++) if (!(want[i] in done)) { printf "runtime_abi: symbol %s missing from runtime.sym\n", want[i] > "/dev/stderr"; exit 1 } }' \
 	    $(BUILD_DIR)/runtime.sym > $@ || { rm -f $@; exit 1; }
 
-$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg $(NOVA_LIB)/nova.inc $(RUNTIME_ABI) | $(BUILD_DIR)
+$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg src/zstory.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(RUNTIME_ABI) | $(BUILD_DIR)
 	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/zvm6.o src/zvm6.s
 	$(LD65) -C src/novaz6.cfg -m $(BUILD_DIR)/novaz6.map -Ln $(BUILD_DIR)/novaz6.sym -o $@ $(BUILD_DIR)/zvm6.o
 
