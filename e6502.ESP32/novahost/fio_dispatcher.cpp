@@ -176,6 +176,10 @@ ndi::FileType file_type_for_name(const char* name) {
     else if (strcasecmp(ext, ".nms")  == 0) return ndi::FT_MID;
     else if (strcasecmp(ext, ".gfx")  == 0) return ndi::FT_GFX;
     else if (strcasecmp(ext, ".nvg")  == 0) return ndi::FT_GFX;
+    else if (strcasecmp(ext, ".4th")  == 0) return ndi::FT_FORTH;
+    else if (strcasecmp(ext, ".fth")  == 0) return ndi::FT_FORTH;
+    else if (strcasecmp(ext, ".fs")   == 0) return ndi::FT_FORTH;
+    else if (strcasecmp(ext, ".fr")   == 0) return ndi::FT_FORTH;
     return ndi::FT_BIN;
 }
 
@@ -789,6 +793,19 @@ void FioDispatcher::handle_event() {
         case CMD_RNG:      handle_rng();      break;
         case CMD_NVGLOAD:  handle_nvgload();  break;
         case CMD_LOAD_MODULE: handle_load_module(); break;
+        case CMD_FOPEN:    handle_fopen(false); break;
+        case CMD_FCREATE:  handle_fopen(true);  break;
+        case CMD_FCLOSE:   handle_fclose();     break;
+        case CMD_FREAD:    handle_fread();      break;
+        case CMD_FWRITE:   handle_fwrite();     break;
+        case CMD_FSEEK:    handle_fseek();      break;
+        case CMD_FTELL:    handle_ftell();      break;
+        case CMD_FSIZE:    handle_fsize();      break;
+        case CMD_FRESIZE:  handle_fresize();    break;
+        case CMD_FFLUSH:   handle_fflush();     break;
+        case CMD_FSTATUS:  handle_fstatus();    break;
+        case CMD_FDELETE:  handle_fdelete();    break;
+        case CMD_FRENAME:  handle_frename();    break;
         default:
             logLn("[fio] unknown cmd 0x%02X\n", (unsigned)c);
             respond_err(ERR_IO);
@@ -1550,6 +1567,100 @@ void FioDispatcher::respond_err(uint8_t err_code) {
 void FioDispatcher::write_size(uint32_t size) {
     _bridge.poke(BANK_BASE + OFF_SIZE_LO, (uint8_t)(size & 0xFF));
     _bridge.poke(BANK_BASE + OFF_SIZE_HI, (uint8_t)((size >> 8) & 0xFF));
+}
+
+void FioDispatcher::write_size24(uint32_t size) {
+    _bridge.poke(BANK_BASE + OFF_SIZE_LO, (uint8_t)(size & 0xFF));
+    _bridge.poke(BANK_BASE + OFF_SIZE_HI, (uint8_t)((size >> 8) & 0xFF));
+    _bridge.poke(BANK_BASE + OFF_SIZE_2,  (uint8_t)((size >> 16) & 0xFF));
+}
+
+bool FioDispatcher::decode_file_access(uint8_t fam, bool& can_read,
+                                       bool& can_write) const {
+    switch (fam & 0x03) {
+        case 1:
+            can_read = true;
+            can_write = false;
+            return true;
+        case 2:
+            can_read = false;
+            can_write = true;
+            return true;
+        case 3:
+            can_read = true;
+            can_write = true;
+            return true;
+        default:
+            can_read = false;
+            can_write = false;
+            return false;
+    }
+}
+
+uint8_t FioDispatcher::alloc_file_handle() {
+    for (uint8_t i = 0; i < MAX_OPEN_FILES; i++) {
+        if (!_file_handles[i].active)
+            return i + 1;
+    }
+    return 0;
+}
+
+bool FioDispatcher::load_file_handle_data(ndi::NdiImage* img, int idx,
+                                          uint32_t size,
+                                          std::vector<uint8_t>& out) {
+    out.clear();
+    if (!img || size > 1024UL * 1024UL)
+        return false;
+    if (size == 0)
+        return true;
+    return load_file_to_vector(img, idx, size, out);
+}
+
+bool FioDispatcher::flush_file_handle(uint8_t id) {
+    if (id < 1 || id > MAX_OPEN_FILES)
+        return false;
+
+    FileHandle& h = _file_handles[id - 1];
+    if (!h.active)
+        return false;
+    if (!h.dirty)
+        return true;
+
+    auto* img = _dm.image(h.slot);
+    if (!img)
+        return false;
+
+    int existing = img->find_entry(h.name, h.parent);
+    if (existing >= 0)
+        img->delete_file(h.name, h.parent);
+
+    uint32_t total = (uint32_t)h.data.size();
+    int new_idx = img->create_file(h.name, file_type_for_name(h.name),
+                                   h.parent, total);
+    if (new_idx < 0)
+        return false;
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= TRANSFER_BUF_BYTES
+            ? TRANSFER_BUF_BYTES
+            : (uint16_t)remaining;
+        if (!img->write_file_chunk_by_index(new_idx, off,
+                                            h.data.data() + off, chunk)) {
+            img->delete_file(h.name, h.parent);
+            return false;
+        }
+        off += chunk;
+    }
+
+    if (!img->zero_file_tail_by_index(new_idx)) {
+        img->delete_file(h.name, h.parent);
+        return false;
+    }
+
+    h.dirty = false;
+    return true;
 }
 
 void FioDispatcher::handle_clear_error() {
@@ -4478,6 +4589,353 @@ void FioDispatcher::handle_delete() {
     if (!img->delete_file(scratch, parent)) {
         respond_err(ERR_NOT_FOUND); return;
     }
+    respond_ok();
+}
+
+// ---------------------------------------------------------------------------
+// Low-level byte-stream file handles
+// ---------------------------------------------------------------------------
+void FioDispatcher::handle_fopen(bool create) {
+    char name[64];
+    copy_filename(name);
+
+    bool can_read = false;
+    bool can_write = false;
+    if (!decode_file_access(page_target(), can_read, can_write)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+
+    std::vector<uint8_t> data;
+    if (!create) {
+        int idx = img->find_entry(scratch, parent);
+        if (idx < 0) {
+            respond_err(ERR_NOT_FOUND);
+            return;
+        }
+
+        ndi::DirEntry e;
+        if (!img->get_entry(idx, e) || e.is_directory()) {
+            respond_err(ERR_IO);
+            return;
+        }
+
+        if (!load_file_handle_data(img, idx, e.size_bytes, data)) {
+            respond_err(ERR_IO);
+            return;
+        }
+    }
+
+    uint8_t id = alloc_file_handle();
+    if (id == 0) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    FileHandle& h = _file_handles[id - 1];
+    h.active = true;
+    h.can_read = can_read;
+    h.can_write = can_write;
+    h.dirty = create;
+    h.slot = slot;
+    h.parent = parent;
+    h.pos = 0;
+    strncpy(h.name, scratch, sizeof(h.name) - 1);
+    h.name[sizeof(h.name) - 1] = 0;
+    h.data = std::move(data);
+
+    _bridge.poke(BANK_BASE + OFF_SRC_LO, id);
+    _bridge.poke(BANK_BASE + OFF_SRC_HI, 0);
+    write_size24((uint32_t)h.data.size());
+    respond_ok();
+}
+
+void FioDispatcher::handle_fclose() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES || !_file_handles[id - 1].active) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    if (!flush_file_handle(id)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    _file_handles[id - 1] = FileHandle();
+    respond_ok();
+}
+
+void FioDispatcher::handle_fread() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES) { respond_err(ERR_IO); return; }
+    FileHandle& h = _file_handles[id - 1];
+    if (!h.active || !h.can_read) { respond_err(ERR_IO); return; }
+
+    uint16_t dest = end();
+    uint32_t requested = transfer_len();
+    uint32_t available = (h.pos < h.data.size())
+        ? (uint32_t)h.data.size() - h.pos
+        : 0;
+    uint32_t total = requested < available ? requested : available;
+    if (dest > 0x10000UL || total > 0x10000UL || dest > 0x10000UL - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        if (!_bridge.loadRam((uint16_t)(dest + off), h.data.data() + h.pos + off, chunk)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    h.pos += total;
+    write_size24(total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_fwrite() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES) { respond_err(ERR_IO); return; }
+    FileHandle& h = _file_handles[id - 1];
+    if (!h.active || !h.can_write) { respond_err(ERR_IO); return; }
+
+    uint16_t src_addr = end();
+    uint32_t total = transfer_len();
+    if (src_addr > 0x10000UL || total > 0x10000UL ||
+        src_addr > 0x10000UL - total || h.pos > 1024UL * 1024UL ||
+        total > 1024UL * 1024UL || h.pos > 1024UL * 1024UL - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    uint32_t new_size = h.pos + total;
+    if (new_size > h.data.size())
+        h.data.resize(new_size);
+
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t remaining = total - off;
+        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+        if (!_bridge.peekBlock((uint16_t)(src_addr + off), wire_count,
+                               h.data.data() + h.pos + off)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        off += chunk;
+    }
+
+    h.pos = new_size;
+    h.dirty = true;
+    write_size24(total);
+    respond_ok();
+}
+
+void FioDispatcher::handle_fseek() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES || !_file_handles[id - 1].active) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    _file_handles[id - 1].pos = result_size24();
+    respond_ok();
+}
+
+void FioDispatcher::handle_ftell() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES || !_file_handles[id - 1].active) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size24(_file_handles[id - 1].pos);
+    respond_ok();
+}
+
+void FioDispatcher::handle_fsize() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES || !_file_handles[id - 1].active) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    write_size24((uint32_t)_file_handles[id - 1].data.size());
+    respond_ok();
+}
+
+void FioDispatcher::handle_fresize() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES) { respond_err(ERR_IO); return; }
+    FileHandle& h = _file_handles[id - 1];
+    if (!h.active || !h.can_write) { respond_err(ERR_IO); return; }
+
+    uint32_t size = result_size24();
+    if (size > 1024UL * 1024UL) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    h.data.resize(size);
+    if (h.pos > size)
+        h.pos = size;
+    h.dirty = true;
+    respond_ok();
+}
+
+void FioDispatcher::handle_fflush() {
+    uint8_t id = _bank[OFF_SRC_LO];
+    if (id < 1 || id > MAX_OPEN_FILES || !_file_handles[id - 1].active) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    if (!flush_file_handle(id)) {
+        respond_err(ERR_IO);
+        return;
+    }
+    respond_ok();
+}
+
+void FioDispatcher::handle_fstatus() {
+    char name[64];
+    copy_filename(name);
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+    int idx = img->find_entry(scratch, parent);
+    if (idx < 0) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    _bridge.poke(BANK_BASE + OFF_SRC_LO, 3);
+    _bridge.poke(BANK_BASE + OFF_SRC_HI, 0);
+    respond_ok();
+}
+
+void FioDispatcher::handle_fdelete() {
+    char name[64];
+    copy_filename(name);
+    char scratch[64];
+    int slot;
+    uint16_t parent;
+    if (!_dm.resolve_path(name, slot, parent, scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    auto* img = _dm.image(slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+    if (!img->delete_file(scratch, parent)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+    respond_ok();
+}
+
+void FioDispatcher::handle_frename() {
+    char old_name[64];
+    copy_filename(old_name);
+    char old_scratch[64];
+    int old_slot;
+    uint16_t old_parent;
+    if (!_dm.resolve_path(old_name, old_slot, old_parent, old_scratch)) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    uint16_t new_addr = end();
+    uint16_t new_len = transfer_len();
+    if (new_len == 0 || new_len > 63) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    char new_name[64];
+    uint8_t wire_count = (new_len == 256) ? 0 : (uint8_t)new_len;
+    if (!_bridge.peekBlock(new_addr, wire_count, (uint8_t*)new_name)) {
+        respond_err(ERR_IO);
+        return;
+    }
+    new_name[new_len] = 0;
+
+    char new_scratch[64];
+    int new_slot;
+    uint16_t new_parent;
+    if (!_dm.resolve_path(new_name, new_slot, new_parent, new_scratch) ||
+        new_slot != old_slot || new_parent != old_parent) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    auto* img = _dm.image(old_slot);
+    if (!img) { respond_err(ERR_NO_MOUNT); return; }
+    int idx = img->find_entry(old_scratch, old_parent);
+    if (idx < 0) {
+        respond_err(ERR_NOT_FOUND);
+        return;
+    }
+
+    ndi::DirEntry e;
+    if (!img->get_entry(idx, e) || e.is_directory()) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    std::vector<uint8_t> data;
+    if (!load_file_handle_data(img, idx, e.size_bytes, data)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    int existing = img->find_entry(new_scratch, new_parent);
+    if (existing >= 0)
+        img->delete_file(new_scratch, new_parent);
+
+    int new_idx = img->create_file(new_scratch, file_type_for_name(new_scratch),
+                                   new_parent, (uint32_t)data.size());
+    if (new_idx < 0) {
+        respond_err(ERR_FULL);
+        return;
+    }
+
+    if (!data.empty() &&
+        !img->write_file_chunk_by_index(new_idx, 0, data.data(), data.size())) {
+        img->delete_file(new_scratch, new_parent);
+        respond_err(ERR_IO);
+        return;
+    }
+    if (!img->zero_file_tail_by_index(new_idx)) {
+        img->delete_file(new_scratch, new_parent);
+        respond_err(ERR_IO);
+        return;
+    }
+    img->delete_file(old_scratch, old_parent);
     respond_ok();
 }
 

@@ -47,8 +47,8 @@
       <Link>Resources\ehbasic.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="..\e6502.Avalonia\Resources\ncc.bin">
-      <Link>Resources\ncc.bin</Link>
+    <None Update="..\e6502.Avalonia\Resources\novaforth.bin">
+      <Link>Resources\novaforth.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="..\e6502.Avalonia\Resources\cp437.bin">

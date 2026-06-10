@@ -55,6 +55,27 @@ public class HostDirectoryDeviceTests
     }
 
     [TestMethod]
+    public void ListDirectory_FourthFilesAreForthType()
+    {
+        string dir = MakeTempDir();
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var device = new HostDirectoryDevice(dir, "HD0");
+
+            File.WriteAllText(Path.Combine(dir, "core.4th"), "\\ core library\n");
+
+            StorageDirEntry entry = device.ListDirectory(null).Single(e => e.Filename == "core");
+            Assert.AreEqual(NdiFileType.Forth, entry.FileType,
+                "Host-directory backed disks must expose .4th files as Forth source so FIO directory metadata matches NDI.");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Subdirectory_CdAndList()
     {
         string dir = MakeTempDir();

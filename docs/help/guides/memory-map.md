@@ -634,7 +634,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte; `NVGLOAD` bitmap destination high byte. |
 | $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte; ignored by `NVGLOAD`. |
 | $B9AE | FioGLenH | R/W | Graphics/XRAM transfer length, high byte; ignored by `NVGLOAD`. |
-| $B9AF | FioDirType | RO | Directory entry type: 0=PRG, 1=SID. |
+| $B9AF | FioDirType | RO | Directory entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH. |
 | B9B0--B9EF | FioName | R/W | Filename buffer (64 bytes ASCII, not null-terminated). |
 
 ### FIO Command Codes

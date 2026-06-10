@@ -48,7 +48,7 @@ struct HeaderInfo {
 // File / entry types — match the 6502 wire values.
 enum FileType : uint8_t {
     FT_BAS = 0, FT_SID = 1, FT_BIN = 2,
-    FT_MID = 3, FT_GFX = 4, FT_DIR = 5
+    FT_MID = 3, FT_GFX = 4, FT_DIR = 5, FT_FORTH = 6
 };
 
 enum EntryFlags : uint8_t {

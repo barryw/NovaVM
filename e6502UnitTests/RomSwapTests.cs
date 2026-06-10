@@ -14,18 +14,18 @@ public class RomSwapTests
     }
 
     [TestMethod]
-    public void WriteRomSwapNcc_SetsNccRom()
+    public void WriteRomSwapForth_SetsForthRom()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
-        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
-        Assert.AreEqual(CompositeBusDevice.ActiveRom.Ncc, bus.CurrentRom);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapForth);
+        Assert.AreEqual(CompositeBusDevice.ActiveRom.Forth, bus.CurrentRom);
     }
 
     [TestMethod]
     public void WriteRomSwapBasic_SetsBasicRom()
     {
         using var bus = new CompositeBusDevice(enableSound: false);
-        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapForth);
         bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapBasic);
         Assert.AreEqual(CompositeBusDevice.ActiveRom.Basic, bus.CurrentRom);
     }
@@ -45,7 +45,7 @@ public class RomSwapTests
         using var bus = new CompositeBusDevice(enableSound: false);
         bool fired = false;
         bus.RomSwapRequested += (_, _) => fired = true;
-        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
+        bus.TrySelectPrimaryRom(CompositeBusDevice.ActiveRom.Forth);
         Assert.IsTrue(fired);
     }
 
@@ -54,11 +54,9 @@ public class RomSwapTests
     {
         using var bus = new CompositeBusDevice(enableSound: false);
         byte basicByte = bus.Read(0xC000);
-        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
-        byte nccByte = bus.Read(0xC000);
-        // NCC stub ROM has JMP $C000 = $4C at $C000
-        // BASIC ROM has different content at $C000
-        Assert.AreNotEqual(basicByte, nccByte);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapForth);
+        byte forthByte = bus.Read(0xC000);
+        Assert.AreNotEqual(basicByte, forthByte);
     }
 
     [TestMethod]
@@ -87,7 +85,7 @@ public class RomSwapTests
     {
         using var bus = new CompositeBusDevice(enableSound: false);
         byte originalByte = bus.Read(0xC000);
-        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
+        bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapForth);
         bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapBasic);
         Assert.AreEqual(originalByte, bus.Read(0xC000));
     }

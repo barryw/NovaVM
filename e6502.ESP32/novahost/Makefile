@@ -27,6 +27,7 @@ ESPOTA   ?= $(shell find "$$HOME/Library/Arduino15/packages/esp32/hardware/esp32
 REPO_ROOT := $(abspath ../..)
 EHBASIC   := $(REPO_ROOT)/ehbasic
 NOVALOGO  := $(REPO_ROOT)/novalogo
+NOVAFORTH := $(REPO_ROOT)/novaforth
 MODGFX    := $(REPO_ROOT)/modules/graphics
 RTASM     := $(REPO_ROOT)/runtime/asm
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
@@ -35,7 +36,7 @@ SD_ASSETS := build/sd
 
 COMPACT_BUILD ?= build/compact
 
-.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo graphics libcall
+.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo novaforth graphics libcall
 
 all: upload
 
@@ -44,6 +45,9 @@ ehbasic:
 
 novalogo:
 	@$(MAKE) --no-print-directory -C $(NOVALOGO)
+
+novaforth:
+	@$(MAKE) --no-print-directory -C $(NOVAFORTH)
 
 graphics:
 	@$(MAKE) --no-print-directory -C $(MODGFX)
@@ -59,12 +63,12 @@ build/f6581_curve.bin: $(FPGA_ROM)/f6581_curve.hex
 	@mkdir -p build
 	@$(HEX16TOBIN) $< $@
 
-sd-assets: ehbasic novalogo graphics libcall build/f6581_curve.bin
+sd-assets: ehbasic novalogo novaforth graphics libcall build/f6581_curve.bin
 	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid $(SD_ASSETS)/assets/boot $(SD_ASSETS)/config $(SD_ASSETS)/lib
 	@cp $(EHBASIC)/basic.bin $(SD_ASSETS)/roms/novabasic.bin
 	@cp $(EHBASIC)/extension.bin $(SD_ASSETS)/roms/extension.bin
 	@cp $(NOVALOGO)/novalogo.bin $(SD_ASSETS)/roms/novalogo.bin
-	@cp $(NOVALOGO)/novalogo_ext.bin $(SD_ASSETS)/roms/novalogo_ext.bin
+	@cp $(NOVAFORTH)/novaforth.bin $(SD_ASSETS)/roms/novaforth.bin
 	@cp build/f6581_curve.bin $(SD_ASSETS)/assets/sid/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json

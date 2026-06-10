@@ -20,7 +20,6 @@ from novahost_client import DEFAULT_DEBUG_PORT, DEFAULT_HOST, NovaHostClient, No
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LOGO_ROM = REPO_ROOT / "novalogo/novalogo.bin"
-LOGO_EXT_ROM = REPO_ROOT / "novalogo/novalogo_ext.bin"
 
 TURTLE_STATE = 0x9F00
 TURTLE_X_FRAC = 0
@@ -133,7 +132,6 @@ def configure_novalogo_runtime(config: dict[str, Any]) -> dict[str, Any]:
         logo = {}
         languages["novalogo"] = logo
     logo["rom"] = "/roms/novalogo.bin"
-    logo["extensionRom"] = "/roms/novalogo_ext.bin"
     return updated
 
 
@@ -597,13 +595,6 @@ def run_smoke(args: argparse.Namespace) -> None:
                 args.timeout,
                 lambda: put_file(args.host, LOGO_ROM, "/roms/novalogo.bin", args.timeout),
             )
-            print("upload /roms/novalogo_ext.bin", flush=True)
-            retry_sd_operation(
-                "upload /roms/novalogo_ext.bin",
-                args.timeout,
-                lambda: put_file(args.host, LOGO_EXT_ROM, "/roms/novalogo_ext.bin", args.timeout),
-            )
-
         if args.target == "hardware":
             assert original_config is not None
             retry_sd_operation(

@@ -106,6 +106,14 @@ def test_management_routes() -> None:
         "management drive mount persistence preserves existing slots": 'doc["mounts"].as<JsonObject>()' in mgmt
         and 'if (mounts.isNull())' in mgmt
         and 'mounts = doc["mounts"].to<JsonObject>()' in mgmt,
+        "management drive mount uses shared storage lock": "handle_mount_drive" in mgmt
+        and "novaBeginStorageMutation()" in mgmt.split("void ManagementServer::handle_mount_drive", 1)[1].split("void ManagementServer::handle_unmount_drive", 1)[0]
+        and "novaEndStorageMutation()" in mgmt.split("void ManagementServer::handle_mount_drive", 1)[1].split("void ManagementServer::handle_unmount_drive", 1)[0]
+        and '"storage_busy"' in mgmt.split("void ManagementServer::handle_mount_drive", 1)[1].split("void ManagementServer::handle_unmount_drive", 1)[0],
+        "management drive unmount uses shared storage lock": "handle_unmount_drive" in mgmt
+        and "novaBeginStorageMutation()" in mgmt.split("void ManagementServer::handle_unmount_drive", 1)[1].split("void ManagementServer::handle_runtime_config", 1)[0]
+        and "novaEndStorageMutation()" in mgmt.split("void ManagementServer::handle_unmount_drive", 1)[1].split("void ManagementServer::handle_runtime_config", 1)[0]
+        and '"storage_busy"' in mgmt.split("void ManagementServer::handle_unmount_drive", 1)[1].split("void ManagementServer::handle_runtime_config", 1)[0],
         "management uploads pause shared FPGA SPI traffic": "novaBeginStorageMutation()" in mgmt
         and "novaEndStorageMutation()" in mgmt
         and "lockSharedBus()" in novahost,
@@ -380,13 +388,25 @@ def test_fio_sd_dispatch_contract() -> None:
     header = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
     device_manager = read("e6502.ESP32/novahost/device_manager.h")
+    ndi_image = read("e6502.ESP32/novahost/ndi_image.h")
     bridge = read("e6502.ESP32/novahost/fpga_bridge.cpp")
     event_reader = read("e6502.ESP32/novahost/fio_event_reader.h")
     novahost = read("e6502.ESP32/novahost/novahost.ino")
+    constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
+    controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
+    nova_inc = read("runtime/asm/nova.inc")
+    fio = read("runtime/asm/fio.s")
+    libfiles = read("runtime/asm/libfiles.inc")
+    files_module = read("modules/files/files.s")
+    forth_file = read("novaforth/forth/lib/file.4th")
+    novaforth = read("novaforth/novaforth.s")
 
     for constant in [
         "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_SIDSTOP", "CMD_MIDPLAY",
         "CMD_MIDSTOP", "CMD_SFLOAD", "CMD_FORMAT", "CMD_PWD",
+        "CMD_FOPEN", "CMD_FCREATE", "CMD_FCLOSE", "CMD_FREAD", "CMD_FWRITE",
+        "CMD_FSEEK", "CMD_FTELL", "CMD_FSIZE", "CMD_FRESIZE", "CMD_FFLUSH",
+        "CMD_FSTATUS", "CMD_FDELETE", "CMD_FRENAME",
     ]:
         check(f"ESP dispatcher defines {constant}", constant in header)
 
@@ -495,6 +515,43 @@ def test_fio_sd_dispatch_contract() -> None:
         "DIRREAD exposes 24-bit file sizes": "OFF_SIZE_2    = OFF_GSPACE" in header
         and "OFF_SIZE_2" in dispatcher
         and "(e.size_bytes >> 16)" in dispatcher,
+        "low-level FILE command IDs match across host implementations": "FIO_CMD_FOPEN    = $2D" in nova_inc
+        and "FIO_CMD_FRENAME  = $39" in nova_inc
+        and re.search(r"FioCmdFOpen\s*=\s*0x2D", constants) is not None
+        and re.search(r"FioCmdFRename\s*=\s*0x39", constants) is not None
+        and "CMD_FOPEN    = 0x2D" in header
+        and "CMD_FRENAME  = 0x39" in header,
+        "ESP handles low-level FILE commands": "case CMD_FOPEN:    handle_fopen(false); break;" in dispatcher
+        and "case CMD_FCREATE:  handle_fopen(true);  break;" in dispatcher
+        and "case CMD_FCLOSE:   handle_fclose();     break;" in dispatcher
+        and "case CMD_FREAD:    handle_fread();      break;" in dispatcher
+        and "case CMD_FWRITE:   handle_fwrite();     break;" in dispatcher
+        and "case CMD_FSEEK:    handle_fseek();      break;" in dispatcher
+        and "case CMD_FTELL:    handle_ftell();      break;" in dispatcher
+        and "case CMD_FSIZE:    handle_fsize();      break;" in dispatcher
+        and "case CMD_FRESIZE:  handle_fresize();    break;" in dispatcher
+        and "case CMD_FFLUSH:   handle_fflush();     break;" in dispatcher
+        and "case CMD_FSTATUS:  handle_fstatus();    break;" in dispatcher
+        and "case CMD_FDELETE:  handle_fdelete();    break;" in dispatcher
+        and "case CMD_FRENAME:  handle_frename();    break;" in dispatcher,
+        "ESP low-level FILE handles report 24-bit counts": "uint32_t result_size24() const" in header
+        and "void FioDispatcher::write_size24" in dispatcher
+        and "SetTransferSize24" in controller,
+        "NDI and host dispatch tag Forth source files": "FT_FORTH = 6" in ndi_image
+        and 'strcasecmp(ext, ".4th")' in dispatcher
+        and "FioDirTypeForth  = 0x06" in constants,
+        "NDK exposes low-level FILE wrappers": "FILE_FOPEN     = $0F" in libfiles
+        and "FILE_FRENAME   = $1B" in libfiles
+        and "FILE_FN_COUNT  = $1C" in libfiles
+        and "file_fopen" in files_module
+        and "file_frename" in files_module
+        and "fio_fopen:" in fio
+        and "fio_frename:" in fio,
+        "NovaForth keeps standard file words in source over a tiny ROM bridge": "word_nova_libcall" in novaforth
+        and "NOVA-LIBCALL" in novaforth
+        and ": OPEN-FILE" in forth_file
+        and ": READ-LINE" in forth_file
+        and "FILE-CALL" in forth_file,
         "VGC FIO validates canonical VGC spaces": "case 0x01: return 4000" in dispatcher
         and "case 0x02: return 4000" in dispatcher
         and "case 0x03: return 64000" in dispatcher
@@ -683,10 +740,11 @@ def test_runtime_autoboot_contract() -> None:
         and "FD0, FD1, FD2, FD3, HD0, HD1" in esp_dm,
         "staged boot config defines NovaLogo runtime": '"novalogo"' in boot_json
         and '"/roms/novalogo.bin"' in boot_json
-        and '"/roms/novalogo_ext.bin"' in boot_json,
+        and '"novaforth"' in boot_json
+        and '"/roms/novaforth.bin"' in boot_json,
         "staged SD assets include NovaLogo ROMs": "$(NOVALOGO)/novalogo.bin" in novahost_make
-        and "$(NOVALOGO)/novalogo_ext.bin" in novahost_make
-        and "sd-assets: ehbasic novalogo" in novahost_make,
+        and "$(NOVAFORTH)/novaforth.bin" in novahost_make
+        and "sd-assets: ehbasic novalogo novaforth" in novahost_make,
         "stack deploy exposes NovaLogo post-deploy smoke gate": "NOVALOGO_SMOKE=1" in flash_stack
         and "run_novalogo_smoke" in flash_stack
         and "tools/run-novalogo-hardware-smoke.py" in flash_stack,

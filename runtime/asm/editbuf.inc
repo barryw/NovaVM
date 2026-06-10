@@ -2,11 +2,11 @@
 ;
 ; editbuf layers a real editable text buffer (cursor movement, insert/delete,
 ; line navigation, selection, cut/copy/paste, scrolling) and a three-choice
-; modal dialog on top of the EDITUI chrome shell. It is intentionally
+; status-line dirty-exit prompt on top of the EDITUI chrome shell. It is intentionally
 ; LANGUAGE-NEUTRAL: it knows nothing about Logo, BASIC, or any document model.
 ;
 ; Anything language-specific is supplied by the host through HOOK VECTORS:
-;   - SAVE hook   : invoked on Ctrl-S (and the dialog "Save First" choice).
+;   - SAVE hook   : invoked on Ctrl+K S (and the dialog "Save First" choice).
 ;                   The host validates/saves/installs and returns a status.
 ;   - INDENT hook : invoked after Enter. The host returns how many leading
 ;                   spaces the new line should start with (auto-indent).
@@ -29,7 +29,7 @@ EDITBUF_INC_INCLUDED = 1
 ; Editor body geometry. Minimal full-screen layout (no frame, no title band):
 ;   row 0          : menu bar (File/Edit/Help + title + dirty marker)
 ;   rows 1..N-2    : editable body, full 80 columns
-;   row N-1        : status bar (help / status message)
+;   row N-1        : status bar (cursor/size/line/type metadata)
 ; ---------------------------------------------------------------------
 EDITBUF_VIEW_LEFT   = 0                               ; first text column
 EDITBUF_VIEW_TOP    = 1                               ; first text row (below menu bar)
@@ -42,7 +42,7 @@ EDITBUF_CLIP_CAP    = 256
 ; ---------------------------------------------------------------------
 ; Exit reason returned in A by editbuf_run (also stored in EDITBUF_RESULT).
 ; ---------------------------------------------------------------------
-EDITBUF_EXIT_QUIT    = $00      ; Ctrl-Q while clean
+EDITBUF_EXIT_QUIT    = $00      ; Alt-X while clean
 EDITBUF_EXIT_SAVED   = $01      ; left via dialog "Save First" after a clean save
 EDITBUF_EXIT_DISCARD = $02      ; left via dialog "Exit Anyway" (draft preserved)
 
@@ -88,6 +88,8 @@ EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
 .global EDITBUF_LENH
 .global EDITBUF_TITLEL        ; NUL-terminated title string
 .global EDITBUF_TITLEH
+.global EDITBUF_TYPEL         ; NUL-terminated file type string
+.global EDITBUF_TYPEH
 .global EDITBUF_STATUSL       ; NUL-terminated status message (may be 0)
 .global EDITBUF_STATUSH
 .global EDITBUF_SAVE_VECL     ; SAVE hook vector
@@ -112,7 +114,7 @@ EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
 ; --- Entry points -------------------------------------------------------
 .global editbuf_run           ; run the modal editor
 .global editbuf_reset_state   ; reset cursor/scroll/selection/dirty for a new session
-.global editbuf_dialog3       ; three-choice restore-under modal (A=result 0/1/2)
+.global editbuf_dialog3       ; three-choice status-line prompt (A=result 0/1/2)
 
 ; Dialog choice result codes (returned by editbuf_dialog3 in A).
 EDITBUF_DLG_EXIT   = $00       ; first button  (Exit Anyway)

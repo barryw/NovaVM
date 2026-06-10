@@ -51,6 +51,9 @@ VTEXT_ERR = $01
 .global VTEXT_ATTR
 .global VTEXT_CHAR
 .global VTEXT_FLAGS
+.global VTEXT_TOPROW
+.global VTEXT_SCROLL_TOP
+.global VTEXT_SCROLL_ROWS
 
 ; Optional region-table ABI. Callers own the table storage and set these state
 ; bytes before define/select/store.

@@ -1085,6 +1085,7 @@ public abstract class ScreenTextEditor
         NdiFileType.Bin => ".bin",
         NdiFileType.Mid => ".mid",
         NdiFileType.Gfx => ".gfx",
+        NdiFileType.Forth => ".4th",
         _ => ""
     };
 

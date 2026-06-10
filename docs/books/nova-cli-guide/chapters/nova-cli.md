@@ -66,7 +66,7 @@ Nova has three separate layers:
 | --- | --- | --- |
 | `nova` CLI | Host-side tool for images and NovaHost files | Your development machine |
 | NDI | Disk image format for floppies and hard drives | `e6502.Storage` and NovaHost |
-| NovaHost | ESP-side HTTP server and SD-card/device manager | The board |
+| NovaHost | ESP-side TCP command server and SD-card/device manager | The board |
 
 Floppy and hard-drive images use the same NDI format. The difference is size,
 where the image lives on the SD card, and which NovaHost slot mounts it.
@@ -95,9 +95,9 @@ Drive mount state is stored on the SD card in:
 
 The CLI uploads images and files, manages mounted drive slots, updates WiFi
 settings, stops NovaHost-driven audio, reboots NovaHost, and can forward local
-terminal keypresses to the running NovaVM over WiFi. The low-level NovaHost HTTP
-API still exists underneath, but normal users should not need to type raw HTTP
-requests.
+terminal keypresses to the running NovaVM over WiFi. NovaHost speaks a
+newline-delimited JSON command protocol over TCP; the CLI is the supported way
+to drive it, and there is no HTTP/REST interface.
 
 ## Build The CLI
 
@@ -139,7 +139,7 @@ upload are still expected to work; verify with a `.mid` to `.nms` import/upload.
 
 ## Remote Host Syntax
 
-Remote commands talk to NovaHost over HTTP.
+Remote commands talk to NovaHost over TCP.
 
 `--remote` may appear before or after the command:
 
@@ -155,7 +155,7 @@ The host may include a port when testing against a local server:
 nova device status --remote 127.0.0.1:8080
 ```
 
-Remote paths are relative to NovaHost's `/sd` URL. These are equivalent:
+Remote paths are relative to the NovaHost SD-card root. These are equivalent:
 
 ```bash
 nova get --remote 192.168.1.65 /config/boot.json
@@ -163,7 +163,7 @@ nova get --remote 192.168.1.65 config/boot.json
 ```
 
 Backslashes are normalized to `/`. Leading slashes are stripped before building
-the `/sd/...` URL.
+the SD-card path.
 
 ## File Types
 
@@ -177,6 +177,7 @@ The CLI infers local NDI file type from extension:
 | `.mid`, `.midi` | `MID` | Compiled to `.nms` first |
 | `.nms` | `MID` | Nova Music Stream |
 | `.nvg` | `GFX` | Nova graphics asset |
+| `.4th`, `.fth`, `.fs` | `FTH` | Forth source text |
 | unknown | `BIN` | Stored as binary data |
 
 `GFX` is the internal NDI file type name for graphics. User-facing graphics
@@ -193,7 +194,7 @@ tools/test-nova-cli-doc-examples.py
 
 The test creates temporary NDI images, imports BASIC, binary, MIDI, and NVG
 files, validates image state, and runs remote commands against a local
-NovaHost-compatible HTTP mock.
+NovaHost-compatible mock server.
 
 Remote examples using `192.168.1.65` are the same command shapes. Replace that
 host with your board's IP address.
@@ -456,12 +457,8 @@ Read NovaHost health and SD-card status.
 nova device status --remote <host>
 ```
 
-This performs:
-
-```text
-GET /health
-GET /sd-status
-```
+This queries NovaHost's health and SD-card mount status over the TCP command
+protocol.
 
 Tested example:
 
@@ -657,12 +654,12 @@ Control keys:
   Arrow keys use the same `$1C` through `$1F` bytes as the desktop emulator;
   the active Nova editor or program decides what those bytes mean.
 
-This command uses TCP port `6503`, not NovaHost's HTTP port. Use `--port` only
-when the debug service is exposed on a non-default port.
+This command uses TCP port `6503`, not NovaHost's standard command port. Use
+`--port` only when the debug service is exposed on a non-default port.
 
 ## Raw Remote SD Commands
 
-Raw remote commands map directly to NovaHost `/sd/<path>`.
+Raw remote commands map directly to NovaHost SD-card paths.
 
 ```bash
 nova ls --remote <host> [path]
@@ -927,8 +924,8 @@ nova keyboard --remote 192.168.1.65
 nova device reboot --remote 192.168.1.65
 ```
 
-The raw NovaHost HTTP endpoints are intentionally not the user-facing workflow.
-The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
+The raw NovaHost SD commands are intentionally not the primary user-facing
+workflow. The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
 `nova get`, and `nova rm` for compatibility and diagnostics.
 
 ## Workflows
@@ -1005,13 +1002,13 @@ and play these files.
 
 `GET ... 404 Not Found`
 
-: Check whether the path is relative to `/sd`, and whether a managed command is
-  prepending a base directory.
+: Check whether the path is relative to the SD-card root, and whether a managed
+  command is prepending a base directory.
 
 `503 sd not mounted`
 
-: NovaHost does not see the SD card. Check `/sd-status`, power, card seating,
-  and FAT32 formatting.
+: NovaHost does not see the SD card. Check `nova device status`, power, card
+  seating, and FAT32 formatting.
 
 `Not enough contiguous free sectors`
 

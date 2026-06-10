@@ -92,6 +92,9 @@ public class AvaloniaCompositeBusTests
     {
         var bus = MakeBus();
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegTextTopRow), "Default base is row 0.");
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegTextScrollStart), "Default scroll window starts at row 0.");
+        Assert.AreEqual(VgcConstants.ScreenRows, bus.Read((ushort)VgcConstants.RegTextScrollRows),
+            "Default scroll window covers the full screen.");
         bus.Write((ushort)VgcConstants.RegTextTopRow, 7);
         Assert.AreEqual(7, bus.Read((ushort)VgcConstants.RegTextTopRow));
         Assert.AreEqual(7, bus.Vgc.GetTextTopRow());
@@ -132,6 +135,22 @@ public class AvaloniaCompositeBusTests
         // Now display row 0 shows physical row 1 = 'U'; display row 49 wraps to row 0 = 'T'.
         Assert.AreEqual((byte)'U', bus.Vgc.GetScreenChar(0, bus.Vgc.PhysicalTextRow(0)));
         Assert.AreEqual((byte)'T', bus.Vgc.GetScreenChar(0, bus.Vgc.PhysicalTextRow(49)));
+    }
+
+    [TestMethod]
+    public void TextScrollWindow_KeepsRowsOutsideWindowPhysicallyFixed()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.RegTextScrollStart, 1);
+        bus.Write((ushort)VgcConstants.RegTextScrollRows, 48);
+        bus.Write((ushort)VgcConstants.RegTextTopRow, 5);
+
+        Assert.AreEqual(1, bus.Read((ushort)VgcConstants.RegTextScrollStart));
+        Assert.AreEqual(48, bus.Read((ushort)VgcConstants.RegTextScrollRows));
+        Assert.AreEqual(0, bus.Vgc.PhysicalTextRow(0), "Menu row must not move when the body scrolls.");
+        Assert.AreEqual(6, bus.Vgc.PhysicalTextRow(1), "First body row rotates within the body window.");
+        Assert.AreEqual(5, bus.Vgc.PhysicalTextRow(48), "Last body row wraps inside rows 1..48.");
+        Assert.AreEqual(49, bus.Vgc.PhysicalTextRow(49), "Status row must not move when the body scrolls.");
     }
 
     [TestMethod]
@@ -768,7 +787,7 @@ public class AvaloniaCompositeBusTests
         bus.Write((ushort)VgcConstants.WtsReverbLevel, 1);
         bus.Write((ushort)(VgcConstants.WtsVoiceBase + VgcConstants.WtsVoiceVolume), 7);
         bus.Write((ushort)VgcConstants.NicSlot, 3);
-        bus.Write((ushort)VgcConstants.RegRomSwap, VgcConstants.RomSwapNcc);
+        bus.Write((ushort)VgcConstants.RegRomSwap, VgcConstants.RomSwapForth);
 
         bus.Write((ushort)VgcConstants.RegCmd, VgcConstants.CmdSysReset);
 

@@ -127,6 +127,19 @@ private:
     static constexpr uint8_t CMD_RNG      = 0x2A;
     static constexpr uint8_t CMD_NVGLOAD  = 0x2B;
     static constexpr uint8_t CMD_LOAD_MODULE = 0x2C;
+    static constexpr uint8_t CMD_FOPEN    = 0x2D;
+    static constexpr uint8_t CMD_FCREATE  = 0x2E;
+    static constexpr uint8_t CMD_FCLOSE   = 0x2F;
+    static constexpr uint8_t CMD_FREAD    = 0x30;
+    static constexpr uint8_t CMD_FWRITE   = 0x31;
+    static constexpr uint8_t CMD_FSEEK    = 0x32;
+    static constexpr uint8_t CMD_FTELL    = 0x33;
+    static constexpr uint8_t CMD_FSIZE    = 0x34;
+    static constexpr uint8_t CMD_FRESIZE  = 0x35;
+    static constexpr uint8_t CMD_FFLUSH   = 0x36;
+    static constexpr uint8_t CMD_FSTATUS  = 0x37;
+    static constexpr uint8_t CMD_FDELETE  = 0x38;
+    static constexpr uint8_t CMD_FRENAME  = 0x39;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -174,6 +187,9 @@ private:
                                     ((uint16_t)_bank[OFF_GADDR_HI] << 8); }
     uint16_t transfer_len() const { return _bank[OFF_GLEN_LO] |
                                            ((uint16_t)_bank[OFF_GLEN_HI] << 8); }
+    uint32_t result_size24() const { return ((uint32_t)_bank[OFF_SIZE_2] << 16) |
+                                            ((uint32_t)_bank[OFF_SIZE_HI] << 8) |
+                                             (uint32_t)_bank[OFF_SIZE_LO]; }
 
     static constexpr uint8_t PAGE_TARGET_XRAM = 0x00;
     static constexpr uint8_t PAGE_TARGET_RAM  = 0x01;
@@ -213,6 +229,18 @@ private:
     void handle_rng();
     void handle_nvgload();
     void handle_load_module();
+    void handle_fopen(bool create);
+    void handle_fclose();
+    void handle_fread();
+    void handle_fwrite();
+    void handle_fseek();
+    void handle_ftell();
+    void handle_fsize();
+    void handle_fresize();
+    void handle_fflush();
+    void handle_fstatus();
+    void handle_fdelete();
+    void handle_frename();
     void handle_sidplay();
     void handle_sidstop();
     void handle_midplay();
@@ -292,6 +320,12 @@ private:
                                          uint16_t len);
     bool load_file_to_vector(ndi::NdiImage* img, int idx, uint32_t size,
                              std::vector<uint8_t>& out);
+    bool decode_file_access(uint8_t fam, bool& can_read, bool& can_write) const;
+    uint8_t alloc_file_handle();
+    bool load_file_handle_data(ndi::NdiImage* img, int idx, uint32_t size,
+                               std::vector<uint8_t>& out);
+    bool flush_file_handle(uint8_t id);
+    void write_size24(uint32_t size);
     bool load_wts_bank_by_name(const char* requested_name);
     bool load_first_wts_bank_from_sd_dir(const char* dir_path);
     bool load_first_wts_bank_from_slot(int slot);
@@ -461,6 +495,20 @@ private:
         uint16_t parent;
         int      next_index;       // walk pointer in _bank/_dir buffer
     } _dir_iter = { false, 0, 0, 0 };
+
+    static constexpr uint8_t MAX_OPEN_FILES = 8;
+    struct FileHandle {
+        bool active = false;
+        bool can_read = false;
+        bool can_write = false;
+        bool dirty = false;
+        int slot = -1;
+        uint16_t parent = ndi::ROOT_PARENT;
+        uint32_t pos = 0;
+        char name[64] = {};
+        std::vector<uint8_t> data;
+    };
+    FileHandle _file_handles[MAX_OPEN_FILES];
 };
 
 #endif

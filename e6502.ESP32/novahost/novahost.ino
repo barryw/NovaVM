@@ -854,9 +854,9 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
 }
 
 // Stage paged-library modules from SD into XRAM (SDRAM) at boot. Each entry in
-// the boot.json "libraries" array names a 16 KB module image and the XRAM byte
-// address (shelf slot base) it must land on so the runtime's lib_call loader can
-// page it into the bank-1 ROM window on demand.
+// the boot.json "libraries" array names a 16 KB module image; the boot-time shelf
+// allocator assigns the XRAM slot base so the runtime's lib_call loader can page
+// it into the bank-1 ROM window on demand.
 //
 // GRACEFUL DEGRADATION: this is best-effort. Missing config, parse failure, a
 // missing/short file, or a stream error are all logged and skipped — the caller
@@ -1598,7 +1598,7 @@ bool loadRomsToFPGA() {
         // 4c.0c re-page shelf: mirror the active runtime's extension ROM into XRAM
         // at $07C000 so the 6502 ensure_ext_resident can page it back into bank 1
         // after a lib_call(MODULE) clobbers the $C000 overlay. Without it the
-        // turtle/graphics still draw, but the legacy ext path (EDIT, sound, timing)
+        // turtle/graphics still draw, but any remaining legacy extension-ROM path
         // re-pages garbage the first time it runs after a graphics lib_call.
         // Best-effort (WARN-and-continue) like the SID curve above; only matters
         // when a runtime with an extension ROM also pages in a module.
@@ -1606,7 +1606,7 @@ bool loadRomsToFPGA() {
             if (!streamSdramAsset(HOST_EXT_XRAM_BASE, "host ext (re-page shelf)",
                                   extPaths, extPathCount, BOOT_ROM_LEN)) {
                 logLn("WARN: host ext not staged at XRAM $%06X; legacy ext re-page "
-                      "(EDIT/sound/timing after graphics) will be unavailable",
+                      "after a graphics lib_call will be unavailable",
                       (unsigned)HOST_EXT_XRAM_BASE);
             } else {
                 logLn("Host ext staged for re-page (%u bytes @ XRAM $%06X)",

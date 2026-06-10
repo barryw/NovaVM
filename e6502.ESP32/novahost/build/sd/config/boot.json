@@ -27,7 +27,18 @@
     },
     "novalogo": {
       "rom": "/roms/novalogo.bin",
-      "extensionRom": "/roms/novalogo_ext.bin",
+      "autoboot": false,
+      "theme": {
+        "background": 0,
+        "foreground": 15,
+        "border": 0
+      },
+      "banner": {
+        "startRow": 0
+      }
+    },
+    "novaforth": {
+      "rom": "/roms/novaforth.bin",
       "autoboot": false,
       "theme": {
         "background": 0,
@@ -44,7 +55,14 @@
     "hd0": ""
   },
   "libraries": [
-    { "name": "graphics", "id": 1, "path": "/lib/graphics.mod", "base": 393216, "size": 16384 }
+    { "name": "graphics", "id": 1, "path": "/lib/graphics.nmod", "size": 16384 },
+    { "name": "system", "id": 3, "path": "/lib/system.nmod", "size": 16384 },
+    { "name": "sound", "id": 2, "path": "/lib/sound.nmod", "size": 16384 },
+    { "name": "editor", "id": 8, "path": "/lib/editor.nmod", "size": 16384 },
+    { "name": "files", "id": 4, "path": "/lib/files.nmod", "size": 16384 },
+    { "name": "memory", "id": 5, "path": "/lib/memory.nmod", "size": 16384 },
+    { "name": "net", "id": 6, "path": "/lib/net.nmod", "size": 16384 },
+    { "name": "turtle", "id": 7, "path": "/lib/turtle.nmod", "size": 16384 }
   ],
   "network": {
     "gameServer": {

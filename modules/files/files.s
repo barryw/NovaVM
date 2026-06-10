@@ -180,6 +180,19 @@ file_jtable:
       .word   file_run-1               ; $0C FILE_RUN
       .word   file_rng-1               ; $0D FILE_RNG
       .word   file_page-1              ; $0E FILE_PAGE
+      .word   file_fopen-1             ; $0F FILE_FOPEN
+      .word   file_fcreate-1           ; $10 FILE_FCREATE
+      .word   file_fclose-1            ; $11 FILE_FCLOSE
+      .word   file_fread-1             ; $12 FILE_FREAD
+      .word   file_fwrite-1            ; $13 FILE_FWRITE
+      .word   file_fseek-1             ; $14 FILE_FSEEK
+      .word   file_ftell-1             ; $15 FILE_FTELL
+      .word   file_fsize-1             ; $16 FILE_FSIZE
+      .word   file_fresize-1           ; $17 FILE_FRESIZE
+      .word   file_fflush-1            ; $18 FILE_FFLUSH
+      .word   file_fstatus-1           ; $19 FILE_FSTATUS
+      .word   file_fdelete-1           ; $1A FILE_FDELETE
+      .word   file_frename-1           ; $1B FILE_FRENAME
 
 ; ===========================================================================
 ; Shared epilogues. file_finish_status maps the NDK A result (0=OK / 1=err) to
@@ -192,6 +205,41 @@ file_finish_status:
       stz     LIB_RESULT
       stz     LIB_RESULT+1
       stz     LIB_RESULT+2
+      stz     LIB_RESULT+3
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_FIO_FAIL
+      sta     LIB_STATUS
+      rts
+
+file_finish_result_fio_src:
+      cmp     #$00
+      bne     @fail
+      LDA     FIO_SRCL
+      STA     LIB_RESULT
+      LDA     FIO_SRCH
+      STA     LIB_RESULT+1
+      stz     LIB_RESULT+2
+      stz     LIB_RESULT+3
+      lda     #LERR_OK
+      sta     LIB_STATUS
+      rts
+@fail:
+      lda     #LERR_FIO_FAIL
+      sta     LIB_STATUS
+      rts
+
+file_finish_result_fio_size:
+      cmp     #$00
+      bne     @fail
+      LDA     FIO_SIZEL
+      STA     LIB_RESULT
+      LDA     FIO_SIZEH
+      STA     LIB_RESULT+1
+      LDA     FIO_SIZE2
+      STA     LIB_RESULT+2
       stz     LIB_RESULT+3
       lda     #LERR_OK
       sta     LIB_STATUS
@@ -441,6 +489,132 @@ file_page:
       STA   PAGER_LENH
       JSR   pager_load_file_page
       JMP   file_finish_status
+
+; ===========================================================================
+; Low-level byte-stream file handles.
+; ===========================================================================
+
+file_fopen:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      LDA   LIB_ARG2+0
+      STA   FIO_DIRTYPE
+      JSR   fio_fopen
+      JMP   file_finish_result_fio_src
+
+file_fcreate:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      LDA   LIB_ARG2+0
+      STA   FIO_DIRTYPE
+      JSR   fio_fcreate
+      JMP   file_finish_result_fio_src
+
+file_fclose:
+      JSR   file_marshal_fileid
+      JSR   fio_fclose
+      JMP   file_finish_status
+
+file_fread:
+      JSR   file_marshal_file_transfer
+      JSR   fio_fread
+      JMP   file_finish_result_fio_size
+
+file_fwrite:
+      JSR   file_marshal_file_transfer
+      JSR   fio_fwrite
+      JMP   file_finish_result_fio_size
+
+file_fseek:
+      JSR   file_marshal_fileid
+      JSR   file_marshal_size_arg1
+      JSR   fio_fseek
+      JMP   file_finish_status
+
+file_ftell:
+      JSR   file_marshal_fileid
+      JSR   fio_ftell
+      JMP   file_finish_result_fio_size
+
+file_fsize:
+      JSR   file_marshal_fileid
+      JSR   fio_fsize
+      JMP   file_finish_result_fio_size
+
+file_fresize:
+      JSR   file_marshal_fileid
+      JSR   file_marshal_size_arg1
+      JSR   fio_fresize
+      JMP   file_finish_status
+
+file_fflush:
+      JSR   file_marshal_fileid
+      JSR   fio_fflush
+      JMP   file_finish_status
+
+file_fstatus:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_fstatus
+      JMP   file_finish_result_fio_src
+
+file_fdelete:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_fdelete_exact
+      JMP   file_finish_status
+
+file_frename:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      LDA   LIB_ARG2+0
+      STA   FIO_ENDL
+      LDA   LIB_ARG2+1
+      STA   FIO_ENDH
+      LDA   LIB_ARG3+0
+      STA   FIO_GLENL
+      LDA   LIB_ARG3+1
+      STA   FIO_GLENH
+      JSR   fio_frename
+      JMP   file_finish_status
+
+file_marshal_fileid:
+      LDA   LIB_ARG0+0
+      STA   FIO_SRCL
+      LDA   LIB_ARG0+1
+      STA   FIO_SRCH
+      RTS
+
+file_marshal_file_transfer:
+      JSR   file_marshal_fileid
+      LDA   LIB_ARG1+0
+      STA   FIO_ENDL
+      LDA   LIB_ARG1+1
+      STA   FIO_ENDH
+      LDA   LIB_ARG2+0
+      STA   FIO_GLENL
+      LDA   LIB_ARG2+1
+      STA   FIO_GLENH
+      RTS
+
+file_marshal_size_arg1:
+      LDA   LIB_ARG1+0
+      STA   FIO_SIZEL
+      LDA   LIB_ARG1+1
+      STA   FIO_SIZEH
+      LDA   LIB_ARG1+2
+      STA   FIO_SIZE2
+      RTS
 
 ; ===========================================================================
 ; NDK driver bodies, included AFTER the wrappers so .referenced(fio_*/pager_*)

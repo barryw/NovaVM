@@ -1035,16 +1035,31 @@ void ManagementServer::handle_mount_drive(uint16_t command,
         return;
     }
     entry.close();
+
+    if (!novaBeginStorageMutation()) {
+        send_error(command, request_id, "storage_busy", "storage busy");
+        return;
+    }
+
     novaReleaseIdleAudioCacheForStorage();
     if (!_dm.mount(slot, sd_path)) {
+        novaEndStorageMutation();
         send_error(command, request_id, "mount_failed",
                    _dm.last_mount_error());
         return;
     }
-    persist_drive_mount_config(prefix, sd_path);
+    bool config_ok = persist_drive_mount_config(prefix, sd_path);
     int boot_slot = _dm.select_boot_slot();
     _dm.set_default_slot(boot_slot);
     const char* boot_prefix = DeviceManager::prefix_for_slot(boot_slot);
+    novaEndStorageMutation();
+
+    if (!config_ok) {
+        send_error(command, request_id, "write_failed",
+                   "failed to update boot config");
+        return;
+    }
+
     logLn("[mgmt] mount %s -> %s; boot default=%s",
           prefix, sd_path, boot_prefix ? boot_prefix : "?");
 
@@ -1073,11 +1088,25 @@ void ManagementServer::handle_unmount_drive(uint16_t command,
         return;
     }
     const char* prefix = DeviceManager::prefix_for_slot(slot);
+
+    if (!novaBeginStorageMutation()) {
+        send_error(command, request_id, "storage_busy", "storage busy");
+        return;
+    }
+
     _dm.unmount(slot);
-    persist_drive_mount_config(prefix, "");
+    bool config_ok = persist_drive_mount_config(prefix, "");
     int boot_slot = _dm.select_boot_slot();
     _dm.set_default_slot(boot_slot);
     const char* boot_prefix = DeviceManager::prefix_for_slot(boot_slot);
+    novaEndStorageMutation();
+
+    if (!config_ok) {
+        send_error(command, request_id, "write_failed",
+                   "failed to update boot config");
+        return;
+    }
+
     logLn("[mgmt] unmount %s; boot default=%s",
           prefix, boot_prefix ? boot_prefix : "?");
 

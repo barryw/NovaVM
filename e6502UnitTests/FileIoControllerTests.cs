@@ -53,6 +53,19 @@ public class FileIoControllerTests
         return lo | (hi << 8) | (bank << 16);
     }
 
+    private static void WriteWord(FileIoController fio, int loAddress, int value)
+    {
+        fio.Write((ushort)loAddress, (byte)(value & 0xFF));
+        fio.Write((ushort)(loAddress + 1), (byte)((value >> 8) & 0xFF));
+    }
+
+    private static void WriteSize24(FileIoController fio, int value)
+    {
+        fio.Write((ushort)VgcConstants.FioSizeL, (byte)(value & 0xFF));
+        fio.Write((ushort)VgcConstants.FioSizeH, (byte)((value >> 8) & 0xFF));
+        fio.Write((ushort)VgcConstants.FioSize2, (byte)((value >> 16) & 0xFF));
+    }
+
     private static byte[] MakeNvg(int width, int height, params (ushort Address, byte[] Pixels)[] spans)
     {
         using var ms = new MemoryStream();
@@ -236,6 +249,88 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void LowLevelFileCommandsProvideForthStyleByteStreams()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                saveDir: dir);
+
+            SetFilename(fio, "fatest.txt");
+            fio.Write((ushort)VgcConstants.FioDirType, 3); // R/W
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFCreate);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            int fileId = fio.Read((ushort)VgcConstants.FioSrcL);
+            Assert.AreNotEqual(0, fileId, "A successful create must return a usable nonzero fileid.");
+
+            byte[] line = Encoding.ASCII.GetBytes("Line 1\n");
+            Array.Copy(line, 0, memory, 0x2000, line.Length);
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2000);
+            WriteWord(fio, VgcConstants.FioGLenL, line.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFWrite);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(line.Length, ReadSize24(fio), "WRITE-FILE needs the host to report the byte count written.");
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFSize);
+            Assert.AreEqual(line.Length, ReadSize24(fio));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            WriteSize24(fio, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFSeek);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2100);
+            WriteWord(fio, VgcConstants.FioGLenL, 32);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFRead);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(line.Length, ReadSize24(fio));
+            CollectionAssert.AreEqual(line, memory.Skip(0x2100).Take(line.Length).ToArray());
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            WriteSize24(fio, 20);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFResize);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFClose);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(20, File.ReadAllBytes(Path.Combine(dir, "fatest.txt")).Length);
+
+            SetFilename(fio, "fatest.txt");
+            byte[] newName = Encoding.ASCII.GetBytes("fatest-renamed.txt");
+            Array.Copy(newName, 0, memory, 0x2200, newName.Length);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2200);
+            WriteWord(fio, VgcConstants.FioGLenL, newName.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFRename);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsFalse(File.Exists(Path.Combine(dir, "fatest.txt")));
+            Assert.IsTrue(File.Exists(Path.Combine(dir, "fatest-renamed.txt")));
+
+            SetFilename(fio, "fatest-renamed.txt");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFDelete);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsFalse(File.Exists(Path.Combine(dir, "fatest-renamed.txt")));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void Delete_RemovesExistingFile()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
@@ -318,6 +413,29 @@ public class FileIoControllerTests
         {
             Directory.Delete(dir, true);
         }
+    }
+
+    [TestMethod]
+    public void DirOpen_ForthSourceReportsForthTypeAndFullTextSize()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            byte[] source = Encoding.ASCII.GetBytes(": TEST 123 ;\n");
+            File.WriteAllBytes(Path.Combine(tempDir, "core.4th"), source);
+
+            SetFilename(fio, "*.4th");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("core", ReadFilename(fio));
+            Assert.AreEqual(VgcConstants.FioDirTypeForth, fio.Read((ushort)VgcConstants.FioDirType),
+                "Forth source must have a distinct directory type so the Forth loader does not treat it as a load-addressed binary.");
+            Assert.AreEqual(source.Length, ReadSize(fio),
+                "Source files do not carry the BASIC/BIN two-byte load-address prefix.");
+            Assert.AreEqual(VgcConstants.FioDirTypeForth, memory[VgcConstants.MetaType]);
+        }
+        finally { Directory.Delete(tempDir, true); }
     }
 
     [TestMethod]
@@ -475,6 +593,106 @@ public class FileIoControllerTests
         {
             if (Directory.Exists(dir))
                 Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Save_ForthSourceWritesRawTextWithoutLoadAddressPrefix()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+
+        try
+        {
+            byte[] memory = new byte[65536];
+            byte[] source = Encoding.ASCII.GetBytes(": ANSWER 42 ;\n");
+            Array.Copy(source, 0, memory, 0x2400, source.Length);
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                dir);
+
+            SetFilename(fio, "core.4th");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x24);
+            fio.Write((ushort)VgcConstants.FioEndL, (byte)(0x2400 + source.Length));
+            fio.Write((ushort)VgcConstants.FioEndH, (byte)((0x2400 + source.Length) >> 8));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioDirTypeForth, fio.Read((ushort)VgcConstants.FioDirType));
+            Assert.AreEqual(source.Length, ReadSize(fio));
+            CollectionAssert.AreEqual(source, File.ReadAllBytes(Path.Combine(dir, "core.4th")),
+                "Forth source must be saved as raw text; a load-address prefix would corrupt INCLUDED input.");
+            Assert.IsFalse(File.Exists(Path.Combine(dir, "core.md")),
+                "Only BASIC program saves create companion help stubs.");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Load_ForthSourceLoadsRawTextAndReportsForthType()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            byte[] source = Encoding.ASCII.GetBytes(": ANSWER 42 ;\n");
+            File.WriteAllBytes(Path.Combine(dir, "core.4th"), source);
+            byte[] memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                dir);
+
+            SetFilename(fio, "core.4th");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x24);
+            fio.Write((ushort)VgcConstants.FioGLenL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x10);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioDirTypeForth, fio.Read((ushort)VgcConstants.FioDirType));
+            Assert.AreEqual(source.Length, ReadSize(fio));
+            CollectionAssert.AreEqual(source, memory.Skip(0x2400).Take(source.Length).ToArray(),
+                "Forth source loads should copy the file body exactly, without stripping a BASIC/BIN load prefix.");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Load_ForthSourceHonorsMaxTransferLength()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "too-big.4th"), ": A 1 ;\n: B 2 ;\n");
+            var fio = MakeController(dir);
+
+            SetFilename(fio, "too-big.4th");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x00);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x24);
+            fio.Write((ushort)VgcConstants.FioGLenL, 4);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoad);
+
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrIo, fio.Read((ushort)VgcConstants.FioErrCode),
+                "The Forth loader depends on FIO refusing to overflow its source buffer.");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
         }
     }
 

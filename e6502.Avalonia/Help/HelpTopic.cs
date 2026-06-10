@@ -8,7 +8,6 @@ public enum HelpTopicType
     Guide,
     Command,
     Function,
-    Ncc,
     Program
 }
 
@@ -39,7 +38,6 @@ public sealed partial class HelpTopic
         {
             "command" => HelpTopicType.Command,
             "function" => HelpTopicType.Function,
-            "ncc" => HelpTopicType.Ncc,
             "program" => HelpTopicType.Program,
             _ => HelpTopicType.Guide
         };

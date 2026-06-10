@@ -237,9 +237,6 @@ HELP_BUF          = $A021
 .ifndef REG_ROMSWAP
 REG_ROMSWAP       = $A03F
 .endif
-.ifndef ROMSWAP_NCC
-ROMSWAP_NCC       = $01
-.endif
 .ifndef ROMSWAP_BASIC
 ROMSWAP_BASIC     = $02
 .endif
@@ -250,14 +247,14 @@ ROMSWAP_BASIC     = $02
 ; @summary Select the primary runtime ROM bank at $C000. At cold boot this is NovaBASIC; a RAM launcher may replace it with another runtime first.
 ROMSWAP_PRIMARY   = ROMSWAP_BASIC
 .endif
-.ifndef ROMSWAP_NCCEDIT
-ROMSWAP_NCCEDIT   = $03
-.endif
 .ifndef ROMSWAP_EXTENSION
 ROMSWAP_EXTENSION = $04
 .endif
 .ifndef ROMSWAP_LOGO
 ROMSWAP_LOGO      = $05
+.endif
+.ifndef ROMSWAP_FORTH
+ROMSWAP_FORTH     = $06
 .endif
 
 .ifndef VGC_SPR_BASE
@@ -425,6 +422,12 @@ VGC_VRAM_AUTOINC  = $01
 ; (ring scroll, 0-49). Scroll = one write, zero plane copies.
 .ifndef VGC_TEXT_TOPROW
 VGC_TEXT_TOPROW   = $A0ED
+.endif
+.ifndef VGC_TEXT_SCROLL_START
+VGC_TEXT_SCROLL_START = $A0EE
+.endif
+.ifndef VGC_TEXT_SCROLL_ROWS
+VGC_TEXT_SCROLL_ROWS  = $A0EF
 .endif
 
 ; Direct screen window: $A200-$B19F maps 4000 cells of the plane named by the
@@ -1145,6 +1148,48 @@ FIO_CMD_RNG      = $2A
 ; @summary Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
 FIO_CMD_NVGLOAD  = $2B
 .endif
+.ifndef FIO_CMD_LOAD_MODULE
+FIO_CMD_LOAD_MODULE = $2C
+.endif
+.ifndef FIO_CMD_FOPEN
+FIO_CMD_FOPEN    = $2D
+.endif
+.ifndef FIO_CMD_FCREATE
+FIO_CMD_FCREATE  = $2E
+.endif
+.ifndef FIO_CMD_FCLOSE
+FIO_CMD_FCLOSE   = $2F
+.endif
+.ifndef FIO_CMD_FREAD
+FIO_CMD_FREAD    = $30
+.endif
+.ifndef FIO_CMD_FWRITE
+FIO_CMD_FWRITE   = $31
+.endif
+.ifndef FIO_CMD_FSEEK
+FIO_CMD_FSEEK    = $32
+.endif
+.ifndef FIO_CMD_FTELL
+FIO_CMD_FTELL    = $33
+.endif
+.ifndef FIO_CMD_FSIZE
+FIO_CMD_FSIZE    = $34
+.endif
+.ifndef FIO_CMD_FRESIZE
+FIO_CMD_FRESIZE  = $35
+.endif
+.ifndef FIO_CMD_FFLUSH
+FIO_CMD_FFLUSH   = $36
+.endif
+.ifndef FIO_CMD_FSTATUS
+FIO_CMD_FSTATUS  = $37
+.endif
+.ifndef FIO_CMD_FDELETE
+FIO_CMD_FDELETE  = $38
+.endif
+.ifndef FIO_CMD_FRENAME
+FIO_CMD_FRENAME  = $39
+.endif
 
 ; Host RNG result byte aliases. FIO.CMD_RNG returns little-endian bytes here.
 ; @label FIO.RNG0
@@ -1209,6 +1254,9 @@ FIO_ERR_DISKFULL  = $04
 .ifndef FIO_ERR_NOTMOUNTED
 FIO_ERR_NOTMOUNTED = $05
 .endif
+.ifndef FIO_TYPE_BAS
+FIO_TYPE_BAS      = $00
+.endif
 .ifndef FIO_TYPE_SID
 FIO_TYPE_SID      = $01
 .endif
@@ -1218,8 +1266,14 @@ FIO_TYPE_BIN      = $02
 .ifndef FIO_TYPE_MID
 FIO_TYPE_MID      = $03
 .endif
+.ifndef FIO_TYPE_GFX
+FIO_TYPE_GFX      = $04
+.endif
 .ifndef FIO_TYPE_DIR
 FIO_TYPE_DIR      = $05
+.endif
+.ifndef FIO_TYPE_FORTH
+FIO_TYPE_FORTH    = $06
 .endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.

@@ -40,6 +40,18 @@ public sealed partial class FileIoController
     private int _dirIndex;
     private bool _dirFiltered;
     private string _wtsBankName = string.Empty;
+    private const int MaxOpenFiles = 8;
+    private readonly OpenFileHandle?[] _openFiles = new OpenFileHandle?[MaxOpenFiles];
+
+    private sealed class OpenFileHandle
+    {
+        public required string Filename { get; init; }
+        public byte[] Data { get; set; } = [];
+        public int Position { get; set; }
+        public bool CanRead { get; init; }
+        public bool CanWrite { get; init; }
+        public bool Dirty { get; set; }
+    }
 
     public FileIoController(
         Func<ushort, byte> busRead,
@@ -125,6 +137,7 @@ public sealed partial class FileIoController
         _dirDevice = null;
         _dirIndex = 0;
         _dirFiltered = false;
+        Array.Clear(_openFiles);
     }
 
     /// <summary>
@@ -184,6 +197,45 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdLoadModule:
                 DoLoadModule();
+                break;
+            case VgcConstants.FioCmdFOpen:
+                DoFOpen(create: false);
+                break;
+            case VgcConstants.FioCmdFCreate:
+                DoFOpen(create: true);
+                break;
+            case VgcConstants.FioCmdFClose:
+                DoFClose();
+                break;
+            case VgcConstants.FioCmdFRead:
+                DoFRead();
+                break;
+            case VgcConstants.FioCmdFWrite:
+                DoFWrite();
+                break;
+            case VgcConstants.FioCmdFSeek:
+                DoFSeek();
+                break;
+            case VgcConstants.FioCmdFTell:
+                DoFTell();
+                break;
+            case VgcConstants.FioCmdFSize:
+                DoFSize();
+                break;
+            case VgcConstants.FioCmdFResize:
+                DoFResize();
+                break;
+            case VgcConstants.FioCmdFFlush:
+                DoFFlush();
+                break;
+            case VgcConstants.FioCmdFStatus:
+                DoFStatus();
+                break;
+            case VgcConstants.FioCmdFDelete:
+                DoFDelete();
+                break;
+            case VgcConstants.FioCmdFRename:
+                DoFRename();
                 break;
             case VgcConstants.FioCmdSidPlay:
                 DoSidPlay();
@@ -330,6 +382,19 @@ public sealed partial class FileIoController
                 return;
             }
 
+            byte fioType = ResolveLoadSaveType(filename)
+                ?? _regs[VgcConstants.FioDirType - VgcConstants.FioBase];
+            if (fioType == VgcConstants.FioDirTypeForth)
+            {
+                SaveRawRamFile(filename, ".4th", VgcConstants.FioDirTypeForth);
+                return;
+            }
+            if (fioType != VgcConstants.FioDirTypeBas && fioType != VgcConstants.FioDirTypeBin)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
             int srcAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
                         | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
             int endAddr = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
@@ -348,17 +413,18 @@ public sealed partial class FileIoController
             for (int i = 0; i < length; i++)
                 data[2 + i] = _busRead((ushort)(srcAddr + i));
 
+            string defaultExtension = fioType == VgcConstants.FioDirTypeBin ? ".bin" : ".bas";
             var resolved = ResolveDevice(filename);
             if (resolved is not null)
             {
                 var (device, name, savedDir) = resolved.Value;
                 try
                 {
-                    device.Save(name, data, ".bas");
+                    device.Save(name, data, defaultExtension);
 
                     // Companion .md — only on HostDirectoryDevice (skip for NDI floppy)
                     bool isNewDoc = false;
-                    if (device is HostDirectoryDevice hdd)
+                    if (fioType == VgcConstants.FioDirTypeBas && device is HostDirectoryDevice hdd)
                     {
                         string mdPath = Path.Combine(
                             hdd.CurrentDirectory == "/" || string.IsNullOrEmpty(hdd.CurrentDirectory)
@@ -383,15 +449,17 @@ public sealed partial class FileIoController
 
             // Direct filesystem fallback (null DeviceManager)
             Directory.CreateDirectory(_saveDir);
-            string path = GetFullPath(filename, ".bas");
+            string path = GetFullPath(filename, defaultExtension);
             File.WriteAllBytes(path, data);
 
             // Create companion .md if it doesn't exist
             string mdPathFallback = Path.ChangeExtension(path, ".md");
-            bool isNewDocFallback = !File.Exists(mdPathFallback);
-            if (isNewDocFallback)
+            bool isNewDocFallback = fioType == VgcConstants.FioDirTypeBas && !File.Exists(mdPathFallback);
+            if (fioType == VgcConstants.FioDirTypeBas && isNewDocFallback)
                 File.WriteAllText(mdPathFallback, $"---\ntitle: {filename}\ntype: program\ncategory: Programs\nkeywords: [{filename}]\n---\n\n");
 
+            _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = fioType;
+            SetTransferSize(length);
             SetOk();
             ProgramSaved?.Invoke(filename, isNewDocFallback);
         }
@@ -399,6 +467,30 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrIo);
         }
+    }
+
+    private void SaveRawRamFile(string filename, string defaultExtension, byte fioType)
+    {
+        int srcAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                    | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+        int endAddr = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                    | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+
+        if (endAddr <= srcAddr)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int length = endAddr - srcAddr;
+        byte[] data = new byte[length];
+        for (int i = 0; i < length; i++)
+            data[i] = _busRead((ushort)(srcAddr + i));
+
+        SaveDataFile(filename, defaultExtension, data);
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = fioType;
+        SetTransferSize(length);
+        SetOk();
     }
 
     private void DoLoad()
@@ -409,6 +501,30 @@ public sealed partial class FileIoController
             if (filename is null)
             {
                 SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte? requestedType = ResolveLoadSaveType(filename);
+            requestedType ??= _regs[VgcConstants.FioDirType - VgcConstants.FioBase] switch
+            {
+                VgcConstants.FioDirTypeForth => VgcConstants.FioDirTypeForth,
+                VgcConstants.FioDirTypeBin => VgcConstants.FioDirTypeBin,
+                _ => null
+            };
+
+            if (requestedType == VgcConstants.FioDirTypeForth)
+            {
+                LoadRawRamFile(filename, ".4th", VgcConstants.FioDirTypeForth);
+                return;
+            }
+            if (requestedType == VgcConstants.FioDirTypeBin)
+            {
+                LoadPrefixedRamFile(filename, ".bin", VgcConstants.FioDirTypeBin, useFileLoadAddress: true);
+                return;
+            }
+            if (requestedType == VgcConstants.FioDirTypeBas)
+            {
+                LoadPrefixedRamFile(filename, ".bas", VgcConstants.FioDirTypeBas, useFileLoadAddress: false);
                 return;
             }
 
@@ -536,6 +652,74 @@ public sealed partial class FileIoController
         }
     }
 
+    private void LoadRawRamFile(string filename, string defaultExtension, byte fioType)
+    {
+        byte[]? data = LoadDataFile(filename, defaultExtension, out bool notFound);
+        if (data is null)
+        {
+            SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+            return;
+        }
+
+        int destAddr = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+                     | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+        int maxLen = GetFioTransferLength();
+        if ((maxLen > 0 && data.Length > maxLen) || destAddr < 0 || destAddr + data.Length > 0x10000)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        for (int i = 0; i < data.Length; i++)
+            _busWrite((ushort)(destAddr + i), data[i]);
+
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = fioType;
+        SetTransferSize(data.Length);
+        SetOk();
+        ProgramLoaded?.Invoke(Path.GetFileNameWithoutExtension(filename));
+    }
+
+    private void LoadPrefixedRamFile(string filename, string defaultExtension, byte fioType, bool useFileLoadAddress)
+    {
+        byte[]? data = LoadDataFile(filename, defaultExtension, out bool notFound);
+        if (data is null)
+        {
+            SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
+            return;
+        }
+
+        if (data.Length < 2)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int dataLength = data.Length - 2;
+        int destAddr = useFileLoadAddress
+            ? data[0] | (data[1] << 8)
+            : _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
+              | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8);
+        if (destAddr < 0 || destAddr + dataLength > 0x10000)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        if (useFileLoadAddress)
+        {
+            _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)(destAddr & 0xFF);
+            _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = (byte)((destAddr >> 8) & 0xFF);
+        }
+
+        for (int i = 0; i < dataLength; i++)
+            _busWrite((ushort)(destAddr + i), data[2 + i]);
+
+        _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = fioType;
+        SetTransferSize(dataLength);
+        SetOk();
+        ProgramLoaded?.Invoke(Path.GetFileNameWithoutExtension(filename));
+    }
+
     private void DoLoadRuntime()
     {
         if (_loadRuntimeRom is null)
@@ -645,7 +829,8 @@ public sealed partial class FileIoController
                         if (filter.ExtFilter is not null)
                         {
                             string entryExt = NdiTypeToExt(entry.FileType);
-                            if (!string.Equals(entryExt, filter.ExtFilter, StringComparison.OrdinalIgnoreCase))
+                            string filterExt = NormalizeFilterExtension(filter.ExtFilter) ?? filter.ExtFilter;
+                            if (!string.Equals(entryExt, filterExt, StringComparison.OrdinalIgnoreCase))
                                 continue;
                         }
 
@@ -829,6 +1014,345 @@ public sealed partial class FileIoController
                 File.Delete(mdPath);
 
             SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFOpen(bool create)
+    {
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte fam = _regs[VgcConstants.FioDirType - VgcConstants.FioBase];
+            if (!DecodeForthFileAccess(fam, out bool canRead, out bool canWrite))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            byte[] data;
+            bool dirty = create;
+            if (create)
+            {
+                data = [];
+            }
+            else
+            {
+                data = LoadExactDataFile(filename, out bool notFound) ?? [];
+                if (notFound)
+                {
+                    SetError(VgcConstants.FioErrNotFound);
+                    return;
+                }
+            }
+
+            int fileId = AllocateFileHandle(new OpenFileHandle
+            {
+                Filename = filename,
+                Data = data,
+                CanRead = canRead,
+                CanWrite = canWrite,
+                Dirty = dirty
+            });
+
+            if (fileId == 0)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = (byte)fileId;
+            _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = 0;
+            SetTransferSize24(data.Length);
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFClose()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        try
+        {
+            if (handle.Dirty)
+                SaveExactDataFile(handle.Filename, handle.Data);
+            _openFiles[fileId - 1] = null;
+            SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFRead()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null || !handle.CanRead)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int dest = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                 | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+        int requested = GetFioTransferLength();
+        int available = Math.Max(0, handle.Data.Length - handle.Position);
+        int count = Math.Min(requested, available);
+        if (!CpuRangeOk(dest, count))
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        for (int i = 0; i < count; i++)
+            _busWrite((ushort)(dest + i), handle.Data[handle.Position + i]);
+
+        handle.Position += count;
+        SetTransferSize24(count);
+        SetOk();
+    }
+
+    private void DoFWrite()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null || !handle.CanWrite)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int src = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+        int count = GetFioTransferLength();
+        if (!CpuRangeOk(src, count))
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int end = handle.Position + count;
+        if (end < handle.Position)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+        if (end > handle.Data.Length)
+        {
+            byte[] resized = handle.Data;
+            Array.Resize(ref resized, end);
+            handle.Data = resized;
+        }
+
+        for (int i = 0; i < count; i++)
+            handle.Data[handle.Position + i] = _busRead((ushort)(src + i));
+
+        handle.Position = end;
+        handle.Dirty = true;
+        SetTransferSize24(count);
+        SetOk();
+    }
+
+    private void DoFSeek()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        handle.Position = GetFioSize24();
+        SetOk();
+    }
+
+    private void DoFTell()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        SetTransferSize24(handle.Position);
+        SetOk();
+    }
+
+    private void DoFSize()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        SetTransferSize24(handle.Data.Length);
+        SetOk();
+    }
+
+    private void DoFResize()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null || !handle.CanWrite)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        int size = GetFioSize24();
+        byte[] resized = handle.Data;
+        Array.Resize(ref resized, size);
+        handle.Data = resized;
+        if (handle.Position > size)
+            handle.Position = size;
+        handle.Dirty = true;
+        SetOk();
+    }
+
+    private void DoFFlush()
+    {
+        int fileId = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
+        var handle = GetFileHandle(fileId);
+        if (handle is null)
+        {
+            SetError(VgcConstants.FioErrIo);
+            return;
+        }
+
+        try
+        {
+            if (handle.Dirty)
+            {
+                SaveExactDataFile(handle.Filename, handle.Data);
+                handle.Dirty = false;
+            }
+            SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFStatus()
+    {
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            if (!ExactDataFileExists(filename))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            _regs[VgcConstants.FioSrcL - VgcConstants.FioBase] = 3; // implementation-defined fam: readable + writable
+            _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = 0;
+            SetOk();
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFDelete()
+    {
+        try
+        {
+            string? filename = ReadFilename();
+            if (filename is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            if (!DeleteExactDataFile(filename))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+        }
+        catch
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
+    }
+
+    private void DoFRename()
+    {
+        try
+        {
+            string? oldName = ReadFilename();
+            if (oldName is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int newNameAddr = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                            | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+            int newNameLen = GetFioTransferLength();
+            string? newName = ReadCpuFilename(newNameAddr, newNameLen);
+            if (newName is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            if (!RenameExactDataFile(oldName, newName))
+            {
+                SetError(VgcConstants.FioErrNotFound);
+                return;
+            }
+
+            SetOk();
+        }
+        catch (FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
         }
         catch
         {
@@ -1971,39 +2495,71 @@ public sealed partial class FileIoController
 
     private static NdiFileType ExtToNdiType(string ext) => ext.ToLowerInvariant() switch
     {
-        ".sid" => NdiFileType.Sid, ".bin" => NdiFileType.Bin,
-        ".mid" => NdiFileType.Mid, ".nms" => NdiFileType.Mid, ".gfx" => NdiFileType.Gfx, _ => NdiFileType.Bas
+        ".sid" => NdiFileType.Sid,
+        ".bin" or ".xram" => NdiFileType.Bin,
+        ".mid" or ".midi" or ".nms" => NdiFileType.Mid,
+        ".gfx" or ".nvg" => NdiFileType.Gfx,
+        ".4th" or ".fth" or ".fs" or ".fr" => NdiFileType.Forth,
+        _ => NdiFileType.Bas
     };
 
     private static string NdiTypeToExt(NdiFileType type) => type switch
     {
-        NdiFileType.Sid => ".sid", NdiFileType.Bin => ".bin",
-        NdiFileType.Mid => ".mid", NdiFileType.Gfx => ".gfx", _ => ".bas"
+        NdiFileType.Sid => ".sid",
+        NdiFileType.Bin => ".bin",
+        NdiFileType.Mid => ".mid",
+        NdiFileType.Gfx => ".gfx",
+        NdiFileType.Forth => ".4th",
+        _ => ".bas"
     };
+
+    private static byte NdiTypeToFioDirType(NdiFileType type) => type switch
+    {
+        NdiFileType.Sid => VgcConstants.FioDirTypeSid,
+        NdiFileType.Bin => VgcConstants.FioDirTypeBin,
+        NdiFileType.Mid => VgcConstants.FioDirTypeMid,
+        NdiFileType.Gfx => VgcConstants.FioDirTypeGfx,
+        NdiFileType.Dir => VgcConstants.FioDirTypeDir,
+        NdiFileType.Forth => VgcConstants.FioDirTypeForth,
+        _ => VgcConstants.FioDirTypeBas
+    };
+
+    private static byte? ResolveLoadSaveType(string filename)
+    {
+        string ext = Path.GetExtension(filename).ToLowerInvariant();
+        return ext switch
+        {
+            ".bas" => VgcConstants.FioDirTypeBas,
+            ".bin" => VgcConstants.FioDirTypeBin,
+            ".4th" or ".fth" or ".fs" or ".fr" => VgcConstants.FioDirTypeForth,
+            "" => null,
+            _ => null
+        };
+    }
+
+    private static bool HasTwoByteLoadPrefix(int fioDirType) =>
+        fioDirType is VgcConstants.FioDirTypeBas or VgcConstants.FioDirTypeBin;
 
     private void PopulateMetadata(StorageDirEntry entry)
     {
-        int metaType = entry.IsDirectory ? VgcConstants.FioDirTypeDir : entry.FileType switch
-        {
-            NdiFileType.Sid => 1,
-            NdiFileType.Bin => 2,
-            NdiFileType.Mid => 3,
-            NdiFileType.Gfx => 4,
-            _ => 0
-        };
+        int metaType = entry.IsDirectory ? VgcConstants.FioDirTypeDir : NdiTypeToFioDirType(entry.FileType);
         WriteMetadataHeader(metaType, entry.SizeBytes);
 
         // Load file bytes and extract type-specific metadata
         if (_dirDevice is null || entry.IsDirectory) return;
         try
         {
-            string ext = NdiTypeToExt(entry.FileType);
-            byte[] data = _dirDevice.Load(entry.Filename, ext);
             switch (entry.FileType)
             {
-                case NdiFileType.Sid: ExtractSidMetadata(data); break;
-                case NdiFileType.Mid: ExtractMidiMetadata(data); break;
-                case NdiFileType.Bin: ExtractBinMetadata(data); break;
+                case NdiFileType.Sid:
+                    ExtractSidMetadata(_dirDevice.Load(entry.Filename, NdiTypeToExt(entry.FileType)));
+                    break;
+                case NdiFileType.Mid:
+                    ExtractMidiMetadata(_dirDevice.Load(entry.Filename, NdiTypeToExt(entry.FileType)));
+                    break;
+                case NdiFileType.Bin:
+                    ExtractBinMetadata(_dirDevice.Load(entry.Filename, NdiTypeToExt(entry.FileType)));
+                    break;
             }
         }
         catch { /* leave at defaults */ }
@@ -2119,13 +2675,7 @@ public sealed partial class FileIoController
         }
         else
         {
-            type = entry.FileType switch
-            {
-                NdiFileType.Sid => 1,
-                NdiFileType.Bin => 2,
-                NdiFileType.Mid => 3,
-                _ => 0
-            };
+            type = NdiTypeToFioDirType(entry.FileType);
         }
         _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
 
@@ -2136,7 +2686,7 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)displayName[i];
 
-        long dataSize = (type == 1 || type == 3) ? entry.SizeBytes : Math.Max(0, entry.SizeBytes - 2);
+        long dataSize = HasTwoByteLoadPrefix(type) ? Math.Max(0, entry.SizeBytes - 2) : entry.SizeBytes;
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
         _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
@@ -2147,22 +2697,21 @@ public sealed partial class FileIoController
         string baseName = Path.GetFileNameWithoutExtension(fi.Name);
         string ext = fi.Extension.ToLowerInvariant();
 
-        // File type: 0=BAS, 1=SID, 2=BIN, 3=MID
-        int type = ext switch { ".sid" => 1, ".bin" => 2, ".mid" or ".nms" => 3, _ => 0 };
+        int type = NdiTypeToFioDirType(ExtToNdiType(ext));
         _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
 
         // Build display name with addresses appended
         string displayName = baseName;
         try
         {
-            if (type == 2 && fi.Length >= 2) // BIN: show load address
+            if (type == VgcConstants.FioDirTypeBin && fi.Length >= 2) // BIN: show load address
             {
                 byte[] hdr = new byte[2];
                 using var fs = fi.OpenRead();
                 if (fs.Read(hdr, 0, 2) == 2)
                     displayName = $"{baseName} ${hdr[0] | (hdr[1] << 8):X4}";
             }
-            else if (type == 1 && fi.Length >= 0x16) // SID: show load/init/play
+            else if (type == VgcConstants.FioDirTypeSid && fi.Length >= 0x16) // SID: show load/init/play
             {
                 byte[] hdr = new byte[0x16];
                 using var fs = fi.OpenRead();
@@ -2183,8 +2732,7 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)displayName[i];
 
-        // File size (SID/MID = full file size, BAS/BIN = minus 2-byte header)
-        long dataSize = (type == 1 || type == 3) ? fi.Length : Math.Max(0, fi.Length - 2);
+        long dataSize = HasTwoByteLoadPrefix(type) ? Math.Max(0, fi.Length - 2) : fi.Length;
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
         _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
@@ -2268,10 +2816,23 @@ public sealed partial class FileIoController
         _regs[VgcConstants.FioGLenL - VgcConstants.FioBase]
         | (_regs[VgcConstants.FioGLenH - VgcConstants.FioBase] << 8);
 
+    private int GetFioSize24() =>
+        _regs[VgcConstants.FioSizeL - VgcConstants.FioBase]
+        | (_regs[VgcConstants.FioSizeH - VgcConstants.FioBase] << 8)
+        | (_regs[VgcConstants.FioSize2 - VgcConstants.FioBase] << 16);
+
     private int GetFioFileOffset() =>
         _regs[VgcConstants.FioSrcL - VgcConstants.FioBase]
         | (_regs[VgcConstants.FioSrcH - VgcConstants.FioBase] << 8)
         | (_regs[VgcConstants.FioEndL - VgcConstants.FioBase] << 16);
+
+    private static bool CpuRangeOk(int address, int length)
+    {
+        if (address < 0 || length < 0)
+            return false;
+        long end = (long)address + length;
+        return end <= 0x10000 && (length == 0 || address < 0x10000);
+    }
 
     private bool XramRangeOk(int address, int length)
     {
@@ -2287,6 +2848,72 @@ public sealed partial class FileIoController
     {
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(length & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((length >> 8) & 0xFF);
+    }
+
+    private void SetTransferSize24(int length)
+    {
+        _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(length & 0xFF);
+        _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((length >> 8) & 0xFF);
+        _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((length >> 16) & 0xFF);
+    }
+
+    private static bool DecodeForthFileAccess(byte fam, out bool canRead, out bool canWrite)
+    {
+        switch (fam & 0x03)
+        {
+            case 1:
+                canRead = true;
+                canWrite = false;
+                return true;
+            case 2:
+                canRead = false;
+                canWrite = true;
+                return true;
+            case 3:
+                canRead = true;
+                canWrite = true;
+                return true;
+            default:
+                canRead = false;
+                canWrite = false;
+                return false;
+        }
+    }
+
+    private int AllocateFileHandle(OpenFileHandle handle)
+    {
+        for (int i = 0; i < _openFiles.Length; i++)
+        {
+            if (_openFiles[i] is null)
+            {
+                _openFiles[i] = handle;
+                return i + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private OpenFileHandle? GetFileHandle(int fileId)
+    {
+        if (fileId < 1 || fileId > _openFiles.Length)
+            return null;
+        return _openFiles[fileId - 1];
+    }
+
+    private string? ReadCpuFilename(int address, int length)
+    {
+        if (length < 1 || length > 63 || !CpuRangeOk(address, length))
+            return null;
+
+        var sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++)
+            sb.Append((char)_busRead((ushort)(address + i)));
+
+        string raw = sb.ToString().Trim();
+        if (raw.Length == 0 || !SafeFilename().IsMatch(raw))
+            return null;
+        return raw;
     }
 
     private byte[]? LoadDataFile(string filename, string defaultExtension, out bool notFound)
@@ -2342,6 +2969,133 @@ public sealed partial class FileIoController
         Directory.CreateDirectory(_saveDir);
         string path = GetFullPath(filename, defaultExtension);
         File.WriteAllBytes(path, data);
+    }
+
+    private byte[]? LoadExactDataFile(string filename, out bool notFound)
+    {
+        notFound = false;
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, "");
+                if (!device.FileExists(baseName, extension))
+                {
+                    notFound = true;
+                    return null;
+                }
+                return device.Load(baseName, extension);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+        }
+
+        string path = GetExactFallbackPath(filename);
+        if (!File.Exists(path))
+        {
+            notFound = true;
+            return null;
+        }
+        return File.ReadAllBytes(path);
+    }
+
+    private void SaveExactDataFile(string filename, byte[] data)
+    {
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, "");
+                device.Save(baseName, data, extension);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+            return;
+        }
+
+        string path = GetExactFallbackPath(filename);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, data);
+    }
+
+    private bool ExactDataFileExists(string filename)
+    {
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, "");
+                return device.FileExists(baseName, extension);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+        }
+
+        return File.Exists(GetExactFallbackPath(filename));
+    }
+
+    private bool DeleteExactDataFile(string filename)
+    {
+        var resolved = ResolveDevice(filename);
+        if (resolved is not null)
+        {
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                var (baseName, extension) = SplitDataFilename(name, "");
+                if (!device.FileExists(baseName, extension))
+                    return false;
+                device.Delete(baseName, extension);
+                return true;
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
+        }
+
+        string path = GetExactFallbackPath(filename);
+        if (!File.Exists(path))
+            return false;
+        File.Delete(path);
+        return true;
+    }
+
+    private bool RenameExactDataFile(string oldName, string newName)
+    {
+        byte[]? data = LoadExactDataFile(oldName, out bool notFound);
+        if (data is null)
+        {
+            if (notFound)
+                return false;
+            throw new IOException("Could not read file for rename.");
+        }
+
+        SaveExactDataFile(newName, data);
+        DeleteExactDataFile(oldName);
+        return true;
+    }
+
+    private string GetExactFallbackPath(string filename)
+    {
+        string path = Path.GetFullPath(Path.Combine(_saveDir, filename));
+        string root = Path.GetFullPath(_saveDir);
+        if (!path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !path.Equals(root, StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException($"Path traversal rejected: '{filename}'");
+        return path;
     }
 
     private static (string BaseName, string Extension) SplitDataFilename(string name, string defaultExtension)
@@ -2439,12 +3193,7 @@ public sealed partial class FileIoController
         if (dot >= 0)
         {
             string ext = remainder[dot..];
-            if (ext.Equals(".bas", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".sid", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".bin", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".mid", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".nms", StringComparison.OrdinalIgnoreCase) ||
-                ext.Equals(".gfx", StringComparison.OrdinalIgnoreCase))
+            if (NormalizeFilterExtension(ext) is not null)
             {
                 extFilter = ext.ToLowerInvariant();
                 namePattern = remainder[..dot];
@@ -2453,4 +3202,15 @@ public sealed partial class FileIoController
 
         return new FilterPattern(devicePrefix, dirPath, namePattern, extFilter);
     }
+
+    private static string? NormalizeFilterExtension(string ext) => ext.ToLowerInvariant() switch
+    {
+        ".bas" => ".bas",
+        ".sid" => ".sid",
+        ".bin" or ".xram" => ".bin",
+        ".mid" or ".midi" or ".nms" => ".mid",
+        ".gfx" or ".nvg" => ".gfx",
+        ".4th" or ".fth" or ".fs" or ".fr" => ".4th",
+        _ => null
+    };
 }

@@ -41,6 +41,8 @@ EDITBUF_LENL:       .res 1
 EDITBUF_LENH:       .res 1
 EDITBUF_TITLEL:     .res 1
 EDITBUF_TITLEH:     .res 1
+EDITBUF_TYPEL:      .res 1
+EDITBUF_TYPEH:      .res 1
 EDITBUF_STATUSL:    .res 1
 EDITBUF_STATUSH:    .res 1
 EDITBUF_SAVE_VECL:  .res 1
@@ -66,6 +68,9 @@ EB_GOALCOL:         .res 1       ; sticky column for up/down
 EB_CURLINEL:        .res 1       ; computed cursor line (16-bit)
 EB_CURLINEH:        .res 1
 EB_CURCOL:          .res 1       ; computed cursor column
+EB_TOTAL_LINESL:    .res 1       ; cached total logical line count (16-bit)
+EB_TOTAL_LINESH:    .res 1
+EB_VSHIFT:          .res 1       ; 1=line inserted, $FF=line removed, 0=unknown
 
 ; --- render / nav scratch ---
 EB_ROW:             .res 1
@@ -81,7 +86,6 @@ EB_SELSTARTL:       .res 1       ; normalized selection start (16-bit)
 EB_SELSTARTH:       .res 1
 EB_SELENDL:         .res 1       ; normalized selection end (16-bit)
 EB_SELENDH:         .res 1
-EB_DLGSEL:          .res 1       ; dialog selected button
 EB_SCRATCHL:        .res 1
 EB_SCRATCHH:        .res 1
 EB_PREVTOPL:        .res 1       ; scroll snapshot for single-line repaint
@@ -90,6 +94,23 @@ EB_PREVLEFT:        .res 1
 EB_PREVSEL:         .res 1       ; was a selection active before a cursor move
 EB_CELLL:           .res 1       ; plane offset of first painted cell (16-bit)
 EB_CELLH:           .res 1
+EB_TITLE_START:     .res 1
+EB_TITLE_LASTSEP:   .res 1
+EB_TITLE_PREVSEP:   .res 1
+EB_TITLE_LEN:       .res 1
+EB_STATUS_IDX:      .res 1
+EB_STATUS_DIGIT:    .res 1
+EB_STATUS_STARTED:  .res 1
+EB_STATUS_NUML:     .res 1
+EB_STATUS_NUMH:     .res 1
+EB_BLT_HEIGHT:      .res 1
+EB_PROMPTLEN:       .res 1
+EB_PROMPT_MSGL:     .res 1
+EB_PROMPT_MSGH:     .res 1
+
+EB_TITLEBUF:        .res 64
+EB_STATUSBUF:       .res 80
+EB_PROMPTBUF:       .res 32
 
 ; --- HILITE hook scratch ---
 EDITBUF_HL_LEN:     .res 1
@@ -123,7 +144,8 @@ editbuf_reset_state:
       STZ   EB_SELH
       STZ   EDITBUF_SELACT
       STZ   EB_GOALCOL
-      RTS
+      STZ   EB_VSHIFT
+      JMP   editbuf_configure_scroll_window
 
 ; ---------------------------------------------------------------------
 ; editbuf_run — run the modal editor. Returns A = EDITBUF_RESULT.
@@ -131,24 +153,25 @@ editbuf_reset_state:
 editbuf_run:
       JSR   editbuf_init_vectors
       JSR   editui_init
+      JSR   editbuf_configure_scroll_window
       JSR   editbuf_call_menu          ; host customizes the menu for its runtime
 
-      ; Wire the EDITUI chrome to our title / help / status.
-      LDA   EDITBUF_TITLEL
+      ; Wire the EDITUI chrome to our compact title and metadata status.
+      JSR   editbuf_build_title
+      LDA   #<EB_TITLEBUF
       STA   EDITUI_TITLEL
-      LDA   EDITBUF_TITLEH
+      LDA   #>EB_TITLEBUF
       STA   EDITUI_TITLEH
-      LDA   #<editbuf_help_text
-      STA   EDITUI_HELPL
-      LDA   #>editbuf_help_text
-      STA   EDITUI_HELPH
-      JSR   editbuf_apply_status
+      STZ   EDITUI_HELPL
+      STZ   EDITUI_HELPH
 
       ; Derive line/col + scroll from the host-provided initial cursor offset so
       ; the first render places the cursor correctly (EDITBUF_CUR may be nonzero;
       ; reset_state does not recompute EB_CURLINE/EB_CURCOL).
       JSR   editbuf_compute_linecol
       JSR   editbuf_adjust_scroll
+      JSR   editbuf_recount_lines
+      JSR   editbuf_apply_status
 
       JSR   editui_draw_shell
       JSR   editbuf_render
@@ -163,35 +186,14 @@ editbuf_run:
 
 ; editbuf_dispatch_key — handle key in A. Returns carry set to exit the editor.
 editbuf_dispatch_key:
-      CMP   #EDITUI_KEY_CTRL_S
-      BNE   :+
-      JSR   editbuf_do_save
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_Q
-      BNE   :+
-      JMP   editbuf_do_quit          ; propagates carry (set = exit)
-:     CMP   #EDITUI_KEY_CTRL_C
-      BNE   :+
-      JSR   editbuf_copy
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_X
-      BNE   :+
-      JSR   editbuf_cut
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_V
-      BNE   :+
-      JSR   editbuf_paste
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_A
-      BNE   :+
-      JSR   editbuf_select_all
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_LEFT
+      STA   EB_T0
+      JSR   editbuf_key_to_command
+      BEQ   @raw
+      JMP   editbuf_dispatch_command
+
+@raw:
+      LDA   EB_T0
+      CMP   #EDITUI_KEY_LEFT
       BNE   :+
       JSR   editbuf_move_left
       CLC
@@ -219,6 +221,16 @@ editbuf_dispatch_key:
 :     CMP   #EDITUI_KEY_END
       BNE   :+
       JSR   editbuf_move_end
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_HOME
+      BNE   :+
+      JSR   editbuf_move_file_start
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_END
+      BNE   :+
+      JSR   editbuf_move_file_end
       CLC
       RTS
 :     CMP   #EDITUI_KEY_PGUP
@@ -257,24 +269,324 @@ editbuf_dispatch_key:
       CLC
       RTS
 
+editbuf_dispatch_command:
+      CMP   #EDITUI_CMD_SAVE
+      BNE   :+
+      JSR   editbuf_do_save
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_QUIT
+      BNE   :+
+      JMP   editbuf_do_quit          ; propagates carry (set = exit)
+:     CMP   #EDITUI_CMD_COPY
+      BNE   :+
+      JSR   editbuf_copy
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_CUT
+      BNE   :+
+      JSR   editbuf_cut
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_PASTE
+      BNE   :+
+      JSR   editbuf_paste
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_SELECT_ALL
+      BNE   :+
+      JSR   editbuf_select_all
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_FIND
+      BNE   :+
+      JSR   editbuf_do_find
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_GOTO_LINE
+      BNE   :+
+      JSR   editbuf_do_goto_line
+      CLC
+      RTS
+:
+      CLC
+      RTS
+
+editbuf_key_to_command:
+      CMP   #EDITUI_KEY_CTRL_C
+      BNE   :+
+      LDA   #EDITUI_CMD_COPY
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_X
+      BNE   :+
+      LDA   #EDITUI_CMD_CUT
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_V
+      BNE   :+
+      LDA   #EDITUI_CMD_PASTE
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_A
+      BNE   :+
+      LDA   #EDITUI_CMD_SELECT_ALL
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_G
+      BNE   :+
+      LDA   #EDITUI_CMD_GOTO_LINE
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_K
+      BNE   :+
+      JSR   editbuf_read_command_key
+      JSR   editbuf_normalize_command_key
+      CMP   #'s'
+      BNE   @none
+      LDA   #EDITUI_CMD_SAVE
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_Q
+      BNE   :+
+      JSR   editbuf_read_command_key
+      JSR   editbuf_normalize_command_key
+      CMP   #'f'
+      BNE   @none
+      LDA   #EDITUI_CMD_FIND
+      RTS
+:     CMP   #EDITUI_KEY_ALT_PREFIX
+      BNE   @none
+      JSR   editbuf_read_command_key
+      JSR   editbuf_normalize_command_key
+      CMP   #'x'
+      BNE   :+
+      LDA   #EDITUI_CMD_QUIT
+      RTS
+:     JSR   editui_menu_open_hotkey
+      RTS
+@none:
+      LDA   #EDITUI_CMD_NONE
+      RTS
+
+editbuf_read_command_key:
+@wait:
+      LDA   VGC_CHARIN
+      BEQ   @wait
+      RTS
+
+editbuf_normalize_command_key:
+      CMP   #'A'
+      BCC   @done
+      CMP   #'Z' + 1
+      BCS   @done
+      ORA   #$20
+@done:
+      RTS
+      CLC
+      RTS
+
 ; ---------------------------------------------------------------------
-; editbuf_apply_status — point EDITUI status at host string, or default to the
-; key-hint help text (the status bar is where help now lives).
+; editbuf_apply_status — point EDITUI status at host string, or generate the
+; editor metadata bar.
 ; ---------------------------------------------------------------------
 editbuf_apply_status:
       LDA   EDITBUF_STATUSL
       ORA   EDITBUF_STATUSH
       BNE   @host
-      LDA   #<editbuf_help_text
-      STA   EDITUI_STATUSL
-      LDA   #>editbuf_help_text
-      STA   EDITUI_STATUSH
-      RTS
+      JMP   editbuf_update_status
 @host:
       LDA   EDITBUF_STATUSL
       STA   EDITUI_STATUSL
       LDA   EDITBUF_STATUSH
       STA   EDITUI_STATUSH
+      RTS
+
+editbuf_build_title:
+      LDA   EDITBUF_TITLEL
+      ORA   EDITBUF_TITLEH
+      BNE   :+
+      STZ   EB_TITLEBUF
+      RTS
+:
+      LDA   EDITBUF_TITLEL
+      STA   EB_PL
+      LDA   EDITBUF_TITLEH
+      STA   EB_PH
+      LDA   #$FF
+      STA   EB_TITLE_LASTSEP
+      STA   EB_TITLE_PREVSEP
+      LDY   #0
+@scan:
+      LDA   (EB_PL),Y
+      BEQ   @scan_done
+      CMP   #'/'
+      BEQ   @sep
+      CMP   #$5C
+      BEQ   @sep
+      BRA   @scan_next
+@sep:
+      LDA   EB_TITLE_LASTSEP
+      STA   EB_TITLE_PREVSEP
+      STY   EB_TITLE_LASTSEP
+@scan_next:
+      INY
+      CPY   #127
+      BCC   @scan
+@scan_done:
+      STZ   EB_TITLE_START
+      LDA   EB_TITLE_LASTSEP
+      CMP   #$FF
+      BEQ   @copy
+      LDA   EB_TITLE_PREVSEP
+      CMP   #$FF
+      BEQ   @copy
+      INC   A
+      STA   EB_TITLE_START
+@copy:
+      LDX   #0
+      LDY   EB_TITLE_START
+@copy_loop:
+      CPX   #56
+      BCS   @term
+      LDA   (EB_PL),Y
+      BEQ   @term
+      STA   EB_TITLEBUF,X
+      INX
+      INY
+      BRA   @copy_loop
+@term:
+      LDA   #0
+      STA   EB_TITLEBUF,X
+      RTS
+
+editbuf_recount_lines:
+      JSR   editbuf_count_lines
+      LDA   EB_T0
+      STA   EB_TOTAL_LINESL
+      LDA   EB_T1
+      STA   EB_TOTAL_LINESH
+      RTS
+
+editbuf_update_status:
+      LDA   #<EB_STATUSBUF
+      STA   EB_PL
+      LDA   #>EB_STATUSBUF
+      STA   EB_PH
+      LDA   #<editbuf_status_x
+      LDY   #>editbuf_status_x
+      JSR   editbuf_status_append_ptr
+      LDA   EB_CURCOL
+      CLC
+      ADC   #1
+      LDX   #0
+      JSR   editbuf_status_append_dec16
+      LDA   #<editbuf_status_y
+      LDY   #>editbuf_status_y
+      JSR   editbuf_status_append_ptr
+      LDA   EB_CURLINEL
+      CLC
+      ADC   #1
+      PHA
+      LDA   EB_CURLINEH
+      ADC   #0
+      TAX
+      PLA
+      JSR   editbuf_status_append_dec16
+      LDA   #<editbuf_status_bytes
+      LDY   #>editbuf_status_bytes
+      JSR   editbuf_status_append_ptr
+      LDA   EDITBUF_LENL
+      LDX   EDITBUF_LENH
+      JSR   editbuf_status_append_dec16
+      LDA   #<editbuf_status_lines
+      LDY   #>editbuf_status_lines
+      JSR   editbuf_status_append_ptr
+      LDA   EB_TOTAL_LINESL
+      LDX   EB_TOTAL_LINESH
+      JSR   editbuf_status_append_dec16
+      LDA   #<editbuf_status_type
+      LDY   #>editbuf_status_type
+      JSR   editbuf_status_append_ptr
+      LDA   EDITBUF_TYPEL
+      ORA   EDITBUF_TYPEH
+      BEQ   @done_type
+      LDA   EDITBUF_TYPEL
+      LDY   EDITBUF_TYPEH
+      JSR   editbuf_status_append_ptr
+@done_type:
+      LDA   #0
+      JSR   editbuf_status_putc
+      LDA   #<EB_STATUSBUF
+      STA   EDITUI_STATUSL
+      LDA   #>EB_STATUSBUF
+      STA   EDITUI_STATUSH
+      RTS
+
+editbuf_finish_screen:
+      JSR   editbuf_apply_status
+      JSR   editui_draw_status
+      JMP   editbuf_place_cursor
+
+editbuf_status_append_ptr:
+      STA   EB_SRCL
+      STY   EB_SRCH
+      LDY   #0
+@loop:
+      LDA   (EB_SRCL),Y
+      BEQ   @done
+      PHY
+      JSR   editbuf_status_putc
+      PLY
+      INY
+      BRA   @loop
+@done:
+      RTS
+
+editbuf_status_putc:
+      LDY   #0
+      STA   (EB_PL),Y
+      INC   EB_PL
+      BNE   :+
+      INC   EB_PH
+:     RTS
+
+editbuf_status_append_dec16:
+      STA   EB_STATUS_NUML
+      STX   EB_STATUS_NUMH
+      STZ   EB_STATUS_STARTED
+      STZ   EB_STATUS_IDX
+@digit:
+      STZ   EB_STATUS_DIGIT
+@subtract:
+      LDY   EB_STATUS_IDX
+      LDA   EB_STATUS_NUML
+      SEC
+      SBC   editbuf_pow10_lo,Y
+      STA   EB_T0
+      LDA   EB_STATUS_NUMH
+      SBC   editbuf_pow10_hi,Y
+      BCC   @emit
+      STA   EB_STATUS_NUMH
+      LDA   EB_T0
+      STA   EB_STATUS_NUML
+      INC   EB_STATUS_DIGIT
+      BRA   @subtract
+@emit:
+      LDA   EB_STATUS_DIGIT
+      BNE   @write
+      LDA   EB_STATUS_STARTED
+      BNE   @write
+      LDA   EB_STATUS_IDX
+      CMP   #4
+      BEQ   @write
+      BRA   @next
+@write:
+      LDA   #1
+      STA   EB_STATUS_STARTED
+      LDA   EB_STATUS_DIGIT
+      CLC
+      ADC   #'0'
+      JSR   editbuf_status_putc
+@next:
+      INC   EB_STATUS_IDX
+      LDA   EB_STATUS_IDX
+      CMP   #5
+      BCC   @digit
       RTS
 
 ; =====================================================================
@@ -524,6 +836,8 @@ editbuf_newline:
       DEX
       BNE   @indent
 @done:
+      LDA   #1
+      STA   EB_VSHIFT
       JMP   editbuf_after_change_down   ; newline shifts lines below it down
 @full:
       RTS
@@ -546,7 +860,7 @@ editbuf_backspace:
       JSR   editbuf_ptr_from_off
       LDY   #0
       LDA   (EB_PL),Y
-      STA   EB_T1                 ; removed char
+      PHA                         ; removed char
       ; close gap of 1 at cursor
       LDA   EDITBUF_CURL
       STA   EB_SCRATCHL
@@ -557,9 +871,11 @@ editbuf_backspace:
       STZ   EDITBUF_CNTH
       JSR   editbuf_close_gap
       JSR   editbuf_mark_dirty
-      LDA   EB_T1
+      PLA
       CMP   #$0A
       BNE   @inline
+      LDA   #$FF
+      STA   EB_VSHIFT
       JMP   editbuf_after_change_down      ; joined two lines -> vertical repaint
 @inline:
       STZ   EB_EDITDELTA                   ; in-line delete: run starts at the cursor
@@ -586,7 +902,7 @@ editbuf_delete:
       JSR   editbuf_ptr_from_off
       LDY   #0
       LDA   (EB_PL),Y
-      STA   EB_T1                 ; removed char
+      PHA                         ; removed char
       LDA   EDITBUF_CURL
       STA   EB_SCRATCHL
       LDA   EDITBUF_CURH
@@ -596,9 +912,11 @@ editbuf_delete:
       STZ   EDITBUF_CNTH
       JSR   editbuf_close_gap
       JSR   editbuf_mark_dirty
-      LDA   EB_T1
+      PLA
       CMP   #$0A
       BNE   @inline
+      LDA   #$FF
+      STA   EB_VSHIFT
       JMP   editbuf_after_change_down      ; deleted a newline -> vertical repaint
 @inline:
       STZ   EB_EDITDELTA                   ; in-line delete: run starts at the cursor
@@ -897,6 +1215,22 @@ editbuf_move_end:
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
 
+editbuf_move_file_start:
+      JSR   editbuf_begin_move
+      STZ   EDITBUF_CURL
+      STZ   EDITBUF_CURH
+      STZ   EB_GOALCOL
+      JMP   editbuf_after_move
+
+editbuf_move_file_end:
+      JSR   editbuf_begin_move
+      LDA   EDITBUF_LENL
+      STA   EDITBUF_CURL
+      LDA   EDITBUF_LENH
+      STA   EDITBUF_CURH
+      JSR   editbuf_update_goalcol
+      JMP   editbuf_after_move
+
 editbuf_move_up:
       JSR   editbuf_begin_move
       JSR   editbuf_compute_linecol
@@ -919,23 +1253,63 @@ editbuf_move_up:
 
 editbuf_move_down:
       JSR   editbuf_begin_move
-      JSR   editbuf_compute_linecol  ; CURLINE (clobbers EB_SCRATCH)
-      JSR   editbuf_count_lines      ; EB_T0:EB_T1 = total (clobbers EB_SCRATCH)
-      ; target line = curline + 1 (set EB_SCRATCH last; both helpers above use it)
-      LDA   EB_CURLINEL
+      ; Find the next line by scanning forward from the cursor to the next LF.
+      ; This keeps repeated down-scroll O(current-line length), not O(file
+      ; position), which matters once the buffer is hundreds of lines deep.
+      LDA   EDITBUF_CURL
       STA   EB_SCRATCHL
-      LDA   EB_CURLINEH
+      LDA   EDITBUF_CURH
       STA   EB_SCRATCHH
+@find_next:
+      LDA   EB_SCRATCHL
+      CMP   EDITBUF_LENL
+      LDA   EB_SCRATCHH
+      SBC   EDITBUF_LENH
+      BCS   @done                 ; no LF after cursor -> no line below
+      LDX   EB_SCRATCHL
+      LDA   EB_SCRATCHH
+      JSR   editbuf_ptr_from_off
+      LDY   #0
+      LDA   (EB_PL),Y
       INC   EB_SCRATCHL
       BNE   :+
       INC   EB_SCRATCHH
-:     LDA   EB_SCRATCHL
-      CMP   EB_T0
+:     CMP   #$0A
+      BNE   @find_next
+
+      ; EB_SCRATCH now points at the target line's first byte.
+      LDA   EB_SCRATCHL
+      STA   EB_LINEOFFL
+      STA   EDITBUF_CURL
       LDA   EB_SCRATCHH
-      SBC   EB_T1
-      BCS   @done                 ; target >= total -> no line below
-      JSR   editbuf_goto_line_col
-      JMP   editbuf_after_move
+      STA   EB_LINEOFFH
+      STA   EDITBUF_CURH
+      INC   EB_CURLINEL
+      BNE   :+
+      INC   EB_CURLINEH
+:     STZ   EB_CURCOL
+      LDA   EB_GOALCOL
+      STA   EB_T0
+      BEQ   @moved
+@adv:
+      LDA   EDITBUF_CURL
+      CMP   EDITBUF_LENL
+      LDA   EDITBUF_CURH
+      SBC   EDITBUF_LENH
+      BCS   @moved                ; target line ended at EOF
+      LDX   EDITBUF_CURL
+      LDA   EDITBUF_CURH
+      JSR   editbuf_ptr_from_off
+      LDY   #0
+      LDA   (EB_PL),Y
+      CMP   #$0A
+      BEQ   @moved
+      JSR   editbuf_cursor_inc
+      INC   EB_CURCOL
+      DEC   EB_T0
+      BNE   @adv
+@moved:
+      JMP   editbuf_after_move_known
 @done:
       RTS
 
@@ -1166,6 +1540,7 @@ editbuf_count_lines:
 ; After-change: recompute, adjust scroll, re-render, place cursor.
 ; =====================================================================
 editbuf_after_change:
+      JSR   editbuf_recount_lines
       JSR   editbuf_compute_linecol
       JSR   editbuf_adjust_scroll
       JSR   editbuf_render
@@ -1184,6 +1559,7 @@ editbuf_begin_move:
 ; the hardware cursor — no body repaint (this is what made arrowing smear).
 editbuf_after_move:
       JSR   editbuf_compute_linecol
+editbuf_after_move_known:
       LDA   EB_TOPLINEL
       STA   EB_PREVTOPL
       LDA   EB_TOPLINEH
@@ -1192,17 +1568,66 @@ editbuf_after_move:
       STA   EB_PREVLEFT
       JSR   editbuf_adjust_scroll
       LDA   EB_PREVSEL                ; had a selection -> repaint to clear it
-      BNE   @full
-      LDA   EB_TOPLINEL
-      CMP   EB_PREVTOPL
-      BNE   @full
-      LDA   EB_TOPLINEH
-      CMP   EB_PREVTOPH
-      BNE   @full
+      BEQ   :+
+      JMP   @full
+:
       LDA   EB_LEFTCOL
       CMP   EB_PREVLEFT
+      BEQ   :+
+      JMP   @full
+:
+      LDA   EB_TOPLINEL
+      CMP   EB_PREVTOPL
+      BNE   @maybe_scroll
+      LDA   EB_TOPLINEH
+      CMP   EB_PREVTOPH
+      BNE   @maybe_scroll
+      JMP   editbuf_finish_screen
+@maybe_scroll:
+      ; Topline +1: document moved down, visible rows shift up.
+      LDA   EB_PREVTOPL
+      CLC
+      ADC   #1
+      STA   EB_T0
+      LDA   EB_PREVTOPH
+      ADC   #0
+      CMP   EB_TOPLINEH
       BNE   @full
-      JMP   editbuf_place_cursor
+      LDA   EB_T0
+      CMP   EB_TOPLINEL
+      BNE   @check_scroll_down
+      JSR   editbuf_ring_scroll_up_one
+      LDA   #EDITBUF_VIEW_ROWS-1
+      STA   EB_ROW
+      LDA   EB_LINEOFFL
+      STA   EB_VISLINEL
+      LDA   EB_LINEOFFH
+      STA   EB_VISLINEH
+      STZ   EB_PAINTSTART
+      JSR   editbuf_render_row
+      JMP   editbuf_finish_screen
+@check_scroll_down:
+      ; Topline -1: document moved up, visible rows shift down.
+      LDA   EB_TOPLINEL
+      CLC
+      ADC   #1
+      STA   EB_T0
+      LDA   EB_TOPLINEH
+      ADC   #0
+      CMP   EB_PREVTOPH
+      BNE   @full
+      LDA   EB_T0
+      CMP   EB_PREVTOPL
+      BNE   @full
+      JSR   editbuf_ring_scroll_down_one
+      STZ   EB_ROW
+      LDA   EB_LINEOFFL
+      STA   EB_VISLINEL
+      LDA   EB_LINEOFFH
+      STA   EB_VISLINEH
+      STZ   EB_PAINTSTART
+      JSR   editbuf_render_row
+      JMP   editbuf_finish_screen
 @full:
       JMP   editbuf_render
 
@@ -1268,13 +1693,14 @@ editbuf_render_current_line:
       LDA   EB_LINEOFFH
       STA   EB_VISLINEH
       JSR   editbuf_render_row
-      JMP   editbuf_place_cursor
+      JMP   editbuf_finish_screen
 
 ; editbuf_after_change_down — for edits that shift text vertically (newline,
 ; line-join delete/backspace): repaint from the changed line to the bottom of
 ; the view (a "local" repaint, not the whole screen), or full-repaint if the
 ; scroll moved.
 editbuf_after_change_down:
+      JSR   editbuf_recount_lines
       JSR   editbuf_compute_linecol
       LDA   EB_TOPLINEL
       STA   EB_PREVTOPL
@@ -1285,16 +1711,22 @@ editbuf_after_change_down:
       JSR   editbuf_adjust_scroll
       LDA   EB_TOPLINEL
       CMP   EB_PREVTOPL
-      BNE   @full
-      LDA   EB_TOPLINEH
+      BEQ   :+
+      JMP   @full
+:     LDA   EB_TOPLINEH
       CMP   EB_PREVTOPH
-      BNE   @full
-      LDA   EB_LEFTCOL
+      BEQ   :+
+      JMP   @full
+:     LDA   EB_LEFTCOL
       CMP   EB_PREVLEFT
-      BNE   @full
-      ; start row = (curline - 1) - topline, clamped to the top of the view.
-      ; curline-1 covers both the split line (newline) and the joined line
-      ; (delete); repainting one extra unchanged row above is harmless.
+      BEQ   :+
+      JMP   @full
+:
+      ; Repaint from the changed row down. This is slower than a row-copy repair,
+      ; but it is correct for the text-ring mapping used by zero-copy scrolling.
+      LDA   EB_CURLINEL
+      ORA   EB_CURLINEH
+      BEQ   @top_render
       LDA   EB_CURLINEL
       SEC
       SBC   #1
@@ -1309,10 +1741,13 @@ editbuf_after_change_down:
       LDA   EB_SCRATCHH
       SBC   EB_TOPLINEH
       BCS   @render                    ; (curline-1) >= topline -> EB_ROW valid
+@top_render:
       STZ   EB_ROW                     ; clamp to the top visible row
 @render:
+      STZ   EB_VSHIFT
       JMP   editbuf_render_from_row
 @full:
+      STZ   EB_VSHIFT
       JMP   editbuf_render
 
 ; editbuf_render_from_row — repaint rows [EB_ROW .. VIEW_ROWS): the line at
@@ -1343,7 +1778,46 @@ editbuf_render_from_row:
       INC   EB_ROW
       BRA   @loop
 @done:
-      JMP   editbuf_place_cursor
+      JMP   editbuf_finish_screen
+
+; editbuf_render_row_count — repaint EB_BLT_HEIGHT visible rows starting at
+; EB_ROW, then refresh chrome and cursor.
+editbuf_render_row_count:
+      JSR   editbuf_render_rows
+      JMP   editbuf_finish_screen
+
+; editbuf_render_rows — repaint EB_BLT_HEIGHT visible rows starting at EB_ROW.
+; Returns without refreshing status/cursor so callers can compose sparse repairs.
+editbuf_render_rows:
+      STZ   EB_SELSTARTL
+      STZ   EB_SELSTARTH
+      STZ   EB_SELENDL
+      STZ   EB_SELENDH
+      CLC
+      LDA   EB_TOPLINEL
+      ADC   EB_ROW
+      STA   EB_SCRATCHL
+      LDA   EB_TOPLINEH
+      ADC   #0
+      STA   EB_SCRATCHH
+      JSR   editbuf_offset_of_line
+      LDA   EB_LINEOFFL
+      STA   EB_VISLINEL
+      LDA   EB_LINEOFFH
+      STA   EB_VISLINEH
+      STZ   EB_PAINTSTART
+@loop:
+      LDA   EB_BLT_HEIGHT
+      BEQ   @done
+      LDA   EB_ROW
+      CMP   #EDITBUF_VIEW_ROWS
+      BCS   @done
+      JSR   editbuf_render_row
+      INC   EB_ROW
+      DEC   EB_BLT_HEIGHT
+      BRA   @loop
+@done:
+      RTS
 
 editbuf_adjust_scroll:
       ; vertical: if curline < topline -> topline = curline
@@ -1438,7 +1912,7 @@ editbuf_render:
       INC   EB_ROW
       BRA   @rowloop
 @donerows:
-      JMP   editbuf_place_cursor
+      JMP   editbuf_finish_screen
 
 ; editbuf_render_row — render screen row EB_ROW, painting columns
 ; [EB_PAINTSTART .. VIEW_COLS) from the document. EB_VISLINE = offset of this
@@ -1457,6 +1931,7 @@ editbuf_render_row:
       LDA   #EDITBUF_VIEW_TOP
       CLC
       ADC   EB_ROW
+      JSR   editbuf_visible_to_physical
       STA   EB_T0                 ; absolute screen row (<= 47)
       ASL
       ASL
@@ -1603,6 +2078,69 @@ editbuf_win_put:
       INC   EB_RUNH
 :     RTS
 
+; =====================================================================
+; Blitter row shifts for editor viewport movement.
+; =====================================================================
+
+editbuf_configure_scroll_window:
+      STZ   VTEXT_TOPROW
+      STZ   VGC_TEXT_TOPROW
+      LDA   #EDITBUF_VIEW_TOP
+      STA   VTEXT_SCROLL_TOP
+      STA   VGC_TEXT_SCROLL_START
+      LDA   #EDITBUF_VIEW_ROWS
+      STA   VTEXT_SCROLL_ROWS
+      STA   VGC_TEXT_SCROLL_ROWS
+      RTS
+
+; Wait for the frame counter to advance before issuing a visible row move.
+editbuf_wait_vblank:
+      LDA   VGC_FRAME
+@wait:
+      CMP   VGC_FRAME
+      BEQ   @wait
+      RTS
+
+editbuf_ring_scroll_up_one:
+      JSR   editbuf_wait_vblank
+      INC   VTEXT_TOPROW
+      LDA   VTEXT_TOPROW
+      CMP   #EDITBUF_VIEW_ROWS
+      BCC   :+
+      STZ   VTEXT_TOPROW
+      LDA   #0
+:     STA   VGC_TEXT_TOPROW
+      RTS
+
+editbuf_ring_scroll_down_one:
+      JSR   editbuf_wait_vblank
+      LDA   VTEXT_TOPROW
+      BNE   :+
+      LDA   #EDITBUF_VIEW_ROWS
+      STA   VTEXT_TOPROW
+:     DEC   VTEXT_TOPROW
+      LDA   VTEXT_TOPROW
+      STA   VGC_TEXT_TOPROW
+      RTS
+
+; A = visible display row -> A = physical text-plane row through the ring base.
+editbuf_visible_to_physical:
+      CMP   #EDITBUF_VIEW_TOP
+      BCC   @done
+      CMP   #EDITUI_STATUS_ROW
+      BCS   @done
+      SEC
+      SBC   #EDITBUF_VIEW_TOP
+      CLC
+      ADC   VTEXT_TOPROW
+      CMP   #EDITBUF_VIEW_ROWS
+      BCC   :+
+      SBC   #EDITBUF_VIEW_ROWS
+:     CLC
+      ADC   #EDITBUF_VIEW_TOP
+@done:
+      RTS
+
 ; editbuf_cell_in_selection — EB_SRC = absolute offset of cell.
 ;   carry set if SELSTART <= off < SELEND (and selection active).
 editbuf_cell_in_selection:
@@ -1736,6 +2274,248 @@ editbuf_mark_dirty:
       RTS
 
 ; =====================================================================
+; Find / goto-line requesters
+; =====================================================================
+editbuf_do_find:
+      LDA   #<editbuf_find_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_find_msg
+      STA   EB_PROMPT_MSGH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      JSR   editbuf_find_text
+      BCC   @done
+      JSR   editbuf_begin_move
+      JSR   editbuf_update_goalcol
+      JMP   editbuf_after_move
+@done:
+      RTS
+
+editbuf_do_goto_line:
+      LDA   #<editbuf_goto_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_goto_msg
+      STA   EB_PROMPT_MSGH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      JSR   editbuf_parse_goto_line
+      BCC   @done
+      JSR   editbuf_begin_move
+      STZ   EB_GOALCOL
+      JSR   editbuf_goto_line_col
+      JMP   editbuf_after_move
+@done:
+      RTS
+
+editbuf_prompt_line:
+      STZ   EB_PROMPTLEN
+      STZ   EB_PROMPTBUF
+      JSR   editbuf_prompt_begin
+@wait:
+      LDA   VGC_CHARIN
+      BEQ   @wait
+      CMP   #EDITUI_KEY_ESC
+      BEQ   @cancel
+      CMP   #EDITUI_KEY_ENTER
+      BEQ   @ok
+      CMP   #EDITUI_KEY_BACKSPACE
+      BEQ   @backspace
+      CMP   #$20
+      BCC   @wait
+      LDX   EB_PROMPTLEN
+      CPX   #31
+      BCS   @wait
+      STA   EB_PROMPTBUF,X
+      STA   VGC_CHAROUT
+      INX
+      STX   EB_PROMPTLEN
+      STZ   EB_PROMPTBUF,X
+      BRA   @wait
+@backspace:
+      LDX   EB_PROMPTLEN
+      BEQ   @wait
+      DEX
+      STX   EB_PROMPTLEN
+      STZ   EB_PROMPTBUF,X
+      TXA
+      CLC
+      ADC   #6
+      STA   VGC_CURSX
+      LDA   #' '
+      STA   VGC_CHAROUT
+      TXA
+      CLC
+      ADC   #6
+      STA   VGC_CURSX
+      BRA   @wait
+@cancel:
+      CLC
+      BRA   @restore
+@ok:
+      SEC
+@restore:
+      PHP
+      JSR   editbuf_apply_status
+      JSR   editui_draw_status
+      JSR   editbuf_place_cursor
+      PLP
+      RTS
+
+editbuf_prompt_begin:
+      STZ   VTEXT_LEFT
+      LDA   #EDITUI_STATUS_ROW
+      STA   VTEXT_TOP
+      LDA   #EDITUI_SCREEN_COLS
+      STA   VTEXT_WIDTH
+      LDA   #1
+      STA   VTEXT_HEIGHT
+      STZ   VTEXT_CURX
+      STZ   VTEXT_CURY
+      LDA   #EDITUI_COLOR_STATUS
+      STA   VTEXT_COLOR
+      STZ   VTEXT_ATTR
+      STZ   VTEXT_FLAGS
+      LDA   #' '
+      STA   VTEXT_CHAR
+      JSR   vtext_clear_region
+
+      LDA   EB_PROMPT_MSGL
+      STA   EDITUI_PRINTL
+      LDA   EB_PROMPT_MSGH
+      STA   EDITUI_PRINTH
+      STZ   EDITUI_PRINTX
+      LDA   #EDITUI_STATUS_ROW
+      STA   EDITUI_PRINTY
+      LDA   #EDITUI_COLOR_STATUS
+      STA   VTEXT_COLOR
+      JSR   editui_print_ptr
+      LDA   #6
+      STA   VGC_CURSX
+      LDA   #EDITUI_STATUS_ROW
+      STA   VGC_CURSY
+      LDA   #1
+      STA   VGC_CURSEN
+      RTS
+
+; Search forward from the current cursor. Carry set on match, with cursor moved.
+editbuf_find_text:
+      LDA   EB_PROMPTLEN
+      BNE   :+
+      CLC
+      RTS
+:     LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+@outer:
+      CLC
+      LDA   EB_SCRATCHL
+      ADC   EB_PROMPTLEN
+      STA   EB_T0
+      LDA   EB_SCRATCHH
+      ADC   #0
+      STA   EB_T1
+      LDA   EDITBUF_LENL
+      CMP   EB_T0
+      LDA   EDITBUF_LENH
+      SBC   EB_T1
+      BCC   @not_found
+      JSR   editbuf_src_from_scratch
+      LDY   #0
+@compare:
+      CPY   EB_PROMPTLEN
+      BEQ   @found
+      LDA   (EB_SRCL),Y
+      CMP   EB_PROMPTBUF,Y
+      BNE   @next
+      INY
+      BRA   @compare
+@next:
+      INC   EB_SCRATCHL
+      BNE   @outer
+      INC   EB_SCRATCHH
+      BRA   @outer
+@found:
+      LDA   EB_SCRATCHL
+      STA   EDITBUF_CURL
+      LDA   EB_SCRATCHH
+      STA   EDITBUF_CURH
+      SEC
+      RTS
+@not_found:
+      CLC
+      RTS
+
+; Parse EB_PROMPTBUF as a 1-based line number into EB_SCRATCH.
+; Negative values clamp to the start of file. Empty/invalid input returns carry clear.
+editbuf_parse_goto_line:
+      LDA   EB_PROMPTLEN
+      BNE   :+
+      CLC
+      RTS
+:     STZ   EB_SCRATCHL
+      STZ   EB_SCRATCHH
+      LDX   #0
+      LDA   EB_PROMPTBUF
+      CMP   #'-'
+      BNE   @loop
+      SEC
+      RTS
+@loop:
+      CPX   EB_PROMPTLEN
+      BEQ   @done
+      LDA   EB_PROMPTBUF,X
+      CMP   #'0'
+      BCC   @invalid
+      CMP   #'9' + 1
+      BCS   @invalid
+      SEC
+      SBC   #'0'
+      STA   EB_STATUS_DIGIT
+      LDA   EB_SCRATCHH
+      BNE   @next
+      LDA   EB_SCRATCHL
+      CMP   #26
+      BCS   @saturate
+      CMP   #25
+      BNE   @mul
+      LDA   EB_STATUS_DIGIT
+      CMP   #6
+      BCS   @saturate
+
+@mul:
+      LDA   EB_SCRATCHL
+      ASL   A
+      STA   EB_T0
+      ASL   A
+      ASL   A
+      CLC
+      ADC   EB_T0
+      CLC
+      ADC   EB_STATUS_DIGIT
+      STA   EB_SCRATCHL
+      BRA   @next
+@saturate:
+      LDA   #$FF
+      STA   EB_SCRATCHL
+      STA   EB_SCRATCHH
+@next:
+      INX
+      BRA   @loop
+@done:
+      LDA   EB_SCRATCHH
+      BNE   @valid
+      LDA   EB_SCRATCHL
+      BEQ   @valid
+      DEC   EB_SCRATCHL
+@valid:
+      SEC
+      RTS
+@invalid:
+      CLC
+      RTS
+
+; =====================================================================
 ; Save / quit
 ; =====================================================================
 editbuf_do_save:
@@ -1795,153 +2575,34 @@ editbuf_redraw_all:
       JSR   editui_draw_shell
       JMP   editbuf_render
 
-; =====================================================================
-; Three-choice modal dialog (restore-under). Returns A = 0/1/2.
-; =====================================================================
-EB_DLG_X     = 15
-EB_DLG_Y     = 20
-EB_DLG_W     = 50
-EB_DLG_H     = 9
-
 editbuf_dialog3:
-      STZ   EB_DLGSEL
-      ; set save-under region to the dialog rect and capture it
-      LDA   #EB_DLG_X
-      STA   EDITUI_MENU_SAVE_X
-      LDA   #EB_DLG_Y
-      STA   EDITUI_MENU_SAVE_Y
-      LDA   #EB_DLG_W
-      STA   EDITUI_MENU_SAVE_W
-      LDA   #EB_DLG_H
-      STA   EDITUI_MENU_SAVE_H
-      JSR   editui_save_under
-      ; draw dialog frame
-      LDA   #EB_DLG_X
-      STA   EDITUI_BOXX
-      LDA   #EB_DLG_Y
-      STA   EDITUI_BOXY
-      LDA   #EB_DLG_W
-      STA   EDITUI_BOXW
-      LDA   #EB_DLG_H
-      STA   EDITUI_BOXH
-      LDA   #EDITUI_BOX_DOUBLE
-      STA   EDITUI_BOX_STYLE
-      LDA   #<editbuf_dlg_title
-      STA   EDITUI_BOX_TITLEL
-      LDA   #>editbuf_dlg_title
-      STA   EDITUI_BOX_TITLEH
-      JSR   editui_draw_box
-      ; clear the dialog interior (box vars still hold the dialog rect)
-      JSR   editui_select_box_body
-      LDA   #EDITUI_COLOR_PANEL
-      STA   VTEXT_COLOR
-      STZ   VTEXT_ATTR
-      LDA   #' '
-      STA   VTEXT_CHAR
-      JSR   vtext_clear_region
-      ; message line
       LDA   #<editbuf_dlg_msg
-      STA   EDITUI_PRINTL
+      STA   EB_PROMPT_MSGL
       LDA   #>editbuf_dlg_msg
-      STA   EDITUI_PRINTH
-      LDA   #EB_DLG_X+3
-      STA   EDITUI_PRINTX
-      LDA   #EB_DLG_Y+2
-      STA   EDITUI_PRINTY
-      LDA   #EDITUI_COLOR_TITLE
-      STA   VTEXT_COLOR
-      JSR   editui_print_ptr
-      JSR   editbuf_dialog_draw_buttons
+      STA   EB_PROMPT_MSGH
+      JSR   editbuf_prompt_begin
 @wait:
       LDA   VGC_CHARIN
       BEQ   @wait
-      CMP   #EDITUI_KEY_LEFT
-      BEQ   @left
-      CMP   #EDITUI_KEY_RIGHT
-      BEQ   @right
-      CMP   #EDITUI_KEY_TAB
-      BEQ   @right
       CMP   #EDITUI_KEY_ENTER
-      BEQ   @choose
+      BEQ   @exit
       CMP   #EDITUI_KEY_ESC
       BEQ   @cancel
-      ; hotkeys: e/s/c (and upper)
       ORA   #$20
       CMP   #'e'
-      BNE   :+
-      STZ   EB_DLGSEL
-      BRA   @choose
-:     CMP   #'s'
+      BEQ   @exit
+      CMP   #'s'
       BNE   :+
       LDA   #1
-      STA   EB_DLGSEL
-      BRA   @choose
+      BRA   @done
 :     CMP   #'c'
       BNE   @wait
-      LDA   #2
-      STA   EB_DLGSEL
-      BRA   @choose
-@left:
-      LDA   EB_DLGSEL
-      BNE   :+
-      LDA   #3
-:     DEC   A
-      STA   EB_DLGSEL
-      JSR   editbuf_dialog_draw_buttons
-      BRA   @wait
-@right:
-      LDA   EB_DLGSEL
-      INC   A
-      CMP   #3
-      BCC   :+
-      LDA   #0
-:     STA   EB_DLGSEL
-      JSR   editbuf_dialog_draw_buttons
-      BRA   @wait
 @cancel:
       LDA   #2
-      STA   EB_DLGSEL
-@choose:
-      JSR   editui_restore_under
-      LDA   EB_DLGSEL
-      RTS
-
-; Draw the three buttons, highlighting EB_DLGSEL.
-editbuf_dialog_draw_buttons:
+      BRA   @done
+@exit:
       LDA   #0
-      STA   EB_T0                 ; button index
-      LDA   #<editbuf_dlg_btn0
-      STA   EB_PL
-      LDA   #>editbuf_dlg_btn0
-      STA   EB_PH
-@draw:
-      ; X position per button
-      LDX   EB_T0
-      LDA   editbuf_dlg_btn_x,X
-      STA   EDITUI_PRINTX
-      LDA   #EB_DLG_Y+5
-      STA   EDITUI_PRINTY
-      ; color: selected?
-      LDA   EB_T0
-      CMP   EB_DLGSEL
-      BNE   @normal
-      LDA   #EDITUI_COLOR_MENU_SEL
-      BRA   @setc
-@normal:
-      LDA   #EDITUI_COLOR_DIM
-@setc:
-      STA   VTEXT_COLOR
-      ; print label (split low/high byte pointer tables, indexed by button #)
-      LDX   EB_T0
-      LDA   editbuf_dlg_btn_lo,X
-      STA   EDITUI_PRINTL
-      LDA   editbuf_dlg_btn_hi,X
-      STA   EDITUI_PRINTH
-      JSR   editui_print_ptr
-      INC   EB_T0
-      LDA   EB_T0
-      CMP   #3
-      BCC   @draw
+@done:
       RTS
 
 ; =====================================================================
@@ -2015,26 +2676,25 @@ editbuf_default_menu:
 ; =====================================================================
       .segment "RODATA"
 
-editbuf_help_text:
-      .byte "Ctrl-S Save   Ctrl-Q Quit   Ctrl-X/C/V Cut/Copy/Paste", 0
-editbuf_status_default:
-      .byte "Ready", 0
-editbuf_dlg_title:
-      .byte "Workspace Modified", 0
+editbuf_status_x:
+      .byte "X:", 0
+editbuf_status_y:
+      .byte " Y:", 0
+editbuf_status_bytes:
+      .byte " B:", 0
+editbuf_status_lines:
+      .byte " L:", 0
+editbuf_status_type:
+      .byte " T:", 0
+editbuf_pow10_lo:
+      .byte <10000, <1000, <100, <10, <1
+editbuf_pow10_hi:
+      .byte >10000, >1000, >100, >10, >1
+editbuf_find_msg:
+      .byte "Find", 0
+editbuf_goto_msg:
+      .byte "Ln", 0
 editbuf_dlg_msg:
-      .byte "Save changes before leaving?", 0
-editbuf_dlg_btn0:
-      .byte "[ Exit Anyway ]", 0
-editbuf_dlg_btn1:
-      .byte "[ Save First ]", 0
-editbuf_dlg_btn2:
-      .byte "[ Cancel ]", 0
-
-editbuf_dlg_btn_lo:
-      .byte <editbuf_dlg_btn0, <editbuf_dlg_btn1, <editbuf_dlg_btn2
-editbuf_dlg_btn_hi:
-      .byte >editbuf_dlg_btn0, >editbuf_dlg_btn1, >editbuf_dlg_btn2
-editbuf_dlg_btn_x:
-      .byte EB_DLG_X+2, EB_DLG_X+19, EB_DLG_X+34
+      .byte "Mod: E exit S save C cancel", 0
 
 .endif

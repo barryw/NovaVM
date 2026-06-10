@@ -121,9 +121,13 @@ Inactive entries have flags byte `0` and may be reused.
 | `MID` | 3 | `.mid`, `.midi`, `.nms` |
 | `GFX` | 4 | `.nvg` |
 | `DIR` | 5 | directories |
+| `FTH` | 6 | `.4th`, `.fth`, `.fs` |
 
 `GFX` is the internal NDI file type name for graphics. User-facing graphics
 assets should use `.nvg`.
+
+`FTH` is Forth source text. Nova's own Forth libraries use `.4th`; `.fth` and
+`.fs` are accepted for compatibility with common host-side Forth conventions.
 
 ## Filenames
 
@@ -139,10 +143,43 @@ AUTOBOOT.bas
 KEYBOARD.BIN
 STARS.NMS
 SPLASH.NVG
+CORE.4TH
 ```
 
 NovaBASIC display and load paths may strip or infer extensions depending on the
 runtime command being used, but the NDI directory stores the full filename.
+
+## NovaForth Library Layout
+
+NovaForth library disks should use this conventional directory tree:
+
+```text
+/forth/
+  autoexec.4th
+  site.4th
+  lib/
+    core.4th
+    core-ext.4th
+    tools.4th
+    file.4th
+    string.4th
+    facility.4th
+    exception.4th
+    nova/
+      vgc.4th
+      fio.4th
+      sprite.4th
+      sound.4th
+      xram.4th
+    compat/
+      thinking.4th
+```
+
+`core.4th` is the boot-time source library for definitions intentionally kept
+out of the NovaForth ROM. `autoexec.4th` is loaded after `core.4th` when present;
+use it to include `core-ext.4th`, Nova hardware libraries, or site-local policy.
+Other files are loaded explicitly with `INCLUDE`/`INCLUDED` (and later
+`REQUIRE`/`REQUIRED` once the full file word set exists).
 
 ## Directories
 

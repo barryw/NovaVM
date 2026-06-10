@@ -63,6 +63,26 @@ public class NdiImageTests
     }
 
     [TestMethod]
+    public void WriteFile_ForthSourceType_RoundTrips()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "FORTH", 800);
+            using var img = NdiImage.Open(path);
+
+            byte[] source = System.Text.Encoding.ASCII.GetBytes(": STAR 42 EMIT ;\n");
+            img.WriteFile("core.4th", NdiFileType.Forth, 0xFFFF, source);
+
+            CollectionAssert.AreEqual(source, img.ReadFile("core.4th", 0xFFFF));
+            var entry = img.ListDirectory(0xFFFF).Single(e => e.Filename == "core.4th");
+            Assert.AreEqual(NdiFileType.Forth, entry.FileType,
+                "Forth source must not be stored as BIN; loaders need to distinguish text input from load-addressed binaries.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
     public void WriteFile_ExistingName_ReplacesData()
     {
         string path = TempPath();

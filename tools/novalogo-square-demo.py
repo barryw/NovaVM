@@ -28,7 +28,6 @@ TIMEOUT = 30.0
 REPO = Path(__file__).resolve().parents[1]
 ROMS = [
     (REPO / "novalogo/novalogo.bin", "/roms/novalogo.bin"),
-    (REPO / "novalogo/novalogo_ext.bin", "/roms/novalogo_ext.bin"),
 ]
 
 VGC_GFX_SPACE = 3

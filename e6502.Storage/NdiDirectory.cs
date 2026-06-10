@@ -2,7 +2,7 @@ using System.Text;
 
 namespace e6502.Storage;
 
-public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4, Dir = 5 }
+public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4, Dir = 5, Forth = 6 }
 
 [Flags]
 public enum NdiEntryFlags : byte { Active = 0x01, Directory = 0x02, Locked = 0x80 }
@@ -23,7 +23,7 @@ public sealed record NdiDirEntry(
 ///
 /// Entry layout:
 ///   $00      Flags: bit 0=active, bit 1=directory, bit 7=locked
-///   $01      File type (0=BAS,1=SID,2=BIN,3=MID,4=GFX)
+///   $01      File type (0=BAS,1=SID,2=BIN,3=MID,4=GFX,5=DIR,6=FORTH)
 ///   $02-$03  Parent directory entry index ($FFFF = root), little-endian
 ///   $04-$07  Start sector, little-endian
 ///   $08-$0B  Size in bytes, little-endian

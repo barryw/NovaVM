@@ -35,8 +35,7 @@ static void test_default_runtime_value_does_not_select_first_rom() {
         "\"languages\":{"
         "\"novabasic\":{\"rom\":\"/roms/novabasic.bin\","
         "\"extensionRom\":\"/roms/extension.bin\"},"
-        "\"novalogo\":{\"rom\":\"/roms/novalogo.bin\","
-        "\"extensionRom\":\"/roms/novalogo_ext.bin\"}}}";
+        "\"novalogo\":{\"rom\":\"/roms/novalogo.bin\"}}}";
 
     BootRuntimeConfig cfg;
     bool ok = parseBootRuntimeConfigText(json, strlen(json), cfg);
@@ -44,8 +43,7 @@ static void test_default_runtime_value_does_not_select_first_rom() {
     check("runtime config is valid", cfg.valid);
     check_eq_str("active runtime", cfg.runtime, "novalogo");
     check_eq_str("active ROM path", cfg.romPath, "/roms/novalogo.bin");
-    check_eq_str("active extension path", cfg.extRomPath,
-                 "/roms/novalogo_ext.bin");
+    check_eq_str("active extension path", cfg.extRomPath, "");
 }
 
 static void test_default_runtime_falls_back_to_novabasic() {

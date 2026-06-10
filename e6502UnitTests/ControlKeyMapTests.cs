@@ -5,15 +5,15 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace e6502UnitTests;
 
 /// <summary>
-/// Ctrl/Meta + A-Z must map to ASCII control codes (0x01-0x1A) so the emulator's
-/// key handler feeds editor commands (Ctrl-S=Save=0x13, Ctrl-Q=Quit=0x11, etc.)
+/// Ctrl + A-Z must map to ASCII control codes (0x01-0x1A) so the emulator's
+/// key handler feeds editor commands (Ctrl-C=Copy=0x03, Ctrl-Q prefix=0x11, etc.)
 /// to the running program instead of inserting the literal letter.
 /// </summary>
 [TestClass]
 public class ControlKeyMapTests
 {
     [TestMethod]
-    public void CtrlS_MapsToSaveControlCode()
+    public void CtrlS_MapsToControlCode()
     {
         Assert.IsTrue(ControlKeyMap.TryMap(Key.S, KeyModifiers.Control, out byte code));
         Assert.AreEqual(0x13, code);
@@ -34,7 +34,7 @@ public class ControlKeyMapTests
     }
 
     [TestMethod]
-    public void CtrlQ_MapsToQuitControlCode()
+    public void CtrlQ_MapsToCommandPrefixControlCode()
     {
         Assert.IsTrue(ControlKeyMap.TryMap(Key.Q, KeyModifiers.Control, out byte code));
         Assert.AreEqual(0x11, code);

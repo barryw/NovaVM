@@ -6,7 +6,7 @@ using KDS.e6502;
 
 public class CompositeBusDevice : IBusDevice, IDisposable
 {
-    public enum ActiveRom { Basic, Ncc, Extension, Logo }
+    public enum ActiveRom { Basic, Extension, Logo, Forth }
 
     private readonly byte[] _ram = new byte[65536];
     private readonly VirtualGraphicsController _vgc = new();
@@ -33,9 +33,9 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private long _lastMusicWallTick;
     private double _musicFrameAccum;
     private readonly byte[] _basicRom;
-    private readonly byte[] _nccRom;
     private byte[]? _extRom;
     private readonly byte[]? _logoRom;
+    private readonly byte[]? _forthRom;
 
     // Paged-library loader state (Stage 4c.0b) — faithful to the FPGA's single bank-1
     // ext_rom BRAM + page_in_ctrl ($BA76-$BA7C) + resident lib_call at $0320.
@@ -97,8 +97,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public Help.HelpTopic? CurrentProgramHelp { get; set; }
 
     public event Action<string?>? HelpRequested;
-    public event Action? NccEditorRequested;
-
     public CompositeBusDevice(
         bool enableSound = false,
         int cpuHz = VgcConstants.DefaultCpuHz,
@@ -202,9 +200,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _basicRom = new byte[16384];
         Array.Copy(_ram, VgcConstants.RomBase, _basicRom, 0, 16384);
 
-        // Build the NCC ROM using NccRomBuilder.
-        _nccRom = new e6502.Avalonia.Compiler.NccRomBuilder().Build();
-
         // Load extension ROM if available.
         string extPath = Path.Combine(AppContext.BaseDirectory, "Resources", "extension.bin");
         if (File.Exists(extPath))
@@ -223,9 +218,14 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             Array.Copy(logoData, _logoRom, Math.Min(logoData.Length, 16384));
         }
 
-        // NovaLogo has no extension ROM (deleted in Phase B): every hardware command
-        // routes through a paged module (SYSTEM/SOUND/GRAPHICS), staged into the shelf
-        // by StageConfiguredModules below.
+        // Load Forth ROM if available.
+        string forthPath = Path.Combine(AppContext.BaseDirectory, "Resources", "novaforth.bin");
+        if (File.Exists(forthPath))
+        {
+            byte[] forthData = File.ReadAllBytes(forthPath);
+            _forthRom = new byte[16384];
+            Array.Copy(forthData, _forthRom, Math.Min(forthData.Length, 16384));
+        }
 
         // Load the resident paged-library loader (lib_call, ORG $0320) if available.
         string libcallPath = Path.Combine(AppContext.BaseDirectory, "Resources", "libcall.bin");
@@ -241,6 +241,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         {
             Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, 16384);
             CurrentRom = ActiveRom.Logo;
+        }
+        else if (bootRom == ActiveRom.Forth && _forthRom != null)
+        {
+            Array.Copy(_forthRom, 0, _ram, VgcConstants.RomBase, 16384);
+            CurrentRom = ActiveRom.Forth;
         }
 
         // Bank-1 overlay starts as the active primary runtime's static extension, and
@@ -258,13 +263,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     // Mirror the active runtime's static extension ROM into the bank-1 overlay image.
     // Called at every primary-runtime select; a later PGD page-in overwrites _extBank
-    // with the paged module. NCC has no extension — leave _extBank untouched for it.
+    // with the paged module.
     private void LoadExtBankStatic(ActiveRom primary)
     {
         byte[]? ext = primary switch
         {
             ActiveRom.Basic => _extRom,     // BASIC keeps its own static extension ROM
-            _ => null,                      // Logo (modules-only) / Ncc: no static ext
+            _ => null,                      // Logo/Forth are modules-only: no static ext
         };
         if (ext != null)
         {
@@ -280,7 +285,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         }
         else
         {
-            _extBankValid = false;          // NCC: no overlay -> RomSwapExtension stays a no-op
+            _extBankValid = false;          // Logo/Forth: modules-only, no static extension overlay
         }
     }
 
@@ -362,11 +367,11 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     // Boot-time shelf staging, the emulator's stand-in for the firmware reading
     // boot.json libraries[] and streaming each module from SD into a shelf slot.
-    // Slot assignment matches boot.json array order: graphics (id $01) -> slot 0,
-    // system (id $03, editor + timing) -> slot 1, sound (id $02, tone/noise/volume)
-    // -> slot 2. Modules absent from Resources/ are silently skipped — a runtime that
-    // never lib_calls them is unaffected, and the build copies the .bin images in
-    // alongside the ROMs.
+    // Slot assignment matches boot.json array order for the latency-sensitive modules:
+    // graphics (id $01) -> slot 0, system (id $03) -> slot 1, sound (id $02) ->
+    // slot 2, editor (id $08) -> slot 3. Modules absent from Resources/ are
+    // silently skipped — a runtime that never lib_calls them is unaffected, and the
+    // build copies the .bin images in alongside the ROMs.
     private void StageConfiguredModules()
     {
         // Seed the LRU to identity [0,1,2,3] up front (firmware does this at boot),
@@ -375,6 +380,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         StageModuleFromResources("graphics.bin", slot: 0, id: 0x01);
         StageModuleFromResources("system.bin",   slot: 1, id: 0x03);
         StageModuleFromResources("sound.bin",    slot: 2, id: 0x02);
+        StageModuleFromResources("editor.bin",   slot: 3, id: 0x08);
         // The shelf holds 4 slots but there are >4 modules (files/memory/net are not
         // pre-staged). Populate the demand-load store from every module image in
         // Resources so a lib_call to an unstaged module misses and streams it in.
@@ -441,13 +447,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
                 CurrentRom = ActiveRom.Basic;
                 break;
-            case ActiveRom.Ncc:
-                Array.Copy(_nccRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
-                CurrentRom = ActiveRom.Ncc;
-                break;
             case ActiveRom.Logo when _logoRom != null:
                 Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
                 CurrentRom = ActiveRom.Logo;
+                break;
+            case ActiveRom.Forth when _forthRom != null:
+                Array.Copy(_forthRom, 0, _ram, VgcConstants.RomBase, VgcConstants.RomSize);
+                CurrentRom = ActiveRom.Forth;
                 break;
             default:
                 return false;
@@ -740,15 +746,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         // ROM swap register — intercept before VGC and ROM write protection.
         if (address == VgcConstants.RegRomSwap)
         {
-            if (data == VgcConstants.RomSwapNcc && CurrentRom != ActiveRom.Ncc)
+            if (data == VgcConstants.RomSwapBasic && CurrentRom != ActiveRom.Basic)
             {
-                Array.Copy(_nccRom, 0, _ram, VgcConstants.RomBase, 16384);
-                CurrentRom = ActiveRom.Ncc;
-                RomSwapRequested?.Invoke(this, EventArgs.Empty);
-            }
-            else if (data == VgcConstants.RomSwapBasic && CurrentRom != ActiveRom.Basic)
-            {
-                var prev = CurrentRom;
                 Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
                 CurrentRom = ActiveRom.Basic;
                 // NOTE: do NOT reload _extBank here. On HW the romswap register only changes the
@@ -756,16 +755,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 // lib_call trampoline MUST keep the paged-in module so the next call HITs. The
                 // static ext is reloaded only on a genuine primary-runtime select (TrySelectPrimaryRom).
                 // Extension ROM swaps are transient (trampoline calls) — no CPU reboot.
-                // Only fire event when returning from NCC ROM.
-                if (prev == ActiveRom.Ncc)
-                    RomSwapRequested?.Invoke(this, EventArgs.Empty);
             }
             else if (data == VgcConstants.RomSwapExtension && CurrentRom != ActiveRom.Extension)
             {
                 // Map the bank-1 overlay image at $C000. _extBank holds the active runtime's
                 // static extension until a PGD page-in replaces it with a paged module — so this
                 // is identical to the old _logoExtRom/_extRom copy when no page-in has happened.
-                // _extBankValid is false only for NCC (no extension) — preserves the old no-op.
+                // _extBankValid is false for module-only runtimes with no static extension.
                 if (_extBankValid)
                 {
                     Array.Copy(_extBank, 0, _ram, VgcConstants.RomBase, 16384);
@@ -780,9 +776,10 @@ public class CompositeBusDevice : IBusDevice, IDisposable
                 // NOTE: do NOT reload _extBank here (see RomSwapBasic) — the paged-in module in the
                 // bank-1 overlay must survive the home-bank restore between lib_call invocations.
             }
-            else if (data == VgcConstants.RomSwapNccEdit)
+            else if (data == VgcConstants.RomSwapForth && _forthRom != null && CurrentRom != ActiveRom.Forth)
             {
-                NccEditorRequested?.Invoke();
+                Array.Copy(_forthRom, 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = ActiveRom.Forth;
             }
             return;
         }

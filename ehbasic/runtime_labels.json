@@ -1407,7 +1407,7 @@
     {
       "label": "FIO.CD",
       "source": "../runtime/asm/fio.s",
-      "line": 303,
+      "line": 342,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1421,7 +1421,7 @@
     {
       "label": "FIO.CHECK",
       "source": "../runtime/asm/fio.s",
-      "line": 129,
+      "line": 168,
       "inputs": [],
       "outputs": [
         {
@@ -1437,7 +1437,7 @@
     {
       "label": "FIO.CLEAR_ERROR",
       "source": "../runtime/asm/fio.s",
-      "line": 167,
+      "line": 206,
       "inputs": [],
       "outputs": [
         {
@@ -1453,7 +1453,7 @@
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1121,
+      "line": 1124,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1465,7 +1465,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1142,
+      "line": 1145,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1477,7 +1477,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1135,
+      "line": 1138,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1489,7 +1489,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1128,
+      "line": 1131,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1501,7 +1501,7 @@
     {
       "label": "FIO.COPY_NAME",
       "source": "../runtime/asm/fio.s",
-      "line": 201,
+      "line": 240,
       "inputs": [],
       "outputs": [
         {
@@ -1521,7 +1521,7 @@
     {
       "label": "FIO.DELETE",
       "source": "../runtime/asm/fio.s",
-      "line": 270,
+      "line": 309,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1535,7 +1535,7 @@
     {
       "label": "FIO.DIR_OPEN",
       "source": "../runtime/asm/fio.s",
-      "line": 250,
+      "line": 289,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1546,7 +1546,7 @@
     {
       "label": "FIO.DIR_READ",
       "source": "../runtime/asm/fio.s",
-      "line": 260,
+      "line": 299,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1557,7 +1557,7 @@
     {
       "label": "FIO.EXEC",
       "source": "../runtime/asm/fio.s",
-      "line": 147,
+      "line": 186,
       "inputs": [
         {
           "name": "A",
@@ -1576,9 +1576,152 @@
       "summary": "Issue an FIO command, wait for completion, and return A=0/1 status."
     },
     {
+      "label": "FIO.FCLOSE",
+      "source": "../runtime/asm/fio.s",
+      "line": 432,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fclose",
+      "summary": "Close the fileid in FIO_SRCL/H, flushing dirty data first."
+    },
+    {
+      "label": "FIO.FCREATE",
+      "source": "../runtime/asm/fio.s",
+      "line": 422,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fcreate",
+      "summary": "Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H."
+    },
+    {
+      "label": "FIO.FDELETE_EXACT",
+      "source": "../runtime/asm/fio.s",
+      "line": 522,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fdelete_exact",
+      "summary": "Delete exact FIO.NAME without BASIC's default .bas behavior."
+    },
+    {
+      "label": "FIO.FFLUSH",
+      "source": "../runtime/asm/fio.s",
+      "line": 502,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fflush",
+      "summary": "Flush dirty data for fileid FIO_SRCL/H."
+    },
+    {
+      "label": "FIO.FOPEN",
+      "source": "../runtime/asm/fio.s",
+      "line": 412,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fopen",
+      "summary": "Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H."
+    },
+    {
+      "label": "FIO.FREAD",
+      "source": "../runtime/asm/fio.s",
+      "line": 442,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fread",
+      "summary": "Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes."
+    },
+    {
+      "label": "FIO.FRENAME",
+      "source": "../runtime/asm/fio.s",
+      "line": 532,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_frename",
+      "summary": "Rename exact FIO.NAME to the CPU string pointed at by FIO_ENDL/H and FIO_GLENL/H."
+    },
+    {
+      "label": "FIO.FRESIZE",
+      "source": "../runtime/asm/fio.s",
+      "line": 492,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fresize",
+      "summary": "Resize fileid FIO_SRCL/H to the low-24-bit size in FIO_SIZEL/H/SIZE2."
+    },
+    {
+      "label": "FIO.FSEEK",
+      "source": "../runtime/asm/fio.s",
+      "line": 462,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fseek",
+      "summary": "Reposition fileid FIO_SRCL/H to the low-24-bit offset in FIO_SIZEL/H/SIZE2."
+    },
+    {
+      "label": "FIO.FSIZE",
+      "source": "../runtime/asm/fio.s",
+      "line": 482,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fsize",
+      "summary": "Return fileid FIO_SRCL/H size in FIO_SIZEL/H/SIZE2."
+    },
+    {
+      "label": "FIO.FSTATUS",
+      "source": "../runtime/asm/fio.s",
+      "line": 512,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fstatus",
+      "summary": "Check exact FIO.NAME status; returns implementation fam in FIO_SRCL/H."
+    },
+    {
+      "label": "FIO.FTELL",
+      "source": "../runtime/asm/fio.s",
+      "line": 472,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_ftell",
+      "summary": "Return fileid FIO_SRCL/H position in FIO_SIZEL/H/SIZE2."
+    },
+    {
+      "label": "FIO.FWRITE",
+      "source": "../runtime/asm/fio.s",
+      "line": 452,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_fwrite",
+      "summary": "Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H."
+    },
+    {
       "label": "FIO.GLOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 292,
+      "line": 331,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1597,7 +1740,7 @@
     {
       "label": "FIO.GSAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 281,
+      "line": 320,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1616,7 +1759,7 @@
     {
       "label": "FIO.ISSUE",
       "source": "../runtime/asm/fio.s",
-      "line": 117,
+      "line": 156,
       "inputs": [
         {
           "name": "A",
@@ -1632,7 +1775,7 @@
     {
       "label": "FIO.LOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 239,
+      "line": 278,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1648,7 +1791,7 @@
     {
       "label": "FIO.LOAD_RUNTIME",
       "source": "../runtime/asm/fio.s",
-      "line": 349,
+      "line": 388,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1662,7 +1805,7 @@
     {
       "label": "FIO.MKDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 314,
+      "line": 353,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1676,7 +1819,7 @@
     {
       "label": "FIO.NAME",
       "source": "../runtime/asm/nova.inc",
-      "line": 788,
+      "line": 791,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1688,7 +1831,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "../runtime/asm/nova.inc",
-      "line": 742,
+      "line": 745,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1700,7 +1843,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "../runtime/asm/fio.s",
-      "line": 385,
+      "line": 554,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1720,7 +1863,7 @@
     {
       "label": "FIO.PWD",
       "source": "../runtime/asm/fio.s",
-      "line": 336,
+      "line": 375,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1731,7 +1874,7 @@
     {
       "label": "FIO.RMDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 325,
+      "line": 364,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1745,7 +1888,7 @@
     {
       "label": "FIO.RNG",
       "source": "../runtime/asm/fio.s",
-      "line": 361,
+      "line": 400,
       "inputs": [],
       "outputs": [
         {
@@ -1765,7 +1908,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1150,
+      "line": 1195,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1777,7 +1920,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1157,
+      "line": 1202,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1789,7 +1932,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1164,
+      "line": 1209,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1801,7 +1944,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1171,
+      "line": 1216,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1813,7 +1956,7 @@
     {
       "label": "FIO.RUN",
       "source": "../runtime/asm/fio.s",
-      "line": 375,
+      "line": 544,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1824,7 +1967,7 @@
     {
       "label": "FIO.SAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 228,
+      "line": 267,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1842,7 +1985,7 @@
     {
       "label": "FIO.SET_IO_ERROR",
       "source": "../runtime/asm/fio.s",
-      "line": 185,
+      "line": 224,
       "inputs": [],
       "outputs": [
         {
@@ -3013,7 +3156,7 @@
     {
       "label": "ROMSWAP.PRIMARY",
       "source": "../runtime/asm/nova.inc",
-      "line": 247,
+      "line": 244,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4304,7 +4447,7 @@
     {
       "label": "VGC.GFXTRANS",
       "source": "../runtime/asm/nova.inc",
-      "line": 366,
+      "line": 363,
       "inputs": [],
       "outputs": [],
       "requires": [],

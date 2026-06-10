@@ -3,7 +3,7 @@ using Avalonia.Input;
 namespace e6502.Avalonia.Input;
 
 /// <summary>
-/// Maps Ctrl/Meta + A-Z to ASCII control codes (Ctrl-A=0x01 .. Ctrl-Z=0x1A).
+/// Maps Ctrl + A-Z to ASCII control codes (Ctrl-A=0x01 .. Ctrl-Z=0x1A).
 /// </summary>
 public static class ControlKeyMap
 {

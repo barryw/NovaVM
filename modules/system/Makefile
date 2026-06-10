@@ -7,11 +7,8 @@ all: system.bin system.nmod
 system.o: system.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libsystem.inc \
             $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vgc.inc \
-            $(NOVA_ASM)/copper.inc $(NOVA_ASM)/copper.s \
-            $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editui.s \
             $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
-            $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s \
             $(NOVA_ASM)/vgc.s \
             $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s \
             $(NOVA_ASM)/nui.inc $(NOVA_ASM)/nui.s \

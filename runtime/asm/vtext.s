@@ -22,6 +22,9 @@ VTEXT_COLOR:      .res 1
 VTEXT_ATTR:       .res 1
 VTEXT_CHAR:       .res 1
 VTEXT_FLAGS:      .res 1
+VTEXT_TOPROW:     .res 1       ; visible-row -> physical-row base
+VTEXT_SCROLL_TOP: .res 1       ; first visible row affected by VTEXT_TOPROW
+VTEXT_SCROLL_ROWS:.res 1       ; 0 means full-screen ring
 VTEXT_TABLEL:     .res 1
 VTEXT_TABLEH:     .res 1
 VTEXT_REGION_ID:  .res 1
@@ -244,12 +247,49 @@ vtext_calc_region_addr:
       STA   VTEXT_CURX
       RTS
 
-; VTEXT_ADDR = (TOP + CURY) * 80 + LEFT + CURX
+; VTEXT_ADDR = physical_row(TOP + CURY) * 80 + LEFT + CURX
 vtext_calc_addr:
       LDA   VTEXT_TOP
       CLC
       ADC   VTEXT_CURY
       STA   VTEXT_TMP
+
+      LDA   VTEXT_SCROLL_ROWS
+      BEQ   @full_ring
+
+      LDA   VTEXT_TMP
+      CMP   VTEXT_SCROLL_TOP
+      BCC   @row_ready
+      SEC
+      SBC   VTEXT_SCROLL_TOP
+      CMP   VTEXT_SCROLL_ROWS
+      BCS   @row_ready
+      CLC
+      ADC   VTEXT_TOPROW
+      CMP   VTEXT_SCROLL_ROWS
+      BCC   @inside_ready
+      SBC   VTEXT_SCROLL_ROWS
+@inside_ready:
+      CLC
+      ADC   VTEXT_SCROLL_TOP
+      STA   VTEXT_TMP
+      BRA   @row_mapped
+
+@full_ring:
+      LDA   VTEXT_TMP
+      CLC
+      ADC   VTEXT_TOPROW
+      CMP   #VTEXT_SCREEN_ROWS
+      BCC   @store_full
+      SBC   #VTEXT_SCREEN_ROWS
+@store_full:
+      STA   VTEXT_TMP
+      BRA   @row_mapped
+
+@row_ready:
+      LDA   VTEXT_TMP
+
+@row_mapped:
 
       ASL
       ASL

@@ -72,6 +72,10 @@ start:
       STA   EDITBUF_TITLEL
       LDA   #>title_str
       STA   EDITBUF_TITLEH
+      LDA   #<type_str
+      STA   EDITBUF_TYPEL
+      LDA   #>type_str
+      STA   EDITBUF_TYPEH
       STZ   EDITBUF_STATUSL
       STZ   EDITBUF_STATUSH
 
@@ -124,7 +128,9 @@ test_hilite_hook:
 
 .segment "RODATA"
 title_str:
-      .byte "SQUARE", 0
+      .byte "forth/test/SQUARE.4th", 0
+type_str:
+      .byte "Test", 0
 init_text:
       .byte "AB", $0A, "CD"
 init_text_end:

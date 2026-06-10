@@ -40,7 +40,6 @@ public partial class MainWindow : Window
     private DocEditorPanel? _docEditor;
     private bool _docEditorVisible;
     private DebuggerService _debugger = null!;
-    private NccEditor? _nccEditor;
     private BasicEditor? _basicEditor;
 
     public MainWindow()
@@ -78,14 +77,6 @@ public partial class MainWindow : Window
                 });
             }
         };
-        _bus.NccEditorRequested += () =>
-        {
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (_nccEditor is { IsActive: false })
-                    _nccEditor.Activate();
-            });
-        };
         InitializeHelp();
 
         var resDir = Path.Combine(AppContext.BaseDirectory, "Resources");
@@ -112,11 +103,6 @@ public partial class MainWindow : Window
 
         // Debugger service
         _debugger = new DebuggerService(_cpu, _bus);
-
-        // NCC editor
-        _nccEditor = new NccEditor(_bus, _debugger, _cpu);
-        _nccEditor.DeviceManager = _bus.DeviceManager;
-        _canvas.AddEditor(_nccEditor);
 
         // BASIC editor
         _basicEditor = new BasicEditor(_bus);
@@ -231,15 +217,6 @@ public partial class MainWindow : Window
             if (!UiTransitionGate.IsPaused && Environment.TickCount64 - _lastMoveResizeTick > 200)
                 _canvas.RequestRedraw();
 
-            // NCC editor: detect program halt (debugger paused while editor was running)
-            if (_nccEditor is { IsActive: true })
-            {
-                if (_nccEditor.IsRunning && _debugger.IsPaused)
-                    _nccEditor.StopRunning();
-                else if (_nccEditor.Mode == EditorMode.Debug)
-                    _nccEditor.CheckDebugBreak();
-            }
-
             // BASIC editor: detect program end (Ready prompt on screen)
             if (_basicEditor is { IsActive: true, Mode: EditorMode.Running })
             {
@@ -286,7 +263,7 @@ public partial class MainWindow : Window
         return value?.Trim().ToLowerInvariant() switch
         {
             "logo" or "novalogo" => CompositeBusDevice.ActiveRom.Logo,
-            "ncc" => CompositeBusDevice.ActiveRom.Ncc,
+            "forth" or "novaforth" => CompositeBusDevice.ActiveRom.Forth,
             _ => CompositeBusDevice.ActiveRom.Basic
         };
     }
@@ -310,11 +287,7 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.F1)
         {
-            if (_nccEditor is { IsActive: true })
-            {
-                ShowHelpPanelNcc();
-            }
-            else if (_bus.CurrentProgramName != null && IsProgramRunning())
+            if (_bus.CurrentProgramName != null && IsProgramRunning())
             {
                 // Program is running — show its help
                 if (_bus.CurrentProgramHelp != null)
@@ -339,8 +312,7 @@ public partial class MainWindow : Window
         }
 
         // Skip window shortcuts when an editor is actively handling keys
-        bool editorActive = _basicEditor is { IsActive: true, Mode: not EditorMode.Running }
-                         || _nccEditor is { IsActive: true, Mode: not EditorMode.Running };
+        bool editorActive = _basicEditor is { IsActive: true, Mode: not EditorMode.Running };
 
         var mod = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
         if (e.KeyModifiers.HasFlag(mod) && !editorActive)
@@ -357,10 +329,6 @@ public partial class MainWindow : Window
                     ToggleDevMode();
                     e.Handled = true;
                     return;
-                case Key.N:
-                    ToggleNccEditor();
-                    e.Handled = true;
-                    return;
             }
         }
         if (e.Key == Key.F11)
@@ -373,21 +341,6 @@ public partial class MainWindow : Window
         }
 
         base.OnKeyDown(e);
-    }
-
-    private void ToggleNccEditor()
-    {
-        if (_nccEditor == null) return;
-        if (_basicEditor is { IsActive: true }) return; // mutual exclusion
-        if (_nccEditor.IsActive)
-        {
-            // Delegate to NccEditor's Ctrl+Q exit handler (Y/N prompt)
-            _nccEditor.HandleKeyDown(Key.Q, KeyModifiers.Control);
-        }
-        else
-        {
-            _nccEditor.Activate();
-        }
     }
 
     private void WriteToScreen(int col, int row, string text, byte fg)
@@ -806,12 +759,6 @@ public partial class MainWindow : Window
             }
         }
         return false;
-    }
-
-    private void ShowHelpPanelNcc()
-    {
-        ShowHelpPanel();
-        _helpPanel?.SetActiveFilter(HelpTopicType.Ncc);
     }
 
     private async void OnTryThisRequested(string code)

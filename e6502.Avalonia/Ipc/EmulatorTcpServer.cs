@@ -273,12 +273,29 @@ public sealed class EmulatorTcpServer : IDisposable
         {
             "ENTER" or "CR" or "RETURN" => 0x0D,
             "BACKSPACE" or "BS" => 0x08,
+            "TAB" => 0x09,
+            "ESC" or "ESCAPE" => 0x1B,
+            "SPACE" => 0x20,
+            "LEFT" or "ARROW-LEFT" or "ARROWLEFT" => 0x1C,
+            "RIGHT" or "ARROW-RIGHT" or "ARROWRIGHT" => 0x1D,
+            "UP" or "ARROW-UP" or "ARROWUP" => 0x1E,
+            "DOWN" or "ARROW-DOWN" or "ARROWDOWN" => 0x1F,
+            "HOME" => 0x02,
+            "END" => 0x05,
+            "PGUP" or "PAGEUP" or "PAGE-UP" or "PAGE_UP" => 0x10,
+            "PGDN" or "PAGEDOWN" or "PAGE-DOWN" or "PAGE_DOWN" => 0x12,
+            "CTRL-HOME" or "CONTROL-HOME" => 0x80,
+            "CTRL-END" or "CONTROL-END" => 0x81,
+            "DELETE" or "DEL" => 0x7F,
             "CTRL-C" or "BREAK" => 0x03,
-            "HOME" => 0x13,
+            "SCREEN-HOME" or "VGC-HOME" => 0x13,
             "CLEAR" or "FF" => 0x0C,
             "LF" => 0x0A,
             _ => (byte)(key.Length == 1 ? key[0] : 0)
         };
+
+        if (code == 0 && TryMapControlKeyName(key, out byte controlKey))
+            code = controlKey;
 
         if (code == 0) return Error($"Unknown key: {key}");
 
@@ -303,6 +320,31 @@ public sealed class EmulatorTcpServer : IDisposable
         return true;
     }
 
+    private static bool TryMapControlKeyName(string key, out byte controlKey)
+    {
+        controlKey = 0;
+
+        ReadOnlySpan<char> prefix;
+        if (key.StartsWith("CTRL-", StringComparison.OrdinalIgnoreCase))
+            prefix = "CTRL-";
+        else if (key.StartsWith("CONTROL-", StringComparison.OrdinalIgnoreCase))
+            prefix = "CONTROL-";
+        else
+            return false;
+
+        if (key.Length != prefix.Length + 1)
+            return false;
+
+        char ch = key[prefix.Length];
+        if (ch is >= 'a' and <= 'z')
+            ch = (char)(ch - 0x20);
+        if (ch is < 'A' or > 'Z')
+            return false;
+
+        controlKey = (byte)(1 + ch - 'A');
+        return true;
+    }
+
     private string CmdReadScreen()
     {
         var vgc = _bus.Vgc;
@@ -311,9 +353,10 @@ public sealed class EmulatorTcpServer : IDisposable
         for (int row = 0; row < VgcConstants.ScreenRows; row++)
         {
             var sb = new StringBuilder(VgcConstants.ScreenCols);
+            int physicalRow = vgc.PhysicalTextRow(row);
             for (int col = 0; col < VgcConstants.ScreenCols; col++)
             {
-                byte b = vgc.GetScreenChar(col, row);
+                byte b = vgc.GetScreenChar(col, physicalRow);
                 sb.Append(b >= 0x20 ? (char)b : ' ');
             }
             lines[row] = sb.ToString().TrimEnd();
@@ -342,9 +385,10 @@ public sealed class EmulatorTcpServer : IDisposable
             return Error("Row out of range");
 
         var sb = new StringBuilder(VgcConstants.ScreenCols);
+        int physicalRow = vgc.PhysicalTextRow(targetRow);
         for (int col = 0; col < VgcConstants.ScreenCols; col++)
         {
-            byte b = vgc.GetScreenChar(col, targetRow);
+            byte b = vgc.GetScreenChar(col, physicalRow);
             sb.Append(b >= 0x20 ? (char)b : ' ');
         }
 
@@ -397,9 +441,10 @@ public sealed class EmulatorTcpServer : IDisposable
             for (int row = 0; row < VgcConstants.ScreenRows; row++)
             {
                 var sb = new StringBuilder(VgcConstants.ScreenCols);
+                int physicalRow = vgc.PhysicalTextRow(row);
                 for (int col = 0; col < VgcConstants.ScreenCols; col++)
                 {
-                    byte b = vgc.GetScreenChar(col, row);
+                    byte b = vgc.GetScreenChar(col, physicalRow);
                     sb.Append(b >= 0x20 ? (char)b : ' ');
                 }
 
@@ -455,7 +500,7 @@ public sealed class EmulatorTcpServer : IDisposable
         bootRom = _bus.CurrentRom switch
         {
             CompositeBusDevice.ActiveRom.Logo => CompositeBusDevice.ActiveRom.Logo,
-            CompositeBusDevice.ActiveRom.Ncc => CompositeBusDevice.ActiveRom.Ncc,
+            CompositeBusDevice.ActiveRom.Forth => CompositeBusDevice.ActiveRom.Forth,
             _ => CompositeBusDevice.ActiveRom.Basic
         };
         error = null;
@@ -473,8 +518,9 @@ public sealed class EmulatorTcpServer : IDisposable
             case "novalogo":
                 bootRom = CompositeBusDevice.ActiveRom.Logo;
                 return true;
-            case "ncc":
-                bootRom = CompositeBusDevice.ActiveRom.Ncc;
+            case "forth":
+            case "novaforth":
+                bootRom = CompositeBusDevice.ActiveRom.Forth;
                 return true;
             default:
                 error = $"Unknown runtime: {runtime}";
@@ -715,9 +761,10 @@ public sealed class EmulatorTcpServer : IDisposable
             for (int row = 0; row < VgcConstants.ScreenRows; row++)
             {
                 var sb = new StringBuilder(VgcConstants.ScreenCols);
+                int physicalRow = vgc.PhysicalTextRow(row);
                 for (int col = 0; col < VgcConstants.ScreenCols; col++)
                 {
-                    byte b = vgc.GetScreenChar(col, row);
+                    byte b = vgc.GetScreenChar(col, physicalRow);
                     sb.Append(b >= 0x20 ? (char)b : ' ');
                 }
                 if (sb.ToString().Contains("Ready", StringComparison.OrdinalIgnoreCase))
@@ -758,9 +805,10 @@ public sealed class EmulatorTcpServer : IDisposable
             for (int row = 0; row < VgcConstants.ScreenRows; row++)
             {
                 var sb = new StringBuilder(VgcConstants.ScreenCols);
+                int physicalRow = vgc.PhysicalTextRow(row);
                 for (int col = 0; col < VgcConstants.ScreenCols; col++)
                 {
-                    byte b = vgc.GetScreenChar(col, row);
+                    byte b = vgc.GetScreenChar(col, physicalRow);
                     sb.Append(b >= 0x20 ? (char)b : ' ');
                 }
                 if (sb.ToString().Contains("Ready", StringComparison.OrdinalIgnoreCase))

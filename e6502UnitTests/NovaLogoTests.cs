@@ -11,8 +11,10 @@ namespace e6502UnitTests;
 [TestClass]
 public class NovaLogoTests
 {
-    private const byte CtrlQ = 0x11;
-    private const byte CtrlS = 0x13;
+    private const byte CtrlK = 0x0B;
+    private const byte KeyEsc = 0x1B;
+    private const byte SyntaxKeyword = 0x03;
+    private const byte SyntaxNumber = 0x07;
     private const ushort LogoHeapPtr = 0x0030;
     private const ushort LogoHeapEnd = 0x9800;
     private const int LogoGcHeaderBytes = 2;
@@ -584,7 +586,7 @@ public class NovaLogoTests
 
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("4242", StringComparison.Ordinal),
-            $"Expected saved FART procedure to run after Ctrl-S/Ctrl-Q editor flow.\n{screen}");
+            $"Expected saved FART procedure to run after the save/exit editor flow.\n{screen}");
     }
 
     [TestMethod]
@@ -624,7 +626,7 @@ public class NovaLogoTests
         int drawingPixelsBefore = CountNonzeroPixels(bus, 152, 24, 168, 88);
         Assert.IsTrue(drawingPixelsBefore > 0, "Precondition: FD 50 should have drawn a visible line.");
 
-        // Define a procedure through the editor (Ctrl-S save, Ctrl-Q quit). The
+        // Define a procedure through the editor (Ctrl+K S save, Alt-X quit). The
         // editor goes full-screen (copper off) and returns here.
         QueueProcedureDefinition(cpu, bus, editor, "TO FART", "PRINT 4242");
         RunSteps(cpu, bus, 8_000_000);
@@ -658,7 +660,7 @@ public class NovaLogoTests
     }
 
     [TestMethod]
-    public void ProcedureEditorCtrlQWithoutSaveAbandonsDefinition()
+    public void ProcedureEditorAltXWithoutSaveAbandonsDefinition()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus);
@@ -669,7 +671,7 @@ public class NovaLogoTests
 
         QueueLine(editor, "TO ABANDON");
         QueueLine(editor, "PRINT 5151");
-        editor.QueueInput(CtrlQ);    // dirty: opens the 3-choice exit dialog
+        QueueAltX(editor);           // dirty: opens the 3-choice exit dialog
         editor.QueueInput(0x0D);     // ENTER selects "Exit Anyway" (default), abandons
 
         QueueLine(editor, "ABANDON");
@@ -677,7 +679,7 @@ public class NovaLogoTests
 
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO ABANDON", StringComparison.Ordinal),
-            $"Ctrl-Q + Exit Anyway should abandon the pending procedure definition.\n{screen}");
+            $"Alt-X + Exit Anyway should abandon the pending procedure definition.\n{screen}");
     }
 
     [TestMethod]
@@ -700,13 +702,13 @@ public class NovaLogoTests
         Assert.IsTrue(dirtyScreen.Contains("*", StringComparison.Ordinal),
             $"Editing should set the dirty marker.\n{dirtyScreen}");
 
-        editor.QueueInput(CtrlS);
-        // Ctrl-S clears the dirty marker (the only '*' disappears).
+        QueueSave(editor);
+        // Ctrl+K S clears the dirty marker (the only '*' disappears).
         RunUntil(cpu, bus, 30_000_000,
             () => !SnapshotScreen(bus.Vgc).Contains("*", StringComparison.Ordinal),
-            "Ctrl-S to clear the dirty marker");
+            "Ctrl+K S to clear the dirty marker");
 
-        editor.QueueInput(CtrlQ);
+        QueueAltX(editor);
         RunSteps(cpu, bus, 5_000_000);
     }
 
@@ -2510,8 +2512,8 @@ public class NovaLogoTests
         // the later call would print nothing.
         QueueLine(editor, "EDIT GREET");
         RunSteps(cpu, bus, 5_000_000);
-        editor.QueueInput(CtrlS);
-        editor.QueueInput(CtrlQ);
+        QueueSave(editor);
+        QueueAltX(editor);
         RunSteps(cpu, bus, 5_000_000);
 
         string afterEdit = SnapshotScreen(bus.Vgc);
@@ -2548,8 +2550,8 @@ public class NovaLogoTests
         QueueLine(editor, "EDIT GREET");
         RunSteps(cpu, bus, 5_000_000);
         QueueLine(editor, "PRINT 22");
-        editor.QueueInput(CtrlS);
-        editor.QueueInput(CtrlQ);
+        QueueSave(editor);
+        QueueAltX(editor);
         RunUntilScreenContains(cpu, bus, "GREET DEFINED", 60_000_000);
 
         QueueLine(editor, "GREET");
@@ -2581,8 +2583,8 @@ public class NovaLogoTests
         QueueLine(editor, "EDIT NEWGUY");
         RunSteps(cpu, bus, 5_000_000);
         QueueLine(editor, "PRINT 55");
-        editor.QueueInput(CtrlS);
-        editor.QueueInput(CtrlQ);
+        QueueSave(editor);
+        QueueAltX(editor);
         RunUntilScreenContains(cpu, bus, "NEWGUY DEFINED", 60_000_000);
 
         QueueLine(editor, "NEWGUY");
@@ -2595,6 +2597,49 @@ public class NovaLogoTests
         foreach (string line in screen.Split('\n'))
             if (line.Trim() == "55") count++;
         Assert.IsTrue(count >= 1, $"Created NEWGUY should print 55.\n{screen}");
+    }
+
+    [TestMethod]
+    public void EditUsesLogoSyntaxHighlighting()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "EDIT HILITE");
+        RunUntilScreenContains(cpu, bus, "TO HILITE", 60_000_000);
+        QueueLine(editor, "PRINT 55");
+        RunSteps(cpu, bus, 5_000_000);
+
+        var (row, col) = FindScreenText(bus.Vgc, "PRINT 55");
+        Assert.AreEqual(SyntaxKeyword, bus.Vgc.GetScreenColor(col, row),
+            "The Logo profile should color command words in the shared procedure editor.");
+        Assert.AreEqual(SyntaxNumber, bus.Vgc.GetScreenColor(col + 6, row),
+            "The Logo profile should color numeric literals in the shared procedure editor.");
+    }
+
+    [TestMethod]
+    public void EditUsesLogoAutoIndent()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "EDIT INDENT");
+        RunUntilScreenContains(cpu, bus, "TO INDENT", 60_000_000);
+        QueueLine(editor, "REPEAT 2 [");
+        QueueLine(editor, "PRINT 1");
+        RunSteps(cpu, bus, 5_000_000);
+
+        var (row, col) = FindScreenText(bus.Vgc, "PRINT 1");
+        Assert.AreEqual(4, col,
+            "After a Logo line with an unmatched [, auto-indent should add one nested level inside the procedure body.");
     }
 
     // =====================================================================
@@ -2857,9 +2902,21 @@ public class NovaLogoTests
         editor.QueueInput(0x0D);
     }
 
+    private static void QueueSave(ScreenEditor editor)
+    {
+        editor.QueueInput(CtrlK);
+        editor.QueueInput((byte)'s');
+    }
+
+    private static void QueueAltX(ScreenEditor editor)
+    {
+        editor.QueueInput(KeyEsc);
+        editor.QueueInput((byte)'x');
+    }
+
     // Drive the shared EDITUI procedure editor: type the TO line at the prompt
     // (which opens the editor), type the body lines into the editor, then
-    // Ctrl-S (save) and Ctrl-Q (exit). The editor re-renders on every key, so
+    // Ctrl+K S (save) and Alt-X (exit). The editor re-renders on every key, so
     // block until the "<name> DEFINED" confirmation rather than guessing a
     // fixed cycle budget.
     private static void QueueProcedureDefinition(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string header, params string[] bodyLines)
@@ -2867,8 +2924,8 @@ public class NovaLogoTests
         QueueLine(editor, header);
         foreach (string bodyLine in bodyLines)
             QueueLine(editor, bodyLine);
-        editor.QueueInput(CtrlS);
-        editor.QueueInput(CtrlQ);
+        QueueSave(editor);
+        QueueAltX(editor);
         // Wait for "<NAME> DEFINED" specifically so back-to-back defines in one
         // test don't match a previous procedure's stale confirmation.
         string name = header.Split(' ', StringSplitOptions.RemoveEmptyEntries)[1];
@@ -2938,6 +2995,26 @@ public class NovaLogoTests
             sb.Append('\n');
         }
         return sb.ToString();
+    }
+
+    private static (int Row, int Col) FindScreenText(VirtualGraphicsController vgc, string text)
+    {
+        for (int row = 0; row < VgcConstants.ScreenRows; row++)
+        {
+            var sb = new StringBuilder(VgcConstants.ScreenCols);
+            for (int col = 0; col < VgcConstants.ScreenCols; col++)
+            {
+                byte ch = vgc.GetScreenChar(col, row);
+                sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
+            }
+
+            int colIndex = sb.ToString().IndexOf(text, StringComparison.Ordinal);
+            if (colIndex >= 0)
+                return (row, colIndex);
+        }
+
+        Assert.Fail($"Could not find '{text}' on screen.\n{SnapshotScreen(vgc)}");
+        return (-1, -1);
     }
 
     private static int ReadTurtleWord(CompositeBusDevice bus, ushort loAddress, ushort hiAddress) =>

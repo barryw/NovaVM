@@ -66,18 +66,22 @@
              CompositeBusDevice pre-stages them into the XRAM shelf at boot. -->
         <Exec Command="make -C $(ProjectDir)../modules/graphics" />
         <Exec Command="make -C $(ProjectDir)../modules/system" />
+        <Exec Command="make -C $(ProjectDir)../modules/editor" />
         <Exec Command="make -C $(ProjectDir)../modules/sound" />
         <Exec Command="make -C $(ProjectDir)../modules/files" />
         <Exec Command="make -C $(ProjectDir)../modules/memory" />
         <Exec Command="make -C $(ProjectDir)../modules/net" />
         <Exec Command="make -C $(ProjectDir)../modules/turtle" />
+        <Exec Command="make -C $(ProjectDir)../novaforth" />
         <Copy SourceFiles="$(ProjectDir)../modules/graphics/graphics.bin" DestinationFiles="$(ProjectDir)Resources/graphics.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/system/system.bin" DestinationFiles="$(ProjectDir)Resources/system.bin" />
+        <Copy SourceFiles="$(ProjectDir)../modules/editor/editor.bin" DestinationFiles="$(ProjectDir)Resources/editor.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/sound/sound.bin" DestinationFiles="$(ProjectDir)Resources/sound.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/files/files.bin" DestinationFiles="$(ProjectDir)Resources/files.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/memory/memory.bin" DestinationFiles="$(ProjectDir)Resources/memory.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/net/net.bin" DestinationFiles="$(ProjectDir)Resources/net.bin" />
         <Copy SourceFiles="$(ProjectDir)../modules/turtle/turtle.bin" DestinationFiles="$(ProjectDir)Resources/turtle.bin" />
+        <Copy SourceFiles="$(ProjectDir)../novaforth/novaforth.bin" DestinationFiles="$(ProjectDir)Resources/novaforth.bin" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
@@ -87,8 +91,10 @@
         <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; python3 ..\tools\gen_runtime_abi_docs.py ..\runtime\asm\nova.inc ..\runtime\asm\fio.inc ..\runtime\asm\fio.s ..\runtime\asm\audio.inc ..\runtime\asm\audio.s ..\runtime\asm\nic.inc ..\runtime\asm\nic.s ..\runtime\asm\vgc.inc ..\runtime\asm\vgc.s ..\runtime\asm\sprite.inc ..\runtime\asm\sprite.s ..\runtime\asm\dma.inc ..\runtime\asm\dma.s ..\runtime\asm\blitter.inc ..\runtime\asm\blitter.s ..\runtime\asm\copper.inc ..\runtime\asm\copper.s ..\runtime\asm\xram.inc ..\runtime\asm\xram.s ..\runtime\asm\pager.inc ..\runtime\asm\pager.s ..\runtime\asm\rng.inc ..\runtime\asm\rng.s ..\runtime\asm\xmc.s --sym basic.sym --json runtime_labels.json --md ..\docs\assembly\runtime-labels.md --asm ..\runtime\asm\runtime_labels.inc" />
         <Exec Command="cd $(ProjectDir)..\assembly &amp;&amp; ca65 --cpu 65c02 -I ..\runtime\asm apps\keyboard\keyboard.s -o apps\keyboard\keyboard.o &amp;&amp; ld65 -C apps\keyboard\keyboard.cfg -o apps\keyboard\keyboard.bin apps\keyboard\keyboard.o" />
         <Exec Command="cd $(ProjectDir)..\ehbasic &amp;&amp; ca65 --cpu 65c02 -I ..\runtime\asm extension.s -o extension.o &amp;&amp; ld65 -C extension.cfg -o extension.bin extension.o" />
+        <Exec Command="cd $(ProjectDir)..\novaforth &amp;&amp; ca65 --cpu 65c02 -I ..\runtime\asm -l novaforth.lst -o novaforth.o novaforth.s &amp;&amp; ld65 -C novaforth.cfg -m novaforth.map -o novaforth.bin novaforth.o" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
         <Copy SourceFiles="$(ProjectDir)../ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
+        <Copy SourceFiles="$(ProjectDir)../novaforth/novaforth.bin" DestinationFiles="$(ProjectDir)Resources/novaforth.bin" />
         <Copy SourceFiles="$(ProjectDir)../assembly/apps/keyboard/keyboard.bin" DestinationFiles="$(USERPROFILE)/e6502-programs/keyboard.bin" />
     </Target>
 
@@ -107,9 +113,11 @@
         <Copy SourceFiles="Resources/ehbasic.bin" DestinationFolder="$(OutputPath)Resources" />
         <Copy SourceFiles="Resources/extension.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/extension.bin')" />
         <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
+        <Copy SourceFiles="Resources/novaforth.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novaforth.bin')" />
         <Copy SourceFiles="Resources/libcall.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/libcall.bin')" />
         <Copy SourceFiles="Resources/graphics.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/graphics.bin')" />
         <Copy SourceFiles="Resources/system.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/system.bin')" />
+        <Copy SourceFiles="Resources/editor.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/editor.bin')" />
         <Copy SourceFiles="Resources/sound.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/sound.bin')" />
         <Copy SourceFiles="Resources/files.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/files.bin')" />
         <Copy SourceFiles="Resources/memory.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/memory.bin')" />
@@ -123,9 +131,6 @@
 
     <ItemGroup>
         <None Update="Resources\ehbasic.bin">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
-        <None Update="Resources\ncc.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\cp437.bin">
@@ -143,6 +148,9 @@
         <None Update="Resources\novalogo.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
+        <None Update="Resources\novaforth.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
         <None Update="Resources\libcall.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
@@ -150,6 +158,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\system.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\editor.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\sound.bin">

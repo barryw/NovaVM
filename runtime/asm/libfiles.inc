@@ -88,7 +88,24 @@ FILE_PAGE      = $0E   ; (nameptr:ARG0 b0.b1, namelen:ARG0 b2,
                        ;  destaddr:ARG2 u24 b0.b1.b2, len:ARG3 u16 b0.b1)
                        ;  -> stream len bytes of a file slice into the target
 
+; =====================================================================
+; Low-level byte-stream file handles (fio.s)
+; =====================================================================
+FILE_FOPEN     = $0F   ; (nameptr:ARG0, namelen:ARG1, fam:ARG2 b0)              -> RESULT=fileid
+FILE_FCREATE   = $10   ; (nameptr:ARG0, namelen:ARG1, fam:ARG2 b0)              -> RESULT=fileid
+FILE_FCLOSE    = $11   ; (fileid:ARG0 b0)                                       -> close/flush
+FILE_FREAD     = $12   ; (fileid:ARG0 b0, dst:ARG1 u16, len:ARG2 u16)           -> RESULT=bytes read
+FILE_FWRITE    = $13   ; (fileid:ARG0 b0, src:ARG1 u16, len:ARG2 u16)           -> RESULT=bytes written
+FILE_FSEEK     = $14   ; (fileid:ARG0 b0, pos:ARG1 u24)                         -> reposition
+FILE_FTELL     = $15   ; (fileid:ARG0 b0)                                       -> RESULT=position low24
+FILE_FSIZE     = $16   ; (fileid:ARG0 b0)                                       -> RESULT=size low24
+FILE_FRESIZE   = $17   ; (fileid:ARG0 b0, size:ARG1 u24)                        -> resize
+FILE_FFLUSH    = $18   ; (fileid:ARG0 b0)                                       -> flush
+FILE_FSTATUS   = $19   ; (nameptr:ARG0, namelen:ARG1)                           -> RESULT=implementation fam
+FILE_FDELETE   = $1A   ; (nameptr:ARG0, namelen:ARG1)                           -> exact delete
+FILE_FRENAME   = $1B   ; (oldptr:ARG0, oldlen:ARG1, newptr:ARG2, newlen:ARG3)   -> exact rename
+
 ; Highest implemented fn-id + 1. Gaps / ids >= FILE_FN_COUNT -> LERR_NO_FN.
-FILE_FN_COUNT  = $0F
+FILE_FN_COUNT  = $1C
 
 .endif

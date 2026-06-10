@@ -98,7 +98,7 @@ EXT_CMD_TIMER    = $4A          ; TIMER — return frame counter
 ;        ARG2_FRAC:ARG3_FRAC = initial cursor byte offset (lo:hi) — the unused
 ;        fractional bytes of the cap/title pointer args carry the cursor.
 ;   Out: RESULT_LO = editbuf exit reason (EDITBUF_EXIT_*)
-;        RESULT_HI = nonzero if the user requested a save (Ctrl-S / "Save First")
+;        RESULT_HI = nonzero if the user requested a save (Ctrl+K S / "Save First")
 ;        ARG1 (lo/hi) = final buffer length
 EXT_CMD_EDIT     = $4B          ; EDIT — run the shared text editor
 

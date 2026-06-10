@@ -170,7 +170,18 @@ def build_parser() -> argparse.ArgumentParser:
     wait.add_argument("--text", default="Ready")
     wait.add_argument("--timeout-ms", type=int, default=5000)
 
-    key = sub.add_parser("key", help="send one key")
+    key = sub.add_parser(
+        "key",
+        help="send one key",
+        description="Send one symbolic key name or one literal character.",
+        epilog=(
+            "Common names: ENTER, BACKSPACE, TAB, ESCAPE, SPACE, DELETE,\n"
+            "  LEFT, RIGHT, UP, DOWN, HOME, END, PGUP, PGDN, PAGEUP, PAGEDOWN,\n"
+            "  CTRL-A..CTRL-Z, CONTROL-A..CONTROL-Z, CTRL-HOME, CTRL-END,\n"
+            "  ALT-A..ALT-Z, SCREEN-HOME, VGC-HOME."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     key.add_argument("key")
 
     type_text = sub.add_parser("type-text", help="inject literal text")

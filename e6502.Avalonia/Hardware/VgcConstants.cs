@@ -69,7 +69,7 @@ public static class VgcConstants
     public const int FioGAddrH         = 0xB9AC;   // graphics/XRAM offset high
     public const int FioGLenL          = 0xB9AD;   // graphics/XRAM transfer length low
     public const int FioGLenH          = 0xB9AE;   // graphics/XRAM transfer length high
-    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID
+    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
 
@@ -111,6 +111,19 @@ public static class VgcConstants
     public const byte FioCmdRng        = 0x2A;     // host-backed 32-bit random value
     public const byte FioCmdNvgLoad    = 0x2B;     // .nvg file -> graphics bitmap
     public const byte FioCmdLoadModule = 0x2C;     // demand-load module image -> XRAM shelf slot
+    public const byte FioCmdFOpen      = 0x2D;     // low-level file open -> fileid
+    public const byte FioCmdFCreate    = 0x2E;     // low-level file create/truncate -> fileid
+    public const byte FioCmdFClose     = 0x2F;     // low-level file close
+    public const byte FioCmdFRead      = 0x30;     // low-level file read
+    public const byte FioCmdFWrite     = 0x31;     // low-level file write
+    public const byte FioCmdFSeek      = 0x32;     // low-level file reposition
+    public const byte FioCmdFTell      = 0x33;     // low-level file position
+    public const byte FioCmdFSize      = 0x34;     // low-level file size
+    public const byte FioCmdFResize    = 0x35;     // low-level file resize
+    public const byte FioCmdFFlush     = 0x36;     // low-level file flush
+    public const byte FioCmdFStatus    = 0x37;     // low-level file status
+    public const byte FioCmdFDelete    = 0x38;     // low-level exact delete
+    public const byte FioCmdFRename    = 0x39;     // low-level exact rename
 
     // Dynamic module shelf geometry (libabi.inc): SHELF_N cache slots at
     // ShelfBaseAddr + i*ShelfSlotBytes in linear XRAM.
@@ -121,7 +134,13 @@ public static class VgcConstants
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
 
+    public const byte FioDirTypeBas    = 0x00;
+    public const byte FioDirTypeSid    = 0x01;
+    public const byte FioDirTypeBin    = 0x02;
+    public const byte FioDirTypeMid    = 0x03;
+    public const byte FioDirTypeGfx    = 0x04;
     public const byte FioDirTypeDir    = 0x05;
+    public const byte FioDirTypeForth  = 0x06;
     public const byte FioErrDiskFull   = 0x04;
     public const byte FioErrNotMounted = 0x05;
 
@@ -222,7 +241,6 @@ public static class VgcConstants
     public const byte FioErrIo         = 0x02;
     public const byte FioErrEndOfDir   = 0x03;
 
-    public const byte FioDirTypeBin     = 0x02;   // dir entry type: .bin (binary executable)
 
     // -------------------------------------------------------------------------
     // Expansion Memory Controller (XMC) registers ($BA00-$BA3F)
@@ -780,7 +798,9 @@ public static class VgcConstants
     public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
     public const int RegColStHi        = 0xA0EB;   // sprite-sprite collision high byte (sprites 8-15, write clears)
     public const int RegColBgHi        = 0xA0EC;   // sprite-background collision high byte (sprites 8-15, write clears)
-    public const int RegTextTopRow     = 0xA0ED;   // first physical text row shown at the top of the display (ring scroll, 0-49)
+    public const int RegTextTopRow     = 0xA0ED;   // ring-scroll base within the active text scroll window
+    public const int RegTextScrollStart = 0xA0EE;  // first display row affected by text ring scroll
+    public const int RegTextScrollRows = 0xA0EF;   // number of display rows affected by text ring scroll
 
     public const byte ScrollCtlXHigh   = 0x01;
     public const byte ScrollCtlGfx     = 0x02;
@@ -952,11 +972,10 @@ public static class VgcConstants
     // -------------------------------------------------------------------------
 
     public const int RegRomSwap       = 0xA03F;
-    public const byte RomSwapNcc      = 0x01;   // switch to NCC ROM
     public const byte RomSwapBasic    = 0x02;   // switch to BASIC ROM
-    public const byte RomSwapNccEdit  = 0x03;   // activate NCC editor
     public const byte RomSwapExtension = 0x04;  // switch to extension ROM
     public const byte RomSwapLogo     = 0x05;   // switch to Logo ROM
+    public const byte RomSwapForth    = 0x06;   // switch to Forth ROM
     public const byte RomSwapPrimary  = RomSwapBasic; // switch to the active primary runtime ROM
 
     // -------------------------------------------------------------------------

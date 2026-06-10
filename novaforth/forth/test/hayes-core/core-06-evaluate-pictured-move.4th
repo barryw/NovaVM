@@ -1,0 +1,185 @@
+\ ------------------------------------------------------------------------
+TESTING EVALUATE
+
+: GE1 S" 123" ; IMMEDIATE
+: GE2 S" 123 1+" ; IMMEDIATE
+: GE3 S" : GE4 345 ;" ;
+: GE5 EVALUATE ; IMMEDIATE
+
+T{ GE1 EVALUATE -> 123 }T         ( TEST EVALUATE IN INTERP. STATE )
+T{ GE2 EVALUATE -> 124 }T
+T{ GE3 EVALUATE -> }T
+T{ GE4 -> 345 }T
+
+T{ : GE6 GE1 GE5 ; -> }T         ( TEST EVALUATE IN COMPILE STATE )
+T{ GE6 -> 123 }T
+T{ : GE7 GE2 GE5 ; -> }T
+T{ GE7 -> 124 }T
+
+\ ------------------------------------------------------------------------
+TESTING SOURCE >IN WORD
+
+: GS1 S" SOURCE" 2DUP EVALUATE
+       >R SWAP >R = R> R> = ;
+T{ GS1 -> <TRUE> <TRUE> }T
+
+VARIABLE SCANS
+: RESCAN?  -1 SCANS +! SCANS @ IF 0 >IN ! THEN ;
+
+T{ 2 SCANS !
+345 RESCAN?
+-> 345 345 }T
+
+: GS2  5 SCANS ! S" 123 RESCAN?" EVALUATE ;
+T{ GS2 -> 123 123 123 123 123 }T
+
+: GS3 WORD COUNT SWAP C@ ;
+T{ BL GS3 HELLO -> 5 CHAR H }T
+T{ CHAR " GS3 GOODBYE" -> 7 CHAR G }T
+T{ BL GS3
+DROP -> 0 }T            \ BLANK LINE RETURN ZERO-LENGTH STRING
+
+: GS4 SOURCE >IN ! DROP ;
+T{ GS4 123 456
+-> }T
+
+\ ------------------------------------------------------------------------
+TESTING <# # #S #> HOLD SIGN BASE >NUMBER HEX DECIMAL
+
+: S=  \ ( ADDR1 C1 ADDR2 C2 -- T/F ) COMPARE TWO STRINGS.
+   >R SWAP R@ = IF         \ MAKE SURE STRINGS HAVE SAME LENGTH
+      R> ?DUP IF         \ IF NON-EMPTY STRINGS
+    0 DO
+       OVER C@ OVER C@ - IF 2DROP <FALSE> UNLOOP EXIT THEN
+       SWAP CHAR+ SWAP CHAR+
+         LOOP
+      THEN
+      2DROP <TRUE>         \ IF WE GET HERE, STRINGS MATCH
+   ELSE
+      R> DROP 2DROP <FALSE>      \ LENGTHS MISMATCH
+   THEN ;
+
+: GP1  <# 41 HOLD 42 HOLD 0 0 #> S" BA" S= ;
+T{ GP1 -> <TRUE> }T
+
+: GP2  <# -1 SIGN 0 SIGN -1 SIGN 0 0 #> S" --" S= ;
+T{ GP2 -> <TRUE> }T
+
+: GP3  <# 1 0 # # #> S" 01" S= ;
+T{ GP3 -> <TRUE> }T
+
+: GP4  <# 1 0 #S #> S" 1" S= ;
+T{ GP4 -> <TRUE> }T
+
+24 CONSTANT MAX-BASE         \ BASE 2 .. 36
+: COUNT-BITS
+   0 0 INVERT BEGIN DUP WHILE >R 1+ R> 2* REPEAT DROP ;
+COUNT-BITS 2* CONSTANT #BITS-UD      \ NUMBER OF BITS IN UD
+
+: GP5
+   BASE @ <TRUE>
+   MAX-BASE 1+ 2 DO         \ FOR EACH POSSIBLE BASE
+      I BASE !            \ TBD: ASSUMES BASE WORKS
+      I 0 <# #S #> S" 10" S= AND
+   LOOP
+   SWAP BASE ! ;
+T{ GP5 -> <TRUE> }T
+
+: GP6
+   BASE @ >R  2 BASE !
+   MAX-UINT MAX-UINT <# #S #>      \ MAXIMUM UD TO BINARY
+   R> BASE !            \ S: C-ADDR U
+   DUP #BITS-UD = SWAP
+   0 DO               \ S: C-ADDR FLAG
+      OVER C@ [CHAR] 1 = AND      \ ALL ONES
+      >R CHAR+ R>
+   LOOP SWAP DROP ;
+T{ GP6 -> <TRUE> }T
+
+: GP7
+   BASE @ >R    MAX-BASE BASE !
+   <TRUE>
+   A 0 DO
+      I 0 <# #S #>
+      1 = SWAP C@ I 30 + = AND AND
+   LOOP
+   MAX-BASE A DO
+      I 0 <# #S #>
+      1 = SWAP C@ 41 I A - + = AND AND
+   LOOP
+   R> BASE ! ;
+
+T{ GP7 -> <TRUE> }T
+
+\ >NUMBER TESTS
+CREATE GN-BUF 0 C,
+: GN-STRING   GN-BUF 1 ;
+: GN-CONSUMED   GN-BUF CHAR+ 0 ;
+: GN'      [CHAR] ' WORD CHAR+ C@ GN-BUF C!  GN-STRING ;
+
+T{ 0 0 GN' 0' >NUMBER -> 0 0 GN-CONSUMED }T
+T{ 0 0 GN' 1' >NUMBER -> 1 0 GN-CONSUMED }T
+T{ 1 0 GN' 1' >NUMBER -> BASE @ 1+ 0 GN-CONSUMED }T
+T{ 0 0 GN' -' >NUMBER -> 0 0 GN-STRING }T   \ SHOULD FAIL TO CONVERT THESE
+T{ 0 0 GN' +' >NUMBER -> 0 0 GN-STRING }T
+T{ 0 0 GN' .' >NUMBER -> 0 0 GN-STRING }T
+
+: >NUMBER-BASED
+   BASE @ >R BASE ! >NUMBER R> BASE ! ;
+
+T{ 0 0 GN' 2' 10 >NUMBER-BASED -> 2 0 GN-CONSUMED }T
+T{ 0 0 GN' 2'  2 >NUMBER-BASED -> 0 0 GN-STRING }T
+T{ 0 0 GN' F' 10 >NUMBER-BASED -> F 0 GN-CONSUMED }T
+T{ 0 0 GN' G' 10 >NUMBER-BASED -> 0 0 GN-STRING }T
+T{ 0 0 GN' G' MAX-BASE >NUMBER-BASED -> 10 0 GN-CONSUMED }T
+T{ 0 0 GN' Z' MAX-BASE >NUMBER-BASED -> 23 0 GN-CONSUMED }T
+
+: GN1   \ ( UD BASE -- UD' LEN ) UD SHOULD EQUAL UD' AND LEN SHOULD BE ZERO.
+   BASE @ >R BASE !
+   <# #S #>
+   0 0 2SWAP >NUMBER SWAP DROP      \ RETURN LENGTH ONLY
+   R> BASE ! ;
+T{ 0 0 2 GN1 -> 0 0 0 }T
+T{ MAX-UINT 0 2 GN1 -> MAX-UINT 0 0 }T
+T{ MAX-UINT DUP 2 GN1 -> MAX-UINT DUP 0 }T
+T{ 0 0 MAX-BASE GN1 -> 0 0 0 }T
+T{ MAX-UINT 0 MAX-BASE GN1 -> MAX-UINT 0 0 }T
+T{ MAX-UINT DUP MAX-BASE GN1 -> MAX-UINT DUP 0 }T
+
+: GN2   \ ( -- 16 10 )
+   BASE @ >R  HEX BASE @  DECIMAL BASE @  R> BASE ! ;
+T{ GN2 -> 10 A }T
+
+\ ------------------------------------------------------------------------
+TESTING FILL MOVE
+
+CREATE FBUF 00 C, 00 C, 00 C,
+CREATE SBUF 12 C, 34 C, 56 C,
+: SEEBUF FBUF C@  FBUF CHAR+ C@  FBUF CHAR+ CHAR+ C@ ;
+
+T{ FBUF 0 20 FILL -> }T
+T{ SEEBUF -> 00 00 00 }T
+
+T{ FBUF 1 20 FILL -> }T
+T{ SEEBUF -> 20 00 00 }T
+
+T{ FBUF 3 20 FILL -> }T
+T{ SEEBUF -> 20 20 20 }T
+
+T{ FBUF FBUF 3 CHARS MOVE -> }T      \ BIZARRE SPECIAL CASE
+T{ SEEBUF -> 20 20 20 }T
+
+T{ SBUF FBUF 0 CHARS MOVE -> }T
+T{ SEEBUF -> 20 20 20 }T
+
+T{ SBUF FBUF 1 CHARS MOVE -> }T
+T{ SEEBUF -> 12 20 20 }T
+
+T{ SBUF FBUF 3 CHARS MOVE -> }T
+T{ SEEBUF -> 12 34 56 }T
+
+T{ FBUF FBUF CHAR+ 2 CHARS MOVE -> }T
+T{ SEEBUF -> 12 12 34 }T
+
+T{ FBUF CHAR+ FBUF 2 CHARS MOVE -> }T
+T{ SEEBUF -> 12 34 34 }T

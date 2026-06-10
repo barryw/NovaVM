@@ -175,7 +175,6 @@ public sealed class HelpPanel : UserControl
             ("Guides", HelpTopicType.Guide),
             ("Commands", HelpTopicType.Command),
             ("Functions", HelpTopicType.Function),
-            ("NCC", HelpTopicType.Ncc),
         };
 
         foreach (var (label, type) in filters)
@@ -303,7 +302,6 @@ public sealed class HelpPanel : UserControl
             HelpTopicType.Guide => ("Guide", HelpStyles.BadgeGuide),
             HelpTopicType.Command => ("Cmd", HelpStyles.BadgeCommand),
             HelpTopicType.Function => ("Fn", HelpStyles.BadgeFunction),
-            HelpTopicType.Ncc => ("NCC", HelpStyles.AccentBlue),
             HelpTopicType.Program => ("Prog", HelpStyles.BadgeProgram),
             _ => ("?", HelpStyles.TextSecondary)
         };

@@ -477,7 +477,7 @@ public class NovaLogoHarnessTests
 
     private static LogoInput Raw(string text) => new(text);
 
-    private static LogoInput SaveAndQuit() => Raw("\x13\x11");
+    private static LogoInput SaveAndQuit() => Raw("\x0B" + "s" + "\x1B" + "x");
 
     private static void QueueInput(ScreenEditor editor, LogoInput input)
     {

@@ -1608,7 +1608,7 @@ static void PrintVmUsage()
     Console.Error.WriteLine("  with --remote: reset uses management TCP; debug commands use <host>:6503");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Commands:");
-    Console.Error.WriteLine("  cold-start [--runtime basic|logo|ncc] [--text <text>] [--no-wait]");
+    Console.Error.WriteLine("  cold-start [--runtime basic|logo|forth] [--text <text>] [--no-wait]");
     Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
     Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
     Console.Error.WriteLine("  screen [--json]");
@@ -3560,6 +3560,7 @@ static NdiFileType ExtensionToFileType(string ext) =>
         ".bin"            => NdiFileType.Bin,
         ".mid" or ".midi" or ".nms" => NdiFileType.Mid,
         ".nvg"            => NdiFileType.Gfx,
+        ".4th" or ".fth" or ".fs" or ".fr" => NdiFileType.Forth,
         _                 => NdiFileType.Bin,
     };
 

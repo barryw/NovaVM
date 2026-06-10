@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Text.Json.Nodes;
 using e6502.Storage;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -54,5 +56,44 @@ public class BootLibrariesTests
         Assert.IsTrue(BootLibraries.RemoveEntry(cfg, "graphics.nmod"));
         Assert.AreEqual(0, cfg["libraries"]!.AsArray().Count);
         Assert.IsFalse(BootLibraries.RemoveEntry(cfg, "graphics.nmod"), "second remove is a no-op");
+    }
+
+    [TestMethod]
+    public void StagedBootConfig_IncludesEditorLibraryWithoutFixedBases()
+    {
+        string json = File.ReadAllText(RepoPath("e6502.ESP32", "novahost", "assets", "config", "boot.json"));
+        JsonObject cfg = JsonNode.Parse(json)!.AsObject();
+        JsonArray libs = cfg["libraries"]!.AsArray();
+
+        JsonObject? editor = null;
+        foreach (JsonNode? node in libs)
+        {
+            JsonObject lib = node!.AsObject();
+            Assert.IsNull(lib["base"], "firmware assigns shelf slots; boot library entries must not pin XRAM bases");
+            if ((string?)lib["name"] == "editor")
+                editor = lib;
+        }
+
+        Assert.IsNotNull(editor, "hardware boot config must catalog editor.nmod for EDITOR module calls");
+        Assert.AreEqual(8, (int)editor!["id"]!);
+        Assert.AreEqual("/lib/editor.nmod", (string?)editor["path"]);
+        Assert.AreEqual(16384, (int)editor["size"]!);
+    }
+
+    private static string RepoPath(params string[] parts)
+    {
+        string? dir = Directory.GetCurrentDirectory();
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir, "e6502.sln")))
+            {
+                string[] allParts = new string[parts.Length + 1];
+                allParts[0] = dir;
+                Array.Copy(parts, 0, allParts, 1, parts.Length);
+                return Path.Combine(allParts);
+            }
+            dir = Directory.GetParent(dir)?.FullName;
+        }
+        throw new DirectoryNotFoundException("Could not locate repository root.");
     }
 }

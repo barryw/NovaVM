@@ -101,6 +101,7 @@ EDITUI_MENU_ITEMH:  .res 1
       .export editui_clear_screen
       .export editui_shutdown
       .export editui_draw_shell
+      .export editui_draw_menu
       .export editui_draw_status
       .export editui_draw_box
       .export editui_select_box_body
@@ -126,6 +127,13 @@ editui_init:
       ; palette mode the editor's color constants are authored against.
       LDA   #EDITUI_PALETTE_MODE
       STA   VGC_PALETTE
+      STZ   VTEXT_TOPROW
+      STZ   VGC_TEXT_TOPROW
+      STZ   VTEXT_SCROLL_TOP
+      STZ   VGC_TEXT_SCROLL_START
+      STZ   VTEXT_SCROLL_ROWS
+      LDA   #EDITUI_SCREEN_ROWS
+      STA   VGC_TEXT_SCROLL_ROWS
       STZ   VGC_CURSEN
       STZ   EDITUI_BOX_STYLE
       STZ   EDITUI_MENUL
@@ -169,6 +177,13 @@ editui_clear_screen:
       JMP   vtext_clear_region
 
 editui_shutdown:
+      STZ   VTEXT_TOPROW
+      STZ   VGC_TEXT_TOPROW
+      STZ   VTEXT_SCROLL_TOP
+      STZ   VGC_TEXT_SCROLL_START
+      STZ   VTEXT_SCROLL_ROWS
+      LDA   #EDITUI_SCREEN_ROWS
+      STA   VGC_TEXT_SCROLL_ROWS
       LDA   #$0C
       STA   VGC_CHAROUT
 @wait:
@@ -277,16 +292,6 @@ editui_strlen:
 @done:
       LDA   EDITUI_LEN
       RTS
-
-editui_center_ptr:
-      JSR   editui_strlen
-      STA   EDITUI_TMP
-      LDA   #EDITUI_SCREEN_COLS
-      SEC
-      SBC   EDITUI_TMP
-      LSR
-      STA   EDITUI_PRINTX
-      JMP   editui_print_ptr
 
 editui_print_at_2:
       LDA   #2
@@ -410,81 +415,14 @@ editui_draw_menu_table:
       RTS
 
 editui_draw_title_band:
-      LDA   EDITUI_TITLEL
-      ORA   EDITUI_TITLEH
-      BNE   @draw
-      LDA   EDITUI_HELPL
-      ORA   EDITUI_HELPH
-      BNE   @draw
-      RTS
-@draw:
-      JSR   editui_push_box_state
-      LDA   #1
-      STA   EDITUI_BOXX
-      LDA   #2
-      STA   EDITUI_BOXY
-      LDA   #78
-      STA   EDITUI_BOXW
-      LDA   #4
-      STA   EDITUI_BOXH
-      LDA   #EDITUI_BOX_DOUBLE
-      STA   EDITUI_BOX_STYLE
-      STZ   EDITUI_BOX_TITLEL
-      STZ   EDITUI_BOX_TITLEH
-      JSR   editui_draw_box
-
-      LDA   EDITUI_TITLEL
-      ORA   EDITUI_TITLEH
-      BEQ   @help
-      LDA   EDITUI_TITLEL
-      STA   EDITUI_PRINTL
-      LDA   EDITUI_TITLEH
-      STA   EDITUI_PRINTH
-      LDA   #3
-      STA   EDITUI_PRINTY
-      LDA   #EDITUI_COLOR_TITLE
-      STA   VTEXT_COLOR
-      JSR   editui_center_ptr
-      ; Always stamp the marker cell (just past the title) so clearing the
-      ; dirty flag erases a previously drawn '*'.
-      LDA   #EDITUI_COLOR_TITLE
-      STA   VTEXT_COLOR
-      LDA   EDITUI_DIRTY
-      BEQ   @clean_mark
-      LDA   #'*'
-      BRA   @put_mark
-@clean_mark:
-      LDA   #' '
-@put_mark:
-      STA   VTEXT_CHAR
-      JSR   vtext_put_char
-
-@help:
-      LDA   EDITUI_HELPL
-      ORA   EDITUI_HELPH
-      BEQ   @restore
-      LDA   EDITUI_HELPL
-      STA   EDITUI_PRINTL
-      LDA   EDITUI_HELPH
-      STA   EDITUI_PRINTH
-      LDA   #4
-      STA   EDITUI_PRINTY
-      LDA   #EDITUI_COLOR_DIM
-      STA   VTEXT_COLOR
-      JSR   editui_center_ptr
-
-@restore:
-      JSR   editui_pop_box_state
-@done:
       RTS
 
 editui_draw_status:
       JSR   editui_full_region
-      LDA   #1
-      STA   VTEXT_LEFT
+      STZ   VTEXT_LEFT
       LDA   #EDITUI_STATUS_ROW
       STA   VTEXT_TOP
-      LDA   #78
+      LDA   #EDITUI_SCREEN_COLS
       STA   VTEXT_WIDTH
       LDA   #1
       STA   VTEXT_HEIGHT
@@ -504,7 +442,7 @@ editui_draw_status:
       STA   EDITUI_PRINTL
       LDA   EDITUI_STATUSH
       STA   EDITUI_PRINTH
-      LDA   #2
+      LDA   #1
       STA   EDITUI_PRINTX
       LDA   #EDITUI_STATUS_ROW
       STA   EDITUI_PRINTY
@@ -1320,55 +1258,46 @@ editui_xram_plane_m:
 
 editui_default_menus:
       .byte 3
-      .byte 'f', 12, <editui_menu_title_file, >editui_menu_title_file, <editui_menu_file_items, >editui_menu_file_items
-      .byte 'e', 12, <editui_menu_title_edit, >editui_menu_title_edit, <editui_menu_edit_items, >editui_menu_edit_items
-      .byte 'h', 12, <editui_menu_title_help, >editui_menu_title_help, <editui_menu_help_items, >editui_menu_help_items
+      .byte 'f', 18, <editui_menu_title_file, >editui_menu_title_file, <editui_menu_file_items, >editui_menu_file_items
+      .byte 'e', 18, <editui_menu_title_edit, >editui_menu_title_edit, <editui_menu_edit_items, >editui_menu_edit_items
+      .byte 's', 18, <editui_menu_title_search, >editui_menu_title_search, <editui_menu_search_items, >editui_menu_search_items
 
 editui_menu_file_items:
-      .byte 4
-      .byte EDITUI_CMD_NEW,  'n', <editui_item_new, >editui_item_new
-      .byte EDITUI_CMD_OPEN, 'o', <editui_item_open, >editui_item_open
+      .byte 2
       .byte EDITUI_CMD_SAVE, 's', <editui_item_save, >editui_item_save
-      .byte EDITUI_CMD_QUIT, 'q', <editui_item_quit, >editui_item_quit
+      .byte EDITUI_CMD_QUIT, 'x', <editui_item_quit, >editui_item_quit
 
 editui_menu_edit_items:
-      .byte 4
-      .byte EDITUI_CMD_UNDO,  'u', <editui_item_undo, >editui_item_undo
+      .byte 3
       .byte EDITUI_CMD_CUT,   't', <editui_item_cut, >editui_item_cut
       .byte EDITUI_CMD_COPY,  'c', <editui_item_copy, >editui_item_copy
       .byte EDITUI_CMD_PASTE, 'p', <editui_item_paste, >editui_item_paste
 
-editui_menu_help_items:
+editui_menu_search_items:
       .byte 2
-      .byte EDITUI_CMD_HELP,  'h', <editui_item_help, >editui_item_help
-      .byte EDITUI_CMD_ABOUT, 'a', <editui_item_about, >editui_item_about
+      .byte EDITUI_CMD_FIND,      'f', <editui_item_find, >editui_item_find
+      .byte EDITUI_CMD_GOTO_LINE, 'g', <editui_item_goto_line, >editui_item_goto_line
 
 editui_menu_title_file:
       .byte "&File",0
 editui_menu_title_edit:
       .byte "&Edit",0
-editui_menu_title_help:
-      .byte "&Help",0
+editui_menu_title_search:
+      .byte "&Search",0
 
-editui_item_new:
-      .byte "&New",0
-editui_item_open:
-      .byte "&Open",0
 editui_item_save:
-      .byte "&Save",0
+      .byte "&Save ^K S",0
 editui_item_quit:
-      .byte "&Quit",0
-editui_item_undo:
-      .byte "&Undo",0
+      .byte "E&xit Alt-X",0
 editui_item_cut:
-      .byte "Cu&t",0
+      .byte "Cu&t ^X",0
 editui_item_copy:
-      .byte "&Copy",0
+      .byte "&Copy ^C",0
 editui_item_paste:
-      .byte "&Paste",0
-editui_item_help:
-      .byte "&Help",0
-editui_item_about:
-      .byte "&About",0
+      .byte "&Paste ^V",0
+editui_item_find:
+      .byte "&Find ^Q F",0
+editui_item_goto_line:
+      .byte "&Goto ^G",0
 
 .endif

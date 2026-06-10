@@ -29,15 +29,13 @@ and talks to NovaHost through a long-lived TCP management connection on port
 framed `NVH1` protocol with CBOR payloads and chunked raw upload data.
 
 Runtime packages uploaded through the webserver can be `.zip`, `.nvr`, or
-`.nrp` files. For two-ROM runtimes, include `nova-runtime.json`:
+`.nrp` files. For runtimes, include `nova-runtime.json`:
 
 ```json
-{"name":"novalogo","rom":"novalogo.bin","extensionRom":"novalogo_ext.bin"}
+{"name":"novalogo","rom":"novalogo.bin"}
 ```
 
-If there is no manifest, one-ROM packages are accepted, and two-ROM packages
-are accepted only when the extension ROM filename contains `ext` or
-`extension`.
+If there is no manifest, one-ROM packages are accepted.
 
 # Drive Mounts
 

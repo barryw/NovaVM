@@ -4,12 +4,9 @@
 ; runtime should carry in its own 16K ROM. Built once (modules/system/system.s),
 ; staged to the XRAM shelf, paged into bank 1 on first lib_call.
 ;
-; Phase A ships exactly one fn — the interactive text editor (SYS_FN_EDIT), moved
-; verbatim out of the NovaLogo extension ROM. The editor is language-neutral
-; (see editbuf.inc): it edits a flat text buffer in low RAM and runs entirely
-; within one lib_call (keyboard + screen are MMIO, which survive the bank swap).
-; No module->runtime callback is needed; the host builds any document record from
-; the final buffer AFTER the editor returns.
+; The full-screen source editor lives in MODULE_ID_EDITOR (libeditor.inc). The
+; original SYS_FN_EDIT slot is intentionally left unimplemented so the remaining
+; SYSTEM fn ids stay stable.
 ;
 ; CALLING CONVENTION (caller side, see libabi.inc):
 ;   LIB_MOD_ID ($0300) = MODULE_ID_SYSTEM
@@ -31,18 +28,8 @@ LIBSYSTEM_INC = 1
 ; A==0 -> LERR_OK. Reporters publish their value/keycode to LIB_RESULT with OK.
 LERR_SYS_FAIL  = $8D   ; rng_*/nui_*/overlay_* NDK routine returned A!=0
 
-; =====================================================================
-; $00  editor
-; =====================================================================
-; SYS_FN_EDIT — run the shared EDITUI/EDITBUF modal editor on a RAM text buffer.
-;   In:  ARG0 lo word  = buffer ptr        ARG0 hi word = initial cursor byte offset
-;        ARG1 lo word  = current length    ARG2 lo word = capacity (bytes)
-;        ARG3 lo word  = NUL-terminated title ptr
-;   Out: RESULT byte0  = editbuf exit reason (EDITBUF_EXIT_*)
-;        RESULT byte1  = nonzero if the user requested a save (Ctrl-S / "Save First")
-;        ARG1 lo word  = final buffer length
-;        LIB_STATUS    = LERR_OK
-SYS_FN_EDIT   = $00
+; $00 is the retired SYS_FN_EDIT slot. Call lib_call(EDITOR, EDITOR_FN_EDIT).
+SYS_FN_EDIT_RETIRED = $00
 
 ; --- timing (moved from the NovaLogo extension ROM in Phase B) ---
 SYS_FN_WAIT     = $01   ; (n:ARG0 frames)  -> busy-wait N video frames

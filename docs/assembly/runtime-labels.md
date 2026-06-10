@@ -1083,6 +1083,97 @@ Inputs:
 Outputs:
 - `A`: 0 on success, 1 on error.
 
+## FIO.FCLOSE
+
+Close the fileid in FIO_SRCL/H, flushing dirty data first.
+
+- Kind: `routine`
+- Symbol: `fio_fclose`
+
+## FIO.FCREATE
+
+Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+
+- Kind: `routine`
+- Symbol: `fio_fcreate`
+
+## FIO.FDELETE_EXACT
+
+Delete exact FIO.NAME without BASIC's default .bas behavior.
+
+- Kind: `routine`
+- Symbol: `fio_fdelete_exact`
+
+## FIO.FFLUSH
+
+Flush dirty data for fileid FIO_SRCL/H.
+
+- Kind: `routine`
+- Symbol: `fio_fflush`
+
+## FIO.FOPEN
+
+Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+
+- Kind: `routine`
+- Symbol: `fio_fopen`
+
+## FIO.FREAD
+
+Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes.
+
+- Kind: `routine`
+- Symbol: `fio_fread`
+
+## FIO.FRENAME
+
+Rename exact FIO.NAME to the CPU string pointed at by FIO_ENDL/H and FIO_GLENL/H.
+
+- Kind: `routine`
+- Symbol: `fio_frename`
+
+## FIO.FRESIZE
+
+Resize fileid FIO_SRCL/H to the low-24-bit size in FIO_SIZEL/H/SIZE2.
+
+- Kind: `routine`
+- Symbol: `fio_fresize`
+
+## FIO.FSEEK
+
+Reposition fileid FIO_SRCL/H to the low-24-bit offset in FIO_SIZEL/H/SIZE2.
+
+- Kind: `routine`
+- Symbol: `fio_fseek`
+
+## FIO.FSIZE
+
+Return fileid FIO_SRCL/H size in FIO_SIZEL/H/SIZE2.
+
+- Kind: `routine`
+- Symbol: `fio_fsize`
+
+## FIO.FSTATUS
+
+Check exact FIO.NAME status; returns implementation fam in FIO_SRCL/H.
+
+- Kind: `routine`
+- Symbol: `fio_fstatus`
+
+## FIO.FTELL
+
+Return fileid FIO_SRCL/H position in FIO_SIZEL/H/SIZE2.
+
+- Kind: `routine`
+- Symbol: `fio_ftell`
+
+## FIO.FWRITE
+
+Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H.
+
+- Kind: `routine`
+- Symbol: `fio_fwrite`
+
 ## FIO.GLOAD
 
 Load VGC/graphics memory using FIO graphics registers.

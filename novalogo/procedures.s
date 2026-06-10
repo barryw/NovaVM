@@ -188,7 +188,7 @@ proc_collect:
       STZ   proc_body_len_hi
 
       ; Open the shared EDITUI editor on an empty body buffer. Carry set means
-      ; the user asked to save (Ctrl-S / "Save First") before exiting.
+      ; the user asked to save (Ctrl+K S / "Save First") before exiting.
       JSR   proc_open_editor
       BCS   @body_done
       RTS
@@ -344,8 +344,8 @@ proc_edit_run:
       LDA   #0
       STA   proc_editor_title,Y
 
-      ; --- lib_call(SYSTEM, SYS_FN_EDIT): the editor moved out of the extension
-      ;     ROM into the shared SYSTEM module. 32-bit LE mailbox cells at $0303+:
+      ; --- lib_call(EDITOR, EDITOR_FN_EDIT): the editor lives in its own
+      ;     shared module. 32-bit LE mailbox cells at $0303+:
       ;       ARG0 = buffer ptr (low word) + initial cursor offset (high word)
       ;       ARG1 = current length   ARG2 = capacity   ARG3 = NUL title ptr
       ;     The editor edits the buffer in place and runs entirely within the call
@@ -371,10 +371,13 @@ proc_edit_run:
       STA   LIB_ARG3+0
       LDA   #>proc_editor_title
       STA   LIB_ARG3+1
+      LDA   #EDITOR_EDIT_PROFILE_LOGO
+      STA   LIB_ARG3+2
+      STZ   LIB_ARG3+3
 
-      LDA   #MODULE_ID_SYSTEM
-      LDX   #SYS_FN_EDIT
-      JSR   do_lib_call               ; page in SYSTEM, run editor, restore host bank
+      LDA   #MODULE_ID_EDITOR
+      LDX   #EDITOR_FN_EDIT
+      JSR   do_lib_call               ; page in EDITOR, run editor, restore host bank
 
       ; editor returns the final buffer length in ARG1, save flag in RESULT byte1
       LDA   LIB_ARG1+0

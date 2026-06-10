@@ -25,8 +25,8 @@ namespace e6502UnitTests;
 ///
 /// Approach (sentinel-survives, the strongest faithful proof against the real
 /// shipped novalogo.bin running on the Avalonia CompositeBusDevice): cold-start
-/// Logo and define a procedure through the editor — which now lives in the SYSTEM
-/// module and runs via lib_call(SYSTEM, SYS_FN_EDIT), so it legitimately drives the
+/// Logo and define a procedure through the editor — which now lives in the EDITOR
+/// module and runs via lib_call(EDITOR, EDITOR_FN_EDIT), so it legitimately drives the
 /// $0300 mailbox and the $0420-$08FF module-BSS band during definition (that band
 /// is FOR paged modules; it is not a runtime clobber). THEN paint a $5A sentinel
 /// across the whole reserved band and drive the real ROM through FOUNDATION-ONLY
@@ -73,7 +73,7 @@ public class NovaLogoMailboxReservationTests
 
         // Define the procedure via the editor FIRST, then PRINT a marker so we know
         // the editor exited and proc_build_record ran. The editor now lives in the
-        // SYSTEM module and runs via lib_call(SYSTEM, SYS_FN_EDIT), so DURING the
+        // EDITOR module and runs via lib_call(EDITOR, EDITOR_FN_EDIT), so DURING the
         // definition it legitimately drives the $0300 mailbox AND its working store
         // in the $0420-$08FF module-BSS band — that is the band's PURPOSE for a
         // paged module, not a runtime clobber (the same reason this test avoids
@@ -88,7 +88,7 @@ public class NovaLogoMailboxReservationTests
             "REPEAT :N [MAKE \"A 1 MAKE \"B 2 MAKE \"A :A + 9 MAKE \"B :B + 8 " +
             "MAKE \"A :A + :B MAKE \"B :B + :A MAKE \"A 3 MAKE \"B 4 " +
             "MAKE \"A :A + 7 MAKE \"B :B + 6 MAKE \"C :A]\r");
-        QueueText(editor, "\x13\x11");          // ^S save, ^Q quit editor
+        QueueText(editor, "\x0B" + "s" + "\x1B" + "x"); // Ctrl+K S save, Alt-X quit editor
         QueueText(editor, "PRINT \"DEFINED\r"); // editor exited + proc record built
         RunUntilScreenContains(cpu, bus, "DEFINED", 200_000_000);
 

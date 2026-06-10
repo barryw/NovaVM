@@ -72,6 +72,8 @@ EDITUI_KEY_ALT_PREFIX = EDITUI_KEY_ESC
 
 EDITUI_KEY_CTRL_A    = $01
 EDITUI_KEY_CTRL_C    = $03
+EDITUI_KEY_CTRL_G    = $07
+EDITUI_KEY_CTRL_K    = $0B
 EDITUI_KEY_CTRL_N    = $0E
 EDITUI_KEY_CTRL_O    = $0F
 EDITUI_KEY_CTRL_Q    = $11
@@ -87,6 +89,8 @@ EDITUI_KEY_HOME      = $02
 EDITUI_KEY_END       = $05
 EDITUI_KEY_PGUP      = $10
 EDITUI_KEY_PGDN      = $12
+EDITUI_KEY_CTRL_HOME = $80
+EDITUI_KEY_CTRL_END  = $81
 
 EDITUI_CMD_NONE      = $00
 EDITUI_CMD_NEW       = $01
@@ -101,6 +105,9 @@ EDITUI_CMD_PASTE     = $09
 EDITUI_CMD_CLOSE     = $0A
 EDITUI_CMD_HELP      = $0B
 EDITUI_CMD_ABOUT     = $0C
+EDITUI_CMD_FIND      = $0D
+EDITUI_CMD_GOTO_LINE = $0E
+EDITUI_CMD_SELECT_ALL = $0F
 
 EDITUI_MENU_ENTRY_SIZE = 6
 EDITUI_MENU_ITEM_SIZE  = 4
@@ -144,6 +151,7 @@ EDITUI_MENU_ITEM_SIZE  = 4
 .global editui_shutdown
 .global editui_draw_shell
 .global editui_draw_title_band
+.global editui_draw_menu
 .global editui_refresh_dirty
 .global editui_draw_status
 .global editui_draw_box

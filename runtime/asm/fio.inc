@@ -81,6 +81,19 @@ FIO_ARG_NAMEPTR_H = NVR5L
 .global fio_pwd
 .global fio_load_runtime
 .global fio_rng
+.global fio_fopen
+.global fio_fcreate
+.global fio_fclose
+.global fio_fread
+.global fio_fwrite
+.global fio_fseek
+.global fio_ftell
+.global fio_fsize
+.global fio_fresize
+.global fio_fflush
+.global fio_fstatus
+.global fio_fdelete_exact
+.global fio_frename
 .global fio_run
 .global fio_prepare_xram_transfer
 

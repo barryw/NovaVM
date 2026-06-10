@@ -105,10 +105,9 @@ public class EmulatorCanvas : Control
             return;
         }
 
-        // F5: activate BASIC editor (only when NCC editor is not active)
-        var nccEditor = _editors.OfType<NccEditor>().FirstOrDefault();
+        // F5: activate BASIC editor.
         var basicEditor = _editors.OfType<BasicEditor>().FirstOrDefault();
-        if (e.Key == Key.F5 && nccEditor is not { IsActive: true })
+        if (e.Key == Key.F5)
         {
             basicEditor?.ToggleActivation();
             e.Handled = true;
@@ -116,7 +115,7 @@ public class EmulatorCanvas : Control
             return;
         }
 
-        if ((e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Meta)) && e.Key == Key.V
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Meta) && e.Key == Key.V
             || (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Insert))
         {
             _ = PasteClipboardAsync();
@@ -154,8 +153,8 @@ public class EmulatorCanvas : Control
             }
         }
 
-        // Ctrl/Meta + letter the font keymap didn't claim -> ASCII control code
-        // (Ctrl-S=Save 0x13, Ctrl-Q=Quit 0x11, ...). Without this it falls through
+        // Ctrl + letter the font keymap didn't claim -> ASCII control code
+        // (Ctrl-C=Copy 0x03, Ctrl-K/Ctrl-Q command prefixes, ...). Without this it falls through
         // to OnTextInput and inserts the literal letter.
         if (ControlKeyMap.TryMap(e.Key, e.KeyModifiers, out byte ctrlCode))
         {
@@ -183,6 +182,22 @@ public class EmulatorCanvas : Control
                 _editor.QueueInput(31);
                 e.Handled = true;
                 break;
+            case Key.Home:
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x80 : (byte)0x02);
+                e.Handled = true;
+                break;
+            case Key.End:
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x81 : (byte)0x05);
+                e.Handled = true;
+                break;
+            case Key.PageUp:
+                _editor.QueueInput(0x10);
+                e.Handled = true;
+                break;
+            case Key.PageDown:
+                _editor.QueueInput(0x12);
+                e.Handled = true;
+                break;
             case Key.Enter:
                 _ = QueueEnterAsync();
                 e.Handled = true;
@@ -192,7 +207,7 @@ public class EmulatorCanvas : Control
                 e.Handled = true;
                 break;
             case Key.Escape:
-                _editor.QueueInput(0x03);
+                _editor.QueueInput(0x1B);
                 e.Handled = true;
                 break;
         }

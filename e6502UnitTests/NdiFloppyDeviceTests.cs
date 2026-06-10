@@ -66,6 +66,27 @@ public class NdiFloppyDeviceTests
         finally { File.Delete(path); }
     }
 
+    [TestMethod]
+    public void Save_FourthUsesForthFileType()
+    {
+        string path = TempNdi();
+        try
+        {
+            CreateDisk(path);
+
+            var dev = new NdiFloppyDevice("F");
+            dev.Mount(path);
+            dev.Save("CORE", System.Text.Encoding.ASCII.GetBytes("\\ core library\n"), ".4th");
+
+            StorageDirEntry entry = dev.ListDirectory(null).Single(e => e.Filename == "CORE");
+            Assert.AreEqual(NdiFileType.Forth, entry.FileType,
+                ".4th files are source input, not binary payloads with load-address prefixes.");
+
+            dev.Unmount();
+        }
+        finally { File.Delete(path); }
+    }
+
     // -------------------------------------------------------------------------
     // 2. Subdirectory: cd, save, list, cd back
     // -------------------------------------------------------------------------

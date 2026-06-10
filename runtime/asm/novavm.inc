@@ -86,13 +86,32 @@ FioCmdXPage                   = $29
 FioCmdRng                     = $2A
 FioCmdNvgLoad                 = $2B
 FioCmdLoadModule              = $2C
+FioCmdFOpen                   = $2D
+FioCmdFCreate                 = $2E
+FioCmdFClose                  = $2F
+FioCmdFRead                   = $30
+FioCmdFWrite                  = $31
+FioCmdFSeek                   = $32
+FioCmdFTell                   = $33
+FioCmdFSize                   = $34
+FioCmdFResize                 = $35
+FioCmdFFlush                  = $36
+FioCmdFStatus                 = $37
+FioCmdFDelete                 = $38
+FioCmdFRename                 = $39
 ShelfBaseAddr                 = $60000
 ShelfSlotBytes                = $4000
 ShelfN                        = $04
 FioPageTargetXram             = $00
 FioPageTargetRam              = $01
 FioPageTargetVgc              = $02
+FioDirTypeBas                 = $00
+FioDirTypeSid                 = $01
+FioDirTypeBin                 = $02
+FioDirTypeMid                 = $03
+FioDirTypeGfx                 = $04
 FioDirTypeDir                 = $05
+FioDirTypeForth               = $06
 FioErrDiskFull                = $04
 FioErrNotMounted              = $05
 MusicStatus                   = $BA50
@@ -170,7 +189,6 @@ FioErrNone                    = $00
 FioErrNotFound                = $01
 FioErrIo                      = $02
 FioErrEndOfDir                = $03
-FioDirTypeBin                 = $02
 
 ; --- Expansion Memory Controller (XMC) registers ($BA00-$BA3F) ---
 XmcBase                       = $BA00
@@ -621,6 +639,8 @@ RegScrollCtl                  = $A0EA
 RegColStHi                    = $A0EB
 RegColBgHi                    = $A0EC
 RegTextTopRow                 = $A0ED
+RegTextScrollStart            = $A0EE
+RegTextScrollRows             = $A0EF
 ScrollCtlXHigh                = $01
 ScrollCtlGfx                  = $02
 ScrollCtlText                 = $04
@@ -741,11 +761,10 @@ HelpSearchBufferLen           = $10
 
 ; --- ROM swap register ($A03F) ---
 RegRomSwap                    = $A03F
-RomSwapNcc                    = $01
 RomSwapBasic                  = $02
-RomSwapNccEdit                = $03
 RomSwapExtension              = $04
 RomSwapLogo                   = $05
+RomSwapForth                  = $06
 
 ; --- Compiler Controller registers ($A031-$A03E) ---
 CmpBase                       = $A031

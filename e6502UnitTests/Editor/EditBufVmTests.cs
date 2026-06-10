@@ -33,8 +33,9 @@ public class EditBufVmTests
     private const ushort TestSeedLenL = 0x0308;   // nonzero => harness uses test-injected buffer
     private const ushort TestSeedLenH = 0x0309;
 
-    private const byte CtrlA = 0x01, CtrlC = 0x03, CtrlQ = 0x11, CtrlS = 0x13, CtrlV = 0x16, CtrlX = 0x18;
-    private const byte KeyRight = 0x1D, KeyDown = 0x1F, KeyHome = 0x02, KeyBackspace = 0x08, KeyEnter = 0x0D;
+    private const byte CtrlA = 0x01, CtrlC = 0x03, CtrlG = 0x07, CtrlK = 0x0B, CtrlQ = 0x11, CtrlV = 0x16, CtrlX = 0x18;
+    private const byte KeyRight = 0x1D, KeyUp = 0x1E, KeyDown = 0x1F, KeyHome = 0x02, KeyBackspace = 0x08, KeyEnter = 0x0D;
+    private const byte KeyEsc = 0x1B, KeyCtrlHome = 0x80, KeyCtrlEnd = 0x81;
 
     private const byte ExitQuit = 0x00, ExitSaved = 0x01, ExitDiscard = 0x02;
     private const byte SaveOk = 0x00, SaveError = 0x02;
@@ -128,14 +129,20 @@ public class EditBufVmTests
         Assert.Fail($"Editor did not exit.\n{Snapshot(h)}");
     }
 
-    private static char ChAt(Harness h, int col, int row) => (char)h.Bus.Vgc.GetScreenChar(col, row);
+    private static int PhysRow(Harness h, int row) => h.Bus.Vgc.PhysicalTextRow(row);
+
+    private static char ChAt(Harness h, int col, int row) =>
+        (char)h.Bus.Vgc.GetScreenChar(col, PhysRow(h, row));
+
+    private static byte ColorAt(Harness h, int col, int row) =>
+        h.Bus.Vgc.GetScreenColor(col, PhysRow(h, row));
 
     private static string Row(Harness h, int row)
     {
         var sb = new StringBuilder();
         for (int col = 0; col < VgcConstants.ScreenCols; col++)
         {
-            byte ch = h.Bus.Vgc.GetScreenChar(col, row);
+            byte ch = h.Bus.Vgc.GetScreenChar(col, PhysRow(h, row));
             sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
         }
         return sb.ToString();
@@ -162,7 +169,7 @@ public class EditBufVmTests
         for (int row = 0; row < VgcConstants.ScreenRows; row++)
             for (int col = 0; col < VgcConstants.ScreenCols; col++)
             {
-                byte ch = h.Bus.Vgc.GetScreenChar(col, row);
+                byte ch = h.Bus.Vgc.GetScreenChar(col, PhysRow(h, row));
                 if (Array.IndexOf(FrameChars, ch) >= 0)
                     return true;
             }
@@ -172,6 +179,10 @@ public class EditBufVmTests
     // Dirty marker is a single '*' cell on the menu bar (right side), shown only
     // when the buffer is dirty.
     private static bool TitleDirty(Harness h) => ChAt(h, DirtyCol, MenuRow) == '*';
+
+    private static byte CursorX(Harness h) => h.Bus.Read((ushort)VgcConstants.RegCursorX);
+
+    private static byte CursorY(Harness h) => h.Bus.Read((ushort)VgcConstants.RegCursorY);
 
     // -----------------------------------------------------------------
 
@@ -183,7 +194,9 @@ public class EditBufVmTests
         Assert.IsTrue(Row(h, MenuRow).Contains("SQUARE", StringComparison.Ordinal),
             $"Title 'SQUARE' should appear on the menu bar (row 0).\n{Snapshot(h)}");
         Assert.IsTrue(Row(h, MenuRow).Contains("File", StringComparison.Ordinal),
-            $"Menu bar should render File/Edit/Help.\n{Snapshot(h)}");
+            $"Menu bar should render File/Edit/Search.\n{Snapshot(h)}");
+        Assert.IsTrue(Row(h, MenuRow).Contains("Search", StringComparison.Ordinal),
+            $"Menu bar should render File/Edit/Search.\n{Snapshot(h)}");
         // Body now starts at row 1, col 0 (no frame, no title band in between).
         Assert.AreEqual('A', ChAt(h, ViewLeft, ViewTop), Snapshot(h));
         Assert.AreEqual('B', ChAt(h, ViewLeft + 1, ViewTop), Snapshot(h));
@@ -192,9 +205,16 @@ public class EditBufVmTests
         // No box-drawing frame characters anywhere (the middle chrome is gone).
         Assert.IsFalse(HasFrameChars(h),
             $"Editor must have no frame/box characters.\n{Snapshot(h)}");
-        // Help hints now live on the status bar (bottom row).
-        Assert.IsTrue(Row(h, VgcConstants.ScreenRows - 1).Contains("Save", StringComparison.Ordinal),
-            $"Status bar should show the key-hint help text.\n{Snapshot(h)}");
+        Assert.IsTrue(Row(h, MenuRow).Contains("test/SQUARE.4th", StringComparison.Ordinal),
+            $"Title should show parent directory plus filename, not the whole path.\n{Snapshot(h)}");
+        Assert.IsFalse(Row(h, MenuRow).Contains("forth/test", StringComparison.Ordinal),
+            $"Title should not show the full source path.\n{Snapshot(h)}");
+        string status = Row(h, VgcConstants.ScreenRows - 1);
+        Assert.IsTrue(status.Contains("X:1 Y:1", StringComparison.Ordinal), status);
+        Assert.IsTrue(status.Contains("B:5", StringComparison.Ordinal), status);
+        Assert.IsTrue(status.Contains("L:2", StringComparison.Ordinal), status);
+        Assert.IsTrue(status.Contains("T:Test", StringComparison.Ordinal), status);
+        Assert.IsFalse(status.Contains("Ctrl-S", StringComparison.Ordinal), status);
         Assert.IsFalse(TitleDirty(h), "Freshly loaded buffer must not show the dirty marker.");
     }
 
@@ -205,41 +225,61 @@ public class EditBufVmTests
         Type(h, (byte)'X');
         Assert.AreEqual((byte)'X', h.Bus.ReadRam(TextBuf), "Inserted char should be at buffer start.");
         Assert.AreEqual('X', ChAt(h, ViewLeft, ViewTop), $"Body should show X first.\n{Snapshot(h)}");
+        Assert.IsTrue(Row(h, VgcConstants.ScreenRows - 1).Contains("B:6", StringComparison.Ordinal),
+            $"Status bar should update file size after edits.\n{Snapshot(h)}");
         Assert.IsTrue(TitleDirty(h), "Editing should set the shared dirty marker.");
     }
 
     [TestMethod]
-    public void CtrlSCallsSaveHookAndClearsDirtyOnOk()
+    public void CtrlKSCallsSaveHookAndClearsDirtyOnOk()
     {
         var h = Boot(saveRet: SaveOk);
         Type(h, (byte)'X');
         Assert.IsTrue(TitleDirty(h), "Pre-condition: dirty after edit.");
-        Type(h, CtrlS);
+        Type(h, CtrlK, (byte)'s');
         Assert.AreEqual(1, h.Bus.ReadRam(TestSaveCnt), "Save hook should fire exactly once.");
         Assert.AreEqual(6, h.Bus.ReadRam(TestSaveLenL), "Save hook should see the post-edit length (5+1).");
         Assert.IsFalse(TitleDirty(h), $"A successful save should clear the dirty marker.\n{Snapshot(h)}");
     }
 
     [TestMethod]
-    public void CtrlQExitsCleanlyWhenNotDirty()
+    public void FileMenuShowsCurrentShortcutLabels()
     {
         var h = Boot();
-        h.Editor.QueueInput(CtrlQ);
-        RunUntilDone(h);
-        Assert.AreEqual(ExitQuit, h.Bus.ReadRam(TestResult), "Clean Ctrl-Q should exit with QUIT.");
+        h.Editor.QueueInput(KeyEsc);
+        h.Editor.QueueInput((byte)'f');
+        Step(h, Settle);
+
+        string screen = Snapshot(h);
+        Assert.IsTrue(screen.Contains("Save ^K S", StringComparison.Ordinal),
+            $"File menu should advertise the Ctrl+K S save binding.\n{screen}");
+        Assert.IsTrue(screen.Contains("Exit Alt-X", StringComparison.Ordinal),
+            $"File menu should advertise the Alt+X exit binding.\n{screen}");
+        Assert.IsFalse(screen.Contains("Open", StringComparison.Ordinal),
+            $"Default native editor menu should not advertise Open until a real picker exists.\n{screen}");
     }
 
     [TestMethod]
-    public void CtrlQWhileDirtyShowsThreeChoiceDialog()
+    public void AltXExitsCleanlyWhenNotDirty()
+    {
+        var h = Boot();
+        h.Editor.QueueInput(KeyEsc);
+        h.Editor.QueueInput((byte)'x');
+        RunUntilDone(h);
+        Assert.AreEqual(ExitQuit, h.Bus.ReadRam(TestResult), "Clean Alt-X should exit with QUIT.");
+    }
+
+    [TestMethod]
+    public void AltXWhileDirtyShowsThreeChoicePrompt()
     {
         var h = Boot();
         Type(h, (byte)'X');
-        Type(h, CtrlQ);
+        Type(h, KeyEsc, (byte)'x');
         string screen = Snapshot(h);
-        Assert.IsTrue(screen.Contains("Workspace Modified", StringComparison.Ordinal), screen);
-        Assert.IsTrue(screen.Contains("Exit Anyway", StringComparison.Ordinal), screen);
-        Assert.IsTrue(screen.Contains("Save First", StringComparison.Ordinal), screen);
-        Assert.IsTrue(screen.Contains("Cancel", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("Mod:", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("E exit", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("S save", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("C cancel", StringComparison.Ordinal), screen);
         Assert.AreNotEqual(0xAA, h.Bus.ReadRam(TestDone), "Dialog open: editor must not have exited.");
     }
 
@@ -248,11 +288,11 @@ public class EditBufVmTests
     {
         var h = Boot();
         Type(h, (byte)'X');
-        Type(h, CtrlQ);
-        Assert.IsTrue(ScreenContains(h, "Exit Anyway"), "Pre-condition: dialog open.");
+        Type(h, KeyEsc, (byte)'x');
+        Assert.IsTrue(ScreenContains(h, "Mod:"), "Pre-condition: dirty-exit prompt open.");
         Type(h, (byte)'c'); // Cancel
         Assert.AreNotEqual(0xAA, h.Bus.ReadRam(TestDone), "Cancel must keep the editor open.");
-        Assert.IsFalse(ScreenContains(h, "Exit Anyway"), "Dialog should be dismissed after cancel.");
+        Assert.IsFalse(ScreenContains(h, "Mod:"), "Dirty-exit prompt should be dismissed after cancel.");
         Assert.AreEqual('X', ChAt(h, ViewLeft, ViewTop),
             $"Body must be restored under the dialog after cancel.\n{Snapshot(h)}");
         Assert.AreEqual((byte)'X', h.Bus.ReadRam(TextBuf), "Draft text must be intact after cancel.");
@@ -263,7 +303,7 @@ public class EditBufVmTests
     {
         var h = Boot();
         Type(h, (byte)'X');
-        Type(h, CtrlQ);
+        Type(h, KeyEsc, (byte)'x');
         h.Editor.QueueInput((byte)'e'); // Exit anyway
         RunUntilDone(h);
         Assert.AreEqual(ExitDiscard, h.Bus.ReadRam(TestResult), "Exit Anyway should report DISCARD.");
@@ -276,7 +316,7 @@ public class EditBufVmTests
     {
         var h = Boot(saveRet: SaveOk);
         Type(h, (byte)'X');
-        Type(h, CtrlQ);
+        Type(h, KeyEsc, (byte)'x');
         h.Editor.QueueInput((byte)'s'); // Save first
         RunUntilDone(h);
         Assert.AreEqual(ExitSaved, h.Bus.ReadRam(TestResult), "Save First (valid) should report SAVED.");
@@ -288,12 +328,12 @@ public class EditBufVmTests
     {
         var h = Boot(saveRet: SaveError);
         Type(h, (byte)'X');
-        Type(h, CtrlQ);
+        Type(h, KeyEsc, (byte)'x');
         Type(h, (byte)'s'); // Save first -> validation fails
         Assert.AreNotEqual(0xAA, h.Bus.ReadRam(TestDone),
             "A failed Save First must keep the editor open, not exit.");
         Assert.IsTrue(h.Bus.ReadRam(TestSaveCnt) >= 1, "Save hook must have been attempted.");
-        Assert.IsFalse(ScreenContains(h, "Exit Anyway"), "Dialog should close after a (failed) save.");
+        Assert.IsFalse(ScreenContains(h, "Mod:"), "Dirty-exit prompt should close after a (failed) save.");
     }
 
     [TestMethod]
@@ -312,7 +352,7 @@ public class EditBufVmTests
     public void SyntaxHighlightHookColorsFirstCharacter()
     {
         var h = Boot(hlMark: 0x2A);
-        Assert.AreEqual(0x2A, h.Bus.Vgc.GetScreenColor(ViewLeft, ViewTop),
+        Assert.AreEqual(0x2A, ColorAt(h, ViewLeft, ViewTop),
             "The highlight hook should color the first character of the line.");
     }
 
@@ -336,6 +376,50 @@ public class EditBufVmTests
         Assert.AreEqual('D', ChAt(h, ViewLeft + 1, ViewTop + 1), $"row8 col1\n{Snapshot(h)}");
         Assert.AreEqual('A', ChAt(h, ViewLeft + 2, ViewTop + 1), $"row8 col2\n{Snapshot(h)}");
         Assert.AreEqual('B', ChAt(h, ViewLeft + 3, ViewTop + 1), $"row8 col3\n{Snapshot(h)}");
+    }
+
+    [TestMethod]
+    public void CtrlQFPromptsAndFindsText()
+    {
+        var h = Boot();
+        Type(h, CtrlQ, (byte)'f', (byte)'C', (byte)'D', KeyEnter);
+
+        Assert.AreEqual(0, CursorX(h), $"Find should place the cursor at the C in CD.\n{Snapshot(h)}");
+        Assert.AreEqual(ViewTop + 1, CursorY(h), $"Find should move to the second logical line.\n{Snapshot(h)}");
+    }
+
+    [TestMethod]
+    public void CtrlGGotoLineUsesOneBasedLineNumbers()
+    {
+        var h = Boot(seedText: Encoding.ASCII.GetBytes("AB\nCD\nEF"));
+        Type(h, CtrlG, (byte)'2', KeyEnter);
+
+        Assert.AreEqual(0, CursorX(h), $"Goto line 2 should move to column 1 of the CD line.\n{Snapshot(h)}");
+        Assert.AreEqual(ViewTop + 1, CursorY(h), $"Goto line 2 should move to the second logical line.\n{Snapshot(h)}");
+    }
+
+    [TestMethod]
+    public void CtrlGOutOfRangeGotoClampsToEndOfFile()
+    {
+        var h = Boot(seedText: Encoding.ASCII.GetBytes("AB\nCD\nEF"));
+        Type(h, CtrlG, (byte)'9', (byte)'9', (byte)'9', KeyEnter);
+
+        Assert.AreEqual(2, CursorX(h), $"Out-of-range goto should clamp to EOF after EF.\n{Snapshot(h)}");
+        Assert.AreEqual(ViewTop + 2, CursorY(h), $"Out-of-range goto should land on the last logical line.\n{Snapshot(h)}");
+    }
+
+    [TestMethod]
+    public void CtrlHomeAndCtrlEndMoveToFileBoundaries()
+    {
+        var h = Boot(seedText: Encoding.ASCII.GetBytes("AB\nCD\nEF"));
+
+        Type(h, KeyCtrlEnd);
+        Assert.AreEqual(2, CursorX(h), $"Ctrl-End should move to EOF after EF.\n{Snapshot(h)}");
+        Assert.AreEqual(ViewTop + 2, CursorY(h), $"Ctrl-End should land on the last logical line.\n{Snapshot(h)}");
+
+        Type(h, KeyCtrlHome);
+        Assert.AreEqual(0, CursorX(h), $"Ctrl-Home should move to start of file.\n{Snapshot(h)}");
+        Assert.AreEqual(ViewTop, CursorY(h), $"Ctrl-Home should land on the first logical line.\n{Snapshot(h)}");
     }
 
     [TestMethod]
@@ -383,14 +467,17 @@ public class EditBufVmTests
     [TestMethod]
     public void BackspaceAtLineStartJoinsLines()
     {
-        var h = Boot();
+        var h = Boot(seedText: Encoding.ASCII.GetBytes("AB\nCD\nEF"));
         // Cursor starts at 0. Move down to line 2 ("CD"), home, backspace deletes
-        // the newline joining the lines into "ABCD".
+        // the newline joining the lines into "ABCD"; the following line must
+        // pull up to row 1 rather than leaving a visual gap.
         Type(h, KeyDown, KeyHome, KeyBackspace);
         Assert.AreEqual('A', ChAt(h, ViewLeft, ViewTop), Snapshot(h));
         Assert.AreEqual('B', ChAt(h, ViewLeft + 1, ViewTop), Snapshot(h));
         Assert.AreEqual('C', ChAt(h, ViewLeft + 2, ViewTop), Snapshot(h));
         Assert.AreEqual('D', ChAt(h, ViewLeft + 3, ViewTop), Snapshot(h));
+        Assert.AreEqual('E', ChAt(h, ViewLeft, ViewTop + 1), Snapshot(h));
+        Assert.AreEqual('F', ChAt(h, ViewLeft + 1, ViewTop + 1), Snapshot(h));
     }
 
     // "00\n01\n...\n(count-1)" — every line is its own two-digit index.
@@ -425,5 +512,33 @@ public class EditBufVmTests
         Step(h, 12_000_000);
         Assert.AreEqual("59", TwoChars(h, ViewTop + 47), $"after scroll: bottom = line 59\n{Snapshot(h)}");
         Assert.AreEqual("12", TwoChars(h, ViewTop), $"after scroll: top = line 12\n{Snapshot(h)}");
+        Assert.AreEqual(1, h.Bus.Read((ushort)VgcConstants.RegTextScrollStart),
+            "The editor should hardware-scroll only the body rows below the menu bar.");
+        Assert.AreEqual(48, h.Bus.Read((ushort)VgcConstants.RegTextScrollRows),
+            "The editor body ring should exclude both menu and status bars.");
+        Assert.AreEqual(12, h.Bus.Read((ushort)VgcConstants.RegTextTopRow),
+            "Tall-buffer cursor scrolling should use the VGC text ring-scroll base instead of repainting/copying the whole viewport.");
+        Assert.AreEqual(0, h.Bus.Vgc.PhysicalTextRow(0), "Menu bar row must stay physically fixed while the body scrolls.");
+        Assert.AreEqual(49, h.Bus.Vgc.PhysicalTextRow(49), "Status bar row must stay physically fixed while the body scrolls.");
+    }
+
+    [TestMethod]
+    public void BackspaceLineJoinNearBottomRepaintsExposedRow()
+    {
+        var h = Boot(seedText: BuildNumberedLines(60));
+        for (int i = 0; i < 59; i++) h.Editor.QueueInput(KeyDown);
+        h.Editor.QueueInput(KeyUp); // line 58 at body row 46, line 59 at row 47
+        Step(h, 12_000_000);
+        Assert.AreEqual("58", TwoChars(h, ViewTop + 46), $"precondition row 46\n{Snapshot(h)}");
+        Assert.AreEqual("59", TwoChars(h, ViewTop + 47), $"precondition row 47\n{Snapshot(h)}");
+
+        Type(h, KeyEnter);
+        Assert.AreEqual("  ", TwoChars(h, ViewTop + 46), $"split row should be blank\n{Snapshot(h)}");
+        Assert.AreEqual("58", TwoChars(h, ViewTop + 47), $"split text should move down\n{Snapshot(h)}");
+
+        Type(h, KeyBackspace);
+        Assert.AreEqual("58", TwoChars(h, ViewTop + 46), $"joined row should pull back up\n{Snapshot(h)}");
+        Assert.AreEqual("59", TwoChars(h, ViewTop + 47),
+            $"exposed bottom row must be repainted from the document, not left as stale copied text\n{Snapshot(h)}");
     }
 }

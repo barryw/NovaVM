@@ -31,7 +31,7 @@ FIO_EMIT_ALL = 0
 .endif
 
 .if FIO_EMIT_ALL = 0
-.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_run)
+.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_fopen) .OR .referenced(fio_fcreate) .OR .referenced(fio_fclose) .OR .referenced(fio_fread) .OR .referenced(fio_fwrite) .OR .referenced(fio_fseek) .OR .referenced(fio_ftell) .OR .referenced(fio_fsize) .OR .referenced(fio_fresize) .OR .referenced(fio_fflush) .OR .referenced(fio_fstatus) .OR .referenced(fio_fdelete_exact) .OR .referenced(fio_frename) .OR .referenced(fio_run)
       .refto fio_exec
 .endif
 .if .referenced(fio_exec)
@@ -103,6 +103,45 @@ FIO_EMIT_ALL = 0
 .endif
 .if FIO_EMIT_ALL .OR .referenced(fio_rng)
       .export fio_rng
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fopen)
+      .export fio_fopen
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fcreate)
+      .export fio_fcreate
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fclose)
+      .export fio_fclose
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fread)
+      .export fio_fread
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fwrite)
+      .export fio_fwrite
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fseek)
+      .export fio_fseek
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_ftell)
+      .export fio_ftell
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fsize)
+      .export fio_fsize
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fresize)
+      .export fio_fresize
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fflush)
+      .export fio_fflush
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fstatus)
+      .export fio_fstatus
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_fdelete_exact)
+      .export fio_fdelete_exact
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_frename)
+      .export fio_frename
 .endif
 .ifndef FIO_NO_STREAMING
 .if FIO_EMIT_ALL .OR .referenced(fio_run)
@@ -367,6 +406,136 @@ fio_load_runtime:
 .if FIO_EMIT_ALL .OR .referenced(fio_rng)
 fio_rng:
       LDA   #FIO_CMD_RNG
+      JMP   fio_exec
+.endif
+
+; @label FIO.FOPEN
+; @kind routine
+; @symbol fio_fopen
+; @summary Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_fopen)
+fio_fopen:
+      LDA   #FIO_CMD_FOPEN
+      JMP   fio_exec
+.endif
+
+; @label FIO.FCREATE
+; @kind routine
+; @symbol fio_fcreate
+; @summary Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_fcreate)
+fio_fcreate:
+      LDA   #FIO_CMD_FCREATE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FCLOSE
+; @kind routine
+; @symbol fio_fclose
+; @summary Close the fileid in FIO_SRCL/H, flushing dirty data first.
+.if FIO_EMIT_ALL .OR .referenced(fio_fclose)
+fio_fclose:
+      LDA   #FIO_CMD_FCLOSE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FREAD
+; @kind routine
+; @symbol fio_fread
+; @summary Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes.
+.if FIO_EMIT_ALL .OR .referenced(fio_fread)
+fio_fread:
+      LDA   #FIO_CMD_FREAD
+      JMP   fio_exec
+.endif
+
+; @label FIO.FWRITE
+; @kind routine
+; @symbol fio_fwrite
+; @summary Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_fwrite)
+fio_fwrite:
+      LDA   #FIO_CMD_FWRITE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FSEEK
+; @kind routine
+; @symbol fio_fseek
+; @summary Reposition fileid FIO_SRCL/H to the low-24-bit offset in FIO_SIZEL/H/SIZE2.
+.if FIO_EMIT_ALL .OR .referenced(fio_fseek)
+fio_fseek:
+      LDA   #FIO_CMD_FSEEK
+      JMP   fio_exec
+.endif
+
+; @label FIO.FTELL
+; @kind routine
+; @symbol fio_ftell
+; @summary Return fileid FIO_SRCL/H position in FIO_SIZEL/H/SIZE2.
+.if FIO_EMIT_ALL .OR .referenced(fio_ftell)
+fio_ftell:
+      LDA   #FIO_CMD_FTELL
+      JMP   fio_exec
+.endif
+
+; @label FIO.FSIZE
+; @kind routine
+; @symbol fio_fsize
+; @summary Return fileid FIO_SRCL/H size in FIO_SIZEL/H/SIZE2.
+.if FIO_EMIT_ALL .OR .referenced(fio_fsize)
+fio_fsize:
+      LDA   #FIO_CMD_FSIZE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FRESIZE
+; @kind routine
+; @symbol fio_fresize
+; @summary Resize fileid FIO_SRCL/H to the low-24-bit size in FIO_SIZEL/H/SIZE2.
+.if FIO_EMIT_ALL .OR .referenced(fio_fresize)
+fio_fresize:
+      LDA   #FIO_CMD_FRESIZE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FFLUSH
+; @kind routine
+; @symbol fio_fflush
+; @summary Flush dirty data for fileid FIO_SRCL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_fflush)
+fio_fflush:
+      LDA   #FIO_CMD_FFLUSH
+      JMP   fio_exec
+.endif
+
+; @label FIO.FSTATUS
+; @kind routine
+; @symbol fio_fstatus
+; @summary Check exact FIO.NAME status; returns implementation fam in FIO_SRCL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_fstatus)
+fio_fstatus:
+      LDA   #FIO_CMD_FSTATUS
+      JMP   fio_exec
+.endif
+
+; @label FIO.FDELETE_EXACT
+; @kind routine
+; @symbol fio_fdelete_exact
+; @summary Delete exact FIO.NAME without BASIC's default .bas behavior.
+.if FIO_EMIT_ALL .OR .referenced(fio_fdelete_exact)
+fio_fdelete_exact:
+      LDA   #FIO_CMD_FDELETE
+      JMP   fio_exec
+.endif
+
+; @label FIO.FRENAME
+; @kind routine
+; @symbol fio_frename
+; @summary Rename exact FIO.NAME to the CPU string pointed at by FIO_ENDL/H and FIO_GLENL/H.
+.if FIO_EMIT_ALL .OR .referenced(fio_frename)
+fio_frename:
+      LDA   #FIO_CMD_FRENAME
       JMP   fio_exec
 .endif
 

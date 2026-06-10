@@ -417,7 +417,22 @@ void DebugServer::cmdSendKey(const String& json) {
     uint8_t code = 0;
     if (upperKey == "ENTER" || upperKey == "CR" || upperKey == "RETURN") code = 0x0D;
     else if (upperKey == "BACKSPACE" || upperKey == "BS")                code = 0x08;
+    else if (upperKey == "TAB")                                          code = 0x09;
+    else if (upperKey == "ESC" || upperKey == "ESCAPE")                  code = 0x1B;
+    else if (upperKey == "SPACE")                                        code = 0x20;
+    else if (upperKey == "LEFT" || upperKey == "ARROW-LEFT" || upperKey == "ARROWLEFT") code = 0x1C;
+    else if (upperKey == "RIGHT" || upperKey == "ARROW-RIGHT" || upperKey == "ARROWRIGHT") code = 0x1D;
+    else if (upperKey == "UP" || upperKey == "ARROW-UP" || upperKey == "ARROWUP") code = 0x1E;
+    else if (upperKey == "DOWN" || upperKey == "ARROW-DOWN" || upperKey == "ARROWDOWN") code = 0x1F;
+    else if (upperKey == "HOME")                                         code = 0x02;
+    else if (upperKey == "END")                                          code = 0x05;
+    else if (upperKey == "PGUP" || upperKey == "PAGEUP" || upperKey == "PAGE-UP" || upperKey == "PAGE_UP") code = 0x10;
+    else if (upperKey == "PGDN" || upperKey == "PAGEDOWN" || upperKey == "PAGE-DOWN" || upperKey == "PAGE_DOWN") code = 0x12;
+    else if (upperKey == "CTRL-HOME" || upperKey == "CONTROL-HOME")      code = 0x80;
+    else if (upperKey == "CTRL-END" || upperKey == "CONTROL-END")        code = 0x81;
+    else if (upperKey == "DELETE" || upperKey == "DEL")                  code = 0x7F;
     else if (upperKey == "CTRL-C" || upperKey == "BREAK")                code = 0x03;
+    else if (upperKey == "SCREEN-HOME" || upperKey == "VGC-HOME")        code = 0x13;
     else if (upperKey.length() == 5 && upperKey.substring(0, 4) == "ALT-") {
         uint8_t alt = upperKey[4];
         if (alt < 'A' || alt > 'Z') { respondOk(); return; }
@@ -428,6 +443,13 @@ void DebugServer::cmdSendKey(const String& json) {
         }
         respondOk();
         return;
+    }
+    else if ((upperKey.length() == 6 && upperKey.substring(0, 5) == "CTRL-") ||
+             (upperKey.length() == 9 && upperKey.substring(0, 8) == "CONTROL-")) {
+        int idx = upperKey.startsWith("CTRL-") ? 5 : 8;
+        uint8_t ch = upperKey[idx];
+        if (ch >= 'A' && ch <= 'Z') code = (uint8_t)(1 + ch - 'A');
+        else { respondOk(); return; }
     }
     else if (key.length() == 1)                           code = key[0];
     else { respondOk(); return; }  // unknown key name — ignore
