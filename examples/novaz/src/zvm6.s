@@ -279,6 +279,37 @@ nz6_prop_cell:
 nz6_apply_current_window:
         LDA nz6_win_current
         STA nz6_tmp_win
+        JSR nz6_build_region_tmp_win
+        ; cursor (skip for a degenerate region — vtext rejects it anyway)
+        LDA VTEXT_HEIGHT
+        BEQ @done
+        LDA VTEXT_WIDTH
+        BEQ @done
+        LDX #4
+        JSR nz6_prop_cell
+        CMP VTEXT_HEIGHT
+        BCC :+
+        LDA VTEXT_HEIGHT
+        DEC A
+:
+        STA VTEXT_CURY
+        LDX #5
+        JSR nz6_prop_cell
+        CMP VTEXT_WIDTH
+        BCC :+
+        LDA VTEXT_WIDTH
+        DEC A
+:
+        STA VTEXT_CURX
+        JMP vtext_set_cursor
+@done:
+        RTS
+
+; Geometry-only half of the rebuild: window nz6_tmp_win's margin-shrunk
+; writable rect + flags -> the live VTEXT_LEFT/TOP/WIDTH/HEIGHT/FLAGS. Does
+; NOT touch the cursor — callers borrowing a non-current window's rect
+; (scroll_window) use it directly and restore via nz6_apply_current_window.
+nz6_build_region_tmp_win:
         ; TOP
         LDX #0
         JSR nz6_prop_cell
@@ -341,29 +372,6 @@ nz6_apply_current_window:
         JSR nz6_prop_byte
         AND #$03
         STA VTEXT_FLAGS
-        ; cursor (skip for a degenerate region — vtext rejects it anyway)
-        LDA VTEXT_HEIGHT
-        BEQ @done
-        LDA VTEXT_WIDTH
-        BEQ @done
-        LDX #4
-        JSR nz6_prop_cell
-        CMP VTEXT_HEIGHT
-        BCC :+
-        LDA VTEXT_HEIGHT
-        DEC A
-:
-        STA VTEXT_CURY
-        LDX #5
-        JSR nz6_prop_cell
-        CMP VTEXT_WIDTH
-        BCC :+
-        LDA VTEXT_WIDTH
-        DEC A
-:
-        STA VTEXT_CURX
-        JMP vtext_set_cursor
-@done:
         RTS
 
 ; Freshen the CURRENT window's cursor props 4/5 from the live vtext cursor
@@ -835,6 +843,57 @@ nz6_ext_window_size:
 @rts:
         RTS
 
+; scroll_window window pixels (EXT:20). Amounts are CELLS (units = cells,
+; M2): a positive amount scrolls the window's text up/forward (Z-spec 1.1),
+; and the vacated bottom rows come back blank in the live text colour (M2's
+; single-colour model — per-window colour rendering, prop 11, is out of M2
+; scope). Works on ANY window: the target's margin-shrunk writable rect —
+; the same rect implicit scrolling uses — is borrowed into the live vtext
+; state, scrolled, and the current window's region rebuilt afterwards. The
+; target's cursor props do NOT move (Zork Zero always follows its page-reset
+; scroll with set_cursor). Amounts >= the window height degenerate to a
+; whole-rect clear. Negative amounts (scroll down/backward): vtext has no
+; descending row blit and Zork Zero never sends one (capture: its single
+; call is positive), so fail loudly through the ROM's unsupported-opcode
+; path rather than silently mis-rendering.
+nz6_ext_scroll_window:
+        LDX #0
+        JSR nz6_window_from_operand
+        BCC @rts
+        PHA
+        ; the live region is about to be borrowed: flush pending buffered
+        ; text into it and save the current window's cursor first
+        JSR nz_screen_flush_word
+        JSR nz6_sync_live_cursor        ; clobbers nz6_tmp_win (:= current)
+        PLA
+        STA nz6_tmp_win
+        LDA zvm_operand_hi+1
+        BMI @negative
+        ORA zvm_operand_lo+1
+        BEQ @restore                    ; amount 0: nothing to scroll
+        JSR nz6_build_region_tmp_win    ; target rect -> live vtext state
+        LDA zvm_operand_hi+1
+        BNE @clear                      ; > 255 cells: blank the whole rect
+        LDA zvm_operand_lo+1
+        CMP VTEXT_HEIGHT
+        BCS @clear                      ; >= height: ditto (height 0 too)
+        TAX
+@loop:
+        PHX
+        JSR vtext_scroll_up
+        PLX
+        DEX
+        BNE @loop
+@restore:
+        JMP nz6_apply_current_window
+@clear:
+        JSR vtext_clear_region
+        BRA @restore
+@negative:
+        JMP zvm_unsupported
+@rts:
+        RTS
+
 ; window_style window flags op (EXT:18) against prop 14:
 ; op 0 = set, 1 = or, 2 = and-not, 3 = xor. A missing op operand means 0.
 nz6_ext_window_style:
@@ -1188,7 +1247,7 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_ext_window_size   ; 17 window_size
         .word nz6_ext_window_style  ; 18 window_style
         .word nz6_ext_get_wind_prop ; 19 get_wind_prop (store)
-        .word nz6_stub          ; 20 scroll_window (cell scroll lands later in M2)
+        .word nz6_ext_scroll_window ; 20 scroll_window (cells; up/forward only)
         .word nz6_ext_pop_stack ; 21 pop_stack (discards items, no store/branch)
         .word nz6_ext_read_mouse ; 22 read_mouse (no mouse: four zero words)
         .word nz6_stub          ; 23 mouse_window (meaningless without a mouse)

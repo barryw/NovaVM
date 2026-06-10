@@ -468,6 +468,49 @@ static void EmitSpecProgram(ZCode z)
     z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
     z.NewLine();                                            // scroll #3
 
+    // --- M2 Task 4: scroll_window (EXT:20) + interrupt-prop round-trip ---
+    // Newline-interrupt props 8/9 must round-trip EXACTLY (Zork Zero arms
+    // routine $384B / countdown -1 on every refresh and reads prop 9 back —
+    // capture finding 5). They are stored, never fired.
+    z.ExtOp(25, Operand.Small(0), Operand.Small(9), Operand.Large(0xFFFF));
+    z.ExtOp(25, Operand.Small(0), Operand.Small(8), Operand.Large(0x384B));
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(9));
+    z.AssertVarEquals(0x12, 0xFFFF, "intprop9-rt");
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(8));
+    z.AssertVarEquals(0x12, 0x384B, "intprop8-rt");
+
+    // scroll_window on a NON-current window: build a 5x5 window 3 in the
+    // free right margin (abs col 75, rows 9-13), fill all five rows, return
+    // to window 0, then scroll window 3 by one cell while window 0 is live.
+    // AA scrolls off, EE lands on row 12, the vacated bottom row (abs 13)
+    // comes back blank. Amount 0 must be a clean no-op.
+    z.ExtOp(16, Operand.Small(3), Operand.Small(10), Operand.Small(76)); // move_window 3,10,76
+    z.ExtOp(17, Operand.Small(3), Operand.Small(5), Operand.Small(5));   // window_size 3,5,5
+    z.VarOp(11, Operand.Small(3));                          // set_window 3
+    z.VarOp(15, Operand.Small(1), Operand.Small(1));
+    z.Print("AA");
+    z.VarOp(15, Operand.Small(2), Operand.Small(1));
+    z.Print("BB");
+    z.VarOp(15, Operand.Small(3), Operand.Small(1));
+    z.Print("CC");
+    z.VarOp(15, Operand.Small(4), Operand.Small(1));
+    z.Print("DD");
+    z.VarOp(15, Operand.Small(5), Operand.Small(1));
+    z.Print("EE");
+    z.VarOp(11, Operand.Small(0));                          // back to window 0
+    z.ExtOp(20, Operand.Small(3), Operand.Small(1));        // scroll_window 3,1 (non-current)
+    z.ExtOp(20, Operand.Small(3), Operand.Small(0));        // amount 0: no-op
+
+    // scroll_window on the CURRENT window: the game's page-reset (capture
+    // finding 4). Amount is in CELLS (units = cells). Content moves up 3
+    // rows, 3 blank rows open at the bottom, and the cursor does NOT move
+    // (it sits at rel 44,0 from scroll #3 above — Zork Zero always follows
+    // with set_cursor): the prompt below must still land on the bare bottom
+    // row. Final window 0 rows: rel 0 = F06, rel 38 = LONG, rel 39 = Z2,
+    // rel 40 = "ZLAST ok", rel 41-44 blank (41 was blank already; 42-44
+    // vacated and blanked by the scroll).
+    z.ExtOp(20, Operand.Small(0), Operand.Small(3));        // scroll_window 0,3
+
     z.Label("prompt");
     z.Print(">");
     z.VarOpStore(4, 0x11, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // read

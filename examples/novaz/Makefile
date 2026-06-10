@@ -34,7 +34,7 @@ RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
 # this list; the awk rule fails the build if a symbol vanishes from the ROM.
 RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version \
 	nz_screen_flush_word zvm_window_current zvm_clear_whole_screen \
-	vtext_clear_region vtext_set_cursor VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
+	vtext_clear_region vtext_set_cursor vtext_scroll_up VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
 	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
@@ -182,7 +182,7 @@ test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z5_SPEC_STORY
 
 test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
-	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-at "0,0=>BANNER" --expect-at "4,4=>SENT" --expect-at "5,5=>F03" --expect-at "5,46=>LONGTAILXYZ" --expect-at "5,47=>Z2 " --expect-at "5,48=>ZLAST ok" --expect-at "5,49=>>" "look=>z6 input ok"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-at "0,0=>BANNER" --expect-at "4,4=>SENT" --expect-at "5,5=>F06" --expect-at "5,43=>LONGTAILXYZ" --expect-at "5,44=>Z2 " --expect-at "5,45=>ZLAST ok" --expect-at "5,46=>    " --expect-at "5,47=>    " --expect-at "5,48=>    " --expect-at "5,49=>>" --expect-at "75,9=>BB" --expect-at "75,12=>EE" --expect-at "75,13=>  " "look=>z6 input ok"
 
 test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
