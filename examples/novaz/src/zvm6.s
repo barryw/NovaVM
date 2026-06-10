@@ -65,6 +65,18 @@ NZ6_SCREEN_COLS = 80
 ; ($0C = grey there, bright red under EGA).
 NZ6_COLOR_DEFAULT = $0F
 
+; Blitter ckey4 mode (nibble-granular color key on 4bpp planes) — the mode
+; bit shipped with M3 (Avalonia VirtualBlitterController; the FPGA blitter
+; grows the same bit in M6). nova.inc predates it.
+NZ6_BLT_MODE_CKEY4 = $08
+; DMA/blitter memory-space ids (VgcConstants.DmaSpace*).
+NZ6_SPACE_GFX  = $03
+NZ6_SPACE_XRAM = $05
+; The Avalonia gfx plane is 320x200 with ONE BYTE PER PIXEL (the FPGA plane
+; is 4bpp packed — M6 maps the same ops onto the packed domain).
+NZ6_GFX_ROW_PIXELS = 320
+NZ6_GFX_ROWS       = 200
+
 .segment "BSS"
 
 ; 8 windows x 16 properties x 2 bytes, little-endian words.
@@ -106,6 +118,14 @@ nz6_pic_off_h:   .res 1
 nz6_pic_len_lo:  .res 1         ; bitmap length (<= 32000)
 nz6_pic_len_hi:  .res 1
 nz6_pic_tmp:     .res 1         ; entry-scan scratch (z_number low byte)
+nz6_blt_cellx:   .res 1         ; draw/erase: abs cell coords
+nz6_blt_celly:   .res 1
+nz6_blt_dst_lo:  .res 1         ; gfx destination byte address
+nz6_blt_dst_hi:  .res 1
+nz6_blt_wbytes:  .res 1         ; full bitmap row bytes (src stride)
+nz6_blt_wclip:   .res 1         ; erase: clipped rect width in PIXELS (16-bit)
+nz6_blt_wclip_hi: .res 1
+nz6_blt_hclip:   .res 1         ; erase: clipped rect height in rows
 
 .segment "CODE"
 
@@ -495,10 +515,15 @@ nz6_op_reset:
         JSR nz6_reset_windows
         LDA #$01                        ; VGC PaletteModeEga
         STA VGC_PALETTE
+        LDA #$02                        ; mode 2: text over gfx — pictures
+        STA VGC_MODE                    ; show wherever cells keep the global
+                                        ; background colour (mode-2 rule in
+                                        ; the VGC compositor)
         LDA #NZ6_COLOR_DEFAULT
         STA nz6_colour
         STA VTEXT_COLOR
         STZ zvm_text_style
+        JSR nz6_gfx_clear
         JSR nz6_pics_preload
         JMP nz6_apply_current_window
 
@@ -713,11 +738,13 @@ nz6_op_erase:
         CMP #$FF
         BNE :+
         JSR nz6_reset_windows           ; -1
+        JSR nz6_gfx_clear               ; V6 erase clears art as well as text
         JMP zvm_clear_whole_screen      ; (tail-calls the V6 select -> apply)
 :
         CMP #$FE
         BNE @rts
         JSR nz6_sync_live_cursor        ; -2 must leave the cursor alone
+        JSR nz6_gfx_clear
         JMP zvm_clear_whole_screen
 @rts:
         RTS
@@ -1580,6 +1607,326 @@ nz6_pics_find:
         CLC
         RTS
 
+; --- draw_picture / erase_picture ---------------------------------------------
+;
+; Blit path (design doc): FIO XPAGE streams the bitmap region from PICS.PAK
+; into the XRAM bounce buffer, then the blitter rect-copies bounce -> gfx
+; layer. Transparent pictures use the nibble-granular color key (mode bit
+; NZ6_BLT_MODE_CKEY4, key = the picture's transparent index from its flags).
+; Coordinates are window-relative 1-based units (= cells); 1 cell = 4x4 gfx
+; pixels, so positions are always nibble-pair aligned. Rects clip at
+; 320x200; fully off-screen draws are clean no-ops.
+
+; draw_picture N [y x] (EXT:5). Missing/unknown N and Rect placeholders
+; (len 0) draw nothing.
+nz6_ext_draw_picture:
+        JSR nz6_pics_find
+        BCS :+
+@rts:
+        RTS
+:
+        LDA nz6_pic_len_lo
+        ORA nz6_pic_len_hi
+        BEQ @rts                        ; Rect placeholder: invisible
+        JSR nz6_pic_rect_setup
+        BCC @rts                        ; off-screen left/top
+        ; one host-assisted FIO XPAGE does the whole draw: the slice at the
+        ; pak entry's offset unpacks into gfx pixels with per-pixel
+        ; transparency and right/bottom clipping (FioPageTargetGfx4)
+        LDA #<nz6_pics_name
+        STA PAGER_NAMEPTR_L
+        LDA #>nz6_pics_name
+        STA PAGER_NAMEPTR_H
+        LDA #(nz6_pics_name_end - nz6_pics_name)
+        STA PAGER_NAMELEN
+        JSR fio_copy_name
+        BNE @rts
+        LDA nz6_pic_off_l
+        STA FIO_SRCL
+        LDA nz6_pic_off_m
+        STA FIO_SRCH
+        LDA nz6_pic_off_h
+        STA FIO_ENDL
+        LDA nz6_pic_w_lo                ; flags reg: pak flags + odd-width bit
+        AND #$01
+        ASL A
+        ORA nz6_pic_flags
+        STA FIO_ENDH
+        LDA nz6_blt_dst_lo              ; start pixel address (y*320 + x)
+        STA FIO_GADDRL
+        LDA nz6_blt_dst_hi
+        STA FIO_GADDRH
+        LDA nz6_blt_wbytes              ; source bytes per row
+        STA FIO_GSPACE
+        LDA nz6_pic_len_lo
+        STA FIO_GLENL
+        LDA nz6_pic_len_hi
+        STA FIO_GLENH
+        LDA #$03                        ; FioPageTargetGfx4
+        STA FIO_DIRTYPE
+        LDA #FIO_CMD_XPAGE
+        JMP fio_exec
+
+; erase_picture N [y x] (EXT:7): fill the picture's (clipped) rect with the
+; current window background colour on the gfx layer.
+nz6_ext_erase_picture:
+        JSR nz6_pics_find
+        BCS :+
+@rts:
+        RTS
+:
+        JSR nz6_pic_rect_setup
+        BCC @rts
+        JSR nz6_pic_clip_rect
+        BCC @rts
+        STZ BLT_SRCSPACE
+        STZ BLT_SRCL
+        STZ BLT_SRCM
+        STZ BLT_SRCH
+        STZ BLT_SRCSTRL
+        STZ BLT_SRCSTRH
+        LDA #NZ6_SPACE_GFX
+        STA BLT_DSTSPACE
+        LDA nz6_blt_dst_lo
+        STA BLT_DSTL
+        LDA nz6_blt_dst_hi
+        STA BLT_DSTM
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRL
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRH
+        LDA nz6_blt_wclip
+        STA BLT_WIDTHL
+        LDA nz6_blt_wclip_hi
+        STA BLT_WIDTHH
+        LDA nz6_blt_hclip
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        LDA #BLT_MODE_FILL
+        STA BLT_MODE_REG
+        STZ BLT_CKEY
+        LDA nz6_colour                  ; window background colour, 1px/byte
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        STA BLT_FILLVALUE
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JMP blitter_wait
+
+; Resolve the op's window-relative cell coords + the found picture's dims
+; into a clipped gfx rect: C=1 with nz6_blt_* filled in, C=0 fully
+; off-screen (or behind the left/top edge — games draw on-screen; partial
+; left/top clips are not worth the src-offset machinery).
+; Operands: y = op1, x = op2 when present (count >= 3), else the current
+; window's cursor props. abs 0-based cell = window origin + rel - 2.
+nz6_pic_rect_setup:
+        BRA @begin
+@off:
+        CLC
+        RTS
+@begin:
+        LDA nz6_win_current
+        STA nz6_tmp_win
+        LDA zvm_operand_count
+        CMP #3
+        BCS @explicit
+        LDX #4                          ; y := cursor y prop
+        JSR nz6_read_prop_unit
+        JSR @origin_add_y
+        BCC @off
+        LDX #5                          ; x := cursor x prop
+        JSR nz6_read_prop_unit
+        BRA @have_x
+@explicit:
+        LDA zvm_operand_lo+1
+        STA nz6_unit_lo
+        LDA zvm_operand_hi+1
+        STA nz6_unit_hi
+        JSR @origin_add_y
+        BCC @off
+        LDA zvm_operand_lo+2
+        STA nz6_unit_lo
+        LDA zvm_operand_hi+2
+        STA nz6_unit_hi
+@have_x:
+        LDX #1                          ; + window origin x (prop 1) - 2
+        JSR @origin_add
+        BCC @off
+        CMP #NZ6_SCREEN_COLS
+        BCS @off
+        STA nz6_blt_cellx
+        ; start pixel address = celly*4*320 + cellx*4 (fits 16 bits: the
+        ; row term is celly*5 in the high byte exactly, 1280 = 5*256)
+        LDA nz6_blt_cellx
+        STA nz6_blt_dst_lo
+        STZ nz6_blt_dst_hi
+        ASL nz6_blt_dst_lo
+        ROL nz6_blt_dst_hi
+        ASL nz6_blt_dst_lo
+        ROL nz6_blt_dst_hi              ; cellx*4
+        LDA nz6_blt_celly
+        ASL A
+        ASL A
+        CLC
+        ADC nz6_blt_celly               ; celly*5 (max 245)
+        CLC
+        ADC nz6_blt_dst_hi
+        STA nz6_blt_dst_hi
+        ; source bytes per row = (w_px + 1) / 2 (max 160)
+        LDA nz6_pic_w_lo
+        CLC
+        ADC #1
+        STA nz6_blt_wbytes
+        LDA nz6_pic_w_hi
+        ADC #0
+        LSR A
+        ROR nz6_blt_wbytes
+        SEC
+        RTS
+
+; nz6_unit (16-bit rel y) + window origin prop0 - 2 -> nz6_blt_celly.
+; C=0 when the result is negative or below the screen.
+@origin_add_y:
+        LDX #0
+        JSR @origin_add
+        BCC @bad_y
+        CMP #NZ6_SCREEN_ROWS
+        BCS @bad_y
+        STA nz6_blt_celly
+        SEC
+        RTS
+@bad_y:
+        CLC
+        RTS
+
+; abs cell = window origin prop X (1-based unit) + nz6_unit (1-based rel)
+; - 2. Returns A = cell with C=1, or C=0 when negative/huge.
+@origin_add:
+        LDA nz6_unit_lo
+        PHA
+        LDA nz6_unit_hi
+        PHA
+        JSR nz6_read_prop_unit          ; clobbers nz6_unit with the prop
+        PLA
+        TAX                             ; rel hi
+        PLA                             ; rel lo
+        CLC
+        ADC nz6_unit_lo
+        STA nz6_unit_lo
+        TXA
+        ADC nz6_unit_hi
+        STA nz6_unit_hi
+        SEC
+        LDA nz6_unit_lo
+        SBC #2
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        SBC #0
+        BNE @oa_bad                     ; negative or > 255: reject
+        LDA nz6_unit_lo
+        SEC
+        RTS
+@oa_bad:
+        CLC
+        RTS
+
+; Clip the found picture's PIXEL rect against the plane (erase_picture's
+; fill needs explicit bounds; draw clips host-side). C=0 = nothing visible.
+nz6_pic_clip_rect:
+        ; width: min(w_px, 320 - cellx*4), 16-bit
+        LDA nz6_blt_cellx
+        STA nz6_blt_wclip
+        STZ nz6_blt_wclip_hi
+        ASL nz6_blt_wclip
+        ROL nz6_blt_wclip_hi
+        ASL nz6_blt_wclip
+        ROL nz6_blt_wclip_hi            ; px = cellx*4
+        SEC
+        LDA #<NZ6_GFX_ROW_PIXELS
+        SBC nz6_blt_wclip
+        TAX                             ; avail lo
+        LDA #>NZ6_GFX_ROW_PIXELS
+        SBC nz6_blt_wclip_hi            ; avail hi (px < 320, never borrows)
+        TAY
+        ; compare avail (Y:X) with w (hi:lo): keep the smaller
+        CPY nz6_pic_w_hi
+        BCC @use_avail
+        BNE @use_w
+        CPX nz6_pic_w_lo
+        BCC @use_avail
+@use_w:
+        LDA nz6_pic_w_lo
+        STA nz6_blt_wclip
+        LDA nz6_pic_w_hi
+        STA nz6_blt_wclip_hi
+        BRA @width_done
+@use_avail:
+        STX nz6_blt_wclip
+        STY nz6_blt_wclip_hi
+@width_done:
+        LDA nz6_blt_wclip
+        ORA nz6_blt_wclip_hi
+        BEQ @empty
+        ; height: min(h_px, 200 - celly*4), 8-bit (both <= 200)
+        LDA nz6_blt_celly
+        ASL A
+        ASL A
+        STA nz6_pic_tmp                 ; py (<= 196)
+        LDA #NZ6_GFX_ROWS
+        SEC
+        SBC nz6_pic_tmp
+        STA nz6_pic_tmp                 ; rows available
+        LDA nz6_pic_h_hi
+        BNE @h_clamp
+        LDA nz6_pic_h_lo
+        CMP nz6_pic_tmp
+        BCC @h_have
+        BEQ @h_have
+@h_clamp:
+        LDA nz6_pic_tmp
+@h_have:
+        STA nz6_blt_hclip
+        BEQ @empty
+        SEC
+        RTS
+@empty:
+        CLC
+        RTS
+
+; Clear the whole 320x200 gfx plane to color 0 (the global display
+; transparent color: the text background shows through).
+nz6_gfx_clear:
+        STZ BLT_SRCSPACE
+        STZ BLT_SRCL
+        STZ BLT_SRCM
+        STZ BLT_SRCH
+        STZ BLT_SRCSTRL
+        STZ BLT_SRCSTRH
+        LDA #NZ6_SPACE_GFX
+        STA BLT_DSTSPACE
+        STZ BLT_DSTL
+        STZ BLT_DSTM
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRL
+        STA BLT_WIDTHL                  ; 320 px wide, one byte per pixel
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRH
+        STA BLT_WIDTHH
+        LDA #NZ6_GFX_ROWS
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        LDA #BLT_MODE_FILL
+        STA BLT_MODE_REG
+        STZ BLT_CKEY
+        STZ BLT_FILLVALUE
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JMP blitter_wait
+
 ; Read the index byte at the 24-bit cursor -> A; cursor += 1.
 nz6_pics_next_byte:
         LDA nz6_pics_cur_l
@@ -1636,9 +1983,9 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  2 log_shift (ROM handles)
         .word nz6_bug           ;  3 art_shift (ROM handles)
         .word nz6_bug           ;  4 set_font (ROM handles)
-        .word nz6_stub          ;  5 draw_picture (no pictures: drawing nothing is correct)
-        .word nz6_ext_picture_data ;  6 picture_data (N=0 writes count/release; branch false)
-        .word nz6_stub          ;  7 erase_picture (no pictures: nothing was ever drawn)
+        .word nz6_ext_draw_picture ;  5 draw_picture (XPAGE -> bounce -> blit)
+        .word nz6_ext_picture_data ;  6 picture_data (real index answers)
+        .word nz6_ext_erase_picture ;  7 erase_picture (bg rect fill)
         .word nz6_ext_set_margins ;  8 set_margins
         .word nz6_bug           ;  9 save_undo (ROM handles)
         .word nz6_bug           ; 10 restore_undo (ROM handles)

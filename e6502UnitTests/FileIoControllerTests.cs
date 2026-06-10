@@ -138,6 +138,23 @@ public class FileIoControllerTests
             });
     }
 
+    private static FileIoController MakeControllerWithGfx(string saveDir, byte[] gfx)
+    {
+        var memory = new byte[65536];
+        return new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            saveDir,
+            vgcRead: (space, offset) =>
+                space == VgcConstants.MemSpaceGfx && (uint)offset < gfx.Length ? gfx[offset] : (byte)0,
+            vgcWrite: (space, offset, value) =>
+            {
+                if (space == VgcConstants.MemSpaceGfx && (uint)offset < gfx.Length)
+                    gfx[offset] = value;
+            },
+            vgcSpaceLength: space => space == VgcConstants.MemSpaceGfx ? gfx.Length : 0);
+    }
+
     private static FileIoController MakeControllerWithXram(string saveDir, byte[] xram)
     {
         var memory = new byte[65536];
@@ -1237,6 +1254,104 @@ public class FileIoControllerTests
             Assert.AreEqual(12, ReadSize(fio), "512 - 500 = 12 bytes remain");
             for (int i = 0; i < 12; i++)
                 Assert.AreEqual(file[500 + i], xram[i], $"byte {i}");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    // XPAGE target 3 (FioPageTargetGfx4): unpack a 4bpp row-packed file
+    // slice (two pixels/byte, high nibble left — the PICS.PAK bitmap format)
+    // into the 1-byte-per-pixel VGC gfx plane. FioGAddr = start PIXEL
+    // address (y*320+x), FioGSpace = source row bytes, FioEndH bit 0 +
+    // high nibble = transparency (skip pixels of that index), bit 1 = odd
+    // width (last pixel of each row is pad). Rows clip at the 320px right
+    // edge and the 200px bottom edge.
+
+    [TestMethod]
+    public void XPage_Gfx4Target_UnpacksRowsWithTransparencyAndClip()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // 4x2 px picture, transparent index 1: rows E 1 1 E / 5 5 5 5
+            byte[] pak = [0xE1, 0x1E, 0x55, 0x55];
+            File.WriteAllBytes(Path.Combine(dir, "pics.bin"), pak);
+
+            var gfx = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+            for (int i = 0; i < gfx.Length; i++) gfx[i] = 0x03; // cyan canvas
+            var fio = MakeControllerWithGfx(dir, gfx);
+
+            SetFilename(fio, "pics.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0); // file offset 0
+            fio.Write((ushort)VgcConstants.FioSrcH, 0);
+            fio.Write((ushort)VgcConstants.FioEndL, 0);
+            fio.Write((ushort)VgcConstants.FioEndH, 0x11); // transparent, index 1
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetGfx4);
+            fio.Write((ushort)VgcConstants.FioGSpace, 2); // 2 bytes per row
+            int start = 80 * VgcConstants.GfxWidth + 40;  // pixel (40,80)
+            fio.Write((ushort)VgcConstants.FioGAddrL, (byte)start);
+            fio.Write((ushort)VgcConstants.FioGAddrH, (byte)(start >> 8));
+            fio.Write((ushort)VgcConstants.FioGLenL, 4);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            int row0 = 80 * VgcConstants.GfxWidth + 40;
+            int row1 = 81 * VgcConstants.GfxWidth + 40;
+            CollectionAssert.AreEqual(new byte[] { 0x0E, 0x03, 0x03, 0x0E },
+                new[] { gfx[row0], gfx[row0 + 1], gfx[row0 + 2], gfx[row0 + 3] },
+                "transparent pixels keep the canvas");
+            CollectionAssert.AreEqual(new byte[] { 0x05, 0x05, 0x05, 0x05 },
+                new[] { gfx[row1], gfx[row1 + 1], gfx[row1 + 2], gfx[row1 + 3] });
+            Assert.AreEqual(0x03, gfx[row0 - 1], "no bleed left");
+            Assert.AreEqual(0x03, gfx[row0 + 4], "no bleed right");
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_Gfx4Target_OddWidthSkipsPadAndClipsAtEdges()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // 3x2 px opaque picture (odd width: pad nibble 0 must NOT draw):
+            // rows 5 5 5 (pad) / E E E (pad)
+            byte[] pak = [0x55, 0x50, 0xEE, 0xE0];
+            File.WriteAllBytes(Path.Combine(dir, "pics.bin"), pak);
+
+            var gfx = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+            var fio = MakeControllerWithGfx(dir, gfx);
+
+            SetFilename(fio, "pics.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0);
+            fio.Write((ushort)VgcConstants.FioEndL, 0);
+            fio.Write((ushort)VgcConstants.FioEndH, 0x02); // odd width, opaque
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetGfx4);
+            fio.Write((ushort)VgcConstants.FioGSpace, 2);
+            // start at pixel (318, 199): clips right (only 318,319 visible)
+            // and bottom (row 2 of the picture is off-screen).
+            int start = 199 * VgcConstants.GfxWidth + 318;
+            fio.Write((ushort)VgcConstants.FioGAddrL, (byte)start);
+            fio.Write((ushort)VgcConstants.FioGAddrH, (byte)(start >> 8));
+            fio.Write((ushort)VgcConstants.FioGLenL, 4);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(0x05, gfx[199 * VgcConstants.GfxWidth + 318]);
+            Assert.AreEqual(0x05, gfx[199 * VgcConstants.GfxWidth + 319]);
+            // pad pixel would have landed at x=321 -> clipped anyway; the
+            // wrap target (next row start) must stay untouched.
+            Assert.AreEqual(0x00, gfx[0]);
         }
         finally
         {

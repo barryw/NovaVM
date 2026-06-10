@@ -17,6 +17,7 @@ public sealed class VirtualBlitterController
     private bool _busy;
     private bool _fillMode;
     private bool _colorKeyMode;
+    private bool _colorKey4Mode;
     private bool _rotateMode;
     private bool _useRowBuffer;
     private byte _srcSpace;
@@ -65,6 +66,7 @@ public sealed class VirtualBlitterController
         _busy = false;
         _fillMode = false;
         _colorKeyMode = false;
+        _colorKey4Mode = false;
         _rotateMode = false;
         _useRowBuffer = false;
         _srcSpace = 0;
@@ -200,13 +202,14 @@ public sealed class VirtualBlitterController
                 if (!(_colorKeyMode && value == _colorKey))
                 {
                     int dstAddr = _dstBase + _row * _dstStride + _col;
-                    if (!_tryWriteByte(_dstSpace, dstAddr, value))
+                    if (!TryWriteKeyed(dstAddr, value, out bool wrote))
                     {
                         FailTransfer(VgcConstants.BltErrRange);
                         break;
                     }
 
-                    _wroteCount++;
+                    if (wrote)
+                        _wroteCount++;
                 }
 
                 _col++;
@@ -239,13 +242,14 @@ public sealed class VirtualBlitterController
             if (!(_colorKeyMode && directValue == _colorKey))
             {
                 int dst = _dstBase + _row * _dstStride + _col;
-                if (!_tryWriteByte(_dstSpace, dst, directValue))
+                if (!TryWriteKeyed(dst, directValue, out bool directWrote))
                 {
                     FailTransfer(VgcConstants.BltErrRange);
                     break;
                 }
 
-                _wroteCount++;
+                if (directWrote)
+                    _wroteCount++;
             }
 
             AdvanceCursor();
@@ -289,9 +293,19 @@ public sealed class VirtualBlitterController
         bool fillMode = (mode & VgcConstants.BltModeFill) != 0;
         bool colorKeyMode = (mode & VgcConstants.BltModeColorKey) != 0;
         bool rotateMode = (mode & VgcConstants.BltModeRotate) != 0;
+        bool colorKey4Mode = (mode & VgcConstants.BltModeColorKey4) != 0;
         byte colorKey = _regs[RegIndex(VgcConstants.BltColorKey)];
 
         if (rotateMode && (fillMode || width != height || width > 256))
+        {
+            SetCount(0);
+            SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
+            return;
+        }
+
+        // Nibble-granular keying only makes sense for a plain copy: fill has
+        // no source and rotate keys per byte (its key doubles as background).
+        if (colorKey4Mode && (fillMode || rotateMode || colorKeyMode))
         {
             SetCount(0);
             SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
@@ -366,6 +380,7 @@ public sealed class VirtualBlitterController
         _busy = true;
         _fillMode = fillMode;
         _colorKeyMode = colorKeyMode;
+        _colorKey4Mode = colorKey4Mode;
         _rotateMode = rotateMode;
         _useRowBuffer = !fillMode && !rotateMode && srcSpace == dstSpace;
         _srcSpace = srcSpace;
@@ -389,6 +404,45 @@ public sealed class VirtualBlitterController
         // Complete transfer synchronously — emulates RDY stalling on real hardware.
         // The extension ROM reads status immediately after starting the blitter.
         AdvanceCycles(int.MaxValue / VgcConstants.BltOpsPerCycle);
+    }
+
+    /// <summary>
+    /// Write one source byte through the active key mode. Plain modes write
+    /// the byte as-is. ColorKey4 compares each 4bpp nibble against the key's
+    /// low nibble: fully transparent bytes are skipped, fully opaque bytes
+    /// written, and mixed bytes read-modify-write the destination so the
+    /// transparent pixel underneath survives. (FPGA note for M6: the RTL
+    /// blitter needs the same mode bit — a dst read port already exists for
+    /// the overlap row buffer, so mixed bytes can RMW in silicon too.)
+    /// </summary>
+    private bool TryWriteKeyed(int dstAddr, byte value, out bool wrote)
+    {
+        wrote = false;
+        if (_colorKey4Mode)
+        {
+            byte key = (byte)(_colorKey & 0x0F);
+            bool hiTransparent = (value >> 4) == key;
+            bool loTransparent = (value & 0x0F) == key;
+            if (hiTransparent && loTransparent)
+                return true;
+
+            if (hiTransparent || loTransparent)
+            {
+                var dstRead = _tryReadByte(_dstSpace, dstAddr);
+                if (!dstRead.ok)
+                    return false;
+
+                value = hiTransparent
+                    ? (byte)((dstRead.value & 0xF0) | (value & 0x0F))
+                    : (byte)((value & 0xF0) | (dstRead.value & 0x0F));
+            }
+        }
+
+        if (!_tryWriteByte(_dstSpace, dstAddr, value))
+            return false;
+
+        wrote = true;
+        return true;
     }
 
     private void AdvanceCursor()

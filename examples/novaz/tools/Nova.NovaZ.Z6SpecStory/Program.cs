@@ -216,32 +216,41 @@ static void WritePackedText(byte[] story, int offset, string text)
 // bare rtrue. Returning from frame 0 must halt the machine cleanly with
 // ZVM_STOP_QUIT (the smoke target asserts the stop reason directly).
 // Synthetic PICS.PAK for the spec image (format mirrors BlorbPictures):
-// "NZPK" v1, count=2, release=7. Pic 3 = 8x8 px solid magenta ($5), pic 7 =
+// "NZPK" v1, count=3, release=7. Pic 3 = 8x8 px solid magenta ($5), pic 7 =
 // 6x10 px solid cyan ($3) — ceil-divide by 4 gives 2x2 and 2(w)x3(h) cells.
-// Offsets are absolute within the pak; rows pack two pixels per byte.
+// Pic 9 = 4x4 px with transparency (flags $11: bit 0 + transparent index 1):
+// each row E,1,1,E — yellow edges around a 2px transparent middle, the
+// nibble-keyed blit fixture. Offsets are absolute; two pixels per byte.
 static byte[] BuildSyntheticPicturesPak()
 {
     const int headerSize = 9, entrySize = 15;
-    int dataStart = headerSize + 2 * entrySize;
+    int dataStart = headerSize + 3 * entrySize;
     int len3 = 4 * 8;      // 8 px = 4 bytes/row, 8 rows
     int len7 = 3 * 10;     // 6 px = 3 bytes/row, 10 rows
-    var pak = new byte[dataStart + len3 + len7];
+    int len9 = 2 * 4;      // 4 px = 2 bytes/row, 4 rows
+    var pak = new byte[dataStart + len3 + len7 + len9];
     pak[0] = (byte)'N'; pak[1] = (byte)'Z'; pak[2] = (byte)'P'; pak[3] = (byte)'K';
     pak[4] = 1;
-    pak[5] = 2; pak[6] = 0;          // count
+    pak[5] = 3; pak[6] = 0;          // count
     pak[7] = 7; pak[8] = 0;          // release
     WriteEntry(pak, headerSize, z: 3, w: 8, h: 8, offset: dataStart, len: len3);
     WriteEntry(pak, headerSize + entrySize, z: 7, w: 6, h: 10, offset: dataStart + len3, len: len7);
+    WriteEntry(pak, headerSize + 2 * entrySize, z: 9, w: 4, h: 4, offset: dataStart + len3 + len7, len: len9, flags: 0x11);
     for (int i = 0; i < len3; i++) pak[dataStart + i] = 0x55;
     for (int i = 0; i < len7; i++) pak[dataStart + len3 + i] = 0x33;
+    for (int r = 0; r < 4; r++)
+    {
+        pak[dataStart + len3 + len7 + r * 2] = 0xE1;     // E 1
+        pak[dataStart + len3 + len7 + r * 2 + 1] = 0x1E; // 1 E
+    }
     return pak;
 
-    static void WriteEntry(byte[] pak, int at, int z, int w, int h, int offset, int len)
+    static void WriteEntry(byte[] pak, int at, int z, int w, int h, int offset, int len, byte flags = 0)
     {
         pak[at] = (byte)z; pak[at + 1] = (byte)(z >> 8);
         pak[at + 2] = (byte)w; pak[at + 3] = (byte)(w >> 8);
         pak[at + 4] = (byte)h; pak[at + 5] = (byte)(h >> 8);
-        pak[at + 6] = 0;
+        pak[at + 6] = flags;
         pak[at + 7] = (byte)offset; pak[at + 8] = (byte)(offset >> 8);
         pak[at + 9] = (byte)(offset >> 16); pak[at + 10] = (byte)(offset >> 24);
         pak[at + 11] = (byte)len; pak[at + 12] = (byte)(len >> 8);
@@ -353,12 +362,29 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpBranch(6, "pic0_taken", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
     z.Fail("pic0-branch");
     z.Label("pic0_taken");
-    z.AssertWordEquals(PicTable, 0, 2, "piccount");
+    z.AssertWordEquals(PicTable, 0, 3, "piccount");
     z.AssertWordEquals(PicTable, 1, 7, "picrel");
     // Flags1 bit 1 (pictures available) must be set once the pak loaded.
     z.TwoOpStore(16, Operand.Large(0), Operand.Small(1), 0x11); // loadb hdr $01
     z.TwoOpStore(9, Operand.Var(0x11), Operand.Small(2), 0x11); // and #2
     z.AssertVarEquals(0x11, 2, "flags1-pics");
+
+    // --- draw_picture / erase_picture blits (window 0 still at its reset
+    // default origin (1,1), so abs cell = coord-1; 1 cell = 4x4 gfx px).
+    // Pic 3 at cells (20,10) -> px x 40-47, y 80-87, solid magenta ($5).
+    z.ExtOp(5, Operand.Small(3), Operand.Small(21), Operand.Small(11));
+    // Pic 9 (4x4, E 1 1 E rows, transparent index 1) over its top-left
+    // corner: opaque yellow edges land, the transparent middle keeps the
+    // magenta underneath — the nibble-granular keying fixture.
+    z.ExtOp(5, Operand.Small(9), Operand.Small(21), Operand.Small(11));
+    // Pic 7 (6x10 cyan) at cells (30,40) -> px x 160-165, y 120-129, then
+    // erased: the rect refills with the window background (black).
+    z.ExtOp(5, Operand.Small(7), Operand.Small(31), Operand.Small(41));
+    z.ExtOp(7, Operand.Small(7), Operand.Small(31), Operand.Small(41));
+    // Clipping: pic 3 at x cell 79 -> px 316-323 clips at 320 without
+    // derailing; fully off-screen draw (y cell 59) is a clean no-op.
+    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(80));
+    z.ExtOp(5, Operand.Small(3), Operand.Small(60), Operand.Small(1));
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");

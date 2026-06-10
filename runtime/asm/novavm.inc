@@ -105,6 +105,7 @@ ShelfN                        = $04
 FioPageTargetXram             = $00
 FioPageTargetRam              = $01
 FioPageTargetVgc              = $02
+FioPageTargetGfx4             = $03
 FioDirTypeBas                 = $00
 FioDirTypeSid                 = $01
 FioDirTypeBin                 = $02
@@ -361,6 +362,7 @@ BltErrWriteProt               = $05
 BltModeFill                   = $01
 BltModeColorKey               = $02
 BltModeRotate                 = $04
+BltModeColorKey4              = $08
 
 ; --- Board input registers ($BA9C-$BAA1) ---
 BoardInputBase                = $BA9C

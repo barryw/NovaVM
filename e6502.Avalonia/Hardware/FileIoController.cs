@@ -1881,6 +1881,64 @@ public sealed partial class FileIoController
                         _vgcWrite(space, addr + i, data[fileOffset + i]);
                     break;
                 }
+                case VgcConstants.FioPageTargetGfx4:
+                {
+                    // The NovaZ picture path (PICS.PAK): unpack a 4bpp
+                    // row-packed slice (two pixels per byte, high nibble
+                    // left) into the 1-byte-per-pixel gfx plane.
+                    //   FioGAddr  = start PIXEL address (y*320 + x)
+                    //   FioGSpace = source bytes per row (1..160)
+                    //   FioEndH   = flags: bit 0 + high nibble = transparent
+                    //               index (skip those pixels), bit 1 = odd
+                    //               width (the last pixel per row is pad)
+                    // Rows clip at the 320px right edge; rows past the 200px
+                    // bottom edge are dropped. (Hardware note for M6: the
+                    // FPGA gfx plane is 4bpp PACKED, so this unpack is
+                    // Avalonia-only — NovaHost streams pak bytes as-is and
+                    // the RTL blitter's nibble color key handles the skip.)
+                    if (_vgcWrite is null || _vgcSpaceLength is null)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    int rowBytes = _regs[VgcConstants.FioGSpace - VgcConstants.FioBase];
+                    byte flags = _regs[VgcConstants.FioEndH - VgcConstants.FioBase];
+                    int startPixel = GetFioGraphicsAddress();
+                    int gfxLen = _vgcSpaceLength(VgcConstants.MemSpaceGfx);
+                    if (rowBytes <= 0 || rowBytes > VgcConstants.GfxWidth / 2 ||
+                        startPixel < 0 || startPixel >= gfxLen)
+                    {
+                        SetError(VgcConstants.FioErrIo);
+                        return;
+                    }
+
+                    bool transparent = (flags & 0x01) != 0;
+                    byte transparentIndex = (byte)(flags >> 4);
+                    int widthPx = rowBytes * 2 - ((flags & 0x02) != 0 ? 1 : 0);
+                    int x0 = startPixel % VgcConstants.GfxWidth;
+                    int y0 = startPixel / VgcConstants.GfxWidth;
+                    int rows = len / rowBytes;
+                    for (int row = 0; row < rows; row++)
+                    {
+                        int y = y0 + row;
+                        if (y >= VgcConstants.GfxHeight)
+                            break;
+                        int src = fileOffset + row * rowBytes;
+                        for (int p = 0; p < widthPx; p++)
+                        {
+                            int x = x0 + p;
+                            if (x >= VgcConstants.GfxWidth)
+                                break;
+                            byte pair = data[src + p / 2];
+                            byte color = (p & 1) == 0 ? (byte)(pair >> 4) : (byte)(pair & 0x0F);
+                            if (transparent && color == transparentIndex)
+                                continue;
+                            _vgcWrite(VgcConstants.MemSpaceGfx, y * VgcConstants.GfxWidth + x, color);
+                        }
+                    }
+                    break;
+                }
                 default:
                     SetError(VgcConstants.FioErrIo);
                     return;

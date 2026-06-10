@@ -133,6 +133,7 @@ public static class VgcConstants
     public const byte FioPageTargetXram = 0x00;    // XPAGE target: flat XRAM
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
+    public const byte FioPageTargetGfx4 = 0x03;    // XPAGE target: 4bpp row-packed -> gfx pixels
 
     public const byte FioDirTypeBas    = 0x00;
     public const byte FioDirTypeSid    = 0x01;
@@ -426,7 +427,7 @@ public static class VgcConstants
     public const int BltSrcStrideH     = 0xBA93;  // source stride high
     public const int BltDstStrideL     = 0xBA94;  // destination stride low
     public const int BltDstStrideH     = 0xBA95;  // destination stride high
-    public const int BltMode           = 0xBA96;  // bit0=fill, bit1=color-key, bit2=rotate
+    public const int BltMode           = 0xBA96;  // bit0=fill, bit1=color-key, bit2=rotate, bit3=color-key4 (nibble)
     public const int BltFillValue      = 0xBA97;  // fill byte when mode bit0 set
     public const int BltColorKey       = 0xBA98;  // transparent source color; rotate background byte
     public const int BltCountL         = 0xBA99;  // bytes written low
@@ -451,6 +452,7 @@ public static class VgcConstants
     public const byte BltModeFill      = 0x01;
     public const byte BltModeColorKey  = 0x02;
     public const byte BltModeRotate    = 0x04;
+    public const byte BltModeColorKey4 = 0x08;  // nibble-granular color key (4bpp planes)
 
     // -------------------------------------------------------------------------
     // Board input registers ($BA9C-$BAA1)

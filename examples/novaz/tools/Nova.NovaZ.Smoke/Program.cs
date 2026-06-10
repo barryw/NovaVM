@@ -138,6 +138,8 @@ try
         RequireContains(screen, expected);
     foreach (var expected in expectedAts)
         RequireAt(screen, expected);
+    foreach (var expected in expectedGfxColors)
+        RequireGfxColor(bus.Vgc, screen, expected);
     RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
     if (expectSoundfont)
         RequireSoundfontLoaded(bus, screen);
@@ -393,6 +395,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
             case "--expect-text-color":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--expect-text-color requires text=>hex.");
+                i++;
+                break;
+            case "--expect-gfx-color":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-gfx-color requires x,y=>hex.");
                 i++;
                 break;
             case "--expect-stop":
