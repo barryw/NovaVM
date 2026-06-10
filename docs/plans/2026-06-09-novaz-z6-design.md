@@ -51,8 +51,10 @@ later addition (Avalonia has a pointer; hardware does not).
 
 ## ROM budget — V6 lives in RAM
 
-The 16 K runtime ROM has ~1.7 KB free (`runtime.map`: code+rodata end at
-`$F924`). The V6 window model + 18 EXT opcodes + picture path will not fit.
+The 16 K runtime ROM had ~1.7 KB free at branch time (`runtime.map`:
+code+rodata ended at `$F924`; after M1's ROM-side additions the end is
+`$FB1A`, ~1.2 KB free). The V6 window model + 18 EXT opcodes + picture path
+will not fit.
 
 Decision: a **RAM-resident V6 segment**. BSS ends at `$1866`; the launcher
 loads `NOVAZ6.BIN` at `$2000` (≈40 KB free to `$BFFF`, of which V6 needs

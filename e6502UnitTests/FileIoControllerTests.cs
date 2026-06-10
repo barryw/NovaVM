@@ -1384,4 +1384,55 @@ public class FileIoControllerTests
             try { Directory.Delete(root, true); } catch { }
         }
     }
+
+    [TestMethod]
+    public void LoadRuntime_FallsBackToRomsWhenNotOnMountedDevice()
+    {
+        // Two-stage resolution: a device manager is present but the runtime is
+        // not on any mounted device, so the host <saveDir>/roms/ library wins.
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(Path.Combine(hd0, "roms"));
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "EMPTY", 800);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            var rom = new byte[VgcConstants.RomSize];
+            rom[0] = 0xA9;
+            File.WriteAllBytes(Path.Combine(hd0, "roms", "NOVAB.bin"), rom);
+
+            byte[]? loaded = null;
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                loadRuntimeRom: data => loaded = data,
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "NOVAB");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdLoadRuntime);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.IsNotNull(loaded, "runtime should fall back to <saveDir>/roms/");
+            Assert.AreEqual(VgcConstants.RomSize, loaded!.Length);
+            Assert.AreEqual(0xA9, loaded[0]);
+        }
+        finally
+        {
+            try { deviceManager?.GetDevice("FD0").Unmount(); } catch { }
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
 }

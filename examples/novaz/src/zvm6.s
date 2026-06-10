@@ -1052,7 +1052,8 @@ nz6_var_pull:
 @store:
         JSR zvm_fetch                   ; store byte -> A
         JMP zvm_set_var
-@stack_addr:                            ; zstory_addr := operand 1 (table base)
+@stack_addr:                            ; zstory_addr := operand 0, pull's
+                                        ; user-stack table base
         LDA zvm_operand_lo
         STA zstory_addr_l
         LDA zvm_operand_hi
