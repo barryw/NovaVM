@@ -10,7 +10,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--skip-manifest-check]");
     return 1;
 }
 
@@ -30,6 +30,7 @@ bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringCo
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
+List<ExpectedAt> expectedAts = LoadExpectedAts(args);
 List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
 List<ExpectedGfxColor> expectedGfxColors = LoadExpectedGfxColors(args);
@@ -60,15 +61,17 @@ try
 
     if (screenOnly)
     {
-        if (expectedScreens.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
-            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-text-color, or --expect-gfx-color check.");
+        if (expectedScreens.Count == 0 && expectedAts.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
+            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-at, --expect-text-color, or --expect-gfx-color check.");
 
         foreach (string input in screenInputs)
             SendRaw(cpu, bus, editor, input);
 
-        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedTextColors, expectedGfxColors, ref morePrompts);
+        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedGfxColors, ref morePrompts);
         foreach (string expected in expectedScreens)
             RequireContains(screenOnlySnapshot, expected);
+        foreach (var expected in expectedAts)
+            RequireAt(screenOnlySnapshot, expected);
         foreach (var expected in expectedTextColors)
             RequireTextColor(bus.Vgc, screenOnlySnapshot, expected);
         foreach (var expected in expectedGfxColors)
@@ -104,6 +107,8 @@ try
         RequireTimeStatusLine(screen);
     foreach (string expected in expectedScreens)
         RequireContains(screen, expected);
+    foreach (var expected in expectedAts)
+        RequireAt(screen, expected);
     RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
     if (expectSoundfont)
         RequireSoundfontLoaded(bus, screen);
@@ -167,7 +172,7 @@ try
         {
             if (command.Expected.Count == 0)
                 throw new InvalidOperationException($"No-prompt command '{command.Text}' requires expected screen text.");
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], ref morePrompts);
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], ref morePrompts);
         }
         RunForSteps(cpu, bus, 200_000);
         screen = SnapshotScreen(bus.Vgc);
@@ -317,6 +322,11 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
                     throw new ArgumentException("--expect-screen requires text.");
                 i++;
                 break;
+            case "--expect-at":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-at requires <col>,<row>=><text>.");
+                i++;
+                break;
             case "--screen-input":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--screen-input requires text.");
@@ -415,6 +425,63 @@ static List<string> LoadExpectedScreens(string[] args)
     }
 
     return expected;
+}
+
+// --expect-at <col>,<row>=><text>: the screen snapshot at 0-based cell
+// (col,row) must START with <text>, whitespace-exact — no normalization.
+static List<ExpectedAt> LoadExpectedAts(string[] args)
+{
+    var expected = new List<ExpectedAt>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-at", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException("--expect-at requires <col>,<row>=><text>.");
+
+        string spec = args[++i];
+        string[] parts = spec.Split("=>", 2, StringSplitOptions.None);
+        if (parts.Length != 2 || parts[1].Length == 0)
+            throw new ArgumentException($"Expected position check must be '<col>,<row>=><text>': {spec}");
+
+        string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+        if (xy.Length != 2 ||
+            !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int col) ||
+            !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int row))
+            throw new ArgumentException($"Expected position must be '<col>,<row>': {spec}");
+        if ((uint)col >= VgcConstants.ScreenCols || (uint)row >= VgcConstants.ScreenRows)
+            throw new ArgumentOutOfRangeException(nameof(args), $"--expect-at cell out of range in '{spec}'.");
+        if (col + parts[1].Length > VgcConstants.ScreenCols)
+            throw new ArgumentOutOfRangeException(nameof(args), $"--expect-at text runs past column {VgcConstants.ScreenCols} in '{spec}'.");
+
+        expected.Add(new ExpectedAt(col, row, parts[1]));
+    }
+
+    return expected;
+}
+
+static bool MatchesAt(string screen, ExpectedAt expected)
+{
+    string[] lines = screen.Split('\n');
+    if (expected.Row >= lines.Length || expected.Col + expected.Text.Length > lines[expected.Row].Length)
+        return false;
+    return lines[expected.Row].Substring(expected.Col, expected.Text.Length)
+        .Equals(expected.Text, StringComparison.Ordinal);
+}
+
+static void RequireAt(string screen, ExpectedAt expected)
+{
+    if (MatchesAt(screen, expected))
+        return;
+
+    string[] lines = screen.Split('\n');
+    string actual = expected.Row < lines.Length
+        ? lines[expected.Row].Substring(
+            Math.Min(expected.Col, lines[expected.Row].Length),
+            Math.Min(expected.Text.Length, Math.Max(0, lines[expected.Row].Length - expected.Col)))
+        : "";
+    throw new InvalidOperationException(
+        $"Expected screen cell {expected.Col},{expected.Row} to start with '{expected.Text}'; saw '{actual}'.\n{screen}");
 }
 
 static List<string> LoadScreenInputs(string[] args)
@@ -548,6 +615,7 @@ static string RunUntilScreenMatches(
     ScreenEditor editor,
     int maxSteps,
     IReadOnlyList<string> expectedScreens,
+    IReadOnlyList<ExpectedAt> expectedAts,
     IReadOnlyList<ExpectedTextColor> expectedTextColors,
     IReadOnlyList<ExpectedGfxColor> expectedGfxColors,
     ref int morePrompts)
@@ -582,9 +650,10 @@ static string RunUntilScreenMatches(
             continue;
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
+        bool hasExpectedAts = expectedAts.All(expected => MatchesAt(screen, expected));
         bool hasExpectedColorText = expectedTextColors.All(expected => FindText(screen, expected.Text) is not null);
         bool hasExpectedGfxColors = expectedGfxColors.All(expected => bus.Vgc.GetGfxPixelColor(expected.X, expected.Y) == expected.Color);
-        if (hasExpectedScreens && hasExpectedColorText && hasExpectedGfxColors)
+        if (hasExpectedScreens && hasExpectedAts && hasExpectedColorText && hasExpectedGfxColors)
             return screen;
     }
 
@@ -1304,4 +1373,5 @@ sealed record SmokeCommand(
     SmokeInputMode Mode = SmokeInputMode.Line,
     bool WaitForPrompt = true);
 sealed record ExpectedTextColor(string Text, byte Color);
+sealed record ExpectedAt(int Col, int Row, string Text);
 sealed record ExpectedGfxColor(int X, int Y, byte Color);

@@ -282,6 +282,11 @@ zvm_run_until_read:
         LDA zstory_version
         CMP #$06
         BNE @direct_pc
+        ; V6: reset the segment's 8-window model. Fresh boots AND restarts
+        ; both come through here, and the segment is already resident (the
+        ; boot path loads it before zvm_run_until_read).
+        LDA #NZ6_OP_RESET
+        JSR NZ6_ENTRY
         ; V6: header $06 is the packed address of the main routine. Call it
         ; with no arguments through the normal call machinery; if it ever
         ; returns (frame 0), zvm_return stops with ZVM_STOP_QUIT.
@@ -437,6 +442,11 @@ zvm_decode_variable:
         CMP #$01              ; je may take 2-4 operands in variable form.
         BNE :+
         LDA #$04
+        BRA @set_limit
+:
+        CMP #$1B              ; V6 set_colour: fg bg [window] — 3 operands.
+        BNE :+
+        LDA #$03
         BRA @set_limit
 :
         LDA #$02

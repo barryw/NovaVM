@@ -786,6 +786,10 @@ zstory_store_filelen:
         CMP #$04
         BCC :+
         JSR zstory_shift_filebytes
+        LDA zstory_version
+        CMP #$06
+        BCC :+
+        JSR zstory_shift_filebytes      ; v6+: header stores length/8
 :
         RTS
 

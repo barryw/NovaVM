@@ -25,9 +25,10 @@ const int ParseBuffer = 0x0450;
 const int Dictionary = 0x0480;
 const int PicTable = 0x0500;                       // scratch: picture_data table
 const int UserStack = 0x0520;                      // scratch: user-stack table (Task 8)
+const int CursorArray = 0x0540;                    // scratch: get_cursor result words
 const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
-const int PackedStrings = 0x0900;                  // strings region;  packed (0x900-0x400)/4
+const int PackedStrings = 0x0C00;                  // strings region;  packed (0xC00-0x400)/4
 
 (string outputPath, int version) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
@@ -143,24 +144,27 @@ static void EmitSpecProgram(ZCode z)
     // Main routine: header $06 points here (packed). Locals-count byte first.
     z.Byte(0);
 
+    // --- Task 7: erase_window -1 FIRST — it resets the 8-window table to
+    // defaults and clears the whole screen, so everything printed below must
+    // survive to the end (and lands at deterministic cells for --expect-at).
+    z.VarOp(13, Operand.Large(0xFFFF));
+
     // M1 core: literal print, packed string via S_O, routine call via R_O.
+    // Lands at cell (0,0) right after the erase homes window 0's cursor.
     z.Print("z6 m1 ");
     z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
     z.Call1S("routine_return_42", 0x11);
     z.AssertVarEquals(0x11, 42, "v6-call");
     z.NewLine();
 
-    // --- Task 6: V6 dispatch routing into the NOVAZ6 segment (M1 stubs) ---
-    // erase_window -1 (VAR:13): routed to the segment; the M1 stub ignores
-    // it, so the "z6 m1 ok" text already on screen must survive to the end.
-    z.VarOp(13, Operand.Large(0xFFFF));
-    // set_window 0 (VAR:11): routed stub, no-op.
+    // --- Task 6: V6 dispatch routing into the NOVAZ6 segment ---
+    // set_window 0 (VAR:11): already current — must be a clean no-op.
     z.VarOp(11, Operand.Small(0));
-    // get_wind_prop 1,4 (EXT:19, store): the stub must consume the store
-    // byte and store 0 — a mis-consumed store byte derails the instruction
-    // stream, which is what this assert really pins.
+    // get_wind_prop 1,4 (EXT:19, store): after reset, window 1's y-cursor
+    // (prop 4) defaults to 1 unit. Also pins store-byte consumption — a
+    // mis-consumed store byte derails the instruction stream.
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
-    z.AssertVarEquals(0x12, 0, "windprop-stub");
+    z.AssertVarEquals(0x12, 1, "windprop-default");
     // picture_data 0, table (EXT:6, branch): stub decodes the branch bytes
     // and applies "false". If the branch is wrongly taken we hit the fail
     // block; fall-through is the good path.
@@ -181,6 +185,89 @@ static void EmitSpecProgram(ZCode z)
     z.Label("fail_us");
     z.Fail("us-stub");
     z.Label("us_ok");
+
+    // --- Task 7: minimal 8-window model ---
+    // Window property round-trip: put_wind_prop 1,4,21 then read it back.
+    z.ExtOp(25, Operand.Small(1), Operand.Small(4), Operand.Small(21));
+    z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
+    z.AssertVarEquals(0x12, 21, "windprop-rt");
+
+    // move_window 2, y=41, x=81 -> props 0/1.
+    z.ExtOp(16, Operand.Small(2), Operand.Small(41), Operand.Small(81));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(0));
+    z.AssertVarEquals(0x12, 41, "movewin-y");
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(1));
+    z.AssertVarEquals(0x12, 81, "movewin-x");
+
+    // window_size 2, y=80, x=120 -> props 2/3.
+    z.ExtOp(17, Operand.Small(2), Operand.Small(80), Operand.Small(120));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(2));
+    z.AssertVarEquals(0x12, 80, "winsize-y");
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(3));
+    z.AssertVarEquals(0x12, 120, "winsize-x");
+
+    // window_style 2 against prop 14: set, or, and-not, xor.
+    z.ExtOp(18, Operand.Small(2), Operand.Small(0b1010), Operand.Small(0));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(14));
+    z.AssertVarEquals(0x12, 0b1010, "winstyle-set");
+    z.ExtOp(18, Operand.Small(2), Operand.Small(0b0001), Operand.Small(1));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(14));
+    z.AssertVarEquals(0x12, 0b1011, "winstyle-or");
+    z.ExtOp(18, Operand.Small(2), Operand.Small(0b0010), Operand.Small(2));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(14));
+    z.AssertVarEquals(0x12, 0b1001, "winstyle-clear");
+    z.ExtOp(18, Operand.Small(2), Operand.Small(0b1111), Operand.Small(3));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(14));
+    z.AssertVarEquals(0x12, 0b0110, "winstyle-xor");
+
+    // set_margins left=8 right=12 window=2 -> props 6/7.
+    z.ExtOp(8, Operand.Small(8), Operand.Small(12), Operand.Small(2));
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(6));
+    z.AssertVarEquals(0x12, 8, "margins-l");
+    z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(7));
+    z.AssertVarEquals(0x12, 12, "margins-r");
+
+    // set_colour fg=4 bg=5 window=3 -> prop 11 records (bg<<8)|fg; M1 does
+    // not touch the live VGC palette.
+    z.TwoOpVar(27, Operand.Small(4), Operand.Small(5), Operand.Small(3));
+    z.ExtOpStore(19, 0x12, Operand.Small(3), Operand.Small(11));
+    z.AssertVarEquals(0x12, (5 << 8) | 4, "colour-rec");
+
+    // Split 40 units (10 cell rows) and place text in window 1 at units
+    // y=9, x=41 -> cell row (1-1+9-1)/4 = 2, col (1-1+41-1)/4 = 10.
+    z.VarOp(10, Operand.Small(40));
+    // split must update the table: window 1 y-size = 40, window 0 origin
+    // y = 41 (units), y-size = 160.
+    z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(2));
+    z.AssertVarEquals(0x12, 40, "split-w1size");
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(0));
+    z.AssertVarEquals(0x12, 41, "split-w0y");
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(2));
+    z.AssertVarEquals(0x12, 160, "split-w0size");
+    z.VarOp(11, Operand.Small(1));                          // set_window 1
+    z.VarOp(15, Operand.Small(9), Operand.Small(41));       // set_cursor y x
+    z.Print("W1TEXT");
+
+    // Cursor readback: set_cursor with no printing in between must read
+    // back exactly (units, relative to the window origin).
+    z.VarOp(15, Operand.Small(13), Operand.Small(17));      // set_cursor 13,17
+    z.VarOp(16, Operand.Large(CursorArray));                // get_cursor array
+    z.AssertWordEquals(CursorArray, 0, 13, "getcursor-y");
+    z.AssertWordEquals(CursorArray, 1, 17, "getcursor-x");
+
+    // set_cursor on a NON-current window only updates the table.
+    z.VarOp(15, Operand.Small(29), Operand.Small(33), Operand.Small(4));
+    z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(4));
+    z.AssertVarEquals(0x12, 29, "setcursor-other-y");
+    z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(5));
+    z.AssertVarEquals(0x12, 33, "setcursor-other-x");
+
+    // Back to window 0: text must continue at window 0's own cursor (row 11
+    // absolute: lower region starts at cell row 10, cursor was at rel row 1),
+    // NOT at window 1's cursor.
+    z.VarOp(11, Operand.Small(0));                          // set_window 0
+    z.Print("back in w0");
+    z.NewLine();
 
     z.Label("prompt");
     z.Print(">");
@@ -306,6 +393,15 @@ sealed class ZCode
     {
         TwoOp(op, a, b);
         Branch(label, branchIf);
+    }
+
+    // 2OP opcode in VAR form (up to 4 operands), e.g. V6 "set_colour fg bg window".
+    public void TwoOpVar(int op, params Operand[] operands)
+    {
+        Emit(0xC0 | (op & 0x1F));
+        Emit(TypeByte(operands));
+        foreach (var operand in operands)
+            EmitOperand(operand);
     }
 
     public void VarOp(int op, params Operand[] operands)
