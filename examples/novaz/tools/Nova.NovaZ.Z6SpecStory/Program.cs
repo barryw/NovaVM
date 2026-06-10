@@ -148,9 +148,12 @@ static void EmitSpecProgram(ZCode z)
     z.AssertVarEquals(0x11, 42, "v6-call");
     z.NewLine();
 
+    z.Label("prompt");
     z.Print(">");
     z.VarOpStore(4, 0x11, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // read
-    z.ZeroOp(10);                                                                 // quit
+    z.Print("z6 input ok");
+    z.NewLine();
+    z.Jump("prompt");
 
     z.Align(4);
     z.Label("routine_return_42");

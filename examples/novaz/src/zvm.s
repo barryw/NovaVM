@@ -278,6 +278,30 @@ zvm_run_until_read:
         STA zvm_rng_hi
         JSR zvm_clear_locals
         JSR zvm_select_active_window
+        LDA zstory_version
+        CMP #$06
+        BNE @direct_pc
+        ; V6: header $06 is the packed address of the main routine. Call it
+        ; with no arguments through the normal call machinery; if it ever
+        ; returns (frame 0), zvm_return stops with ZVM_STOP_QUIT.
+        LDA zstory_initial_pc_lo
+        STA zvm_operand_lo
+        LDA zstory_initial_pc_hi
+        STA zvm_operand_hi
+        LDA #$01
+        STA zvm_operand_count    ; counts the packed-addr operand itself:
+                                 ; 1 = address only -> arg_count = 0.
+                                 ; (0 would trip the null-call guard.)
+        LDA #$FF
+        STA zvm_store_var        ; call_vn semantics: no store
+        STZ zvm_pc_l             ; sentinel return PC (frame 0 return = quit);
+                                 ; never dispatched, so zvm_check_code_target
+                                 ; never validates it
+        STZ zvm_pc_h
+        STZ zvm_pc_b
+        JSR zvm_call_common
+        BRA @loop
+@direct_pc:
         LDA zstory_initial_pc_lo
         STA zvm_pc_l
         LDA zstory_initial_pc_hi
@@ -874,7 +898,15 @@ zvm_return:
         STA zvm_ret_hi
         LDA zvm_frame_count
         BNE @have_frame
+        LDA zstory_version
+        CMP #$06
+        BEQ @main_returned
         LDA #ZVM_STOP_UNSUPPORTED
+        STA zvm_stop_reason
+        RTS
+@main_returned:
+        ; V6: the main routine returned -- the machine halts cleanly.
+        LDA #ZVM_STOP_QUIT
         STA zvm_stop_reason
         RTS
 @have_frame:

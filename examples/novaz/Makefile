@@ -155,7 +155,7 @@ test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z5_SPEC_STORY) $(SMOKE_DLL)
 
 test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)"
-	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z6 m1 ok"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z6 m1 ok" "look=>z6 input ok"
 
 test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)"
