@@ -239,3 +239,94 @@ A full game turn (turns 1–3, e.g. `inventory` = 91 ops) is:
 10. **set_window targets only 0/1/7** — an 8-window table is still right
     (props are indexed by number), but rendering work can prioritize those
     three.
+
+## Post-M2 capture (2026-06-10)
+
+Regenerated with M2 shipped (units = cells, windows = vtext regions,
+in-window scroll, real `scroll_window`). Raw trace committed beside the M1
+one: `docs/plans/data/2026-06-10-nz6-trace-zork-zero-post-m2.txt`
+(1988 lines, 60KB). Same 20-turn capture script, still bit-deterministic.
+
+### Stats vs the M1 capture
+
+- **474 traced ops** (88 boot + 386 in-turn) vs 475 (86 + 389).
+- New: 2 × `select` hooks (id $08, the M2 `zvm_select_active_window` V6
+  path) at boot.
+- **Gone: `get_cursor` (was 1) and `scroll_window` (was 1).** Both belonged
+  to the `<G? .Y .YLEFT>` branch of `MARGINAL-PIC` (`pic.zil`): with the 4×
+  cursor inflation the game thought the drop-cap picture didn't fit and
+  issued `get_cursor` → `scroll_window 0,$97` → `set_cursor $2E,1`. With
+  cell units the picture height (0, no pictures) never exceeds the room
+  below the cursor, so the branch is rightly skipped. The plan's risk-5
+  detector (residual get_cursor/scroll asymmetry) is clean.
+- All coordinates in the trace are sane cells; the per-turn refresh motif's
+  `draw_picture $D8` lands at `$32,6` (row 50 = window bottom + 1, the
+  game's border row) instead of M1's `$33,6`.
+- `morePrompts` = **1489**, all during boot, all real (see below).
+
+### Finding 9 was wrong: the boot MORE storm is the game's
+
+The M1 capture blamed the 1337 boot `[ MORE ]` auto-answers on stale MORE
+text re-matching (finding 9). The post-M2 evidence overturns that:
+
+- The storm is one contiguous block between boot seq 68 (`get_wind_prop
+  0,9`) and seq 69 — i.e. during the prologue, before any read.
+- The game is executing a `new_line` loop at zvm_pc $1CC7B with a local
+  counting down from $FFFF: it is `CLEAR-CRCNT` (`prologue.zil`), which
+  reads the CR-interrupt countdown (window prop 9) back and prints that
+  many newlines ("in case illuminated letter is taller than intro").
+- The countdown was armed by `MARGINAL-PIC` (`pic.zil`): `WINPUT 0 ,WCRCNT
+  <pic height in lines>` — with the drop-cap picture absent the armed value
+  is -1 ($FFFF), so the loop prints ~65.5K newlines.
+- **dfrotz reproduces the identical flood** (~1340 screen lines of blanks
+  between the prologue paragraph and Banquet Hall on an 80×50 dumb
+  terminal).
+- The MORE counts are exact page math of the storm: 65525 newlines through
+  M2's 44-line playfield pages = **1489**; through M1's 49-line full-screen
+  pages = **1337**. Both numbers were real `[ MORE ]` waits, not harness
+  spam. (The M2 count being *higher* is the layout fix working: smaller
+  window, more pages.)
+
+### Finding 5 refined: the CR interrupt is real interpreter work (M3)
+
+Per the Infocom YZIP spec ("Carriage Return Interrupt"): *"Before the
+interpreter outputs a carriage return, it checks CRCNT, and if it is
+non-zero, decrements it. If CRCNT reaches zero by such an operation, the
+contents of CRFUNC are called as a function address."* Frotz implements
+exactly this (`screen.c countdown()`, plus a Zork Zero r393 fire-at-end
+quirk). M2 still stores props 8/9 verbatim and never fires — in text-only
+mode the only observable delta is the storm length (65535 vs ~65525
+newlines), but in M3 the countdown is load-bearing: it releases the
+drop-cap margins (`RESET-MARGIN` = the $384B routine the game arms every
+refresh). Implement the decrement+fire with the picture work.
+
+### Banner overlap diagnosed: game-side text-only artifact
+
+The banner garble ("Moves:Sc3" on row 1, score "0" on row 2) is the game's
+own layout under missing picture metadata: `INIT-STATUS-LINE` /
+`UPDATE-STATUS-LINE` (`globals.zil`) derive every banner `CURSET` from
+`PICINF` results (HERE-LOC/REGION-LOC pics), and `picture_data` honestly
+fails. The rendered cells match the issued coordinates exactly (e.g. the
+moves counter prints at `set_cursor 2,9` → abs (1,8), right after the
+"Sc" residue of a once-printed "Score:" label). Two spec cross-checks:
+
+- Our `set_cursor` clamp of out-of-range coordinates (`0,1` → row 1)
+  matches YZIP: *"If either of the arguments is outside the area covered by
+  the window, it will be set to the appropriate dimension of the window."*
+  (Frotz instead treats 0 as "keep current coordinate" — a Frotz-ism, not
+  YZIP.)
+- dfrotz's banner is equally garbled on the same story file.
+
+No runtime fix; M3's picture metrics restore the intended banner.
+
+### Smoke re-pin
+
+`projects/zork-zero/smoke.txt` now pins the M2 layout: boot-screen
+`--expect-at` args in `project.mk` (banner row 0, blank gap row, room title
+at inset col 6, prompt at abs (6,49)) plus post-turn `.expect-at` script
+directives (new in `Nova.NovaZ.Smoke`): banner intact after three turns,
+echoed command + response inside the inset, "Time passes..." followed by
+pinned blank cells (the stale-text regression trap — those cells held
+longer inventory text one turn earlier), prompt at the window bottom. A
+trailing `|` in a `.expect-at` script line protects trailing spaces from
+the script reader's trim.

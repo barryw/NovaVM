@@ -5,7 +5,18 @@ PROJECT_STORY := $(PROJECT_DIR)/STORY.BIN
 PROJECT_IMAGE := $(DIST_DIR)/$(PROJECT)/fd0.ndi
 # V6 has no v3-style status line, and the banner scrolls off before the first
 # prompt, so release/serial never survive on screen for the manifest check.
-PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check
-# 300KB V6 story: boot pages enough story to blow the default 80M-step budget.
+# The --expect-at args pin the M2 boot layout (cells are 0-based col,row):
+# banner room/region on row 0, the game's text-only "Moves:" banner artifact
+# on row 1, a blank row in the banner/playfield gap, the room title inside the
+# 45x70 playfield inset at origin (5,5) + 1-col left margin (text col 6, with
+# blank gutter cols 0-5), and the prompt at the window bottom row 49.
+PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check \
+	--expect-at "0,0=>Banquet Hall                   Flatheadia" \
+	--expect-at "0,1=>Moves:" \
+	--expect-at "0,4=>      " \
+	--expect-at "0,37=>      Banquet Hall" \
+	--expect-at "6,49=>>"
+# 300KB V6 story: the boot prologue ends in the game's own ~65K-newline
+# CLEAR-CRCNT storm (see README), which dominates the step budget.
 NOVAZ_SMOKE_MAX_STEPS ?= 480000000
 export NOVAZ_SMOKE_MAX_STEPS

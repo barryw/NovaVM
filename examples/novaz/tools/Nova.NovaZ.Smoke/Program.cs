@@ -9,7 +9,7 @@ using KDS.e6502;
 if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|])");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--skip-manifest-check]");
     return 1;
 }
@@ -172,6 +172,13 @@ try
             Console.WriteLine($".wait {command.Text}");
             int steps = Math.Max(1, (int)Math.Round(seconds * 1_000_000));
             RunForSteps(cpu, bus, steps);
+            continue;
+        }
+        if (command.Mode == SmokeInputMode.ExpectAt)
+        {
+            // Pure assertion: snapshot the live screen, no input, no CPU steps.
+            Console.WriteLine($".expect-at {command.Text}");
+            RequireAt(SnapshotScreen(bus.Vgc), ParseExpectedAtSpec(command.Text));
             continue;
         }
         if (command.Mode == SmokeInputMode.ExpectStop)
@@ -407,6 +414,22 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
 
 static SmokeCommand ParseCommandSpec(string spec)
 {
+    // ".expect-at <col>,<row>=><text>" asserts the live screen without sending
+    // any input (and without running the CPU): the "=>" belongs to the position
+    // spec, so it must be carved off before the command/expectation split. A
+    // single trailing '|' is stripped from <text> so scripts can pin trailing
+    // spaces (the script reader trims line ends) — "6,36=>Time passes...   |"
+    // proves the cells after the text are blank.
+    const string expectAtPrefix = ".expect-at ";
+    if (spec.StartsWith(expectAtPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string atSpec = spec[expectAtPrefix.Length..].TrimStart();
+        if (atSpec.Length == 0)
+            throw new ArgumentException($".expect-at requires <col>,<row>=><text> in '{spec}'.");
+        ParseExpectedAtSpec(atSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(atSpec, [], SmokeInputMode.ExpectAt, WaitForPrompt: false);
+    }
+
     string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
     string command = parts[0];
     if (string.IsNullOrWhiteSpace(command))
@@ -494,25 +517,36 @@ static List<ExpectedAt> LoadExpectedAts(string[] args)
         if (i + 1 >= args.Length)
             throw new ArgumentException("--expect-at requires <col>,<row>=><text>.");
 
-        string spec = args[++i];
-        string[] parts = spec.Split("=>", 2, StringSplitOptions.None);
-        if (parts.Length != 2 || parts[1].Length == 0)
-            throw new ArgumentException($"Expected position check must be '<col>,<row>=><text>': {spec}");
-
-        string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
-        if (xy.Length != 2 ||
-            !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int col) ||
-            !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int row))
-            throw new ArgumentException($"Expected position must be '<col>,<row>': {spec}");
-        if ((uint)col >= VgcConstants.ScreenCols || (uint)row >= VgcConstants.ScreenRows)
-            throw new ArgumentOutOfRangeException(nameof(args), $"--expect-at cell out of range in '{spec}'.");
-        if (col + parts[1].Length > VgcConstants.ScreenCols)
-            throw new ArgumentOutOfRangeException(nameof(args), $"--expect-at text runs past column {VgcConstants.ScreenCols} in '{spec}'.");
-
-        expected.Add(new ExpectedAt(col, row, parts[1]));
+        expected.Add(ParseExpectedAtSpec(args[++i]));
     }
 
     return expected;
+}
+
+// Shared by the --expect-at CLI flag and the ".expect-at" script directive.
+// A single trailing '|' is stripped from <text> (trailing-space protection for
+// script lines, harmless for quoted CLI args that don't use it).
+static ExpectedAt ParseExpectedAtSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.None);
+    if (parts.Length != 2 || parts[1].Length == 0)
+        throw new ArgumentException($"Expected position check must be '<col>,<row>=><text>': {spec}");
+
+    string text = parts[1];
+    if (text.Length > 1 && text.EndsWith('|'))
+        text = text[..^1];
+
+    string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+    if (xy.Length != 2 ||
+        !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int col) ||
+        !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int row))
+        throw new ArgumentException($"Expected position must be '<col>,<row>': {spec}");
+    if ((uint)col >= VgcConstants.ScreenCols || (uint)row >= VgcConstants.ScreenRows)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"--expect-at cell out of range in '{spec}'.");
+    if (col + text.Length > VgcConstants.ScreenCols)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"--expect-at text runs past column {VgcConstants.ScreenCols} in '{spec}'.");
+
+    return new ExpectedAt(col, row, text);
 }
 
 static bool MatchesAt(string screen, ExpectedAt expected)
@@ -1483,7 +1517,8 @@ enum SmokeInputMode
     Line,
     Raw,
     Wait,
-    ExpectStop
+    ExpectStop,
+    ExpectAt
 }
 
 sealed record SmokeCommand(
