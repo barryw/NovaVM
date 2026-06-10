@@ -46,6 +46,8 @@
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualDmaController.cs" Link="Hardware\VirtualDmaController.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualBlitterController.cs" Link="Hardware\VirtualBlitterController.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\FileIoController.cs" Link="Hardware\FileIoController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\ZSoundController.cs" Link="Hardware\ZSoundController.cs" />
+    <Compile Include="..\e6502.Avalonia\Hardware\MathCoprocessor.cs" Link="Hardware\MathCoprocessor.cs" />
   </ItemGroup>
 
   <!-- Rendering (EmulatorCanvas replaced by browser-local DirectCanvas) -->
