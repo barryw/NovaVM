@@ -747,6 +747,14 @@ static string RunUntilReadyPrompt(
     var cursorTrace = new Queue<string>();
     int lastCx = -1, lastCy = -1;
     string? lastReadySnapshot = null;
+    var probePcs = new HashSet<int>(
+        (Environment.GetEnvironmentVariable("NOVAZ_SMOKE_PROBE_PC") ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(s => Convert.ToInt32(s, 16)));
+    int opcodePcLoAddress = TryReadRuntimeSymbol("zvm_opcode_pc_l") ?? 0x0091;
+    int opcodePcHiAddress = TryReadRuntimeSymbol("zvm_opcode_pc_h") ?? 0x0092;
+    int opcodePcBankAddress = TryReadRuntimeSymbol("zvm_opcode_pc_b") ?? 0x00B3;
+    int opcodeAddress = TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093;
 
     for (int i = 0; i < maxSteps; i++)
     {
@@ -769,12 +777,28 @@ static string RunUntilReadyPrompt(
             }
         }
 
-        int opcodePc = ReadWord(bus, 0x008E, 0x008D);
+        int opcodePc = ReadWord(bus, opcodePcHiAddress, opcodePcLoAddress);
         if (opcodePc != lastOpcodePc)
         {
             lastOpcodePc = opcodePc;
-            trace.Enqueue($"${bus.Read(0x00AF):X2}{opcodePc:X4}:${bus.Read(0x008F):X2}");
-            while (trace.Count > 24)
+            if (probePcs.Contains(opcodePc))
+            {
+                int lo = TryReadRuntimeSymbol("zvm_locals_lo") ?? 0x0314;
+                int hi = TryReadRuntimeSymbol("zvm_locals_hi") ?? 0x0324;
+                int spAddr = TryReadRuntimeSymbol("zvm_sp") ?? 0;
+                int stkLo = TryReadRuntimeSymbol("zvm_stack_lo") ?? 0;
+                int stkHi = TryReadRuntimeSymbol("zvm_stack_hi") ?? 0;
+                int sp = spAddr > 0 ? bus.Read((ushort)spAddr) : -1;
+                string top = sp > 0 && stkLo > 0
+                    ? $"{bus.Read((ushort)(stkHi + sp - 1)):X2}{bus.Read((ushort)(stkLo + sp - 1)):X2}"
+                    : "----";
+                var locals = new List<string>();
+                for (int li = 0; li < 6; li++)
+                    locals.Add($"{ReadWord(bus, hi + li, lo + li):X4}");
+                Console.Error.WriteLine($"probe pc=${opcodePc:X4} sp={sp:X2} top=${top} locals={string.Join(",", locals)}");
+            }
+            trace.Enqueue($"${bus.Read((ushort)opcodePcBankAddress):X2}{opcodePc:X4}:${bus.Read((ushort)opcodeAddress):X2}");
+            while (trace.Count > 400)
                 trace.Dequeue();
             if (traceTopRow)
             {
@@ -801,7 +825,7 @@ static string RunUntilReadyPrompt(
 
         string screen = SnapshotScreen(bus.Vgc);
         if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
-            throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)}\n{screen}");
+            throw new InvalidOperationException($"NovaZ hit an unsupported opcode. {FormatZvmState(cpu, bus)} recent={string.Join(" ", trace)}\n{screen}");
         if (screen.Contains("[ MORE ]", StringComparison.Ordinal))
         {
             morePrompts++;
