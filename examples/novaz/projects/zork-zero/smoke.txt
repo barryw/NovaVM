@@ -1,0 +1,9 @@
+# Zork Zero (V6) first-prompt smoke — M1 text-only milestone.
+# Boot reaches the Banquet Hall prompt (the runner verifies prompt readiness);
+# the commands below assert on captured response text. The game's own input
+# pump polls read_char between output paragraphs, so the runner can see a
+# "ready" state before a long response finishes — only the first response
+# line of each command is pinned (timed interludes append varying text too).
+look=>Banquet Hall
+inventory=>platter of hellhound bones
+wait=>Time passes
