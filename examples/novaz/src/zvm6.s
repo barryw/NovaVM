@@ -57,7 +57,7 @@ nz6_rect_left:   .res 1         ; erase_window: cell rect
 nz6_rect_top:    .res 1
 nz6_rect_w:      .res 1
 nz6_rect_h:      .res 1
-nz6_stk_lo:      .res 1         ; push_stack: free-slot count in flight
+nz6_stk_lo:      .res 1         ; push_stack/pull: free-slot count in flight
 nz6_stk_hi:      .res 1
 
 .segment "CODE"
@@ -971,7 +971,8 @@ nz6_ext_push_stack:
 ; back to the free-slot count (word 0). NO store, NO branch; the discarded
 ; values stay in memory — the spec only requires the count to move. The
 ; stack-less/zero-stack form pops the GAME stack instead; that form is
-; deferred to M2 (alongside the V6 'pull' variant), so it fails loudly
+; deferred to M2 (the V6 'pull' opcode itself IS implemented — see
+; nz6_var_pull), so it fails loudly
 ; through the ROM's unsupported-opcode path rather than silently no-opping.
 nz6_ext_pop_stack:
         LDA zvm_operand_count

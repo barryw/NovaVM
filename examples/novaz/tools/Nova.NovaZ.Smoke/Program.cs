@@ -770,8 +770,8 @@ static string RunUntilReadyPrompt(
             {
                 lastCx = cx;
                 lastCy = cy;
-                int zpc = ReadWord(bus, 0x008E, 0x008D);
-                cursorTrace.Enqueue($"({cx},{cy})@pc${cpu.Pc:X4}|zpc${zpc:X4}|op${bus.Read(0x008F):X2}");
+                int zpc = ReadWord(bus, opcodePcHiAddress, opcodePcLoAddress);
+                cursorTrace.Enqueue($"({cx},{cy})@pc${cpu.Pc:X4}|zpc${zpc:X4}|op${bus.Read((ushort)opcodeAddress):X2}");
                 while (cursorTrace.Count > 60)
                     cursorTrace.Dequeue();
             }
@@ -869,7 +869,14 @@ static string RunUntilReadyPrompt(
 static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
 {
     int globals = ReadWord(bus, 0x0051, 0x0052);
-    int opcodePc = ReadWord(bus, 0x008E, 0x008D);
+    int opcodePcLo = TryReadRuntimeSymbol("zvm_opcode_pc_l") ?? 0x0091;
+    int opcodePcHi = TryReadRuntimeSymbol("zvm_opcode_pc_h") ?? 0x0092;
+    int opcodePcBank = TryReadRuntimeSymbol("zvm_opcode_pc_b") ?? 0x00B3;
+    int opcodeAddr = TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093;
+    int pcLo = TryReadRuntimeSymbol("zvm_pc_l") ?? 0x008F;
+    int pcHi = TryReadRuntimeSymbol("zvm_pc_h") ?? 0x0090;
+    int pcBank = TryReadRuntimeSymbol("zvm_pc_b") ?? 0x00B2;
+    int opcodePc = ReadWord(bus, opcodePcHi, opcodePcLo);
     int objectTable = ReadWord(bus, 0x004F, 0x0050);
     int operandLoAddress = TryReadRuntimeSymbol("zvm_operand_lo") ?? 0x0304;
     int operandHiAddress = TryReadRuntimeSymbol("zvm_operand_hi") ?? 0x030C;
@@ -930,8 +937,8 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
     var state = cpu.GetState();
     return
         $"cpu=PC${cpu.Pc:X4}/A${state.A:X2}/X${state.X:X2}/Y${state.Y:X2} " +
-        $"zvm_pc=${bus.Read(0x00AE):X2}{bus.Read(0x008C):X2}{bus.Read(0x008B):X2} " +
-        $"op_pc=${bus.Read(0x00AF):X2}{opcodePc:X4} op_bytes=${ReadXramWord(bus, (bus.Read(0x00AF) << 16) | opcodePc):X4} " +
+        $"zvm_pc=${bus.Read((ushort)pcBank):X2}{bus.Read((ushort)pcHi):X2}{bus.Read((ushort)pcLo):X2} " +
+        $"op_pc=${bus.Read((ushort)opcodePcBank):X2}{opcodePc:X4} op_bytes=${ReadXramWord(bus, (bus.Read((ushort)opcodePcBank) << 16) | opcodePc):X4} " +
         $"globals=${globals:X4} g10=${global10:X4} g11=${global11:X4} g12=${global12:X4} g13=${global13:X4} " +
         $"obj=${operand0:X4} objEntry=${objectEntry:X4} objParent=${objectParent:X4} objSibling=${objectSibling:X4} objChild=${objectChild:X4} " +
         $"zaddr=${bus.Read(0x0042):X2}{bus.Read(0x0041):X2}{bus.Read(0x0040):X2} " +
@@ -939,7 +946,7 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         $"fio=${bus.Read(VgcConstants.FioCmd):X2}/${bus.Read(VgcConstants.FioStatus):X2}/${bus.Read(VgcConstants.FioErrCode):X2} " +
         $"xmc=${bus.Read(VgcConstants.XmcStatus):X2}/${bus.Read(VgcConstants.XmcErrCode):X2} " +
         $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}{vtext} " +
-        $"zvm_opcode=${bus.Read(0x008F):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
+        $"zvm_opcode=${bus.Read((ushort)opcodeAddr):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
         $"ops={ReadWord(bus, operandHiAddress, operandLoAddress):X4},{ReadWord(bus, operandHiAddress + 1, operandLoAddress + 1):X4},{ReadWord(bus, operandHiAddress + 2, operandLoAddress + 2):X4},{ReadWord(bus, operandHiAddress + 3, operandLoAddress + 3):X4} " +
         $"locals={ReadWord(bus, localsHiAddress, localsLoAddress):X4},{ReadWord(bus, localsHiAddress + 1, localsLoAddress + 1):X4},{ReadWord(bus, localsHiAddress + 2, localsLoAddress + 2):X4},{ReadWord(bus, localsHiAddress + 3, localsLoAddress + 3):X4}";
 }
@@ -1321,7 +1328,7 @@ static void RequireReadyPrompt(
     if (!IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
     {
         throw new InvalidOperationException(
-            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read(0x008F):X2}. " +
+            $"Expected visible cursor or active read loop on a bare Zork prompt; got {bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()} pc=${cpu.Pc:X4} opcode=${bus.Read((ushort)(TryReadRuntimeSymbol("zvm_opcode") ?? 0x0093)):X2}. " +
             $"{FormatPromptDiagnostics(bus.Vgc, screen)}\n{screen}");
     }
 }
