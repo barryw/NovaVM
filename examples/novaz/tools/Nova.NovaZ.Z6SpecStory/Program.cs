@@ -373,23 +373,37 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpStore(19, 0x12, Operand.Small(3), Operand.Small(11));
     z.AssertVarEquals(0x12, (5 << 8) | 4, "colour-rec");
 
-    // Split 40 units (10 cell rows) and place text in window 1 at units
-    // y=9, x=41 -> cell row (1-1+9-1)/4 = 2, col (1-1+41-1)/4 = 10.
+    // Units ARE cells: the header advertises an 80x50-unit screen with a
+    // 1x1 font (zstory.s), so every coordinate below is a 1-based text
+    // cell — exactly what Zork Zero computes and sends (capture finding 1).
+    // Split 40 rows: window 1 = rows 1-40, window 0 = rows 41-50.
     z.VarOp(10, Operand.Small(40));
     // split must update the table: window 1 y-size = 40, window 0 origin
-    // y = 41 (units), y-size = 160.
+    // y = 41, y-size = 10.
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(2));
     z.AssertVarEquals(0x12, 40, "split-w1size");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(0));
     z.AssertVarEquals(0x12, 41, "split-w0y");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(2));
-    z.AssertVarEquals(0x12, 160, "split-w0size");
+    z.AssertVarEquals(0x12, 10, "split-w0size");
+    // Banner placement exactly as Zork Zero sends it (capture boot seqs
+    // 17-18 + the per-turn banner block), in cell coordinates.
+    z.ExtOp(16, Operand.Small(1), Operand.Small(1), Operand.Small(1));  // move_window 1,1,1
+    z.ExtOp(17, Operand.Small(1), Operand.Small(5), Operand.Small(80)); // window_size 1,5,80
     z.VarOp(11, Operand.Small(1));                          // set_window 1
-    z.VarOp(15, Operand.Small(9), Operand.Small(41));       // set_cursor y x
-    z.Print("W1TEXT");
+    // set_cursor 0,1 — Zork Zero's verbatim pre-read banner op: row/col 0
+    // clamps to 1 (the stored prop must read back as 1).
+    z.VarOp(15, Operand.Small(0), Operand.Small(1));
+    z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
+    z.AssertVarEquals(0x12, 1, "setcursor-y0-clamp");
+    z.VarOp(15, Operand.Small(1), Operand.Small(0));        // col 0 clamps too
+    z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(5));
+    z.AssertVarEquals(0x12, 1, "setcursor-x0-clamp");
+    z.VarOp(15, Operand.Small(2), Operand.Small(9));        // set_cursor 2,9
+    z.Print("W1TEXT");                                      // -> abs cell (col 8, row 1)
 
     // Cursor readback: set_cursor with no printing in between must read
-    // back exactly (units, relative to the window origin).
+    // back exactly (cells, relative to the window origin).
     z.VarOp(15, Operand.Small(13), Operand.Small(17));      // set_cursor 13,17
     z.VarOp(16, Operand.Large(CursorArray));                // get_cursor array
     z.AssertWordEquals(CursorArray, 0, 13, "getcursor-y");
@@ -402,8 +416,8 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(5));
     z.AssertVarEquals(0x12, 33, "setcursor-other-x");
 
-    // Back to window 0: text must continue at window 0's own cursor (row 11
-    // absolute: lower region starts at cell row 10, cursor was at rel row 1),
+    // Back to window 0: text must continue at window 0's own cursor (row 41
+    // absolute: lower region starts at cell row 40, cursor was at rel row 1),
     // NOT at window 1's cursor.
     z.VarOp(11, Operand.Small(0));                          // set_window 0
     z.Print("back in w0");

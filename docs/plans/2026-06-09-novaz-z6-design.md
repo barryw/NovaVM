@@ -17,7 +17,8 @@ opcodes (5–8) plus the V6 window EXT block (16–29) are absent or
    *routine* called at startup; `quit` when it returns. Stories grow to
    269–341 KB — all four fit the 512 KB XRAM page cache.
 2. **Screen model**: the two-window model is replaced by **8 windows in
-   pixel units**, each with 16 properties (position, size, cursor, margins,
+   units (= text cells, see Coordinate mapping)**, each with 16 properties
+   (position, size, cursor, margins,
    newline-interrupt routine, style, colour, font, attributes, line count).
    No interpreter status line — games draw their own chrome.
 3. **Pictures**: `draw_picture` / `picture_data` / `erase_picture` /
@@ -29,19 +30,30 @@ Only these four games exist; every mainstream interpreter carries per-game
 quirks for them. That is expected here too and is what the per-project
 longplay harness is for.
 
-## Coordinate mapping — the load-bearing trick
+## Coordinate mapping — units are cells
 
-VGC text is 80×50 cells over a 320×200 gfx layer: **one text cell = exactly
-4×4 gfx pixels**. So NovaZ declares:
+*(Amended for M2: an earlier revision declared 1 unit = 1 gfx pixel with a
+4×4 font. The Zork Zero capture — finding 1 in
+`2026-06-10-zork-zero-window-ops.md` — proved games trust the header
+metrics and send cell coordinates, so units are cells.)*
 
-- screen size `320×200` units (header `$22/$24`), 80×50 chars (`$20/$21`),
-- font width = font height = **4 units** (`$26/$27` — V5/V6 swap these two
-  bytes, but at 4×4 the swap is harmless).
+**1 V6 unit = 1 text cell.** NovaZ declares:
 
-Text and pictures then share one coordinate space with no rounding: window
-pixel coords map to text cells by `>>2`, picture coords are native gfx
-pixels. Margins (`set_margins`, window props 6/7) round outward to the next
-cell boundary.
+- screen size `80×50` units (header `$22/$24`), 80×50 chars (`$20/$21`),
+- font width = font height = **1 unit** (`$26/$27` — V5/V6 swap these two
+  bytes, but at 1×1 the swap is harmless).
+
+The game computes window layout from these metrics and sends arbitrary cell
+values (`set_cursor 2,9`, `window_size 0,45,70`); the segment does direct
+cell math everywhere — window-relative 1-based unit ↔ absolute 0-based cell
+is `origin + rel − 2` — and coordinates, sizes, margins (`set_margins`,
+window props 6/7) and scroll amounts are exact cell counts with no
+rounding. Prop values round-trip exactly through `put_wind_prop` /
+`get_wind_prop` / `get_cursor`.
+
+Pictures stay in native gfx pixels: the VGC gfx layer is 320×200 and one
+text cell = exactly 4×4 gfx pixels, so M3 converts cells → gfx pixels (×4,
+exact) at the picture-blit boundary only.
 
 Header capability bits: interpreter number 6 (IBM PC, matches the MCGA art),
 Flags1 advertises pictures/bold/fixed/timed-input, Flags2 mouse and menu
@@ -101,7 +113,7 @@ without touching the floppy.
   `put_wind_prop` are straight table reads/writes with validation.
 - Reworked-for-V6 semantics behind version branches in the existing
   handlers: `erase_window`, `split_window`, `set_window`, `set_cursor`
-  (window arg, pixel coords), `get_cursor`, `set_colour` (window arg).
+  (window arg, cell coords), `get_cursor`, `set_colour` (window arg).
 - New EXT: `move_window` (16), `window_size` (17), `window_style` (18),
   `get_wind_prop` (19), `scroll_window` (20), `pop_stack` (21),
   `mouse_window` (23, no-op), `push_stack` (24), `put_wind_prop` (25),
@@ -121,7 +133,8 @@ without touching the floppy.
 - `draw_picture`: FIO load → blitter XRAM→gfx blit at (x,y) gfx pixels.
 - `erase_picture`: gfx-layer rect fill with the window background colour.
 - `picture_data`: answered from the XRAM-resident index (word 0 = height,
-  word 1 = width, in units = pixels); `N=0` returns count + release.
+  word 1 = width, in units = cells (pixel dimensions ÷4)); `N=0` returns
+  count + release.
 
 ### 4. XRAM map (512 KB)
 Story page cache (≤ 341 KB) + dynamic-memory workspace + save staging as

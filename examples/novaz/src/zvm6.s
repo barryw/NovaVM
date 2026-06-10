@@ -22,9 +22,11 @@
 ; Window model (M1, Z-Machine Standard 1.1 section 8.8):
 ;   - 8 windows, 16 word-sized properties each, stored little-endian in
 ;     nz6_win_props (offset = window*32 + prop*2).
-;   - Coordinates/cursors are 1-based UNITS. 1 unit = 1 gfx pixel; the font
-;     is 4x4 units, so the 320x200-unit screen is the 80x50 text cell grid:
-;     cell = (unit-1)>>2, unit = cell*4+1.
+;   - Coordinates/cursors are 1-based UNITS, and 1 unit = 1 TEXT CELL: the
+;     header (zstory.s) advertises an 80x50-unit screen with a 1x1 font, so
+;     games compute and send cell coordinates (Zork Zero capture finding 1).
+;     cell = unit-1, unit = cell+1; M3 converts cells to gfx pixels (x4,
+;     exact) at the picture-blit boundary only.
 ;   - Mapping onto the ROM's two-window text path: window 0 drives the
 ;     classic LOWER window (region-relative cell cursor zvm_lower_x/y,
 ;     region top = zvm_split_lines); windows 1-7 drive the classic UPPER
@@ -155,18 +157,17 @@ nz6_write_prop_unit:
         STA nz6_win_props+1,Y
         RTS
 
-; nz6_unit := 1 / 320 (origin and full-width constants).
+; nz6_unit := 1 (or 80): origin and full-width constants; units are cells.
 nz6_unit_one:
         LDA #1
         STA nz6_unit_lo
         STZ nz6_unit_hi
         RTS
 
-nz6_unit_320:
-        LDA #<320
+nz6_unit_80:
+        LDA #80
         STA nz6_unit_lo
-        LDA #>320
-        STA nz6_unit_hi
+        STZ nz6_unit_hi
         RTS
 
 ; Window number from operand index X -> A (0-7), C=1 valid / C=0 invalid.
@@ -183,9 +184,10 @@ nz6_window_from_operand:
         CLC
         RTS
 
-; --- unit <-> cell conversions ----------------------------------------------
+; --- unit <-> cell conversions (units ARE cells; only the 1-based offset
+; --- and the window origin move) ----------------------------------------------
 
-; cell = (unit-1)>>2 for the 16-bit unit in nz6_unit_lo/hi -> A.
+; cell = unit - 1 for the 16-bit unit in nz6_unit_lo/hi -> A.
 ; unit 0 (never legal, units are 1-based) maps to cell 0; results past 255
 ; clamp to $FF (the ROM's own cursor clamps bound further). Clobbers nz6_unit.
 nz6_unit_to_cell:
@@ -201,11 +203,6 @@ nz6_unit_to_cell:
         LDA nz6_unit_hi
         SBC #0
         STA nz6_unit_hi
-        LSR nz6_unit_hi
-        ROR nz6_unit_lo
-        LSR nz6_unit_hi
-        ROR nz6_unit_lo
-        LDA nz6_unit_hi
         BEQ :+
         LDA #$FF
         RTS
@@ -216,35 +213,19 @@ nz6_unit_to_cell:
         LDA #0
         RTS
 
-; unit = cell*4 + 1 for the cell in A -> nz6_unit_lo/hi.
+; unit = cell + 1 for the cell in A -> nz6_unit_lo/hi.
 nz6_cell_to_unit:
         STZ nz6_unit_hi
-        ASL A
-        ROL nz6_unit_hi
-        ASL A
-        ROL nz6_unit_hi
-        CLC
-        ADC #1
+        INC A
         STA nz6_unit_lo
-        BCC :+
-        INC nz6_unit_hi
+        BNE :+
+        INC nz6_unit_hi                 ; cell $FF -> unit $100
 :
         RTS
 
-; span cells = (size_units + 3) >> 2 (round up) for nz6_unit -> A, clamped
-; to $FF. Clobbers nz6_unit.
+; span cells = size_units (sizes are exact cell counts) for nz6_unit -> A,
+; clamped to $FF.
 nz6_units_to_span:
-        CLC
-        LDA nz6_unit_lo
-        ADC #3
-        STA nz6_unit_lo
-        LDA nz6_unit_hi
-        ADC #0
-        STA nz6_unit_hi
-        LSR nz6_unit_hi
-        ROR nz6_unit_lo
-        LSR nz6_unit_hi
-        ROR nz6_unit_lo
         LDA nz6_unit_hi
         BEQ :+
         LDA #$FF
@@ -254,10 +235,10 @@ nz6_units_to_span:
         RTS
 
 ; A = absolute cell, X = origin prop (0 = y, 1 = x) of window nz6_tmp_win.
-; -> nz6_unit = window-relative 1-based unit: cell*4+1 - origin + 1, min 1.
+; -> nz6_unit = window-relative 1-based unit: cell+1 - origin + 1, min 1.
 nz6_abs_cell_to_rel_unit:
         PHX
-        JSR nz6_cell_to_unit            ; nz6_unit = abs unit (cell*4+1)
+        JSR nz6_cell_to_unit            ; nz6_unit = abs unit (cell+1)
         PLX
         JSR nz6_off_for_prop            ; Y -> origin prop of nz6_tmp_win
         SEC
@@ -280,7 +261,8 @@ nz6_abs_cell_to_rel_unit:
         RTS
 
 ; X = cursor prop (4 = y, 5 = x) of window nz6_tmp_win; the matching origin
-; prop is X-4. -> A = absolute cell: (origin + rel - 2) >> 2.
+; prop is X-4. -> A = absolute cell: origin + rel - 2 (window-relative
+; 1-based unit to absolute 0-based cell).
 nz6_rel_prop_to_abs_cell:
         JSR nz6_read_prop_unit          ; nz6_unit = relative unit
         TXA
@@ -296,7 +278,7 @@ nz6_rel_prop_to_abs_cell:
         ADC nz6_win_props+1,Y
         STA nz6_unit_hi
         ; nz6_unit = origin + rel; subtract 1 so nz6_unit_to_cell's own -1
-        ; yields (origin + rel - 2) >> 2.
+        ; yields origin + rel - 2.
         LDA nz6_unit_lo
         ORA nz6_unit_hi
         BEQ @zero
@@ -372,9 +354,9 @@ nz6_load_table_to_live:
 ; --- reset --------------------------------------------------------------------
 
 ; Reset the 8-window table to the V6 boot defaults and sync the ROM text
-; path. Window 0: full screen (1,1 / 200x320), wrap+scroll+buffer, cursor
+; path. Window 0: full screen (1,1 / 50x80), wrap+scroll+buffer, cursor
 ; 1,1. Windows 1-7: origin 1,1, size 0, no attributes, cursor 1,1. All
-; windows: font 1, font size 4x4. Current window 0.
+; windows: font 1, font size 1x1 (units are cells). Current window 0.
 nz6_reset_windows:
         LDX #0
 @zero:
@@ -396,17 +378,14 @@ nz6_reset_windows:
         STA nz6_win_props+8,Y          ; prop 4:  y-cursor = 1
         STA nz6_win_props+10,Y         ; prop 5:  x-cursor = 1
         STA nz6_win_props+24,Y         ; prop 12: font number = 1
-        LDA #$04
-        STA nz6_win_props+26,Y         ; prop 13: font size = $0404 (4x4 units)
+        STA nz6_win_props+26,Y         ; prop 13: font size = $0101 (1x1 units)
         STA nz6_win_props+27,Y
         DEX
         BPL @win
-        LDA #200
-        STA nz6_win_props+4            ; window 0 prop 2: y-size = 200
-        LDA #<320
-        STA nz6_win_props+6            ; window 0 prop 3: x-size = 320
-        LDA #>320
-        STA nz6_win_props+7
+        LDA #50
+        STA nz6_win_props+4            ; window 0 prop 2: y-size = 50
+        LDA #80
+        STA nz6_win_props+6            ; window 0 prop 3: x-size = 80
         LDA #%00001011
         STA nz6_win_props+28           ; window 0 prop 14: wrap+scroll+buffer
         STZ nz6_win_current
@@ -427,26 +406,26 @@ nz6_op_reset:
 
 ; --- VAR screen ops -----------------------------------------------------------
 
-; split_window lines_units (VAR:10). Window 1 becomes the top 'lines' units
+; split_window lines (VAR:10). Window 1 becomes the top 'lines' cell rows
 ; (full width); window 0 starts below it. Does NOT clear, does NOT move
 ; cursors beyond the clamping zvm_select_active_window applies.
 nz6_op_split:
         JSR nz_screen_flush_word
         JSR zvm_window_save_cursor
         JSR nz6_sync_live_to_table
-        ; clamp the requested units to the 200-unit screen height
+        ; clamp the requested rows to the 50-row screen height
         LDA zvm_operand_hi
         BEQ :+
-        LDA #200
+        LDA #50
         BRA @have
 :
         LDA zvm_operand_lo
-        CMP #201
+        CMP #51
         BCC @have
-        LDA #200
+        LDA #50
 @have:
         STA nz6_tmp_lines
-        ; window 1: origin 1,1, y-size = lines, x-size = 320
+        ; window 1: origin 1,1, y-size = lines, x-size = 80
         LDA #1
         STA nz6_tmp_win
         LDA nz6_tmp_lines
@@ -459,10 +438,10 @@ nz6_op_split:
         JSR nz6_write_prop_unit
         LDX #1
         JSR nz6_write_prop_unit
-        JSR nz6_unit_320
+        JSR nz6_unit_80
         LDX #3
         JSR nz6_write_prop_unit
-        ; window 0: origin 1,lines+1, y-size = 200-lines, x-size = 320
+        ; window 0: origin 1,lines+1, y-size = 50-lines, x-size = 80
         STZ nz6_tmp_win
         LDA nz6_tmp_lines
         INC A
@@ -470,7 +449,7 @@ nz6_op_split:
         STZ nz6_unit_hi
         LDX #0
         JSR nz6_write_prop_unit
-        LDA #200
+        LDA #50
         SEC
         SBC nz6_tmp_lines
         STA nz6_unit_lo
@@ -480,14 +459,12 @@ nz6_op_split:
         JSR nz6_unit_one
         LDX #1
         JSR nz6_write_prop_unit
-        JSR nz6_unit_320
+        JSR nz6_unit_80
         LDX #3
         JSR nz6_write_prop_unit
-        ; ROM bookkeeping: split cells = units>>2, clamped like the classic
-        ; path (max 48 keeps at least two lower-window rows)
+        ; ROM bookkeeping: split cells = lines (units are cells), clamped
+        ; like the classic path (max 48 keeps at least two lower-window rows)
         LDA nz6_tmp_lines
-        LSR A
-        LSR A
         CMP #49
         BCC :+
         LDA #48
@@ -633,12 +610,11 @@ nz6_op_erase:
 @select:
         JMP zvm_select_active_window
 
-; set_cursor y x [window] (VAR:15). Units, relative to the window origin.
-; Only the table changes for a non-current window; the live cursor moves
-; only when the target IS the current window.
-; NOTE: the live cursor is cell-quantized (4 units per cell), so
-; non-cell-aligned units round down on the next nz6_sync_live_to_table.
-; M2 must preserve props 4/5 directly if sub-cell precision is required.
+; set_cursor y x [window] (VAR:15). Units (= cells), relative to the window
+; origin. Row/col 0 clamps to 1: Zork Zero sends set_cursor 0,1 in its
+; pre-read banner block (units are 1-based, 0 is off-grid). Only the table
+; changes for a non-current window; the live cursor moves only when the
+; target IS the current window.
 nz6_op_set_cursor:
         LDA zvm_operand_hi
         ORA zvm_operand_hi+1
@@ -659,12 +635,20 @@ nz6_op_set_cursor:
         STA nz6_unit_lo
         LDA zvm_operand_hi
         STA nz6_unit_hi
+        ORA zvm_operand_lo
+        BNE :+
+        INC nz6_unit_lo                 ; row 0 -> 1
+:
         LDX #4
         JSR nz6_write_prop_unit
         LDA zvm_operand_lo+1
         STA nz6_unit_lo
         LDA zvm_operand_hi+1
         STA nz6_unit_hi
+        ORA zvm_operand_lo+1
+        BNE :+
+        INC nz6_unit_lo                 ; col 0 -> 1
+:
         LDX #5
         JSR nz6_write_prop_unit
         LDA nz6_tmp_win
@@ -676,7 +660,8 @@ nz6_op_set_cursor:
         RTS
 
 ; get_cursor array (VAR:16). Writes the CURRENT window's cursor as two
-; words (y then x, units, window-relative) into Z-memory.
+; words (y then x, units = cells, window-relative, exactly as stored in
+; props 4/5) into Z-memory.
 nz6_op_get_cursor:
         JSR zvm_window_save_cursor
         JSR nz6_sync_live_to_table      ; leaves nz6_tmp_win = current window
@@ -1136,7 +1121,7 @@ nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_ext_window_size   ; 17 window_size
         .word nz6_ext_window_style  ; 18 window_style
         .word nz6_ext_get_wind_prop ; 19 get_wind_prop (store)
-        .word nz6_stub          ; 20 scroll_window (pixel scroll deferred past M1)
+        .word nz6_stub          ; 20 scroll_window (cell scroll lands later in M2)
         .word nz6_ext_pop_stack ; 21 pop_stack (discards items, no store/branch)
         .word nz6_ext_read_mouse ; 22 read_mouse (no mouse: four zero words)
         .word nz6_stub          ; 23 mouse_window (meaningless without a mouse)
