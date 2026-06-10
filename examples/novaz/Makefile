@@ -11,6 +11,7 @@ Z3_SPEC := tools/Nova.NovaZ.Z3SpecStory/Nova.NovaZ.Z3SpecStory.csproj
 Z4_STYLE := tools/Nova.NovaZ.Z4StyleStory/Nova.NovaZ.Z4StyleStory.csproj
 Z4_SPEC := tools/Nova.NovaZ.Z4SpecStory/Nova.NovaZ.Z4SpecStory.csproj
 Z5_SPEC := tools/Nova.NovaZ.Z5SpecStory/Nova.NovaZ.Z5SpecStory.csproj
+Z6_SPEC := tools/Nova.NovaZ.Z6SpecStory/Nova.NovaZ.Z6SpecStory.csproj
 JUKEBOX := tools/Nova.NovaZ.Jukebox/Nova.NovaZ.Jukebox.csproj
 SMOKE_DLL := tools/Nova.NovaZ.Smoke/bin/Release/net10.0/Nova.NovaZ.Smoke.dll
 PACKER_SRC := $(PACKER) tools/Nova.NovaZ.Packer/Program.cs
@@ -20,6 +21,7 @@ Z3_SPEC_SRC := $(Z3_SPEC) tools/Nova.NovaZ.Z3SpecStory/Program.cs
 Z4_STYLE_SRC := $(Z4_STYLE) tools/Nova.NovaZ.Z4StyleStory/Program.cs
 Z4_SPEC_SRC := $(Z4_SPEC) tools/Nova.NovaZ.Z4SpecStory/Program.cs
 Z5_SPEC_SRC := $(Z5_SPEC) tools/Nova.NovaZ.Z5SpecStory/Program.cs
+Z6_SPEC_SRC := $(Z6_SPEC) tools/Nova.NovaZ.Z6SpecStory/Program.cs
 JUKEBOX_SRC := $(JUKEBOX) tools/Nova.NovaZ.Jukebox/Program.cs
 SMOKE_BUILD_ARGS ?= --no-restore /nr:false
 SMOKE_ARGS ?=
@@ -35,6 +37,10 @@ Z4_SPEC_IMAGE := $(DIST_DIR)/z4-spec/fd0.ndi
 Z5_SPEC_STORY := $(BUILD_DIR)/z5-spec.z5
 Z5_SPEC_SOUND := $(BUILD_DIR)/z5-spec-sound.pak
 Z5_SPEC_IMAGE := $(DIST_DIR)/z5-spec/fd0.ndi
+Z6_SPEC_STORY := $(BUILD_DIR)/z6-spec.z6
+Z6_SPEC_V7_STORY := $(BUILD_DIR)/z6-spec-v7.z6
+Z6_SPEC_IMAGE := $(DIST_DIR)/z6-spec/fd0.ndi
+Z6_SPEC_V7_IMAGE := $(DIST_DIR)/z6-spec-v7/fd0.ndi
 PROJECT ?=
 STORY_NAME ?= story.bin
 RUNTIME_NAME ?= novaz.bin
@@ -125,6 +131,12 @@ $(Z4_SPEC_STORY): $(Z4_SPEC_SRC) | $(BUILD_DIR)
 $(Z5_SPEC_STORY): $(Z5_SPEC_SRC) | $(BUILD_DIR)
 	$(DOTNET) run --project $(Z5_SPEC) -- --output "$@" --sound-pak "$(Z5_SPEC_SOUND)"
 
+$(Z6_SPEC_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
+	$(DOTNET) run --project $(Z6_SPEC) -- --output "$@"
+
+$(Z6_SPEC_V7_STORY): $(Z6_SPEC_SRC) | $(BUILD_DIR)
+	$(DOTNET) run --project $(Z6_SPEC) -- --output "$@" --version 7
+
 test-z3-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z3_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z3_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z3SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z3_SPEC_STORY)"
 	$(DOTNET) $(SMOKE_DLL) "$(Z3_SPEC_IMAGE)" --generic-boot --expect-screen "addrpaddrA-12" --expect-screen "abbr@" --expect-screen "upper window ok" --expect-screen "buffer off ok" --expect-screen "z3 window ok" --expect-screen "z3 spec ok" --skip-manifest-check "take red,key=>z3 input ok"
@@ -140,6 +152,14 @@ test-z4-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z4_SPEC_STORY) $(SMOKE_DLL)
 test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z5_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z5_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z5SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z5_SPEC_STORY)" --asset "$(Z5_SPEC_SOUND):SOUND.PAK"
 	$(DOTNET) $(SMOKE_DLL) "$(Z5_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z5 sound ok" --expect-screen "z5 spec ok" "take silver,key=>z5 input ok"
+
+test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z6 m1 ok"
+
+test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
+	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_V7_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "UNSUPPORTED Z-MACHINE VERSION: 7"
 
 # --- Sound jukebox (mount-and-run "Infocom sound museum" showcase images) ----
 LURKING_SOUND_NUMS  := 3,4,6,7,8,9,10,11,12,13,15,16,17,18
@@ -231,4 +251,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
