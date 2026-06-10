@@ -523,6 +523,7 @@ nz6_op_reset:
         STA nz6_colour
         STA VTEXT_COLOR
         STZ zvm_text_style
+        LDA #0
         JSR nz6_gfx_clear
         JSR nz6_pics_preload
         JMP nz6_apply_current_window
@@ -738,13 +739,13 @@ nz6_op_erase:
         CMP #$FF
         BNE :+
         JSR nz6_reset_windows           ; -1
-        JSR nz6_gfx_clear               ; V6 erase clears art as well as text
+        JSR nz6_gfx_fill_bg             ; the parchment field lives in gfx
         JMP zvm_clear_whole_screen      ; (tail-calls the V6 select -> apply)
 :
         CMP #$FE
         BNE @rts
         JSR nz6_sync_live_cursor        ; -2 must leave the cursor alone
-        JSR nz6_gfx_clear
+        JSR nz6_gfx_fill_bg
         JMP zvm_clear_whole_screen
 @rts:
         RTS
@@ -1790,21 +1791,29 @@ nz6_ext_draw_picture:
         STA FIO_DIRTYPE
         LDA #FIO_CMD_XPAGE
         JSR fio_exec
-        BNE @rts2
+        BEQ :+
+@rts2a:
+        RTS
+:
         ; MCGA-faithful compositing: on the original hardware a picture
         ; overwrites the text pixels under it, so blank the text cells the
         ; bitmap fully covers (space, bg 0 = the global background colour —
         ; transparent under the mode-2 rule, letting the art show through).
         ; Text printed afterwards re-covers the art, exactly like MCGA.
         ; Partial edge cells (non-multiple-of-4 dims) stay text-owned.
-        LDA nz6_pic_w_hi                ; cols = w_px / 4 (floor)
+        LDA nz6_pic_w_lo                ; cols = ceil(w_px / 4): partial edge
+        CLC                             ; cells belong to the picture too —
+        ADC #3                          ; on MCGA its pixels own that area
+        TAX
+        LDA nz6_pic_w_hi
+        ADC #0
         LSR A
         STA nz6_pic_tmp
-        LDA nz6_pic_w_lo
+        TXA
         ROR A
         LSR nz6_pic_tmp
         ROR A
-        BEQ @rts2                       ; less than one full cell wide
+        BEQ @rts2
         ; clip to the screen's right edge
         STA nz6_blt_wclip
         LDA #NZ6_SCREEN_COLS
@@ -1816,11 +1825,16 @@ nz6_ext_draw_picture:
 :
         LDA nz6_blt_wclip
         BEQ @rts2
-        ; rows = h_px / 4 (floor), clipped to the bottom edge
+        ; rows = ceil(h_px / 4), clipped to the bottom edge
+        LDA nz6_pic_h_lo
+        CLC
+        ADC #3
+        TAX
         LDA nz6_pic_h_hi
+        ADC #0
         LSR A
         STA nz6_pic_tmp
-        LDA nz6_pic_h_lo
+        TXA
         ROR A
         LSR nz6_pic_tmp
         ROR A
@@ -2213,14 +2227,28 @@ nz6_gfx_scroll_live:
         LDA #BLT_MODE_FILL
         STA BLT_MODE_REG
         STZ BLT_CKEY
-        STZ BLT_FILLVALUE
+        LDA nz6_colour                  ; revealed rows take the window bg —
+        LSR A                           ; the parchment field lives in gfx
+        LSR A
+        LSR A
+        LSR A
+        STA BLT_FILLVALUE
         LDA #BLT_CMD_START
         STA BLT_CMD_REG
         JMP blitter_wait
 
-; Clear the whole 320x200 gfx plane to color 0 (the global display
-; transparent color: the text background shows through).
+; Fill the whole 320x200 gfx plane with colour A. The V6 erase paths pass
+; the window background — the gfx plane IS the MCGA framebuffer, so the
+; parchment field lives here and partial picture-edge cells reveal it.
+; Reset passes 0 (display-transparent).
+nz6_gfx_fill_bg:
+        LDA nz6_colour                  ; window background colour
+        LSR A
+        LSR A
+        LSR A
+        LSR A
 nz6_gfx_clear:
+        STA nz6_clr_tmp
         STZ BLT_SRCSPACE
         STZ BLT_SRCL
         STZ BLT_SRCM
@@ -2244,7 +2272,8 @@ nz6_gfx_clear:
         LDA #BLT_MODE_FILL
         STA BLT_MODE_REG
         STZ BLT_CKEY
-        STZ BLT_FILLVALUE
+        LDA nz6_clr_tmp                 ; the fill colour passed in A
+        STA BLT_FILLVALUE
         LDA #BLT_CMD_START
         STA BLT_CMD_REG
         JMP blitter_wait

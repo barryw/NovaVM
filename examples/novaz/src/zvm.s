@@ -4079,10 +4079,15 @@ zvm_clear_whole_screen:
         STA VTEXT_HEIGHT
         LDA zstory_version
         CMP #$06
-        BEQ :+                  ; V6: clear in the game's live colours
+        BNE @classic_colour
+        LDA VTEXT_COLOR         ; V6: cells clear to a TRANSPARENT background
+        AND #$0F                ; (bg 0 = the global bg) — the parchment
+        STA VTEXT_COLOR         ; field lives in the gfx plane now
+        BRA @colour_done
+@classic_colour:
         LDA #ZVM_COLOR_NORMAL
         STA VTEXT_COLOR
-:
+@colour_done:
         STZ VTEXT_ATTR
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
         STA VTEXT_FLAGS
