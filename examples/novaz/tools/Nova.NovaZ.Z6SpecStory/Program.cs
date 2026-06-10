@@ -434,6 +434,40 @@ static void EmitSpecProgram(ZCode z)
     z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
     z.NewLine();
 
+    // --- M2 Task 3: in-window scrolling kills stale text ---
+    // Sentinel OUTSIDE window 0's rect: banner cell abs (4,4) — the last
+    // banner row, directly above the playfield — must survive the playfield
+    // scrolling below, rect-clipped.
+    z.VarOp(11, Operand.Small(1));                          // set_window 1
+    z.VarOp(15, Operand.Small(5), Operand.Small(5));        // set_cursor 5,5 -> abs (4,4)
+    z.Print("SENT");
+    z.VarOp(11, Operand.Small(0));                          // set_window 0; cursor rel (3,0)
+
+    // Fill rows 3..43 with distinctive lines, then a LONG line on the bottom
+    // row (rel 44). Each following newline scrolls the 45-row window once:
+    //   scroll 1: INSETW0 (rel 0) scrolls off; the vacated bottom row must
+    //             come back BLANK — the short "Z2" printed there leaves no
+    //             tail of LONGTAILXYZ (which scrolled through that exact row).
+    //   scroll 2: "ZLAST ok" on the fresh bottom row (the packed-string "ok"
+    //             via S_O keeps its on-screen proof here — the boot marker
+    //             scrolls off).
+    //   scroll 3: leaves the bottom row bare for the prompt (the harness's
+    //             ready detection needs '>' alone on the cursor row). Final
+    //             rows: rel 0 = F03, rel 41 = LONG, rel 42 = Z2, rel 43 =
+    //             "ZLAST ok", rel 44 (abs row 49) = the bare prompt.
+    for (int row = 3; row <= 43; row++)
+    {
+        z.Print($"F{row:00}");
+        z.NewLine();
+    }
+    z.Print("LONGTAILXYZ");                                 // rel row 44 (bottom)
+    z.NewLine();                                            // scroll #1
+    z.Print("Z2");                                          // on the freshly blanked bottom row
+    z.NewLine();                                            // scroll #2
+    z.Print("ZLAST ");
+    z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
+    z.NewLine();                                            // scroll #3
+
     z.Label("prompt");
     z.Print(">");
     z.VarOpStore(4, 0x11, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // read

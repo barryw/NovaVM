@@ -182,7 +182,7 @@ test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z5_SPEC_STORY
 
 test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
-	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-screen "z6 m1 ok" --expect-at "0,0=>BANNER" --expect-at "5,5=>INSETW0" --expect-at "5,7=>z6 m1 ok" "look=>z6 input ok"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-at "0,0=>BANNER" --expect-at "4,4=>SENT" --expect-at "5,5=>F03" --expect-at "5,46=>LONGTAILXYZ" --expect-at "5,47=>Z2 " --expect-at "5,48=>ZLAST ok" --expect-at "5,49=>>" "look=>z6 input ok"
 
 test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_V7_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPECV7" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_V7_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
