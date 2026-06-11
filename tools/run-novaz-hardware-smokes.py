@@ -31,7 +31,9 @@ from novahost_client import (  # noqa: E402
 
 SCREEN_COLS = 80
 SCREEN_ROWS = 50
+GFX_WIDTH = 320
 VGC_PLANE_COLOR = 2
+VGC_PLANE_GFX = 3
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,13 @@ class SmokeCommand:
 @dataclass(frozen=True)
 class TextColorExpectation:
     text: str
+    color: int
+
+
+@dataclass(frozen=True)
+class GfxColorExpectation:
+    x: int
+    y: int
     color: int
 
 
@@ -70,6 +79,7 @@ class HardwareSmoke:
     commands: tuple[SmokeCommand, ...] = ()
     expected_screens: tuple[str, ...] = ()
     expected_text_colors: tuple[TextColorExpectation, ...] = ()
+    expected_gfx_colors: tuple[GfxColorExpectation, ...] = ()
     screen_only: bool = False
     expect_more: bool = False
     expect_time_status: bool = False
@@ -264,6 +274,35 @@ SMOKES: tuple[HardwareSmoke, ...] = (
         name="ztuu-longplay",
         image=repo_path("examples/novaz/dist/ztuu/fd0.ndi"),
         script=repo_path("examples/novaz/projects/ztuu/longplay.txt"),
+    ),
+    HardwareSmoke(
+        name="zork-zero",
+        image=repo_path("examples/novaz/dist/zork-zero/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/zork-zero/smoke.txt"),
+        expected_screens=("Banquet Hall", "platter of hellhound bones"),
+        expected_gfx_colors=(
+            GfxColorExpectation(0, 0, 0x06),
+            GfxColorExpectation(12, 34, 0x01),
+            GfxColorExpectation(43, 43, 0x0C),
+            GfxColorExpectation(65, 61, 0x0C),
+            GfxColorExpectation(43, 92, 0x0B),
+            GfxColorExpectation(300, 34, 0x01),
+        ),
+        no_status_line=True,
+    ),
+    HardwareSmoke(
+        name="arthur",
+        image=repo_path("examples/novaz/dist/arthur/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/arthur/smoke.txt"),
+        no_status_line=True,
+    ),
+    HardwareSmoke(
+        name="journey",
+        image=repo_path("examples/novaz/dist/journey/fd0.ndi"),
+        script=repo_path("examples/novaz/projects/journey/smoke.txt"),
+        expected_screens=("The Party", "Individual Commands", "Start"),
+        screen_only=True,
+        no_status_line=True,
     ),
 )
 
@@ -479,6 +518,8 @@ def build_images(selected: list[HardwareSmoke]) -> None:
     smoke_names = {s.name for s in selected}
     if any(name in {"zork-i", "zork-i-torture", "zork-ii", "zork-iii", "deadline", "amfv", "trinity", "hhgg", "beyond-zork", "border-zone", "sherlock", "ztuu"} for name in smoke_names):
         targets.append("test-infocom-smokes")
+    if any(name in {"zork-zero", "arthur", "journey"} for name in smoke_names):
+        targets.append("test-infocom-v6-smokes")
     if any(name in {"zork-i-longplay", "deadline-longplay", "amfv-longplay", "trinity-longplay", "hhgg-longplay", "border-zone-longplay", "sherlock-longplay", "ztuu-longplay"} for name in smoke_names):
         targets.append("test-infocom-longplays")
     if not targets:
@@ -614,6 +655,19 @@ def require_text_color(client: NovaHostClient, screen: str, expected: TextColorE
         )
 
 
+def require_gfx_color(client: NovaHostClient, screen: str, expected: GfxColorExpectation) -> None:
+    address = expected.y * GFX_WIDTH + expected.x
+    response = client.read_vram(VGC_PLANE_GFX, address, 1)
+    values = response.get("data")
+    actual = int(values[0] if values is not None else response.get("value")) & 0xFF
+    if actual == expected.color:
+        return
+    raise RuntimeError(
+        f"expected graphics pixel {expected.x},{expected.y} "
+        f"to use color ${expected.color:02X}; saw ${actual:02X}\n{screen}"
+    )
+
+
 def wait_for_game_prompt(
     client: NovaHostClient,
     smoke: HardwareSmoke,
@@ -681,6 +735,8 @@ def run_smoke(
                 require_contains(screen, expected, f"{smoke.name} screen")
             for expected in smoke.expected_text_colors:
                 require_text_color(client, screen, expected)
+            for expected in smoke.expected_gfx_colors:
+                require_gfx_color(client, screen, expected)
             if smoke.expect_more and more_counter[0] == 0:
                 raise RuntimeError(f"expected at least one [ MORE ] prompt for {smoke.name}\n{screen}")
             print(f"=== {smoke.name}: passed morePrompts={more_counter[0]}", flush=True)
@@ -692,6 +748,8 @@ def run_smoke(
             timeout=boot_timeout,
             more_counter=more_counter,
         )
+        for expected in smoke.expected_gfx_colors:
+            require_gfx_color(client, screen, expected)
 
         for command in load_commands(smoke):
             if command.text.lower() == ".reboot":

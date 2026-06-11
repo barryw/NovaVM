@@ -88,6 +88,7 @@ module blitter (
     localparam ROM_BASE = 24'hC000;
 
     localparam MODE_FILL = 0, MODE_COLORKEY = 1, MODE_ROTATE = 2;
+    localparam MODE_GFX4_UNPACK = 3;
 
     // Row buffer: 1024 bytes max width for same-space overlap protection
     localparam ROW_BUF_SIZE = 1024;
@@ -122,7 +123,7 @@ module blitter (
     } state_t;
 
     state_t state;
-    logic        fill_mode, colorkey_mode, rotate_mode, use_row_buffer;
+    logic        fill_mode, colorkey_mode, rotate_mode, gfx4_unpack_mode, use_row_buffer;
     logic [2:0]  src_space, dst_space;
     logic [23:0] src_base, dst_base;
     logic [15:0] width, height;
@@ -166,7 +167,7 @@ module blitter (
         for (int i = 0; i < REG_COUNT; i++) regs[i] = 0;
         regs[R_STATUS] = ST_IDLE;
         state = S_IDLE;
-        fill_mode = 0; colorkey_mode = 0; rotate_mode = 0; use_row_buffer = 0;
+        fill_mode = 0; colorkey_mode = 0; rotate_mode = 0; gfx4_unpack_mode = 0; use_row_buffer = 0;
         src_space = 0; dst_space = 0;
         src_base = 0; dst_base = 0;
         width = 0; height = 0; last_col = 0; last_row = 0;
@@ -222,7 +223,8 @@ module blitter (
     // `row <= 0`) and incremented by stride whenever `row` advances.
     // =========================================================================
     logic [23:0] src_row_off, dst_row_off;
-    wire  [23:0] src_addr = src_base + src_row_off + {8'b0, col};
+    wire  [15:0] src_col = gfx4_unpack_mode ? {1'b0, col[15:1]} : col;
+    wire  [23:0] src_addr = src_base + src_row_off + {8'b0, src_col};
     wire  [23:0] dst_addr = dst_base + dst_row_off + {8'b0, col};
 
     function automatic logic [7:0] sin_quarter_mag(input logic [6:0] index);
@@ -368,9 +370,15 @@ module blitter (
         endcase
     endfunction
 
-    wire write_skipped_by_colorkey = colorkey_mode && !rotate_mode && read_byte == color_key;
+    wire [3:0] gfx4_pixel = col[0] ? read_byte[3:0] : read_byte[7:4];
+    wire gfx4_key_enabled = gfx4_unpack_mode && color_key[7:4] == 4'h0;
+    wire write_skipped_by_colorkey =
+        (colorkey_mode && !rotate_mode && read_byte == color_key) ||
+        (gfx4_key_enabled && gfx4_pixel == color_key[3:0]);
     wire video_write_wait = is_video_space(dst_space) && !video_write_safe &&
                             read_valid && !write_skipped_by_colorkey;
+    wire [15:0] src_validate_width =
+        gfx4_unpack_mode ? ({1'b0, width[15:1]} + {15'd0, width[0]}) : width;
 
     // =========================================================================
     // Memory read data mux
@@ -433,7 +441,7 @@ module blitter (
                 default: begin
                     vgc_space = dst_space;
                     vgc_addr = dst_addr[16:0];
-                    vgc_wdata = read_byte;
+                    vgc_wdata = gfx4_unpack_mode ? {4'h0, gfx4_pixel} : read_byte;
                     vgc_we = !video_write_wait;
                 end
             endcase
@@ -456,6 +464,7 @@ module blitter (
             fill_mode <= 0;
             colorkey_mode <= 0;
             rotate_mode <= 0;
+            gfx4_unpack_mode <= 0;
             use_row_buffer <= 0;
             src_space <= 0;
             dst_space <= 0;
@@ -519,6 +528,11 @@ module blitter (
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADARGS;
                         state <= S_DONE;
+                    end else if (gfx4_unpack_mode &&
+                                 (fill_mode || rotate_mode || colorkey_mode || dst_space != SPACE_GFX)) begin
+                        regs[R_STATUS] <= ST_ERROR;
+                        regs[R_ERRCODE] <= ERR_BADARGS;
+                        state <= S_DONE;
                     end else if (!fill_mode && space_size(src_space) == 0) begin
                         regs[R_STATUS] <= ST_ERROR;
                         regs[R_ERRCODE] <= ERR_BADSPACE;
@@ -533,7 +547,7 @@ module blitter (
                             validate_limit <= {12'b0, space_size(src_space)};
                             validate_remaining <= last_row;
                             validate_stride <= src_stride;
-                            validate_width <= width;
+                            validate_width <= src_validate_width;
                             validate_base_in_range <= ({8'b0, src_base} < {12'b0, space_size(src_space)});
                             state <= S_VALIDATE_SRC;
                         end else begin
@@ -749,6 +763,8 @@ module blitter (
                                 read_byte <= fill_value;
                             end else if (rotate_mode)
                                 state <= S_ROT_SAMPLE;
+                            else if (gfx4_unpack_mode && !col[0])
+                                state <= S_WRITE;
                             else
                                 state <= S_READ;
                         end
@@ -856,11 +872,13 @@ module blitter (
                             fill_mode     <= regs[R_MODE][MODE_FILL];
                             colorkey_mode <= regs[R_MODE][MODE_COLORKEY];
                             rotate_mode   <= regs[R_MODE][MODE_ROTATE];
+                            gfx4_unpack_mode <= regs[R_MODE][MODE_GFX4_UNPACK];
                             fill_value    <= regs[R_FILLVAL];
                             color_key     <= regs[R_COLORKEY];
                             rotate_angle  <= regs[R_ROTANGLE];
                             use_row_buffer <= !regs[R_MODE][MODE_FILL] &&
                                               !regs[R_MODE][MODE_ROTATE] &&
+                                              !regs[R_MODE][MODE_GFX4_UNPACK] &&
                                               regs[R_SRCSPACE][2:0] == regs[R_DSTSPACE][2:0];
                             row <= 0; col <= 0;
                             // Reset row-offset accumulators so address math

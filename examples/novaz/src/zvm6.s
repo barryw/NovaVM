@@ -70,15 +70,11 @@ NZ6_PIC_FLAG_TRANSPARENT = $01
 NZ6_PIC_FLAG_FLOW_ICON = $04
 NZ6_PIC_FLAG_FLOW_CELLTOP = $08
 
-; Blitter ckey4 mode (nibble-granular color key on 4bpp planes) — the mode
-; bit shipped with M3 (Avalonia VirtualBlitterController; the FPGA blitter
-; grows the same bit in M6). nova.inc predates it.
-NZ6_BLT_MODE_CKEY4 = $08
 ; DMA/blitter memory-space ids (VgcConstants.DmaSpace*).
 NZ6_SPACE_GFX  = $03
 NZ6_SPACE_XRAM = $05
-; The Avalonia gfx plane is 320x200 with ONE BYTE PER PIXEL (the FPGA plane
-; is 4bpp packed — M6 maps the same ops onto the packed domain).
+; The VGC gfx plane is addressed as one 4-bit pixel per address. PICS.PAK
+; bitmaps stay row-packed in storage and are unpacked by the blitter.
 NZ6_GFX_ROW_PIXELS = 320
 NZ6_GFX_ROWS       = 200
 
@@ -1885,10 +1881,10 @@ nz6_pics_find:
 
 ; --- draw_picture / erase_picture ---------------------------------------------
 ;
-; Blit path (design doc): FIO XPAGE streams the bitmap region from PICS.PAK
-; into the XRAM bounce buffer, then the blitter rect-copies bounce -> gfx
-; layer. Transparent pictures use the nibble-granular color key (mode bit
-; NZ6_BLT_MODE_CKEY4, key = the picture's transparent index from its flags).
+; Blit path: FIO XPAGE streams the bitmap region from PICS.PAK into the XRAM
+; bounce buffer, then the blitter unpacks row-packed 4bpp bytes to the gfx
+; layer. Transparent pictures set BLT_CKEY to the transparent index; opaque
+; pictures set it above 15 to disable skips.
 ; Coordinates are window-relative 1-based V6 units (= gfx pixels). Rects clip
 ; at 320x200; fully off-screen draws are clean no-ops. Text invalidation
 ; snaps the covered pixel rect back to 4x4 VTEXT cells after the bitmap lands.
@@ -1980,50 +1976,91 @@ nz6_ext_draw_picture:
         SBC #>((NZ6_GFX_ROW_PIXELS * 2) & $FFFF)
         STA nz6_blt_dst_hi
 @after_flow_icon:
-        ; one host-assisted FIO XPAGE does the whole draw: the slice at the
-        ; pak entry's offset unpacks into gfx pixels with per-pixel
-        ; transparency and right/bottom clipping (FioPageTargetGfx4)
+        JSR nz6_pic_clip_rect
+        BCS :+
+        JMP @rts2
+:
+        ; Load the packed bitmap slice into the reusable XRAM bounce buffer.
         LDA #<nz6_pics_name
         STA PAGER_NAMEPTR_L
         LDA #>nz6_pics_name
         STA PAGER_NAMEPTR_H
         LDA #(nz6_pics_name_end - nz6_pics_name)
         STA PAGER_NAMELEN
-        JSR fio_copy_name
-        BEQ @fio_name_ok
-        JMP @rts
-@fio_name_ok:
         LDA nz6_pic_off_l
-        STA FIO_SRCL
+        STA PAGER_FILEL
         LDA nz6_pic_off_m
-        STA FIO_SRCH
+        STA PAGER_FILEM
         LDA nz6_pic_off_h
-        STA FIO_ENDL
-        LDA nz6_pic_w_lo                ; flags reg: pak flags + odd-width bit
-        AND #$01
-        ASL A
-        ORA nz6_pic_flags
-        STA FIO_ENDH
-        LDA nz6_blt_dst_lo              ; start pixel address (y*320 + x)
-        STA FIO_GADDRL
-        LDA nz6_blt_dst_hi
-        STA FIO_GADDRH
-        LDA nz6_blt_wbytes              ; source bytes per row
-        STA FIO_GSPACE
+        STA PAGER_FILEH
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_L
+        STA PAGER_ADDRL
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_M
+        STA PAGER_ADDRM
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_H
+        STA PAGER_ADDRH
         LDA nz6_pic_len_lo
-        STA FIO_GLENL
+        STA PAGER_LENL
         LDA nz6_pic_len_hi
-        STA FIO_GLENH
-        STZ FIO_SIZEL                   ; no underpaint: the gfx plane always
-                                        ; holds real framebuffer content now
-                                        ; (erase fills the parchment), so
-                                        ; transparent pixels simply skip
-        LDA #$03                        ; FioPageTargetGfx4
-        STA FIO_DIRTYPE
-        LDA #FIO_CMD_XPAGE
-        JSR fio_exec
+        STA PAGER_LENH
+        LDA #PAGER_TARGET_XRAM
+        STA PAGER_TARGET
+        JSR pager_load_file_page
         BEQ :+
 @rts2a:
+        RTS
+:
+        ; Unpack the row-packed 4bpp source into one gfx pixel per VGC
+        ; address. BLT_CKEY > 15 disables transparency for opaque pictures.
+        LDA #NZ6_SPACE_XRAM
+        STA BLT_SRCSPACE
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_L
+        STA BLT_SRCL
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_M
+        STA BLT_SRCM
+        LDA #ZSTORY_XRAM_PICS_BOUNCE_H
+        STA BLT_SRCH
+        LDA nz6_blt_wbytes
+        STA BLT_SRCSTRL
+        STZ BLT_SRCSTRH
+        LDA #NZ6_SPACE_GFX
+        STA BLT_DSTSPACE
+        LDA nz6_blt_dst_lo
+        STA BLT_DSTL
+        LDA nz6_blt_dst_hi
+        STA BLT_DSTM
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRL
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRH
+        LDA nz6_blt_wclip
+        STA BLT_WIDTHL
+        LDA nz6_blt_wclip_hi
+        STA BLT_WIDTHH
+        LDA nz6_blt_hclip
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        LDA #BLT_MODE_GFX4_UNPACK
+        STA BLT_MODE_REG
+        LDA nz6_pic_flags
+        AND #NZ6_PIC_FLAG_TRANSPARENT
+        BEQ @opaque_pic
+        LDA nz6_pic_flags
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        STA BLT_CKEY
+        BRA @start_unpack
+@opaque_pic:
+        LDA #$FF
+        STA BLT_CKEY
+@start_unpack:
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JSR blitter_wait
+        BEQ :+
         RTS
 :
         ; MCGA-faithful compositing approximation for the split text/gfx
@@ -2389,6 +2426,8 @@ nz6_pic_clip_rect:
         LDA nz6_pic_tmp
 @h_have:
         STA nz6_blt_hclip
+        LDA nz6_blt_hclip              ; STA does not refresh Z; exact-fit
+                                       ; clips arrive here with Z still set.
         BEQ @empty
         SEC
         RTS

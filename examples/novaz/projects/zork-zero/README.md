@@ -19,12 +19,14 @@ The generated image is written to `examples/novaz/dist/zork-zero/fd0.ndi`
 and includes `PICS.PAK` — 503 pictures (396 custom-palette 4bpp bitmaps +
 107 Rect placeholders, release 14) pre-converted by the Packer.
 
-## M3 status (pictures on Avalonia)
+## V6 graphics status
 
 The game runs with its real art and picture-driven layout:
 
 - **Pictures render.** `draw_picture` streams pak bitmap regions into the
-  VGC gfx layer (host-assisted 4bpp unpack with per-pixel transparency);
+  XRAM bounce buffer, then uses the blitter's `BLT_MODE_GFX4_UNPACK` path to
+  expand row-packed 4bpp source into the VGC gfx layer with per-pixel
+  transparency;
   the title sequence, the playfield border art, and the per-refresh border
   pic `$D8` all draw. The VGC runs mode 2 (text over gfx); v2 picture packs
   upload a generated 16-entry RGB palette at V6 boot. `--expect-gfx-color`
@@ -56,7 +58,6 @@ Remaining limitations:
   between output paragraphs, so the smoke runner may see "ready" before a
   response finishes; `smoke.txt` pins response text and stable banner
   rows, not exact response rows.
-- **Hardware (M6)** — the FPGA gfx plane is 4bpp packed, so the Avalonia
-  host-assisted unpack (`FioPageTargetGfx4`) does not apply there; the RTL
-  blitter grows the nibble-granular color key (`BltModeColorKey4`, already
-  pinned by Avalonia tests) and NovaHost streams pak bytes as-is.
+- **Hardware** — the portable path uses only XPAGE-to-XRAM plus the reusable
+  blitter unpack mode, so the same draw path runs in Avalonia and on FPGA
+  hardware.

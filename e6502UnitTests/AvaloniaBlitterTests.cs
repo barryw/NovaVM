@@ -354,26 +354,22 @@ public class AvaloniaBlitterTests
         Assert.AreEqual(romBefore, bus.Read((ushort)VgcConstants.RomBase));
     }
 
-    // Nibble-granular color key (BltModeColorKey4): the gfx plane packs two
-    // 4bpp pixels per byte, so byte-granular keying fringes every odd
-    // opaque/transparent boundary. In this mode each nibble compares against
-    // the key's low nibble independently; mixed bytes read-modify-write the
-    // destination so the transparent pixel underneath survives.
-
     [TestMethod]
-    public void Blitter_ColorKey4_SkipsTransparentNibbles()
+    public void Blitter_Gfx4Unpack_WritesOneGfxPixelPerNibble()
     {
         var bus = MakeBus();
 
         int srcBase = 0x2400;
-        bus.Write((ushort)(srcBase + 0), 0x51); // opaque 5, transparent 1
-        bus.Write((ushort)(srcBase + 1), 0x15); // transparent 1, opaque 5
-        bus.Write((ushort)(srcBase + 2), 0x11); // fully transparent
-        bus.Write((ushort)(srcBase + 3), 0x55); // fully opaque
+        bus.Write((ushort)(srcBase + 0), 0x51);
+        bus.Write((ushort)(srcBase + 1), 0xA2);
+        bus.Write((ushort)(srcBase + 2), 0x30); // low nibble is odd-width padding
+        bus.Write((ushort)(srcBase + 4), 0x47);
+        bus.Write((ushort)(srcBase + 5), 0x89);
+        bus.Write((ushort)(srcBase + 6), 0xB0);
 
         int dstBase = 1024;
-        for (int i = 0; i < 4; i++)
-            bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, dstBase + i, 0x33);
+        for (int i = 0; i < 2 * VgcConstants.GfxWidth; i++)
+            bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, dstBase + i, 0x00);
 
         StartBlit(
             bus,
@@ -381,26 +377,65 @@ public class AvaloniaBlitterTests
             dstSpace: VgcConstants.DmaSpaceVgcGfx,
             srcAddr: srcBase,
             dstAddr: dstBase,
-            width: 4,
-            height: 1,
+            width: 5,
+            height: 2,
             srcStride: 4,
             dstStride: VgcConstants.GfxWidth,
-            mode: VgcConstants.BltModeColorKey4,
-            colorKey: 0x01);
+            mode: VgcConstants.BltModeGfx4Unpack,
+            colorKey: 0xFF);
 
-        AssertBlitOk(bus, expectedCount: 3); // 3 bytes carried opaque nibbles
-        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, dstBase + 0, out byte b0));
-        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, dstBase + 1, out byte b1));
-        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, dstBase + 2, out byte b2));
-        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, dstBase + 3, out byte b3));
-        Assert.AreEqual(0x53, b0, "hi nibble from src, lo preserved");
-        Assert.AreEqual(0x35, b1, "lo nibble from src, hi preserved");
-        Assert.AreEqual(0x33, b2, "fully transparent byte untouched");
-        Assert.AreEqual(0x55, b3, "fully opaque byte copied");
+        AssertBlitOk(bus, expectedCount: 10);
+        AssertGfx(bus, dstBase + 0, 0x05);
+        AssertGfx(bus, dstBase + 1, 0x01);
+        AssertGfx(bus, dstBase + 2, 0x0A);
+        AssertGfx(bus, dstBase + 3, 0x02);
+        AssertGfx(bus, dstBase + 4, 0x03);
+        AssertGfx(bus, dstBase + 5, 0x00);
+        AssertGfx(bus, dstBase + VgcConstants.GfxWidth + 0, 0x04);
+        AssertGfx(bus, dstBase + VgcConstants.GfxWidth + 4, 0x0B);
     }
 
     [TestMethod]
-    public void Blitter_ColorKey4_CombinedWithRotate_IsBadArgs()
+    public void Blitter_Gfx4Unpack_SkipsTransparentPixels()
+    {
+        var bus = MakeBus();
+
+        int srcBase = 0x2400;
+        bus.Write((ushort)(srcBase + 0), 0x51);
+        bus.Write((ushort)(srcBase + 1), 0x15);
+        bus.Write((ushort)(srcBase + 2), 0x11);
+        bus.Write((ushort)(srcBase + 3), 0x55);
+
+        int dstBase = 1024;
+        for (int i = 0; i < 8; i++)
+            bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, dstBase + i, 0x09);
+
+        StartBlit(
+            bus,
+            srcSpace: VgcConstants.DmaSpaceCpuRam,
+            dstSpace: VgcConstants.DmaSpaceVgcGfx,
+            srcAddr: srcBase,
+            dstAddr: dstBase,
+            width: 8,
+            height: 1,
+            srcStride: 4,
+            dstStride: VgcConstants.GfxWidth,
+            mode: VgcConstants.BltModeGfx4Unpack,
+            colorKey: 0x01);
+
+        AssertBlitOk(bus, expectedCount: 4);
+        AssertGfx(bus, dstBase + 0, 0x05);
+        AssertGfx(bus, dstBase + 1, 0x09);
+        AssertGfx(bus, dstBase + 2, 0x09);
+        AssertGfx(bus, dstBase + 3, 0x05);
+        AssertGfx(bus, dstBase + 4, 0x09);
+        AssertGfx(bus, dstBase + 5, 0x09);
+        AssertGfx(bus, dstBase + 6, 0x05);
+        AssertGfx(bus, dstBase + 7, 0x05);
+    }
+
+    [TestMethod]
+    public void Blitter_Gfx4Unpack_CombinedWithRotate_IsBadArgs()
     {
         var bus = MakeBus();
         StartBlit(
@@ -413,11 +448,17 @@ public class AvaloniaBlitterTests
             height: 4,
             srcStride: 4,
             dstStride: VgcConstants.GfxWidth,
-            mode: (byte)(VgcConstants.BltModeColorKey4 | VgcConstants.BltModeRotate),
+            mode: (byte)(VgcConstants.BltModeGfx4Unpack | VgcConstants.BltModeRotate),
             colorKey: 0x01);
 
         Assert.AreEqual(VgcConstants.BltStatusError, bus.Read((ushort)VgcConstants.BltStatus));
         Assert.AreEqual(VgcConstants.BltErrBadArgs, bus.Read((ushort)VgcConstants.BltErrCode));
+    }
+
+    private static void AssertGfx(CompositeBusDevice bus, int address, byte expected)
+    {
+        Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, address, out byte actual));
+        Assert.AreEqual(expected, actual);
     }
 
     private static void StartBlit(

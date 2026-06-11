@@ -388,6 +388,71 @@ module test_blitter;
         check("gfx[603] = 9 (skipped)", sim_gfx[603] == 4'h9);
         check("gfx[604] = 2 (copied)", sim_gfx[604] == 4'h2);
 
+        // ----- Test 6c: GFX4 unpack — RAM to VGC gfx -----
+        $display("Test: GFX4 unpack RAM to VGC gfx");
+        // Source bytes hold two pixels each: high nibble first, low nibble second.
+        sim_ram[16'h5400] = 8'h51;
+        sim_ram[16'h5401] = 8'hA2;
+        sim_ram[16'h5402] = 8'h30; // odd-width pad nibble must not be written
+        sim_ram[16'h5404] = 8'h47;
+        sim_ram[16'h5405] = 8'h89;
+        sim_ram[16'h5406] = 8'hB0;
+        for (int i = 700; i < 1025; i++)
+            sim_gfx[i] = 4'h0;
+
+        setup_copy(0, 16'h5400, 4, 3, 700, 320, 5, 2);
+        blt_reg(19, 8'h08);     // Mode = GFX4 unpack
+        blt_reg(21, 8'hFF);     // ColorKey > 15 disables transparency
+        blt_start();
+        wait_blt_done();
+
+        check("gfx4 unpack status ok", dut.regs[1] == 8'h02);
+        check("gfx4 unpack count = 10", {dut.regs[24], dut.regs[23], dut.regs[22]} == 24'd10);
+        check("gfx4 row0 pixel0 = 5", sim_gfx[700] == 4'h5);
+        check("gfx4 row0 pixel1 = 1", sim_gfx[701] == 4'h1);
+        check("gfx4 row0 pixel2 = A", sim_gfx[702] == 4'hA);
+        check("gfx4 row0 pixel3 = 2", sim_gfx[703] == 4'h2);
+        check("gfx4 row0 pixel4 = 3", sim_gfx[704] == 4'h3);
+        check("gfx4 odd-width pad untouched", sim_gfx[705] == 4'h0);
+        check("gfx4 row1 pixel0 = 4", sim_gfx[1020] == 4'h4);
+        check("gfx4 row1 pixel4 = B", sim_gfx[1024] == 4'hB);
+
+        // ----- Test 6d: GFX4 unpack transparency skips keyed nibbles -----
+        $display("Test: GFX4 unpack transparency");
+        sim_ram[16'h5500] = 8'h51;
+        sim_ram[16'h5501] = 8'h15;
+        sim_ram[16'h5502] = 8'h11;
+        sim_ram[16'h5503] = 8'h55;
+        for (int i = 800; i < 808; i++)
+            sim_gfx[i] = 4'h9;
+
+        setup_copy(0, 16'h5500, 4, 3, 800, 320, 8, 1);
+        blt_reg(19, 8'h08);     // Mode = GFX4 unpack
+        blt_reg(21, 8'h01);     // Transparent colour index 1
+        blt_start();
+        wait_blt_done();
+
+        check("gfx4 transparent status ok", dut.regs[1] == 8'h02);
+        check("gfx4 transparent count = 4", {dut.regs[24], dut.regs[23], dut.regs[22]} == 24'd4);
+        check("gfx4 transparent dst0 copied", sim_gfx[800] == 4'h5);
+        check("gfx4 transparent dst1 skipped", sim_gfx[801] == 4'h9);
+        check("gfx4 transparent dst2 skipped", sim_gfx[802] == 4'h9);
+        check("gfx4 transparent dst3 copied", sim_gfx[803] == 4'h5);
+        check("gfx4 transparent dst4 skipped", sim_gfx[804] == 4'h9);
+        check("gfx4 transparent dst5 skipped", sim_gfx[805] == 4'h9);
+        check("gfx4 transparent dst6 copied", sim_gfx[806] == 4'h5);
+        check("gfx4 transparent dst7 copied", sim_gfx[807] == 4'h5);
+
+        // ----- Test 6e: GFX4 unpack rejects non-gfx destination -----
+        $display("Test: GFX4 unpack bad args");
+        setup_copy(0, 16'h5500, 4, 0, 16'h5600, 8, 8, 1);
+        blt_reg(19, 8'h08);
+        blt_start();
+        wait_blt_done();
+
+        check("gfx4 non-gfx dst rejected", dut.regs[1] == 8'h03);
+        check("gfx4 non-gfx errcode badargs", dut.regs[2] == 8'h04);
+
         // ----- Test 6c: VGC gfx save/restore through CPU RAM -----
         $display("Test: VGC gfx save/restore via RAM");
         for (int i = 0; i < 8; i++) begin

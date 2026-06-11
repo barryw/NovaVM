@@ -251,6 +251,7 @@ zvm_save_scratch_base_h: .res 1
 .export zvm_verify_sum_lo
 .export zvm_verify_sum_hi
 .export zvm_read_key_loop
+.export zvm_read_char_wait
 .export zvm_read_timed_poll
 
 zvm_run_until_read:
@@ -3836,13 +3837,13 @@ zvm_read_char:
         LDX #$01                ; read_char operands: [1, time, routine]
         JSR nz_timed_arm
         JSR nz_cursor_on
-@wait:
+zvm_read_char_wait:
         JSR nz_input_poll
         CMP #$00
         BNE @got
         LDA zvm_timed_abort
         BNE @abort
-        BRA @wait
+        BRA zvm_read_char_wait
 @got:
         PHA
         JSR nz_timed_disable

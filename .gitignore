@@ -297,6 +297,7 @@ NovaDraw/*.app/
 examples/novaz/build/
 examples/novaz/dist/
 examples/novaz/projects/*/STORY.BIN
+examples/novaz/projects/*/PICS.BLB
 
 # Copyrighted Infocom material must never be committed. The NovaZ collection
 # images live under examples/novaz/dist/ (ignored above); these rules block the

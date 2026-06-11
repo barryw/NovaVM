@@ -1892,10 +1892,9 @@ public sealed partial class FileIoController
                     //               index (skip those pixels), bit 1 = odd
                     //               width (the last pixel per row is pad)
                     // Rows clip at the 320px right edge; rows past the 200px
-                    // bottom edge are dropped. (Hardware note for M6: the
-                    // FPGA gfx plane is 4bpp PACKED, so this unpack is
-                    // Avalonia-only — NovaHost streams pak bytes as-is and
-                    // the RTL blitter's nibble color key handles the skip.)
+                    // bottom edge are dropped. This target is Avalonia-only
+                    // compatibility; portable runtimes should stream packed
+                    // bytes to XRAM and use the blitter's GFX4 unpack mode.
                     if (_vgcWrite is null || _vgcSpaceLength is null)
                     {
                         SetError(VgcConstants.FioErrIo);

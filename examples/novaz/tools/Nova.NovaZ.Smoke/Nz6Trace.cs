@@ -57,9 +57,30 @@ static class Nz6Trace
     static int _printTablePc = -1;
     static int _printAddrPc = -1;
     static int _printPaddrPc = -1;
+    static int _drawPicturePc = -1;
+    static int _pictureRectSetupPc = -1;
+    static int _pictureClipRectPc = -1;
+    static int _drawStartUnpackPc = -1;
+    static int _drawRts2Pc = -1;
+    static int _pagerLoadPc = -1;
     static int _operandLo;
     static int _operandHi;
     static int _operandCount;
+    static bool _tracePictures;
+    static int _winCurrent = -1;
+    static int _picW = -1;
+    static int _picH = -1;
+    static int _picFlags = -1;
+    static int _picOff = -1;
+    static int _picLen = -1;
+    static int _bltCellX = -1;
+    static int _bltCellY = -1;
+    static int _bltPx = -1;
+    static int _bltPy = -1;
+    static int _bltDst = -1;
+    static int _bltWBytes = -1;
+    static int _bltWClip = -1;
+    static int _bltHClip = -1;
 
     public static bool Enabled => _writer is not null;
 
@@ -93,12 +114,21 @@ static class Nz6Trace
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_print_addr in build/runtime.sym.");
         _printPaddrPc = ReadSymbol("runtime.sym", "zvm_print_paddr")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_print_paddr in build/runtime.sym.");
+        _drawPicturePc = ReadSymbol("novaz6.sym", "nz6_ext_draw_picture") ?? -1;
+        _pictureRectSetupPc = ReadSymbol("novaz6.sym", "nz6_pic_rect_setup") ?? -1;
+        _pictureClipRectPc = ReadSymbol("novaz6.sym", "nz6_pic_clip_rect") ?? -1;
+        _drawStartUnpackPc = ReadSymbol("novaz6.sym", "@start_unpack") ?? -1;
+        _drawRts2Pc = ReadSymbol("novaz6.sym", "@rts2") ?? -1;
+        _pagerLoadPc = ReadSymbol("runtime.sym", "pager_load_file_page") ?? -1;
         _operandLo = ReadSymbol("runtime.sym", "zvm_operand_lo")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_lo in build/runtime.sym.");
         _operandHi = ReadSymbol("runtime.sym", "zvm_operand_hi")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_hi in build/runtime.sym.");
         _operandCount = ReadSymbol("runtime.sym", "zvm_operand_count")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_count in build/runtime.sym.");
+        _tracePictures = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_NZ6_PICS") == "1";
+        if (_tracePictures)
+            InitPictureTraceSymbols();
 
         string? dir = Path.GetDirectoryName(Path.GetFullPath(path));
         if (!string.IsNullOrEmpty(dir))
@@ -118,6 +148,18 @@ static class Nz6Trace
         int pc = cpu.Pc;
         if (pc == _entryPc)
             LogOp(cpu.GetState().A, bus);
+        else if (_tracePictures && pc == _drawPicturePc)
+            LogPictureTrace("draw-entry", bus);
+        else if (_tracePictures && pc == _pictureRectSetupPc)
+            LogPictureTrace("draw-found", bus);
+        else if (_tracePictures && pc == _pictureClipRectPc)
+            LogPictureTrace("draw-rect", bus);
+        else if (_tracePictures && pc == _pagerLoadPc)
+            LogPagerTrace(bus);
+        else if (_tracePictures && pc == _drawStartUnpackPc)
+            LogPictureTrace("draw-start-unpack", bus);
+        else if (_tracePictures && pc == _drawRts2Pc)
+            LogPictureTrace("draw-rts2", bus);
         else if (pc == _eraseLinePc)
             LogRomOp("erase_line", bus);
         else if (pc == _setTextStylePc)
@@ -172,6 +214,77 @@ static class Nz6Trace
 
     static int ReadOperand(IBusDevice bus, int index) =>
         (bus.Read((ushort)(_operandHi + index)) << 8) | bus.Read((ushort)(_operandLo + index));
+
+    static void InitPictureTraceSymbols()
+    {
+        _winCurrent = ReadSymbol("novaz6.sym", "nz6_win_current") ?? -1;
+        _picW = ReadSymbol("novaz6.sym", "nz6_pic_w_lo") ?? -1;
+        _picH = ReadSymbol("novaz6.sym", "nz6_pic_h_lo") ?? -1;
+        _picFlags = ReadSymbol("novaz6.sym", "nz6_pic_flags") ?? -1;
+        _picOff = ReadSymbol("novaz6.sym", "nz6_pic_off_l") ?? -1;
+        _picLen = ReadSymbol("novaz6.sym", "nz6_pic_len_lo") ?? -1;
+        _bltCellX = ReadSymbol("novaz6.sym", "nz6_blt_cellx") ?? -1;
+        _bltCellY = ReadSymbol("novaz6.sym", "nz6_blt_celly") ?? -1;
+        _bltPx = ReadSymbol("novaz6.sym", "nz6_blt_px_lo") ?? -1;
+        _bltPy = ReadSymbol("novaz6.sym", "nz6_blt_py") ?? -1;
+        _bltDst = ReadSymbol("novaz6.sym", "nz6_blt_dst_lo") ?? -1;
+        _bltWBytes = ReadSymbol("novaz6.sym", "nz6_blt_wbytes") ?? -1;
+        _bltWClip = ReadSymbol("novaz6.sym", "nz6_blt_wclip") ?? -1;
+        _bltHClip = ReadSymbol("novaz6.sym", "nz6_blt_hclip") ?? -1;
+    }
+
+    static void LogPictureTrace(string stage, IBusDevice bus)
+    {
+        int count = bus.Read((ushort)_operandCount);
+        int op0 = ReadOperand(bus, 0);
+        int op1 = ReadOperand(bus, 1);
+        int op2 = ReadOperand(bus, 2);
+        int win = ReadByte(bus, _winCurrent);
+        int picW = ReadWordLe(bus, _picW);
+        int picH = ReadWordLe(bus, _picH);
+        int flags = ReadByte(bus, _picFlags);
+        int offset = Read24Le(bus, _picOff);
+        int length = ReadWordLe(bus, _picLen);
+        int px = ReadWordLe(bus, _bltPx);
+        int py = ReadByte(bus, _bltPy);
+        int cellX = ReadByte(bus, _bltCellX);
+        int cellY = ReadByte(bus, _bltCellY);
+        int dst = ReadWordLe(bus, _bltDst);
+        int rowBytes = ReadByte(bus, _bltWBytes);
+        int wClip = ReadWordLe(bus, _bltWClip);
+        int hClip = ReadByte(bus, _bltHClip);
+        _writer!.WriteLine(
+            $"{_seq++} ## {stage} win={win:X2} count={count} ops={op0:X4},{op1:X4},{op2:X4} " +
+            $"pic={picW}x{picH} flags={flags:X2} off={offset:X6} len={length:X4} " +
+            $"px={px} py={py} cell={cellX},{cellY} dst={dst:X4} rowBytes={rowBytes} clip={wClip}x{hClip}");
+    }
+
+    static void LogPagerTrace(IBusDevice bus)
+    {
+        int nameLen = bus.Read(0x0028);
+        int namePtr = bus.Read(0x0029) | (bus.Read(0x002A) << 8);
+        int file = bus.Read(0x002B) | (bus.Read(0x002C) << 8) | (bus.Read(0x002D) << 16);
+        int addr = bus.Read(0x0020) | (bus.Read(0x0021) << 8) | (bus.Read(0x0022) << 16);
+        int len = bus.Read(0x0026) | (bus.Read(0x0027) << 8);
+        int target = bus.Read(0x002E);
+        int op0 = ReadOperand(bus, 0);
+        int op1 = ReadOperand(bus, 1);
+        int op2 = ReadOperand(bus, 2);
+        _writer!.WriteLine(
+            $"{_seq++} ## pager-enter ops={op0:X4},{op1:X4},{op2:X4} " +
+            $"nameLen={nameLen} namePtr=${namePtr:X4} file=${file:X6} dest=${addr:X6} len=${len:X4} target=${target:X2}");
+    }
+
+    static int ReadByte(IBusDevice bus, int address) =>
+        address >= 0 ? bus.Read((ushort)address) : 0;
+
+    static int ReadWordLe(IBusDevice bus, int address) =>
+        address >= 0 ? bus.Read((ushort)address) | (bus.Read((ushort)(address + 1)) << 8) : 0;
+
+    static int Read24Le(IBusDevice bus, int address) =>
+        address >= 0
+            ? bus.Read((ushort)address) | (bus.Read((ushort)(address + 1)) << 8) | (bus.Read((ushort)(address + 2)) << 16)
+            : 0;
 
     // Same ld65 -Ln format TryReadRuntimeSymbol parses, but parametrized by
     // symbol file so the segment's build/novaz6.sym can be read too.

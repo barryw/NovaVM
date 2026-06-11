@@ -396,9 +396,9 @@ module test_vgc_regs;
         bus_write(VIRQ_TIMER_MID_A, 8'h00);
         bus_write(VIRQ_TIMER_HI_A, 8'h00);
         bus_read(VIRQ_TIMER_LO_A, rb); step(2);
-        check_eq("$A0F4 reads timer period low", int'(rb), 6);
+        check_eq("$A0F8 reads timer period low", int'(rb), 6);
         bus_read(VIRQ_TIMER_MID_A, rb); step(2);
-        check_eq("$A0F5 reads timer period mid", int'(rb), 0);
+        check_eq("$A0F9 reads timer period mid", int'(rb), 0);
         bus_read(VIRQ_TIMER_HI_A, rb); step(2);
         check_eq("$A0F6 reads timer period high", int'(rb), 0);
 
@@ -457,7 +457,7 @@ module test_vgc_regs;
     task automatic test_palette_mode_register();
         logic [7:0] rb;
         $display("");
-        $display("Test: palette mode register at $A0E9 — bit0 selects C64/Nova or EGA");
+        $display("Test: palette mode register at $A0E9 — low two bits select C64/EGA/custom");
         do_reset();
         check_eq("palette_mode reset default is C64/Nova", int'(dut.palette_mode), 0);
         bus_read(REG_PALETTE_MODE_A, rb); step(2);
@@ -468,13 +468,46 @@ module test_vgc_regs;
         bus_read(REG_PALETTE_MODE_A, rb); step(2);
         check_eq("$A0E9 CPU readback sees EGA", int'(rb), 1);
 
-        bus_write(REG_PALETTE_MODE_A, 8'hFE); step(2);
-        check_eq("palette_mode uses bit 0 only (0xFE -> 0)", int'(dut.palette_mode), 0);
+        bus_write(REG_PALETTE_MODE_A, 8'h02); step(2);
+        check_eq("palette_mode=2 selects custom", int'(dut.palette_mode), 2);
+        bus_read(REG_PALETTE_MODE_A, rb); step(2);
+        check_eq("$A0E9 CPU readback sees custom", int'(rb), 2);
+
+        bus_write(REG_PALETTE_MODE_A, 8'hFF); step(2);
+        check_eq("palette_mode uses low two bits (0xFF -> 3)", int'(dut.palette_mode), 3);
 
         dbg_write(REG_PALETTE_MODE_A, 8'h01);
         check_eq("debug write palette_mode=1", int'(dut.palette_mode), 1);
         dbg_read(REG_PALETTE_MODE_A, rb);
         check_eq("$A0E9 debug readback sees debug-written palette_mode=1", int'(rb), 1);
+    endtask
+
+    task automatic test_custom_palette_registers();
+        logic [7:0] rb;
+        $display("");
+        $display("Test: custom palette byte stream at $A0F4/$A0F5");
+
+        bus_write(REG_PALETTE_IDX_A, 8'd3); step(2);
+        check_eq("palette index write selects byte 3", int'(dut.palette_write_index), 3);
+        bus_write(REG_PALETTE_DATA_A, 8'h12); step(2);
+        bus_write(REG_PALETTE_DATA_A, 8'h34); step(2);
+        bus_write(REG_PALETTE_DATA_A, 8'h56); step(2);
+        check_eq("palette data write auto-increments index", int'(dut.palette_write_index), 6);
+        check_eq("custom palette entry 1 red byte", int'(dut.custom_palette_rgb[3]), 8'h12);
+        check_eq("custom palette entry 1 green byte", int'(dut.custom_palette_rgb[4]), 8'h34);
+        check_eq("custom palette entry 1 blue byte", int'(dut.custom_palette_rgb[5]), 8'h56);
+        bus_read(REG_PALETTE_IDX_A, rb); step(2);
+        check_eq("$A0F4 CPU readback sees palette index", int'(rb), 6);
+        bus_read(REG_PALETTE_DATA_A, rb); step(2);
+        check_eq("$A0F5 CPU readback sees current palette byte", int'(rb), int'(dut.custom_palette_rgb[6]));
+
+        dbg_write(REG_PALETTE_IDX_A, 8'd47);
+        check_eq("debug palette index write", int'(dut.palette_write_index), 47);
+        dbg_write(REG_PALETTE_DATA_A, 8'hAB);
+        check_eq("debug palette data wraps index", int'(dut.palette_write_index), 0);
+        check_eq("debug palette data writes byte 47", int'(dut.custom_palette_rgb[47]), 8'hAB);
+        dbg_read(REG_PALETTE_IDX_A, rb);
+        check_eq("$A0F4 debug readback sees wrapped index", int'(rb), 0);
     endtask
 
     task automatic test_palette_mode_compositor();
@@ -487,15 +520,23 @@ module test_vgc_regs;
         force dut.border_color = 4'd1;
         force dut.spr_pixel_hit = 1'b0;
 
-        force dut.palette_mode = 1'b0;
+        force dut.palette_mode = 2'd0;
         #1;
         check_eq("C64/Nova color index 1 is white",
                  int'(dut.pixel_color), 12'hFFF);
 
-        force dut.palette_mode = 1'b1;
+        force dut.palette_mode = 2'd1;
         #1;
         check_eq("EGA color index 1 is blue",
                  int'(dut.pixel_color), 12'h00A);
+
+        dut.custom_palette_rgb[3] = 8'h12;
+        dut.custom_palette_rgb[4] = 8'h34;
+        dut.custom_palette_rgb[5] = 8'h56;
+        force dut.palette_mode = 2'd2;
+        #1;
+        check_eq("custom palette color index 1 uses uploaded RGB nibbles",
+                 int'(dut.pixel_color), 12'h135);
 
         release dut.visible_d2;
         release dut.in_text_area_d2;
@@ -914,6 +955,7 @@ module test_vgc_regs;
         test_display_dim_register();
         test_gfx_transparent_color_register();
         test_palette_mode_register();
+        test_custom_palette_registers();
         test_palette_mode_compositor();
         test_debug_write_paths();
         test_memread_char();

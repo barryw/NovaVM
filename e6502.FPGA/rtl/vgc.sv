@@ -996,6 +996,9 @@ module vgc (
         border_color = 4'd11; fg_color = 4'd15; bg_color = 4'd0;
         display_dim = 4'd15;
         gfx_color = 4'd1; mode = 0; cursor_enable = 0; text_layer_visible = 1'b1;
+        palette_mode = PALETTE_MODE_C64; palette_write_index = 6'd0;
+        for (int i = 0; i < PALETTE_RGB_BYTES; i++)
+            custom_palette_rgb[i] = palette_default_byte(6'(i));
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
@@ -1095,6 +1098,8 @@ module vgc (
     wire text_reg_sel  = (cpu_raddr == TEXT_FLAGS_ADDR || cpu_raddr == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel = (cpu_raddr == GFX_TRANS_ADDR);
     wire palette_mode_sel = (cpu_raddr == PALETTE_MODE_ADDR);
+    wire palette_index_sel = (cpu_raddr == PALETTE_INDEX_ADDR);
+    wire palette_data_sel = (cpu_raddr == PALETTE_DATA_ADDR);
     wire scroll_ctl_sel = (cpu_raddr == SCROLL_CTL_ADDR);
     wire text_top_row_sel = (cpu_raddr == TEXT_TOP_ROW_ADDR);
     wire screen_win_sel   = (cpu_raddr >= SCREENWIN_BASE && cpu_raddr <= SCREENWIN_END);
@@ -1129,6 +1134,8 @@ module vgc (
     wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
     wire palette_mode_sel_w = (r_cpu_addr_w == PALETTE_MODE_ADDR);
+    wire palette_index_sel_w = (r_cpu_addr_w == PALETTE_INDEX_ADDR);
+    wire palette_data_sel_w = (r_cpu_addr_w == PALETTE_DATA_ADDR);
     wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
     wire text_top_row_sel_w = (r_cpu_addr_w == TEXT_TOP_ROW_ADDR);
     wire screen_win_sel_w   = (r_cpu_addr_w >= SCREENWIN_BASE && r_cpu_addr_w <= SCREENWIN_END);
@@ -1271,6 +1278,8 @@ module vgc (
                 IRQ_ENABLE: cpu_rdata = irq_enable;
                 IRQ_STATUS: cpu_rdata = irq_pending;
                 4'h3:       cpu_rdata = IRQ_VALID;
+                4'h4:       cpu_rdata = {2'b0, palette_write_index};
+                4'h5:       cpu_rdata = custom_palette_rgb[palette_write_index];
                 IRQ_TIMER_LO:   cpu_rdata = irq_timer_period[7:0];
                 IRQ_TIMER_MID:  cpu_rdata = irq_timer_period[15:8];
                 IRQ_TIMER_HI:   cpu_rdata = irq_timer_period[23:16];
@@ -1296,7 +1305,7 @@ module vgc (
             endcase
         end
         else if (dim_reg_sel) cpu_rdata = {4'b0, display_dim};
-        else if (palette_mode_sel) cpu_rdata = {7'b0, palette_mode};
+        else if (palette_mode_sel) cpu_rdata = {6'b0, palette_mode};
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_top_row_sel) cpu_rdata = {2'b0, text_top_row};
         else if (screen_win_sel) cpu_rdata = vram_cpu_read_latch;
@@ -1337,6 +1346,8 @@ module vgc (
     wire dbg_text_sel  = (dbg_addr == TEXT_FLAGS_ADDR || dbg_addr == TEXT_REVATTR_ADDR);
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
     wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
+    wire dbg_palette_index_sel = (dbg_addr == PALETTE_INDEX_ADDR);
+    wire dbg_palette_data_sel = (dbg_addr == PALETTE_DATA_ADDR);
     wire dbg_scroll_ctl_sel = (dbg_addr == SCROLL_CTL_ADDR);
     wire dbg_text_top_row_sel = (dbg_addr == TEXT_TOP_ROW_ADDR);
     wire dbg_collision_hi_sel = (dbg_addr == COLLST_HI_ADDR || dbg_addr == COLLBG_HI_ADDR);
@@ -1348,6 +1359,8 @@ module vgc (
     wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR);
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
     wire dbg_write_palette_mode_sel = dbg_we && (dbg_waddr == PALETTE_MODE_ADDR);
+    wire dbg_write_palette_index_sel = dbg_we && (dbg_waddr == PALETTE_INDEX_ADDR);
+    wire dbg_write_palette_data_sel = dbg_we && (dbg_waddr == PALETTE_DATA_ADDR);
     wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
     wire dbg_write_text_top_row_sel = dbg_we && (dbg_waddr == TEXT_TOP_ROW_ADDR);
     wire dbg_write_collision_hi_sel = dbg_we && (dbg_waddr == COLLST_HI_ADDR || dbg_waddr == COLLBG_HI_ADDR);
@@ -1391,6 +1404,8 @@ module vgc (
                 IRQ_ENABLE: dbg_rdata = irq_enable;
                 IRQ_STATUS: dbg_rdata = irq_pending;
                 4'h3:       dbg_rdata = IRQ_VALID;
+                4'h4:       dbg_rdata = {2'b0, palette_write_index};
+                4'h5:       dbg_rdata = custom_palette_rgb[palette_write_index];
                 IRQ_TIMER_LO:   dbg_rdata = irq_timer_period[7:0];
                 IRQ_TIMER_MID:  dbg_rdata = irq_timer_period[15:8];
                 IRQ_TIMER_HI:   dbg_rdata = irq_timer_period[23:16];
@@ -1409,7 +1424,7 @@ module vgc (
             endcase
         end
         else if (dbg_dim_sel) dbg_rdata = {4'b0, display_dim};
-        else if (dbg_palette_mode_sel) dbg_rdata = {7'b0, palette_mode};
+        else if (dbg_palette_mode_sel) dbg_rdata = {6'b0, palette_mode};
         else if (dbg_scroll_ctl_sel) dbg_rdata = {5'b0, scroll_ctl[2:0]};
         else if (dbg_text_top_row_sel) dbg_rdata = {2'b0, text_top_row};
         else if (dbg_collision_hi_sel) begin
@@ -1451,7 +1466,7 @@ module vgc (
             text_layer_visible <= 1'b1;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
             gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 4'd0;
-            cursor_enable <= 0; palette_mode <= 1'b0; font_slot <= 0;
+            cursor_enable <= 0; palette_mode <= PALETTE_MODE_C64; palette_write_index <= 6'd0; font_slot <= 0;
             scroll_ctl <= SCROLL_CTL_DEFAULT;
             scroll_x_fetch <= 0;
             scroll_y_fetch <= 0;
@@ -1517,6 +1532,8 @@ module vgc (
                 copper_list_count[i] <= 0;
             for (int i = 0; i < 64; i++)
                 fio_name[i] <= 0;
+            for (int i = 0; i < PALETTE_RGB_BYTES; i++)
+                custom_palette_rgb[i] <= palette_default_byte(6'(i));
             fio_name_len <= 0;
             for (int i = 0; i < 8; i++)
                 sprrow_data[i] <= 8'h00;
@@ -2231,7 +2248,15 @@ module vgc (
                     gfx_trans_color <= r_cpu_wdata_w[3:0];
 
                 if (palette_mode_sel_w)
-                    palette_mode <= r_cpu_wdata_w[0];
+                    palette_mode <= r_cpu_wdata_w[1:0];
+
+                if (palette_index_sel_w)
+                    palette_write_index <= palette_index_mod(r_cpu_wdata_w);
+
+                if (palette_data_sel_w) begin
+                    custom_palette_rgb[palette_write_index] <= r_cpu_wdata_w;
+                    palette_write_index <= palette_index_next(palette_write_index);
+                end
 
                 if (scroll_ctl_sel_w) begin
                     scroll_ctl <= {5'b0, r_cpu_wdata_w[2:0]};
@@ -2422,7 +2447,15 @@ module vgc (
                 gfx_trans_color <= dbg_wdata[3:0];
 
             if (dbg_write_palette_mode_sel)
-                palette_mode <= dbg_wdata[0];
+                palette_mode <= dbg_wdata[1:0];
+
+            if (dbg_write_palette_index_sel)
+                palette_write_index <= palette_index_mod(dbg_wdata);
+
+            if (dbg_write_palette_data_sel) begin
+                custom_palette_rgb[palette_write_index] <= dbg_wdata;
+                palette_write_index <= palette_index_next(palette_write_index);
+            end
 
             if (dbg_write_scroll_ctl_sel) begin
                 scroll_ctl <= {5'b0, dbg_wdata[2:0]};

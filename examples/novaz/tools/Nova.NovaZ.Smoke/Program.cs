@@ -11,7 +11,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|])");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--auto-read-char-space] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
     return 1;
 }
 
@@ -31,6 +31,7 @@ bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringCo
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
 bool expectZork0BootGfxReplay = args.Skip(1).Contains("--expect-zork0-boot-gfx-replay", StringComparer.Ordinal);
+bool autoReadCharSpace = args.Skip(1).Contains("--auto-read-char-space", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
 int? expectStop = LoadExpectStop(args);
 List<ExpectedAt> expectedAts = LoadExpectedAts(args);
@@ -43,6 +44,7 @@ List<SmokeCommand> commands = LoadCommands(args, bootOnly, screenOnly);
 JsonNode? manifest = TryReadManifest(imagePath);
 int? rawInputModeAddress = TryReadRuntimeSymbol("nz_raw_input_mode");
 int? readKeyLoopAddress = TryReadRuntimeSymbol("zvm_read_key_loop");
+int? readCharWaitAddress = TryReadRuntimeSymbol("zvm_read_char_wait");
 int? readTimedLoopAddress = TryReadRuntimeSymbol("zvm_read_timed_poll");
 string storageRoot = Path.Combine(Path.GetTempPath(), $"nova-novaz-smoke-{Guid.NewGuid():N}");
 CompositeBusDevice? bus = null;
@@ -100,7 +102,7 @@ try
         foreach (string input in screenInputs)
             SendRaw(cpu, bus, editor, input);
 
-        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedTextAttrs, expectedGfxColors, ref morePrompts);
+        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedTextAttrs, expectedGfxColors, ref morePrompts, readCharWaitAddress, autoReadCharSpace);
         foreach (string expected in expectedScreens)
             RequireContains(screenOnlySnapshot, expected);
         foreach (var expected in expectedAts)
@@ -122,7 +124,7 @@ try
         return 0;
     }
 
-    string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+    string screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readCharWaitAddress, readTimedLoopAddress, autoReadCharSpace);
     Nz6Trace.Marker("--- boot: first prompt");
     RunForSteps(cpu, bus, 200_000);
     screen = SnapshotScreen(bus.Vgc);
@@ -163,7 +165,7 @@ try
             Console.WriteLine("> .reboot");
             cpu.Boot();
             RunForSteps(cpu, bus, 500_000);
-            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readCharWaitAddress, readTimedLoopAddress, autoReadCharSpace);
             RunForSteps(cpu, bus, 200_000);
             screen = SnapshotScreen(bus.Vgc);
             if (screen.Contains("UNSUPPORTED Z-OPCODE", StringComparison.Ordinal))
@@ -214,11 +216,11 @@ try
 
         if (command.WaitForPrompt)
         {
-            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+            screen = RunUntilReadyPrompt(cpu, bus, editor, maxSteps, ref morePrompts, rawInputModeAddress, readKeyLoopAddress, readCharWaitAddress, readTimedLoopAddress, autoReadCharSpace);
         }
         else if (command.Expected.Count > 0)
         {
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], [], ref morePrompts);
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], [], ref morePrompts, readCharWaitAddress, autoReadCharSpace);
         }
         else
         {
@@ -388,6 +390,7 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
             case "--no-status-line":
             case "--expect-soundfont":
             case "--expect-zork0-boot-gfx-replay":
+            case "--auto-read-char-space":
                 break;
             case "--expect-screen":
                 if (i + 1 >= args.Length)
@@ -793,7 +796,9 @@ static string RunUntilScreenMatches(
     IReadOnlyList<ExpectedTextColor> expectedTextColors,
     IReadOnlyList<ExpectedTextAttr> expectedTextAttrs,
     IReadOnlyList<ExpectedGfxColor> expectedGfxColors,
-    ref int morePrompts)
+    ref int morePrompts,
+    int? readCharWaitAddress,
+    bool autoReadCharSpace)
 {
     int snapshotMask = ReadEnvHex("NOVAZ_SMOKE_SNAPSHOT_MASK", 0x3FFF);
     string? lastMatchSnapshot = null;
@@ -833,6 +838,14 @@ static string RunUntilScreenMatches(
         lastMatchSnapshot = screen;
         if (HandleStartupPrompt(screen, cpu, bus, editor, screenStable))
             continue;
+        if (autoReadCharSpace && screenStable && SettledAtReadCharWait(cpu, bus, readCharWaitAddress))
+        {
+            Nz6Trace.Marker("--- key: <space> (read_char gate)");
+            editor.QueueInput(0x20);
+            RunForSteps(cpu, bus, 500_000);
+            lastMatchSnapshot = null;
+            continue;
+        }
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
         bool hasExpectedAts = expectedAts.All(expected => MatchesAt(screen, expected));
@@ -874,7 +887,9 @@ static string RunUntilReadyPrompt(
     ref int morePrompts,
     int? rawInputModeAddress,
     int? readKeyLoopAddress,
-    int? readTimedLoopAddress)
+    int? readCharWaitAddress,
+    int? readTimedLoopAddress,
+    bool autoReadCharSpace)
 {
     int snapshotMask = ReadEnvHex("NOVAZ_SMOKE_SNAPSHOT_MASK", 0x3FFF);
     var trace = new Queue<string>();
@@ -986,6 +1001,14 @@ static string RunUntilReadyPrompt(
         lastReadySnapshot = screen;
         if (HandleStartupPrompt(screen, cpu, bus, editor, screenStable))
             continue;
+        if (autoReadCharSpace && screenStable && SettledAtReadCharWait(cpu, bus, readCharWaitAddress))
+        {
+            Nz6Trace.Marker("--- key: <space> (read_char gate)");
+            editor.QueueInput(0x20);
+            RunForSteps(cpu, bus, 500_000);
+            lastReadySnapshot = null;
+            continue;
+        }
         if (IsReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress))
             return screen;
         // The PC is only sampled every 0x4000 steps. The untimed read spin is
@@ -1219,6 +1242,21 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
         if (screen.Contains(">n", StringComparison.OrdinalIgnoreCase))
             return false;
         SendLine(cpu, bus, editor, "N");
+        return true;
+    }
+
+    if (screen.Contains("Would you like to restore", StringComparison.OrdinalIgnoreCase) &&
+        screen.Contains("Please press Y or N", StringComparison.OrdinalIgnoreCase))
+    {
+        if (screen.Contains(">N", StringComparison.OrdinalIgnoreCase))
+            return false;
+        SendRaw(cpu, bus, editor, "N");
+        return true;
+    }
+
+    if (screen.Contains("Do you want to restore a saved game", StringComparison.OrdinalIgnoreCase))
+    {
+        SendRaw(cpu, bus, editor, "N");
         return true;
     }
 
@@ -1768,6 +1806,26 @@ static bool IsAtReadLoop(Cpu cpu, int keyLoopAddress, int? readTimedLoopAddress)
         return true;
     return readTimedLoopAddress is int timedLoop &&
         (cpu.Pc == timedLoop || cpu.Pc == timedLoop + 3);
+}
+
+static bool IsAtReadCharWait(Cpu cpu, int? readCharWaitAddress)
+{
+    return readCharWaitAddress is int waitAddress &&
+        (cpu.Pc == waitAddress || cpu.Pc == waitAddress + 3 || cpu.Pc == waitAddress + 5);
+}
+
+static bool SettledAtReadCharWait(Cpu cpu, CompositeBusDevice bus, int? readCharWaitAddress)
+{
+    for (int s = 0; s < 256; s++)
+    {
+        if (IsAtReadCharWait(cpu, readCharWaitAddress))
+            return true;
+        int cycles = cpu.ClocksForNext();
+        cpu.ExecuteNext();
+        bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
+    }
+    return IsAtReadCharWait(cpu, readCharWaitAddress);
 }
 
 // Fallback for the interrupt-poll loop, whose length may defeat the fixed PC

@@ -71,6 +71,12 @@ BEYOND_ZORK_STORY ?= $(INFOCOM_ROOT)/Beyond Zork - The Coconut of Quendor/Beyond
 SHERLOCK_STORY ?= $(INFOCOM_ROOT)/Sherlock - The Riddle of the Crown Jewels/Sherlock.z5
 ZTUU_STORY ?= $(INFOCOM_ROOT)/Zork_ The Undiscovered Underground/ZTUU.Z5
 LURKING_STORY ?= $(INFOCOM_ROOT)/The Lurking Horror/Lurking.z3
+ZORK_ZERO_STORY ?= $(INFOCOM_ROOT)/Zork Zero - The Revenge of Megaboz/Zork0.z6
+ZORK_ZERO_PICTURES ?= $(INFOCOM_ROOT)/Zork Zero - The Revenge of Megaboz/Zork0.blb
+ARTHUR_STORY ?= $(INFOCOM_ROOT)/Arthur/ARTHUR.Z6
+ARTHUR_PICTURES ?= $(INFOCOM_ROOT)/Arthur/Arthur.blb
+JOURNEY_STORY ?= $(INFOCOM_ROOT)/Journey/Journey.z6
+JOURNEY_PICTURES ?= $(INFOCOM_ROOT)/Journey/Journey.blb
 
 # Sampled-sound Blorb archives (IF Archive: infocom/media/sound/, also shipped
 # alongside the story files here). Override if yours live elsewhere; download
@@ -288,7 +294,12 @@ test-infocom-v45-smokes:
 	$(MAKE) test-project PROJECT=sherlock STORY="$(SHERLOCK_STORY)"
 	$(MAKE) test-project PROJECT=ztuu STORY="$(ZTUU_STORY)"
 
-test-infocom-smokes: test-infocom-z3-smokes test-infocom-v45-smokes
+test-infocom-v6-smokes:
+	$(MAKE) test-project PROJECT=zork-zero STORY="$(ZORK_ZERO_STORY)" PICTURES="$(ZORK_ZERO_PICTURES)"
+	$(MAKE) test-project PROJECT=arthur STORY="$(ARTHUR_STORY)" PICTURES="$(ARTHUR_PICTURES)"
+	$(MAKE) test-project PROJECT=journey STORY="$(JOURNEY_STORY)" PICTURES="$(JOURNEY_PICTURES)"
+
+test-infocom-smokes: test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-v6-smokes
 
 test-infocom-z3-longplays:
 	$(MAKE) test-project-longplay PROJECT=zork-i STORY="$(ZORK_I_STORY)"
@@ -325,4 +336,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-v6-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE

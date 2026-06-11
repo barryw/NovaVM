@@ -249,10 +249,11 @@ packs the graphics blorb into `PICS.PAK` (4bpp row-packed bitmaps + a flat
 index; v2 packs include a generated 16-entry RGB palette) onto the image; the
 segment loads the index into XRAM at boot and answers `picture_data` from it
 (pixel dimensions, count/release for N=0, Flags1 bit 1 set), and
-`draw_picture` is one host-assisted FIO XPAGE (`FioPageTargetGfx4`) that
-unpacks the bitmap region into the 1-byte-per-pixel gfx plane with per-pixel
-transparency and edge clipping. V6 boots in custom-palette mode when a v2
-pack is present, otherwise EGA fallback, plus VGC mode 2 (text over gfx) with
+`draw_picture` streams the bitmap region into the XRAM bounce buffer and uses
+the blitter's `BLT_MODE_GFX4_UNPACK` path to unpack row-packed 4bpp bytes into
+the gfx plane with per-pixel transparency and edge clipping. V6 boots in
+custom-palette mode when a v2 pack is present, otherwise EGA fallback, plus
+VGC mode 2 (text over gfx) with
 a Z-colour -> VGC-index mapping behind `set_colour`/`set_text_style`. The
 carriage-return interrupt (window props 8/9) decrements per newline and fires
 the armed routine (Frotz r393 ordering). A pak-less image still runs the

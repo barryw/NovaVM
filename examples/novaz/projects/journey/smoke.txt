@@ -1,0 +1,3 @@
+# Journey (V6) first smoke.
+# Screen-only menu smoke for now; pin graphics probes after the first stable
+# in-game screen is inspected in Avalonia.

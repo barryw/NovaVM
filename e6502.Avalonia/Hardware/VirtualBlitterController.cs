@@ -17,7 +17,7 @@ public sealed class VirtualBlitterController
     private bool _busy;
     private bool _fillMode;
     private bool _colorKeyMode;
-    private bool _colorKey4Mode;
+    private bool _gfx4UnpackMode;
     private bool _rotateMode;
     private bool _useRowBuffer;
     private byte _srcSpace;
@@ -66,7 +66,7 @@ public sealed class VirtualBlitterController
         _busy = false;
         _fillMode = false;
         _colorKeyMode = false;
-        _colorKey4Mode = false;
+        _gfx4UnpackMode = false;
         _rotateMode = false;
         _useRowBuffer = false;
         _srcSpace = 0;
@@ -230,6 +230,43 @@ public sealed class VirtualBlitterController
                 continue;
             }
 
+            if (_gfx4UnpackMode)
+            {
+                int packedSrc = _srcBase + _row * _srcStride + (_col / 2);
+                var packedRead = _tryReadByte(_srcSpace, packedSrc);
+                if (!packedRead.ok)
+                {
+                    FailTransfer(VgcConstants.BltErrRange);
+                    break;
+                }
+
+                byte pixel = (_col & 1) == 0
+                    ? (byte)(packedRead.value >> 4)
+                    : (byte)(packedRead.value & 0x0F);
+                bool transparent = _colorKey <= 0x0F && pixel == (_colorKey & 0x0F);
+                if (!transparent)
+                {
+                    int dst = _dstBase + _row * _dstStride + _col;
+                    if (!_tryWriteByte(_dstSpace, dst, pixel))
+                    {
+                        FailTransfer(VgcConstants.BltErrRange);
+                        break;
+                    }
+
+                    _wroteCount++;
+                }
+
+                AdvanceCursor();
+                opsBudget--;
+                opsUsed++;
+                if (_row >= _height)
+                {
+                    CompleteTransfer();
+                    break;
+                }
+                continue;
+            }
+
             int src = _srcBase + _row * _srcStride + _col;
             var directRead = _tryReadByte(_srcSpace, src);
             if (!directRead.ok)
@@ -293,7 +330,7 @@ public sealed class VirtualBlitterController
         bool fillMode = (mode & VgcConstants.BltModeFill) != 0;
         bool colorKeyMode = (mode & VgcConstants.BltModeColorKey) != 0;
         bool rotateMode = (mode & VgcConstants.BltModeRotate) != 0;
-        bool colorKey4Mode = (mode & VgcConstants.BltModeColorKey4) != 0;
+        bool gfx4UnpackMode = (mode & VgcConstants.BltModeGfx4Unpack) != 0;
         byte colorKey = _regs[RegIndex(VgcConstants.BltColorKey)];
 
         if (rotateMode && (fillMode || width != height || width > 256))
@@ -303,9 +340,10 @@ public sealed class VirtualBlitterController
             return;
         }
 
-        // Nibble-granular keying only makes sense for a plain copy: fill has
-        // no source and rotate keys per byte (its key doubles as background).
-        if (colorKey4Mode && (fillMode || rotateMode || colorKeyMode))
+        // GFX4 unpack consumes row-packed 4bpp source bytes and writes one
+        // destination gfx pixel per nibble. BLT_CKEY 0..15 skips transparent
+        // pixels; values above 15 disable transparency.
+        if (gfx4UnpackMode && (fillMode || rotateMode || colorKeyMode))
         {
             SetCount(0);
             SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
@@ -319,6 +357,12 @@ public sealed class VirtualBlitterController
         {
             SetCount(0);
             SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadSpace);
+            return;
+        }
+        if (gfx4UnpackMode && dstSpace != VgcConstants.DmaSpaceVgcGfx)
+        {
+            SetCount(0);
+            SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrBadArgs);
             return;
         }
 
@@ -346,7 +390,8 @@ public sealed class VirtualBlitterController
             return;
         }
 
-        if (!fillMode && !RectFits(srcBase, width, height, srcStride, srcSpaceLen))
+        int srcWidth = gfx4UnpackMode ? (width + 1) / 2 : width;
+        if (!fillMode && !RectFits(srcBase, srcWidth, height, srcStride, srcSpaceLen))
         {
             SetCount(0);
             SetStatus(VgcConstants.BltStatusError, VgcConstants.BltErrRange);
@@ -380,9 +425,9 @@ public sealed class VirtualBlitterController
         _busy = true;
         _fillMode = fillMode;
         _colorKeyMode = colorKeyMode;
-        _colorKey4Mode = colorKey4Mode;
+        _gfx4UnpackMode = gfx4UnpackMode;
         _rotateMode = rotateMode;
-        _useRowBuffer = !fillMode && !rotateMode && srcSpace == dstSpace;
+        _useRowBuffer = !fillMode && !rotateMode && !gfx4UnpackMode && srcSpace == dstSpace;
         _srcSpace = srcSpace;
         _dstSpace = dstSpace;
         _srcBase = srcBase;
@@ -406,38 +451,10 @@ public sealed class VirtualBlitterController
         AdvanceCycles(int.MaxValue / VgcConstants.BltOpsPerCycle);
     }
 
-    /// <summary>
-    /// Write one source byte through the active key mode. Plain modes write
-    /// the byte as-is. ColorKey4 compares each 4bpp nibble against the key's
-    /// low nibble: fully transparent bytes are skipped, fully opaque bytes
-    /// written, and mixed bytes read-modify-write the destination so the
-    /// transparent pixel underneath survives. (FPGA note for M6: the RTL
-    /// blitter needs the same mode bit — a dst read port already exists for
-    /// the overlap row buffer, so mixed bytes can RMW in silicon too.)
-    /// </summary>
+    /// <summary>Write one source byte through the active byte-oriented copy path.</summary>
     private bool TryWriteKeyed(int dstAddr, byte value, out bool wrote)
     {
         wrote = false;
-        if (_colorKey4Mode)
-        {
-            byte key = (byte)(_colorKey & 0x0F);
-            bool hiTransparent = (value >> 4) == key;
-            bool loTransparent = (value & 0x0F) == key;
-            if (hiTransparent && loTransparent)
-                return true;
-
-            if (hiTransparent || loTransparent)
-            {
-                var dstRead = _tryReadByte(_dstSpace, dstAddr);
-                if (!dstRead.ok)
-                    return false;
-
-                value = hiTransparent
-                    ? (byte)((dstRead.value & 0xF0) | (value & 0x0F))
-                    : (byte)((value & 0xF0) | (dstRead.value & 0x0F));
-            }
-        }
-
         if (!_tryWriteByte(_dstSpace, dstAddr, value))
             return false;
 
