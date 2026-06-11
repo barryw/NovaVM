@@ -12,19 +12,22 @@ namespace e6502UnitTests;
 /// <summary>
 /// Pins the NovaZ PICS.PAK format produced by the packer's BlorbPictures
 /// (examples/novaz/tools/Nova.NovaZ.Packer):
-///   "NZPK" ver(1) count(2 LE) release(2 LE)
+///   "NZPK" ver(1) count(2 LE) release(2 LE) palette[16 RGB triples]
 ///   index[count]: z_number(2) width(2) height(2) flags(1) offset(4) len(4)  (LE)
 ///   data: 4bpp row-packed bitmaps (two pixels/byte, high nibble = left pixel,
 ///         rows padded to whole bytes); offset is ABSOLUTE within the pak so
 ///         the 6502 can hand it straight to a FIO region load.
-/// flags bit 0 = picture has transparency; bits 4-7 = the transparent EGA
-/// index (an index unused by the picture's opaque pixels). Blorb 'Rect'
-/// placeholder pictures keep their dimensions but have offset=0, len=0.
+/// flags bit 0 = picture has transparency; bit 2 = align small framed icon flow;
+/// bit 3 = align larger framed flow pictures to a text-cell top; bits 4-7 =
+/// the transparent palette index (an index unused by the picture's opaque
+/// pixels). Blorb 'Rect' placeholder pictures keep their dimensions but have
+/// offset=0, len=0.
 /// </summary>
 [TestClass]
 public sealed class NovaZPicturePackTests
 {
-    private const int HeaderSize = 9;
+    private const int FixedHeaderSize = 9;
+    private const int HeaderSize = 57;
     private const int IndexEntrySize = 15;
 
     // --- EGA palette -------------------------------------------------------
@@ -71,9 +74,13 @@ public sealed class NovaZPicturePackTests
 
         byte[] pack = BlorbPictures.BuildPack(MakeBlorb((11, PngBytes(img))));
 
-        // Header: "NZPK" ver=1 count=1 release=0
-        CollectionAssert.AreEqual(new byte[] { (byte)'N', (byte)'Z', (byte)'P', (byte)'K', 1, 1, 0, 0, 0 },
-            pack.Take(HeaderSize).ToArray());
+        // Header: "NZPK" ver=2 count=1 release=0, followed by a 16-entry RGB palette.
+        CollectionAssert.AreEqual(new byte[] { (byte)'N', (byte)'Z', (byte)'P', (byte)'K', 2, 1, 0, 0, 0 },
+            pack.Take(FixedHeaderSize).ToArray());
+        CollectionAssert.AreEqual(new byte[] { 0, 0, 0 }, pack.Skip(FixedHeaderSize).Take(3).ToArray());
+        CollectionAssert.AreEqual(new byte[] { 0, 0, 170 }, pack.Skip(FixedHeaderSize + 3).Take(3).ToArray());
+        CollectionAssert.AreEqual(new byte[] { 170, 0, 0 }, pack.Skip(FixedHeaderSize + 4 * 3).Take(3).ToArray());
+        CollectionAssert.AreEqual(new byte[] { 255, 255, 255 }, pack.Skip(FixedHeaderSize + 15 * 3).Take(3).ToArray());
 
         // Index entry: z=11, w=4, h=4, flags=0, offset=HeaderSize+IndexEntrySize, len=8
         int dataStart = HeaderSize + IndexEntrySize;
@@ -159,11 +166,65 @@ public sealed class NovaZPicturePackTests
 
         byte flags = pack[HeaderSize + 6];
         Assert.AreEqual(0x01, flags & 0x01, "transparency flag must be set");
+        Assert.AreEqual(0, flags & 0x04, "inline alignment flag requires a small transparent framed icon");
+        Assert.AreEqual(0, flags & 0x08, "cell-top flow alignment requires a larger transparent framed picture");
         int transparentIndex = flags >> 4;
         Assert.AreEqual(1, transparentIndex, "lowest EGA index unused by opaque pixels");
 
         int dataStart = HeaderSize + IndexEntrySize;
         Assert.AreEqual(0x01, pack[dataStart], "black(0) left, transparent(1) right");
+    }
+
+    [TestMethod]
+    public void BuildPack_SmallOpaqueFrameWithTransparentInterior_SetsInlineAlignmentFlag()
+    {
+        // Z6 inline room icons in Zork Zero are small framed pictures with a
+        // transparent interior; the runtime uses this bit to align the frame to
+        // text flow without scanning bitmap data.
+        using var img = new Image<Rgba32>(4, 4);
+        for (int y = 0; y < 4; y++)
+        {
+            for (int x = 0; x < 4; x++)
+            {
+                bool frame = x == 0 || x == 3 || y == 0 || y == 3;
+                img[x, y] = frame
+                    ? new Rgba32(0, 0, 0, 255)
+                    : new Rgba32(0, 0, 0, 0);
+            }
+        }
+
+        byte[] pack = BlorbPictures.BuildPack(MakeBlorb((6, PngBytes(img))));
+
+        byte flags = pack[HeaderSize + 6];
+        Assert.AreEqual(0x01, flags & 0x01, "transparency flag must be set");
+        Assert.AreEqual(0x04, flags & 0x04, "small transparent framed icons should request flow alignment");
+        Assert.AreEqual(0, flags & 0x08, "small framed icons use their own padded flow alignment");
+    }
+
+    [TestMethod]
+    public void BuildPack_LargerOpaqueFrameWithTransparentInterior_SetsCellTopFlowFlag()
+    {
+        // Zork Zero's drop-cap pictures are framed transparent flow images.
+        // They must snap to the top of a 4px text cell when drawn so the
+        // following room heading lands below the bitmap, matching Frotz.
+        using var img = new Image<Rgba32>(42, 35);
+        for (int y = 0; y < img.Height; y++)
+        {
+            for (int x = 0; x < img.Width; x++)
+            {
+                bool frame = x == 0 || x == img.Width - 1 || y == 0 || y == img.Height - 1;
+                img[x, y] = frame
+                    ? new Rgba32(0, 0, 0, 255)
+                    : new Rgba32(0, 0, 0, 0);
+            }
+        }
+
+        byte[] pack = BlorbPictures.BuildPack(MakeBlorb((8, PngBytes(img))));
+
+        byte flags = pack[HeaderSize + 6];
+        Assert.AreEqual(0x01, flags & 0x01, "transparency flag must be set");
+        Assert.AreEqual(0, flags & 0x04, "larger framed flow pictures are not small room icons");
+        Assert.AreEqual(0x08, flags & 0x08, "larger framed flow pictures should request text-cell top alignment");
     }
 
     [TestMethod]
@@ -212,7 +273,7 @@ public sealed class NovaZPicturePackTests
     [TestMethod]
     public void BuildPack_ZorkZeroBlorb_PacksAllPictures()
     {
-        string path = FindZorkZeroBlorb();
+        string? path = FindZorkZeroBlorb();
         if (path is null)
         {
             Assert.Inconclusive("projects/zork-zero/PICS.BLB not present");
@@ -226,6 +287,8 @@ public sealed class NovaZPicturePackTests
 
         // Index must be sorted ascending and every PNG entry's bitmap in bounds.
         int prev = -1;
+        bool sawDropCap = false;
+        bool sawRoomIcon = false;
         for (int i = 0; i < count; i++)
         {
             int e = HeaderSize + i * IndexEntrySize;
@@ -234,9 +297,20 @@ public sealed class NovaZPicturePackTests
             prev = z;
             int w = BitConverter.ToUInt16(pack, e + 2);
             int h = BitConverter.ToUInt16(pack, e + 4);
+            byte flags = pack[e + 6];
             int off = BitConverter.ToInt32(pack, e + 7);
             int len = BitConverter.ToInt32(pack, e + 11);
             Assert.IsTrue(w <= 320 && h <= 200, $"pic {z} dims {w}x{h}");
+            if (z == 0x0002)
+            {
+                sawDropCap = true;
+                Assert.AreEqual(0x08, flags & 0x08, "Zork Zero drop caps should snap to the text-cell top");
+            }
+            if (z == 0x00D8)
+            {
+                sawRoomIcon = true;
+                Assert.AreEqual(0x04, flags & 0x04, "Zork Zero room icons should use padded framed-icon flow");
+            }
             if (len > 0)
             {
                 Assert.AreEqual(((w + 1) / 2) * h, len, $"pic {z} bitmap length");
@@ -244,6 +318,9 @@ public sealed class NovaZPicturePackTests
                     $"pic {z} data in bounds");
             }
         }
+
+        Assert.IsTrue(sawDropCap, "expected Zork Zero drop-cap picture $0002");
+        Assert.IsTrue(sawRoomIcon, "expected Zork Zero room-icon picture $00D8");
     }
 
     // --- helpers --------------------------------------------------------------

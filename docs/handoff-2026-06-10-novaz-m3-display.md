@@ -10,17 +10,17 @@ complete plus five GUI-driven fix commits. Zork Zero boots with art: banner, col
 drop-cap, location thumbnails, picture-metric layout, no boot storm, CR interrupt firing,
 art scrolling with text.
 
-**BUT the display is still wrong** (user evidence, not yet diagnosed):
+**Current resume state (Codex):** the side-column/right-border issue was a real
+V6 coordinate-contract bug and is fixed without Zork Zero-specific nudges. NovaZ
+now advertises a 320x200-unit V6 screen with a 4x4 font, keeps window/picture
+coordinates in pixel units, and converts to 80x50 cells only at the VTEXT
+boundary. The live gfx plane byte-matches a host replay of the first-prompt draw
+list, and `PICS.PAK` v2 carries a generated 16-entry RGB palette that NovaZ
+uploads into a new VGC custom-palette mode on V6 boot.
 
-1. **The compass rose emblem is corrupted** — in the original it sits on a complete WHITE
-   disc overlapping the banner; ours renders the disc as a thin top sliver with the rest
-   dark/black ring + banner colours showing through. NOT a palette issue — the geometry
-   of the rendered emblem is wrong.
-2. A black notch right of the centre emblem area and other banner discontinuities remain.
-3. The banner/column seam still shows a gap band in places.
-
-The user compared against a real MCGA screenshot (web "zork zero" image) — keep using that
-as the reference.
+Still worth checking in the GUI against the MCGA screenshot: final subjective
+colour quality of the generated global palette. The implementation is automatic
+and game-agnostic; no Zork Zero-specific palette table was added.
 
 ## What's been fixed so far (and how) — context for the next debugger
 
@@ -37,13 +37,28 @@ screenshots is whack-a-mole. **Stop doing that.**
 
 ## Recommended next step: a golden-image harness
 
+**Resume note (Codex):** added this harness to `Nova.NovaZ.Smoke` as
+`--expect-zork0-boot-gfx-replay` and wired it into
+`projects/zork-zero/project.mk`. It reads the generated image's `PICS.PAK`,
+replays the deterministic first-prompt draw list into a 320x200 colour-index
+buffer (white framebuffer fill, pixel-unit placement, transparent skip), and
+byte-compares the live gfx plane. Current result: **0 mismatches** at the first
+prompt. Follow-up from the user screenshot found the real geometry issue: the
+runtime advertised 80x50 units with a 1x1 font, forcing picture draws through a
+coarse cell surrogate. `zvm6.s` now uses pixel-unit placement end to end, and
+the title-specific `1F1`/`1F2` nudge was removed. The small right-ribbon patch
+is picture `$01E1` drawn by the story at pixel-unit `(y=14,x=192)`; with the
+generated custom palette it is a dark patch, not the bright EGA-red square seen
+in old false-colour previews.
+
 Build a host-side reference renderer and diff the whole plane:
 
-1. The boot draw list is fully known: `docs/plans/data/2026-06-10-nz6-trace-zork-zero-post-m3.txt`
-   (seq 25–67: pics 5, 1F1@10,1, 1F2@10,71, title comps at y=1,x=36, 1E1@5,49, 2@2,1,
-   D8@12,1 — window-relative coords, windows 7/0 origins in the trace).
+1. The boot draw list is fully known from `examples/novaz/build/nz6-trace-zork-zero-pixel.log`
+   after regeneration (seq 25–93: pics 5, 1F1@35,1, 1F2@35,284, title comps
+   at y=1,x=139, 1E1@14,192, 2@5,1, D8@45,1 — window-relative pixel units,
+   windows 7/0 origins in the trace).
 2. Write a C# test (or python tool) that replays that list against PICS.PAK with the SAME
-   rules the segment+host implement (cells→px ×4, origin+rel−2, transparency skip) into a
+   rules the segment+host implement (origin+rel−2 pixel placement, transparency skip) into a
    320×200 buffer.
 3. Boot the real image headlessly (smoke harness pattern), snapshot the gfx plane
    (`bus.Vgc.GetGfxPixelColor` / `TryReadMemorySpace(MemSpaceGfx)`), and DIFF byte-exact.
@@ -69,15 +84,22 @@ Hypotheses for the emblem corruption, in likelihood order:
   `--expect-gfx-color "x,y=>hex"` probes (gfx INDEX, palette-independent).
 - Dispatch trace: `make capture-z6-trace PROJECT=zork-zero` (bit-deterministic).
 
-## Follow-up feature (agreed with user): programmable VGC palette
+## Programmable VGC palette
 
-Colours ARE also off (EGA can't represent the maroon/parchment MCGA tones) and the user
-wants this: packer median-cuts the blorb art (main Zork Zero screen = exactly 15 distinct
-colours) → palette block in PICS.PAK header (format v2) → VGC custom palette mode +
-16-entry write interface (Avalonia renderer + M6 FPGA palette RAM) → runtime uploads at
-V6 boot, reset-safe. No per-game config: automatic from art ("that would be sort of
-neat!" — user). Do this AFTER the geometry is pixel-correct, or palette changes will
-mask geometry diffs in the golden harness.
+Implemented for Avalonia/NovaZ:
+
+- VGC custom palette mode (`PaletteModeCustom`) plus RGB byte-stream registers
+  `RegPaletteIndex`/`RegPaletteData`.
+- Renderer uses the uploaded 16-entry BGRA palette when custom mode is active.
+- `runtime/asm/vgc_palette.s` adds the reusable NDK helper
+  `vgc_upload_palette_rgb_xram`.
+- Packer emits `PICS.PAK` v2: 9-byte fixed header, 48-byte RGB palette, then the
+  unchanged 15-byte index records and 4bpp bitmap data.
+- NovaZ V6 accepts both v1 and v2 packs. v1 stays EGA fallback; v2 uploads the
+  palette before declaring pictures available.
+
+Not done here: M6 FPGA palette RAM/RTL parity. The software ABI is now pinned
+for that work.
 
 ## Session traps already paid for (don't repay)
 

@@ -796,7 +796,7 @@ public static class VgcConstants
     public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
     public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
     public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color, default 0
-    public const int RegPaletteMode    = 0xA0E9;   // bit0: 0=C64/Nova palette, 1=IBM EGA palette
+    public const int RegPaletteMode    = 0xA0E9;   // bits0-1: 0=C64/Nova, 1=IBM EGA, 2/3=custom RGB palette
     public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
     public const int RegColStHi        = 0xA0EB;   // sprite-sprite collision high byte (sprites 8-15, write clears)
     public const int RegColBgHi        = 0xA0EC;   // sprite-background collision high byte (sprites 8-15, write clears)
@@ -811,6 +811,8 @@ public static class VgcConstants
 
     public const byte PaletteModeC64    = 0x00;
     public const byte PaletteModeEga    = 0x01;
+    public const byte PaletteModeCustom = 0x02;
+    public const byte PaletteModeMask   = 0x03;
 
     public const byte VramPlaneChar    = 0x01;
     public const byte VramPlaneColor   = 0x02;
@@ -838,6 +840,7 @@ public static class VgcConstants
     public const byte TextFlagFlash           = 0x04;
 
     public const byte TextAttrFlash           = 0x01;
+    public const byte TextAttrReverse         = 0x02;
 
     // -------------------------------------------------------------------------
     // VGC core registers ($A000-$A00F)
@@ -891,6 +894,8 @@ public static class VgcConstants
     public const int RegIrqStatus      = 0xA0F1;
     public const int RegIrqForce       = 0xA0F2;
     public const int RegIrqValid       = 0xA0F3;
+    public const int RegPaletteIndex   = 0xA0F4;   // byte index into custom palette RGB stream (0-47)
+    public const int RegPaletteData    = 0xA0F5;   // write RGB byte, auto-increments RegPaletteIndex
     public const byte IrqValidMask     = 0x7F;
     public const byte IrqVBlank        = 0x01;
     public const byte IrqCopper0       = 0x02;

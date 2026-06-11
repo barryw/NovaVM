@@ -996,6 +996,24 @@ zvm_return:
 @return_discarded:
         RTS
 
+zvm_throw:
+        LDA zvm_operand_hi + 1
+        BNE @unsupported
+        LDA zvm_operand_lo + 1
+        BEQ @unsupported
+        CMP zvm_frame_count
+        BEQ @ok
+        BCS @unsupported
+@ok:
+        STA zvm_frame_count
+        LDA zvm_operand_lo
+        STA zvm_value_lo
+        LDA zvm_operand_hi
+        STA zvm_value_hi
+        JMP zvm_return
+@unsupported:
+        JMP zvm_unsupported
+
 zvm_call_vs:
         JSR zvm_fetch
         STA zvm_store_var
@@ -3814,6 +3832,7 @@ zvm_set_font:
         JMP zvm_store_a_lo_zero_hi
 
 zvm_read_char:
+        JSR nz_screen_flush_word
         LDX #$01                ; read_char operands: [1, time, routine]
         JSR nz_timed_arm
         JSR nz_cursor_on
@@ -4931,6 +4950,7 @@ zvm_2op_table:
         .word zvm_call_2s
         .word zvm_call_2n
         .word zvm_set_colour
+        .word zvm_throw
 zvm_2op_count = (* - zvm_2op_table) / 2
 
 zvm_var_table:

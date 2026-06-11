@@ -22,6 +22,47 @@ public class AvaloniaTextRenderingTests
     }
 
     [TestMethod]
+    public void TextPixelRenderer_ReverseAttrSwapsPackedColors()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x24, textAttr: VgcConstants.TextAttrReverse);
+
+        Assert.IsTrue(TrySample(vgc, font, x: 0, y: 0, flashVisible: true, out byte fg));
+        Assert.AreEqual(2, fg, "Reverse attr should render set glyph pixels with the packed background color.");
+
+        Assert.IsTrue(TrySample(vgc, font, x: 1, y: 0, flashVisible: true, out byte bg));
+        Assert.AreEqual(4, bg, "Reverse attr should render unset glyph pixels with the packed foreground color.");
+    }
+
+    [TestMethod]
+    public void TextPixelRenderer_Mode2KeepsReverseBackgroundOpaque()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x24, textAttr: VgcConstants.TextAttrReverse);
+
+        bool opaque = TextPixelRenderer.TrySample(
+            vgc,
+            font,
+            px: 1,
+            py: 0,
+            mode: 2,
+            scrollX: 0,
+            scrollY: 0,
+            bgColor: 4,
+            fontIndex: 0,
+            flashVisible: true,
+            cursorX: 10,
+            cursorY: 10,
+            cursorEnabled: false,
+            out byte colorIndex);
+
+        Assert.IsTrue(opaque);
+        Assert.AreEqual(4, colorIndex);
+    }
+
+    [TestMethod]
     public void TextPixelRenderer_FlashHiddenDrawsCellBackground()
     {
         var vgc = new VirtualGraphicsController();

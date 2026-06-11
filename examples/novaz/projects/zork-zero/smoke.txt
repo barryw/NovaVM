@@ -13,6 +13,6 @@
 look=>Banquet Hall
 inventory=>platter of hellhound bones
 wait=>Time passes
-.expect-at 9,2=>Banquet Hall
-.expect-at 9,3=>Moves:  3
-.expect-at 0,33=>           |
+.expect-at 8,1=>Banquet Hall
+.expect-at 8,2=>Moves:  3
+.expect-at 0,34=>          |

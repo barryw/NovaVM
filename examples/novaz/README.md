@@ -238,23 +238,25 @@ generated from `runtime.sym` at build time). The packer adds `NOVAZ6.BIN` to
 every image; a V6 story booted from an image without it aborts with
 `NOVAZ6.BIN MISSING OR INVALID`. The segment provides the 8-window model
 mapped onto the existing text path, user stacks in dynamic memory, and the
-V6 picture pipeline. As of M2, V6 units are cells (matching the advertised
-header metrics) and the window property table drives real vtext regions:
-windows render as true rectangles with per-window cursors, margins,
-in-window scrolling (vacated rows blanked), and a working `scroll_window`.
+V6 picture pipeline. V6 units are gfx pixels (the advertised header is
+320x200 units with a 4x4 font); the window property table drives real vtext
+regions by snapping units to 80x50 cells at the text boundary. Windows render
+as true rectangles with per-window cursors, margins, in-window scrolling
+(vacated rows blanked), and a working `scroll_window`.
 
 M3 added pictures on Avalonia: the packer's `--pictures <file.blb>`
-quantizes the graphics blorb to the VGC's EGA palette and writes `PICS.PAK`
-(4bpp row-packed bitmaps + a flat index) onto the image; the segment loads
-the index into XRAM at boot and answers `picture_data` from it (dims in
-cells, count/release for N=0, Flags1 bit 1 set), and `draw_picture` is one
-host-assisted FIO XPAGE (`FioPageTargetGfx4`) that unpacks the bitmap
-region into the 1-byte-per-pixel gfx plane with per-pixel transparency and
-edge clipping. V6 boots in EGA palette mode + VGC mode 2 (text over gfx)
-with a Z-colour -> EGA mapping behind `set_colour`/`set_text_style`, and
-the carriage-return interrupt (window props 8/9) decrements per newline and
-fires the armed routine (Frotz r393 ordering). A pak-less image still runs
-the honest text-only path. Zork Zero draws its title art and borders, lays
-the banner out from real picture metrics, and its boot newline storm is
-gone (morePrompts 1489 -> 0); see `projects/zork-zero/README.md` for what
-remains (M4 quirks, M6 hardware notes).
+packs the graphics blorb into `PICS.PAK` (4bpp row-packed bitmaps + a flat
+index; v2 packs include a generated 16-entry RGB palette) onto the image; the
+segment loads the index into XRAM at boot and answers `picture_data` from it
+(pixel dimensions, count/release for N=0, Flags1 bit 1 set), and
+`draw_picture` is one host-assisted FIO XPAGE (`FioPageTargetGfx4`) that
+unpacks the bitmap region into the 1-byte-per-pixel gfx plane with per-pixel
+transparency and edge clipping. V6 boots in custom-palette mode when a v2
+pack is present, otherwise EGA fallback, plus VGC mode 2 (text over gfx) with
+a Z-colour -> VGC-index mapping behind `set_colour`/`set_text_style`. The
+carriage-return interrupt (window props 8/9) decrements per newline and fires
+the armed routine (Frotz r393 ordering). A pak-less image still runs the
+honest text-only path. Zork Zero draws its title art and borders, lays the
+banner out from real picture metrics, and its boot newline storm is gone
+(morePrompts 1489 -> 0); see `projects/zork-zero/README.md` for what remains
+(M4 quirks, M6 hardware notes).

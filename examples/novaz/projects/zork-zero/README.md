@@ -16,7 +16,7 @@ make -C examples/novaz ndi PROJECT=zork-zero
 ```
 
 The generated image is written to `examples/novaz/dist/zork-zero/fd0.ndi`
-and includes `PICS.PAK` — 503 pictures (396 EGA-quantized 4bpp bitmaps +
+and includes `PICS.PAK` — 503 pictures (396 custom-palette 4bpp bitmaps +
 107 Rect placeholders, release 14) pre-converted by the Packer.
 
 ## M3 status (pictures on Avalonia)
@@ -26,11 +26,13 @@ The game runs with its real art and picture-driven layout:
 - **Pictures render.** `draw_picture` streams pak bitmap regions into the
   VGC gfx layer (host-assisted 4bpp unpack with per-pixel transparency);
   the title sequence, the playfield border art, and the per-refresh border
-  pic `$D8` all draw. The VGC runs mode 2 (text over gfx) in the EGA
-  palette; `--expect-gfx-color` probes in `project.mk` pin live picture
-  pixels against values derived from the blorb PNGs.
+  pic `$D8` all draw. The VGC runs mode 2 (text over gfx); v2 picture packs
+  upload a generated 16-entry RGB palette at V6 boot. `--expect-gfx-color`
+  probes in `project.mk` pin live picture indices against values derived
+  from the blorb PNGs.
 - **The banner garble is gone.** `picture_data` answers from the pak index
-  (dims in cells), so `INIT-STATUS-LINE` lays the banner out as designed:
+  (pixel dimensions under the 320x200-unit V6 header), so
+  `INIT-STATUS-LINE` lays the banner out as designed:
   "Banquet Hall … Flatheadia" / "Moves: 0 … Score: 0".
 - **The boot newline storm is gone.** With real picture metrics the
   CR-interrupt countdown arms with a real height instead of -1, so

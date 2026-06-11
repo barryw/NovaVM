@@ -8,36 +8,29 @@ PROJECT_PICTURES := $(PROJECT_DIR)/PICS.BLB
 PROJECT_IMAGE := $(DIST_DIR)/$(PROJECT)/fd0.ndi
 # V6 has no v3-style status line, and the banner scrolls off before the first
 # prompt, so release/serial never survive on screen for the manifest check.
-# The --expect-at args pin the M2 boot layout (cells are 0-based col,row):
-# banner room/region on row 0, the game's text-only "Moves:" banner artifact
-# on row 1, a blank row in the banner/playfield gap, the room title inside the
-# 45x70 playfield inset at origin (5,5) + 1-col left margin (text col 6, with
-# blank gutter cols 0-5), and the prompt at the window bottom row 49.
-# M3 interim pins (Task 4: picture_data answers from PICS.PAK): the banner
-# now lays out from real picture metrics — "Banquet Hall ... Flatheadia" on
-# row 2, "Moves:  0 ... Score:   0" on row 3, the M2 "Moves:Sc1" garble is
-# gone — and the boot CLEAR-CRCNT newline storm self-limited (the countdown
-# is armed with a real picture height instead of -1), so boot needs no MORE
-# answers at all. The prompt sits at (18,41): the drop-cap margin is still
-# armed because the CR interrupt never fires — Task 6 releases it; Task 7
-# re-pins the final layout with border art.
-# Task 6: the CR interrupt fires and RESET-MARGIN releases the drop-cap
-# margins — the prompt lands at (11,34) inside the real 40x58 playfield the
-# game sizes from border-art metrics (move_window 0,11,12 in the trace).
+# The --expect-at args pin the V6 pixel-unit boot layout (cells are 0-based
+# col,row): the story sees a 320x200-unit screen with a 4x4 font, lays out the
+# banner from real picture metrics, and the text layer snaps those units back
+# to 80x50 cells at the VTEXT boundary. Small transparent inline pictures align
+# their visible art to the 4px text grid, so the story's own CR counts stay
+# intact; boot needs no MORE answers.
 PROJECT_SMOKE_ARGS := --generic-boot --no-status-line --skip-manifest-check \
-	--expect-at "9,2=>Banquet Hall" \
-	--expect-at "61,2=>Flatheadia" \
-	--expect-at "9,3=>Moves:  0" \
-	--expect-at "61,3=>Score:   0" \
-	--expect-at "11,34=>>" \
+	--expect-zork0-boot-gfx-replay \
+	--expect-at "8,1=>Banquet Hall" \
+	--expect-at "61,1=>Flatheadia" \
+	--expect-at "8,2=>Moves:  0" \
+	--expect-at "61,2=>Score:   0" \
+	--expect-at "10,33=>>" \
 	--expect-gfx-color "0,0=>06" \
-	--expect-gfx-color "44,44=>04" \
-	--expect-gfx-color "65,61=>04" \
-	--expect-gfx-color "44,84=>06"
+	--expect-gfx-color "12,34=>01" \
+	--expect-gfx-color "43,43=>0C" \
+	--expect-gfx-color "65,61=>0C" \
+	--expect-gfx-color "43,92=>0B" \
+	--expect-gfx-color "300,34=>01"
 # The gfx probes read picture pixels straight from the plane: title art
-# pic 5 at (0,0), border art pic 2 at cells (11,11) -> px (44,44), and the
-# per-refresh border pic \$D8 at px (44,84) — values derived from the blorb
-# PNGs through the packer's EGA quantizer.
+# pic 5 at (0,0), border art pic 2 at pixel (43,43), and the per-refresh
+# border pic \$D8 at px (43,92) — values derived from the blorb PNGs through
+# the packer's generated custom-palette quantizer.
 # The 65K-newline boot storm died with real picture metrics; 80M steps is
 # plenty for boot + three turns now.
 NOVAZ_SMOKE_MAX_STEPS ?= 80000000

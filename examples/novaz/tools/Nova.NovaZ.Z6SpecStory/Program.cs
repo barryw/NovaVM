@@ -31,6 +31,12 @@ const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x1600;                  // strings region;  packed (0x1600-0x400)/4
 
+static int CellUnit(int oneBasedCell) => (oneBasedCell - 1) * 4 + 1;
+static int CellCountUnits(int cells) => cells * 4;
+static Operand UnitOperand(int units) => units <= 0xFF ? Operand.Small(units) : Operand.Large(units);
+static Operand CellUnitOperand(int oneBasedCell) => UnitOperand(CellUnit(oneBasedCell));
+static Operand CellCountOperand(int cells) => UnitOperand(CellCountUnits(cells));
+
 (string outputPath, int version, bool mainReturns, string? fixture, string? picturesPakPath) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
@@ -265,10 +271,10 @@ static void EmitMainReturnsProgram(ZCode z)
 }
 
 // V6 colour fixture (M3 Task 2): set_colour drives the live text colour
-// through the segment's Z->EGA mapping, set_text_style derives bold/reverse
-// from the current colour pair, and the V6 boot default is EGA white-on-black
-// ($0F). Asserted by test-z6-colours via --expect-text-color (colour RAM
-// bytes, palette-mode independent).
+// through the segment's Z->EGA mapping, set_text_style derives bold from the
+// current colour pair and reverse from the text-attr plane. The V6 boot
+// default is EGA white-on-black ($0F). Asserted by test-z6-colours via
+// --expect-text-color/--expect-text-attr (palette-mode independent).
 static void EmitColoursProgram(ZCode z)
 {
     z.Byte(0); // locals count
@@ -285,7 +291,7 @@ static void EmitColoursProgram(ZCode z)
     z.Print("egaparch");                                      // -> F0
     z.NewLine();
     z.VarOp(17, Operand.Small(1));                            // reverse
-    z.Print("egarev");                                        // -> 0F
+    z.Print("egarev");                                        // colour F0, attr 02
     z.NewLine();
     z.VarOp(17, Operand.Small(0));
     z.Print("egaroman");                                      // -> F0
@@ -324,6 +330,8 @@ static void EmitSpecProgram(ZCode z)
     // (the M2 banner now owns cell 0,0).
     z.Call1S("routine_return_42", 0x11);
     z.AssertVarEquals(0x11, 42, "v6-call");
+    z.Call1S("routine_catch_throw", 0x11);
+    z.AssertVarEquals(0x11, 99, "catch-throw");
 
     // --- Task 6: V6 dispatch routing into the NOVAZ6 segment ---
     // set_window 0 (VAR:11): already current — must be a clean no-op.
@@ -335,18 +343,17 @@ static void EmitSpecProgram(ZCode z)
     z.AssertVarEquals(0x12, 1, "windprop-default");
     // picture_data N table ?(label) (EXT:6) against the synthetic PICS.PAK
     // on the spec image (pic 3 = 8x8 px, pic 7 = 6x10 px, release 7; see
-    // BuildSyntheticPicturesPak). Dimensions come back in CELLS — pixel dims
-    // divided by 4 and rounded UP, so layout reservations never overflow.
+    // BuildSyntheticPicturesPak). Dimensions come back in V6 units/pixels.
     z.ExtOpBranch(6, "pic3_known", branchIf: true, Operand.Small(3), Operand.Large(PicTable));
     z.Fail("pic3-branch");
     z.Label("pic3_known");
-    z.AssertWordEquals(PicTable, 0, 2, "pic3-h");
-    z.AssertWordEquals(PicTable, 1, 2, "pic3-w");
+    z.AssertWordEquals(PicTable, 0, 8, "pic3-h");
+    z.AssertWordEquals(PicTable, 1, 8, "pic3-w");
     z.ExtOpBranch(6, "pic7_known", branchIf: true, Operand.Small(7), Operand.Large(PicTable));
     z.Fail("pic7-branch");
     z.Label("pic7_known");
-    z.AssertWordEquals(PicTable, 0, 3, "pic7-h"); // ceil(10/4)
-    z.AssertWordEquals(PicTable, 1, 2, "pic7-w"); // ceil(6/4)
+    z.AssertWordEquals(PicTable, 0, 10, "pic7-h");
+    z.AssertWordEquals(PicTable, 1, 6, "pic7-w");
     // Unknown picture: writes NOTHING (the $BEEF poison survives), branch
     // false. Re-poison first — pic3/pic7 above overwrote the table.
     z.VarOp(1, Operand.Large(PicTable), Operand.Small(0), Operand.Large(0xBEEF));
@@ -517,6 +524,11 @@ static void EmitSpecProgram(ZCode z)
     z.AssertVarEquals(0x12, 80, "winsize-y");
     z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(3));
     z.AssertVarEquals(0x12, 120, "winsize-x");
+    // V6 window operand -3 means "current window". Zork Zero's hint UI asks
+    // for the current window height this way before doing arithmetic with it.
+    z.VarOp(11, Operand.Small(2));
+    z.ExtOpStore(19, 0x12, Operand.Large(0xFFFD), Operand.Small(2));
+    z.AssertVarEquals(0x12, 80, "windprop-current");
 
     // window_style 2 against prop 14: set, or, and-not, xor.
     z.ExtOp(18, Operand.Small(2), Operand.Small(0b1010), Operand.Small(0));
@@ -545,28 +557,28 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpStore(19, 0x12, Operand.Small(3), Operand.Small(11));
     z.AssertVarEquals(0x12, (5 << 8) | 4, "colour-rec");
 
-    // Units ARE cells: the header advertises an 80x50-unit screen with a
-    // 1x1 font (zstory.s), so every coordinate below is a 1-based text
-    // cell — exactly what Zork Zero computes and sends (capture finding 1).
+    // Units are gfx pixels: the header advertises a 320x200-unit screen with
+    // a 4x4 font (zstory.s). Most coordinates below target a specific text
+    // cell; CellUnitOperand converts that 1-based cell to a 1-based V6 unit.
     // V6 split_window is a pure table op (Zork Zero never calls it): window
-    // 1 y-size = 40, window 0 origin y = 41, y-size = 10.
+    // 1 y-size = 160 units, window 0 origin y = 161, y-size = 40 units.
     z.VarOp(10, Operand.Small(40));
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(2));
-    z.AssertVarEquals(0x12, 40, "split-w1size");
+    z.AssertVarEquals(0x12, CellCountUnits(40), "split-w1size");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(0));
-    z.AssertVarEquals(0x12, 41, "split-w0y");
+    z.AssertVarEquals(0x12, CellUnit(41), "split-w0y");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(2));
-    z.AssertVarEquals(0x12, 10, "split-w0size");
+    z.AssertVarEquals(0x12, CellCountUnits(10), "split-w0size");
 
-    // Zork Zero's real layout, verbatim (capture boot seqs 15-18): window 0
-    // = 45x70 playfield inset at (6,6), window 1 = top 5 rows full width.
+    // Zork Zero's real cell layout: window 0 = 45x70 playfield inset at
+    // cell (6,6), window 1 = top 5 rows full width.
     // These REPLACE the split geometry above — windows are vtext regions now.
-    z.ExtOp(16, Operand.Small(0), Operand.Small(6), Operand.Small(6));   // move_window 0,6,6
-    z.ExtOp(17, Operand.Small(0), Operand.Small(45), Operand.Small(70)); // window_size 0,45,70
-    z.ExtOp(16, Operand.Small(1), Operand.Small(1), Operand.Small(1));   // move_window 1,1,1
-    z.ExtOp(17, Operand.Small(1), Operand.Small(5), Operand.Small(80));  // window_size 1,5,80
+    z.ExtOp(16, Operand.Small(0), CellUnitOperand(6), CellUnitOperand(6));       // move_window 0,21,21
+    z.ExtOp(17, Operand.Small(0), CellCountOperand(45), CellCountOperand(70));   // window_size 0,180,280
+    z.ExtOp(16, Operand.Small(1), CellUnitOperand(1), CellUnitOperand(1));       // move_window 1,1,1
+    z.ExtOp(17, Operand.Small(1), CellCountOperand(5), CellCountOperand(80));    // window_size 1,20,320
     z.VarOp(11, Operand.Small(0));                          // set_window 0
-    z.VarOp(15, Operand.Small(1), Operand.Small(1));        // set_cursor 1,1
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));    // set_cursor 1,1
     z.Print("INSET");                                       // -> abs cell (col 5, row 5)
 
     // Banner separation: window 1 renders at the real screen top-left.
@@ -588,22 +600,23 @@ static void EmitSpecProgram(ZCode z)
     z.NewLine();
 
     // Cursor readback: set_cursor with no printing in between must read
-    // back exactly (cells, relative to the window; 13,17 is inside 45x70).
-    z.VarOp(15, Operand.Small(13), Operand.Small(17));      // set_cursor 13,17
+    // back exactly (units, relative to the window; cell 13,17 is inside
+    // 45x70).
+    z.VarOp(15, CellUnitOperand(13), CellUnitOperand(17));  // set_cursor 49,65
     z.VarOp(16, Operand.Large(CursorArray));                // get_cursor array
-    z.AssertWordEquals(CursorArray, 0, 13, "getcursor-y");
-    z.AssertWordEquals(CursorArray, 1, 17, "getcursor-x");
+    z.AssertWordEquals(CursorArray, 0, CellUnit(13), "getcursor-y");
+    z.AssertWordEquals(CursorArray, 1, CellUnit(17), "getcursor-x");
 
     // set_cursor on a NON-current window only updates the table.
-    z.VarOp(15, Operand.Small(29), Operand.Small(33), Operand.Small(4));
+    z.VarOp(15, CellUnitOperand(29), CellUnitOperand(33), Operand.Small(4));
     z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(4));
-    z.AssertVarEquals(0x12, 29, "setcursor-other-y");
+    z.AssertVarEquals(0x12, CellUnit(29), "setcursor-other-y");
     z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(5));
-    z.AssertVarEquals(0x12, 33, "setcursor-other-x");
+    z.AssertVarEquals(0x12, CellUnit(33), "setcursor-other-x");
 
     // M1 print markers (literal + packed string via S_O), now landing inside
     // the inset playfield: set_cursor 3,1 -> abs cell (col 5, row 7).
-    z.VarOp(15, Operand.Small(3), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(3), CellUnitOperand(1));
     z.Print("z6 m1 ");
     z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
     z.NewLine();
@@ -613,7 +626,7 @@ static void EmitSpecProgram(ZCode z)
     // banner row, directly above the playfield — must survive the playfield
     // scrolling below, rect-clipped.
     z.VarOp(11, Operand.Small(1));                          // set_window 1
-    z.VarOp(15, Operand.Small(5), Operand.Small(5));        // set_cursor 5,5 -> abs (4,4)
+    z.VarOp(15, CellUnitOperand(5), CellUnitOperand(5));    // set_cursor 17,17 -> abs (4,4)
     z.Print("SENT");
     z.VarOp(11, Operand.Small(0));                          // set_window 0; cursor rel (3,0)
 
@@ -658,32 +671,32 @@ static void EmitSpecProgram(ZCode z)
     // to window 0, then scroll window 3 by one cell while window 0 is live.
     // AA scrolls off, EE lands on row 12, the vacated bottom row (abs 13)
     // comes back blank. Amount 0 must be a clean no-op.
-    z.ExtOp(16, Operand.Small(3), Operand.Small(10), Operand.Small(76)); // move_window 3,10,76
-    z.ExtOp(17, Operand.Small(3), Operand.Small(5), Operand.Small(5));   // window_size 3,5,5
+    z.ExtOp(16, Operand.Small(3), CellUnitOperand(10), CellUnitOperand(76)); // move_window 3,37,301
+    z.ExtOp(17, Operand.Small(3), CellCountOperand(5), CellCountOperand(5)); // window_size 3,20,20
     z.VarOp(11, Operand.Small(3));                          // set_window 3
-    z.VarOp(15, Operand.Small(1), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));
     z.Print("AA");
-    z.VarOp(15, Operand.Small(2), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(2), CellUnitOperand(1));
     z.Print("BB");
-    z.VarOp(15, Operand.Small(3), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(3), CellUnitOperand(1));
     z.Print("CC");
-    z.VarOp(15, Operand.Small(4), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(4), CellUnitOperand(1));
     z.Print("DD");
-    z.VarOp(15, Operand.Small(5), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(5), CellUnitOperand(1));
     z.Print("EE");
     z.VarOp(11, Operand.Small(0));                          // back to window 0
-    z.ExtOp(20, Operand.Small(3), Operand.Small(1));        // scroll_window 3,1 (non-current)
+    z.ExtOp(20, Operand.Small(3), CellCountOperand(1));     // scroll_window 3,4 (non-current)
     z.ExtOp(20, Operand.Small(3), Operand.Small(0));        // amount 0: no-op
 
     // scroll_window on the CURRENT window: the game's page-reset (capture
-    // finding 4). Amount is in CELLS (units = cells). Content moves up 3
+    // finding 4). Amount is in units/pixels. Content moves up 3 cell
     // rows, 3 blank rows open at the bottom, and the cursor does NOT move
     // (it sits at rel 44,0 from scroll #3 above — Zork Zero always follows
     // with set_cursor): the prompt below must still land on the bare bottom
     // row. Final window 0 rows: rel 0 = F06, rel 38 = LONG, rel 39 = Z2,
     // rel 40 = "ZLAST ok", rel 41-44 blank (41 was blank already; 42-44
     // vacated and blanked by the scroll).
-    z.ExtOp(20, Operand.Small(0), Operand.Small(3));        // scroll_window 0,3
+    z.ExtOp(20, Operand.Small(0), CellCountOperand(3));     // scroll_window 0,12
 
     // Object-tree integrity across remove_obj of a MIDDLE child (the
     // zobject_remove previous-sibling scan path). Baked tree: 1 parents
@@ -714,22 +727,21 @@ static void EmitSpecProgram(ZCode z)
     // --- draw_picture / erase_picture blits. This block runs at the TAIL:
     // newline scrolls now move the gfx layer with the text (MCGA semantics),
     // so art drawn early would scroll away with the program's output. The
-    // px targets are unchanged; coords are window-0-relative to the final
-    // inset origin (6,6): rel = abs_cell - 4.
+    // px targets are unchanged; coords are window-0-relative V6 units.
     // Pic 3 at cells (20,10) -> px x 40-47, y 80-87, solid magenta ($5).
-    z.ExtOp(5, Operand.Small(3), Operand.Small(16), Operand.Small(6));
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(16), CellUnitOperand(6));
     // Pic 9 (4x4, E 1 1 E rows, transparent index 1) over its top-left
     // corner: opaque yellow edges land, the transparent middle keeps the
     // magenta underneath — the nibble-keyed unpack fixture.
-    z.ExtOp(5, Operand.Small(9), Operand.Small(16), Operand.Small(6));
+    z.ExtOp(5, Operand.Small(9), CellUnitOperand(16), CellUnitOperand(6));
     // Pic 7 (6x10 cyan) at cells (30,40) -> px x 160-165, y 120-129, then
     // erased: the rect refills with the window background (black).
-    z.ExtOp(5, Operand.Small(7), Operand.Small(26), Operand.Small(36));
-    z.ExtOp(7, Operand.Small(7), Operand.Small(26), Operand.Small(36));
+    z.ExtOp(5, Operand.Small(7), CellUnitOperand(26), CellUnitOperand(36));
+    z.ExtOp(7, Operand.Small(7), CellUnitOperand(26), CellUnitOperand(36));
     // Clipping: pic 3 at x cell 79 -> px 316-323 clips at 320 without
     // derailing; fully off-screen draw (y cell 59) is a clean no-op.
-    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(75));
-    z.ExtOp(5, Operand.Small(3), Operand.Small(56), Operand.Small(1));
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(1), CellUnitOperand(75));
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(56), CellUnitOperand(1));
 
     // MCGA-faithful compositing: drawing a picture overwrites the text
     // pixels under it, so the blit blanks the covered cells (space, bg 0 =
@@ -740,20 +752,20 @@ static void EmitSpecProgram(ZCode z)
     // blank under the draw; the uncovered control QQ must survive (it
     // proves window-4 printing landed at all; window 2 is unusable here —
     // the earlier set_margins fixture left it with margins 8+12).
-    z.ExtOp(16, Operand.Small(4), Operand.Small(31), Operand.Small(2)); // move_window 4 -> (31,2)
-    z.ExtOp(17, Operand.Small(4), Operand.Small(10), Operand.Small(4)); // window_size 4: 10x4
+    z.ExtOp(16, Operand.Small(4), CellUnitOperand(31), CellUnitOperand(2)); // move_window 4 -> (121,5)
+    z.ExtOp(17, Operand.Small(4), CellCountOperand(10), CellCountOperand(4)); // window_size 4: 40x16
     z.VarOp(11, Operand.Small(4));                                      // set_window 4
-    z.VarOp(15, Operand.Small(1), Operand.Small(1));                    // cursor home
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));                // cursor home
     z.Print("PP");
-    z.VarOp(15, Operand.Small(7), Operand.Small(1));                    // cursor row 7 -> abs row 36
+    z.VarOp(15, CellUnitOperand(7), CellUnitOperand(1));                // cursor row 7 -> abs row 36
     z.Print("QQ");
     // draw from window 4 itself (coords are window-relative; window 0 is
     // the inset here): rel (1,1) = window 4's origin = cell (1,30)
-    z.ExtOp(5, Operand.Small(3), Operand.Small(1), Operand.Small(1));
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(1), CellUnitOperand(1));
     // Art scrolls WITH the text (the MCGA framebuffer is one surface):
     // scroll_window 4 by one cell row moves QQ up to row 35 AND shifts the
     // picture's gfx rows up 4px — its old bottom rows go empty.
-    z.ExtOp(20, Operand.Small(4), Operand.Small(1));
+    z.ExtOp(20, Operand.Small(4), CellCountOperand(1));
     z.VarOp(11, Operand.Small(0));                                      // back to window 0
 
 
@@ -768,6 +780,19 @@ static void EmitSpecProgram(ZCode z)
     z.Label("routine_return_42");
     z.Byte(0);
     z.OneOp(11, Operand.Small(42));
+
+    z.Align(4);
+    z.Label("routine_catch_throw");
+    z.Byte(0);
+    z.ZeroOpStore(9, 0x12);        // catch -> g2
+    z.Call1N("routine_throw_99");
+    z.OneOp(11, Operand.Small(1)); // would fail the caller's assertion
+
+    z.Align(4);
+    z.Label("routine_throw_99");
+    z.Byte(0);
+    z.TwoOp(28, Operand.Small(99), Operand.Var(0x12));
+    z.OneOp(11, Operand.Small(2)); // unreachable if throw unwinds correctly
 
     // CR-interrupt routine: bump the fired counter (global var $60), no
     // printing (a printing CR routine would re-enter the newline path).

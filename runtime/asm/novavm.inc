@@ -648,6 +648,8 @@ ScrollCtlGfx                  = $02
 ScrollCtlText                 = $04
 PaletteModeC64                = $00
 PaletteModeEga                = $01
+PaletteModeCustom             = $02
+PaletteModeMask               = $03
 VramPlaneChar                 = $01
 VramPlaneColor                = $02
 VramPlaneGfx                  = $03
@@ -666,6 +668,7 @@ TextFlagReverse               = $01
 TextFlagReverseExplicit       = $02
 TextFlagFlash                 = $04
 TextAttrFlash                 = $01
+TextAttrReverse               = $02
 
 ; --- VGC core registers ($A000-$A00F) ---
 RegMode                       = $A000
@@ -710,6 +713,8 @@ RegIrqEnable                  = $A0F0
 RegIrqStatus                  = $A0F1
 RegIrqForce                   = $A0F2
 RegIrqValid                   = $A0F3
+RegPaletteIndex               = $A0F4
+RegPaletteData                = $A0F5
 IrqValidMask                  = $7F
 IrqVBlank                     = $01
 IrqCopper0                    = $02

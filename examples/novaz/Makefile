@@ -126,7 +126,7 @@ $(RUNTIME_ABI): $(RUNTIME) Makefile
 	    END { for (i = 1; i <= n; i++) if (!(want[i] in done)) { printf "runtime_abi: symbol %s missing from runtime.sym\n", want[i] > "/dev/stderr"; exit 1 } }' \
 	    $(BUILD_DIR)/runtime.sym > $@ || { rm -f $@; exit 1; }
 
-$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg src/zstory.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(RUNTIME_ABI) | $(BUILD_DIR)
+$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg src/zstory.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/pager.inc $(RUNTIME_ABI) | $(BUILD_DIR)
 	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/zvm6.o src/zvm6.s
 	$(LD65) -C src/novaz6.cfg -m $(BUILD_DIR)/novaz6.map -Ln $(BUILD_DIR)/novaz6.sym -o $@ $(BUILD_DIR)/zvm6.o
 
@@ -198,7 +198,7 @@ test-z6-colours: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_COLOURS
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_COLOURS_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6COLOUR" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_COLOURS_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_COLOURS_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "colour fixture done" \
 	    --expect-text-color "egadef=>0F" --expect-text-color "egagrnblu=>12" --expect-text-color "egawhite=>0F" \
-	    --expect-text-color "egaparch=>F0" --expect-text-color "egarev=>0F" --expect-text-color "egaroman=>F0" \
+	    --expect-text-color "egaparch=>F0" --expect-text-color "egarev=>F0" --expect-text-attr "egarev=>02" --expect-text-color "egaroman=>F0" --expect-text-attr "egaroman=>00" \
 	    --expect-text-color "egabold=>F8" --expect-text-color "egakeep=>F0" --expect-text-color "egaredkeep=>04" \
 	    --expect-text-color "egadflt=>0F"
 

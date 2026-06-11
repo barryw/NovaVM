@@ -1,3 +1,4 @@
+using System;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Rendering;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -94,15 +95,19 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void PaletteMode_UsesBitZeroOnly()
+    public void PaletteMode_UsesLowTwoBits()
     {
         _vgc.Write(VgcConstants.RegPaletteMode, VgcConstants.PaletteModeEga);
         Assert.AreEqual(VgcConstants.PaletteModeEga, _vgc.Read(VgcConstants.RegPaletteMode));
         Assert.AreEqual(VgcConstants.PaletteModeEga, _vgc.GetPaletteMode());
 
-        _vgc.Write(VgcConstants.RegPaletteMode, 0xFE);
-        Assert.AreEqual(VgcConstants.PaletteModeC64, _vgc.Read(VgcConstants.RegPaletteMode));
-        Assert.AreEqual(VgcConstants.PaletteModeC64, _vgc.GetPaletteMode());
+        _vgc.Write(VgcConstants.RegPaletteMode, VgcConstants.PaletteModeCustom);
+        Assert.AreEqual(VgcConstants.PaletteModeCustom, _vgc.Read(VgcConstants.RegPaletteMode));
+        Assert.AreEqual(VgcConstants.PaletteModeCustom, _vgc.GetPaletteMode());
+
+        _vgc.Write(VgcConstants.RegPaletteMode, 0xFF);
+        Assert.AreEqual(VgcConstants.PaletteModeMask, _vgc.Read(VgcConstants.RegPaletteMode));
+        Assert.AreEqual(VgcConstants.PaletteModeMask, _vgc.GetPaletteMode());
     }
 
     [TestMethod]
@@ -112,6 +117,34 @@ public class AvaloniaVgcTests
         Assert.AreEqual(0xFF0000AAu, ColorPalette.GetBgra(1, VgcConstants.PaletteModeEga));
         Assert.AreEqual(0xFFAA5500u, ColorPalette.GetBgra(6, VgcConstants.PaletteModeEga));
         Assert.AreEqual(0xFFFFFFFFu, ColorPalette.GetBgra(15, VgcConstants.PaletteModeEga));
+    }
+
+    [TestMethod]
+    public void CustomPalette_WritesRgbStreamAndAutoIncrements()
+    {
+        _vgc.Write(VgcConstants.RegPaletteIndex, 3); // palette entry 1, red component
+        _vgc.Write(VgcConstants.RegPaletteData, 0x12);
+        _vgc.Write(VgcConstants.RegPaletteData, 0x34);
+        _vgc.Write(VgcConstants.RegPaletteData, 0x56);
+
+        Assert.AreEqual(6, _vgc.Read(VgcConstants.RegPaletteIndex));
+        ReadOnlySpan<uint> custom = _vgc.GetCustomBgraPalette();
+        Assert.AreEqual(0xFF123456u, custom[1]);
+    }
+
+    [TestMethod]
+    public void ColorPalette_CustomModeUsesUploadedPalette()
+    {
+        _vgc.Write(VgcConstants.RegPaletteIndex, 3);
+        _vgc.Write(VgcConstants.RegPaletteData, 0x12);
+        _vgc.Write(VgcConstants.RegPaletteData, 0x34);
+        _vgc.Write(VgcConstants.RegPaletteData, 0x56);
+        _vgc.Write(VgcConstants.RegPaletteMode, VgcConstants.PaletteModeCustom);
+
+        ReadOnlySpan<uint> palette = ColorPalette.GetBgraPalette(
+            _vgc.GetPaletteMode(),
+            _vgc.GetCustomBgraPalette());
+        Assert.AreEqual(0xFF123456u, palette[1]);
     }
 
     [TestMethod]
@@ -530,6 +563,10 @@ public class AvaloniaVgcTests
     [TestMethod]
     public void OwnsAddress_RegPaletteMode_True() =>
         Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegPaletteMode));
+
+    [TestMethod]
+    public void OwnsAddress_RegPaletteData_True() =>
+        Assert.IsTrue(_vgc.OwnsAddress(VgcConstants.RegPaletteData));
 
     [TestMethod]
     public void OwnsAddress_RegScrollCtl_True() =>

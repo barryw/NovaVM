@@ -23,10 +23,11 @@ public interface IScreenInput
 ///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/text-attr memory
 ///   $A0E5        Display dimmer (0=black, 15=full brightness)
 ///   $A0E8        Graphics-plane transparent color (0-15)
-///   $A0E9        Fixed VGC palette mode (0=C64/Nova, 1=IBM EGA)
+///   $A0E9        VGC palette mode (0=C64/Nova, 1=IBM EGA, 2/3=custom RGB)
 ///   $A0EA        Scroll control (bit0=SCROLLX high, bit1=gfx, bit2=text)
 ///   $A0EB-$A0EC  High bytes for 16-sprite collision masks
 ///   $A0ED-$A0EF  Text ring scroll base/window
+///   $A0F4-$A0F5  Custom palette byte-index/data stream
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -83,6 +84,9 @@ public class VirtualGraphicsController : IBusDevice
     // Block graphics bitmap (320x200, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
+    private readonly byte[] _customPaletteRgb = new byte[VgcConstants.PaletteSize * 3];
+    private readonly uint[] _customBgraPalette = new uint[VgcConstants.PaletteSize];
+
     // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
 
@@ -100,6 +104,7 @@ public class VirtualGraphicsController : IBusDevice
     private byte _textReverseAttr;
     private byte _gfxTransparentColor;
     private byte _paletteMode;
+    private byte _paletteWriteIndex;
     private byte _scrollCtl;
     private ushort _collisionSpriteSprite;
     private ushort _collisionSpriteBackground;
@@ -153,6 +158,8 @@ public class VirtualGraphicsController : IBusDevice
         _textScrollRows = VgcConstants.ScreenRows;
         _gfxTransparentColor = 0;
         _paletteMode = VgcConstants.PaletteModeC64;
+        _paletteWriteIndex = 0;
+        ResetCustomPalette();
         _scrollCtl = VgcConstants.ScrollCtlDefault;
         _collisionSpriteSprite = 0;
         _collisionSpriteBackground = 0;
@@ -367,7 +374,7 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegPaletteMode)
         {
-            _paletteMode = (byte)(data & 0x01);
+            _paletteMode = (byte)(data & VgcConstants.PaletteModeMask);
             return;
         }
 
@@ -673,6 +680,8 @@ public class VirtualGraphicsController : IBusDevice
 
     public byte GetPaletteMode() => _paletteMode;
 
+    public ReadOnlySpan<uint> GetCustomBgraPalette() => _customBgraPalette;
+
     public bool IrqPending => (_irqStatus & _irqEnable) != 0;
     public bool IsCopperEnabled => _copperEnabled;
 
@@ -946,6 +955,8 @@ public class VirtualGraphicsController : IBusDevice
             VgcConstants.RegIrqEnable => _irqEnable,
             VgcConstants.RegIrqStatus => _irqStatus,
             VgcConstants.RegIrqValid => VgcConstants.IrqValidMask,
+            VgcConstants.RegPaletteIndex => _paletteWriteIndex,
+            VgcConstants.RegPaletteData => _customPaletteRgb[_paletteWriteIndex],
             _ => 0
         };
 
@@ -953,6 +964,14 @@ public class VirtualGraphicsController : IBusDevice
     {
         switch (address)
         {
+            case VgcConstants.RegPaletteIndex:
+                _paletteWriteIndex = (byte)(data % _customPaletteRgb.Length);
+                break;
+            case VgcConstants.RegPaletteData:
+                _customPaletteRgb[_paletteWriteIndex] = data;
+                UpdateCustomPaletteEntry(_paletteWriteIndex / 3);
+                _paletteWriteIndex = (byte)((_paletteWriteIndex + 1) % _customPaletteRgb.Length);
+                break;
             case VgcConstants.RegIrqEnable:
                 _irqEnable = (byte)(data & VgcConstants.IrqValidMask);
                 break;
@@ -964,6 +983,31 @@ public class VirtualGraphicsController : IBusDevice
                 break;
         }
     }
+
+    private void ResetCustomPalette()
+    {
+        for (int i = 0; i < VgcConstants.PaletteSize; i++)
+        {
+            var color = ColorPalette.Get(i, VgcConstants.PaletteModeC64);
+            int offset = i * 3;
+            _customPaletteRgb[offset] = color.R;
+            _customPaletteRgb[offset + 1] = color.G;
+            _customPaletteRgb[offset + 2] = color.B;
+            _customBgraPalette[i] = ToBgra(color.R, color.G, color.B);
+        }
+    }
+
+    private void UpdateCustomPaletteEntry(int index)
+    {
+        int offset = index * 3;
+        _customBgraPalette[index] = ToBgra(
+            _customPaletteRgb[offset],
+            _customPaletteRgb[offset + 1],
+            _customPaletteRgb[offset + 2]);
+    }
+
+    private static uint ToBgra(byte r, byte g, byte b) =>
+        0xFF000000u | ((uint)r << 16) | ((uint)g << 8) | b;
 
     // -------------------------------------------------------------------------
     // Command dispatch
