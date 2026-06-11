@@ -371,7 +371,8 @@ def test_fio_clear_error_contract() -> None:
         and "@wait:" in fio,
         "BASIC helper clears stale local FIO status first": "STA   FIO_ERRCODE" in fio and "STA   FIO_STATUS" in fio,
         "BASIC command token exists": "XTK_FIOCLR         = $71" in basic and '"FIOCLR",0' in basic,
-        "BASIC command dispatches fio_clear_error": "LAB_FIOCLR" in basic and "JSR   fio_clear_error" in basic,
+        "BASIC command dispatches fio_clear_error": "LAB_FIOCLR" in basic
+        and ("JSR   fio_clear_error" in basic or "JMP   fio_clear_error" in basic),
         "ESP dispatcher command ID matches": "CMD_CLEARERR = 0x27" in dispatcher_h,
         "ESP dispatcher handles clear command": "case CMD_CLEARERR: handle_clear_error(); break;" in dispatcher_cpp,
         "ESP clear command responds OK": "void FioDispatcher::handle_clear_error()" in dispatcher_cpp and "respond_ok();" in dispatcher_cpp,

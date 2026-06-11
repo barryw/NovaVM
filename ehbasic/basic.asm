@@ -9215,18 +9215,11 @@ basic_fio_copy_name:
       LDA   #FIO_RESULT_ERROR
       RTS
 
-; basic_fio_clear_error — inline reimplementation of the dropped fio.s
-;   fio_clear_error helper. Clears the host-visible FIO error/status latch.
-;   AUTOBOOT calls this so a missing AUTOBOOT file is not reported as a disk error.
-basic_fio_clear_error:
-      LDA   #FIO_ERR_NONE
-      STA   FIO_ERRCODE
-      LDA   #FIO_STATUS_OK
-      STA   FIO_STATUS
-      LDA   #FIO_CMD_CLEARERR
-      STA   FIO_CMD
-      LDA   #FIO_RESULT_OK
-      RTS
+; Emit only the shared FIO clear-error helper. The .refto makes the stripped
+; NDK fio.s include materialize fio_clear_error here without pulling in full
+; file I/O, while keeping BASIC a consumer of the shared implementation.
+      .refto fio_clear_error
+      .include "fio.s"
 
 ; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
 ;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.
@@ -9827,17 +9820,18 @@ LAB_ENVELOPE
 ; did for the graphics primitives (vgc.s) and Phase 2 for sprites (sprite.s).
 ; (extension.s keeps its own audio.s include for EXT_SFLOAD/PLAYING/MNOTE.)
 ;
-; fio.s is no longer compiled into the BASIC ROM either: every FILE keyword
-; (SAVE/LOAD/GSAVE/GLOAD/DEL/CD/MKDIR/RMDIR) now routes through the shared FILES
-; module via lib_call (FILE_*), exactly as Phase 1 did for graphics (vgc.s),
-; Phase 2 for sprites (sprite.s), Phase 3 for audio (audio.s) and Phase 4 for net
-; (nic.s). The two small fio.s helpers BASIC still needs OUTSIDE the module are
-; reimplemented inline above: basic_fio_copy_name (used by LAB_FIO_GETNAME, which
-; the audio keywords also rely on) and basic_fio_clear_error (used by AUTOBOOT).
+; Most fio.s entry points are no longer compiled into the BASIC ROM: every FILE
+; keyword (SAVE/LOAD/GSAVE/GLOAD/DEL/CD/MKDIR/RMDIR) routes through the shared
+; FILES module via lib_call (FILE_*), exactly as Phase 1 did for graphics
+; (vgc.s), Phase 2 for sprites (sprite.s), Phase 3 for audio (audio.s) and
+; Phase 4 for net (nic.s). BASIC still keeps basic_fio_copy_name inline because
+; LAB_FIO_GETNAME also feeds the audio keywords, but FIOCLR/AUTOBOOT use the
+; shared fio_clear_error helper from fio.s above.
 ; The FIO_ARG_* (zp) pointer-filename pseudo-registers and the FIO_NAME_LIMIT /
-; FIO_RESULT_* equates those inline helpers need come from fio.inc (header only, no
-; code), pulled up with the other lib_call includes at the top of this file; the
-; FIO_* MMIO register and command names come from nova.inc (also included above).
+; FIO_RESULT_* equates that inline helper needs come from fio.inc (header only,
+; no code), pulled up with the other lib_call includes at the top of this file;
+; the FIO_* MMIO register and command names come from nova.inc (also included
+; above).
 ; nic.s is no longer compiled into the BASIC ROM: every NET keyword (NOPEN/NCLOSE/
 ; NSEND/NRECV$) now routes through the shared NET module via lib_call (NET_*),
 ; exactly as Phase 1 did for graphics (vgc.s), Phase 2 for sprites (sprite.s) and
@@ -10947,7 +10941,7 @@ LAB_SFLOAD
 ; perform FIOCLR — clear FIO error/status latch
 
 LAB_FIOCLR
-      JMP   basic_fio_clear_error ; relocated from ext EXT_FIOCLR (direct, Group A)
+      JMP   fio_clear_error       ; shared fio.s helper, direct Group A command
 
 ; helper: evaluate filename expression and copy into FIO_NAME/FIO_NAMELEN
 ; on invalid/empty/too-long name, jumps directly to LAB_FIO_ERRIO
@@ -11247,7 +11241,7 @@ LAB_AUTOBOOT
       LDA   FIO_ERRCODE
       CMP   #FIO_ERR_NOTFOUND
       BNE   @ab_done              ; leave unexpected boot I/O errors visible
-      JSR   basic_fio_clear_error ; missing AUTOBOOT is normal, not a disk error
+      JSR   fio_clear_error       ; missing AUTOBOOT is normal, not a disk error
       BRA   @ab_done
 
 @ab_found
@@ -11304,7 +11298,6 @@ LAB_AUTOBOOT
 
 @ab_booting
       .byte "Booting...",$0D,$0A,$00
-
 
 ; character get subroutine for zero page
 

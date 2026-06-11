@@ -2,6 +2,7 @@ al 000000 .__ZP_FILEOFFS__
 al 000080 .__ZP_LAST__
 al 00001F .__ZP_SIZE__
 al 000080 .__ZP_START__
+al 00EA83 .fio_clear_error
 al 00FFF4 .LAB_nobyw
 al 00FFDD .LAB_stlp
 al 00FFD7 .RES_vec
@@ -332,7 +333,6 @@ al 00EABC .LAB_VSYNC
 al 00EAAE .@sxz
 al 00EA9E .basic_lib_arg_word
 al 00EA97 .@bz
-al 00EA83 .basic_fio_clear_error
 al 00EA6A .@copy
 al 00EA76 .@bad
 al 00EA5C .basic_fio_copy_name
@@ -1377,3 +1377,4 @@ al 00C002 .LAB_2D13
 al 00E98F .PG2_TABS
 al 00E994 .PG2_TABE
 al 00C000 .LAB_COLD
+al 00EA83 .fio_clear_error

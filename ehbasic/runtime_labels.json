@@ -1498,7 +1498,8 @@
       "requires": [],
       "kind": "routine",
       "symbol": "fio_clear_error",
-      "summary": "Clear the host-visible FIO status and error latch."
+      "summary": "Clear the host-visible FIO status and error latch.",
+      "address": "$EA83"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",

@@ -1033,6 +1033,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
+- Address: `$EA83`
 
 Outputs:
 - `A`: 0 on success.
