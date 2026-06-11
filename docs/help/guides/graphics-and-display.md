@@ -283,8 +283,9 @@ To test whether sprite 2 participated in any sprite-sprite collision, check bit
 
 NovaBASIC starts with a 16-color palette inspired by the Commodore 64.
 All fixed-index graphics, text, sprite, background, and border colors use
-the same indices. `RegPaletteMode` at `$A0E9` selects the fixed palette:
-write `0` for the default C64/Nova palette or `1` for IBM EGA colors.
+the same indices. `RegPaletteMode` at `$A0E9` selects the active palette:
+write `0` for the default C64/Nova palette, `1` for IBM EGA colors, or `2`
+after uploading a custom palette.
 
 | **Index** | **Color** | **Index** | **Color** |
 | --- | --- | --- | --- |
@@ -311,7 +312,14 @@ POKE $A0E9,1 : REM IBM EGA palette
 POKE $A0E9,0 : REM C64/Nova palette
 ```
 
-`RegPaletteMode` controls the fixed VGC palette used by text, bitmap graphics,
+Custom palettes contain 16 RGB entries, 48 bytes total, in byte order
+`R0,G0,B0,R1,G1,B1,...,R15,G15,B15`. Write `0` to `$A0F4`, then write the 48
+RGB bytes to `$A0F5`; each data write advances the palette index. Finally write
+`2` to `$A0E9` to select the custom palette. The current FPGA output uses the
+high nibble of each RGB byte, giving an RGB444 hardware palette with 4096
+possible visible colors.
+
+`RegPaletteMode` controls the VGC palette used by text, bitmap graphics,
 sprites, background, and border.
 
 ## The Copper (Raster Effects)

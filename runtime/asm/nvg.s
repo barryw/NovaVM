@@ -6,13 +6,14 @@ FIO_EMIT_ALL_RUNTIME = 1
 .endif
 .include "pager.s"
 .include "blitter.s"
+.include "vgc_palette.s"
 
 .ifndef NVG_IMPLEMENTATION_INCLUDED
 NVG_IMPLEMENTATION_INCLUDED = 1
 
       .segment "BSS"
 
-nvg_header:       .res NVG_HEADER_SIZE + NVG_PALETTE_BYTES
+nvg_header:       .res NVG_HEADER_SIZE
 nvg_base_l:       .res 1
 nvg_base_m:       .res 1
 nvg_base_h:       .res 1
@@ -304,28 +305,27 @@ nvg_load_native_palette:
       LDA   nvg_base_h
       ADC   #$00
       STA   PAGER_FILEH
-      LDA   #<(nvg_header+NVG_HEADER_SIZE)
+      LDA   #XRAM_NVG_STAGE_L
       STA   PAGER_ADDRL
-      LDA   #>(nvg_header+NVG_HEADER_SIZE)
+      LDA   #XRAM_NVG_STAGE_M
       STA   PAGER_ADDRM
-      STZ   PAGER_ADDRH
+      LDA   #XRAM_NVG_STAGE_H
+      STA   PAGER_ADDRH
       LDA   #NVG_PALETTE_BYTES
       STA   PAGER_LENL
       STZ   PAGER_LENH
-      LDA   #PAGER_TARGET_RAM
+      LDA   #PAGER_TARGET_XRAM
       STA   PAGER_TARGET
       JSR   pager_load_current_file_page
       BNE   @done
-      STZ   VGC_PALIDX
-      LDX   #$00
-@loop:
-      LDA   nvg_header+NVG_HEADER_SIZE,X
-      STA   VGC_PALDATA
-      INX
-      CPX   #NVG_PALETTE_BYTES
-      BNE   @loop
-      LDA   #VGC_PALMODE_CUSTOM
-      STA   VGC_PALETTE
+      LDA   #XRAM_NVG_STAGE_L
+      STA   XRAM_ADDRL
+      LDA   #XRAM_NVG_STAGE_M
+      STA   XRAM_ADDRM
+      LDA   #XRAM_NVG_STAGE_H
+      STA   XRAM_ADDRH
+      JSR   vgc_set_palette_custom_xram
+      BNE   @done
 @ok:
       LDA   #FIO_RESULT_OK
 @done:

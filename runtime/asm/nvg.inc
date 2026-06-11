@@ -9,13 +9,14 @@ NVG_INC_INCLUDED = 1
 .include "fio.inc"
 .include "pager.inc"
 .include "xram.inc"
+.include "vgc_palette.inc"
 
 NVG_MAGIC_0       = 'N'
 NVG_MAGIC_1       = 'V'
 NVG_MAGIC_2       = 'G'
 NVG_MAGIC_2_VER   = '2'
 NVG_HEADER_SIZE   = $10
-NVG_PALETTE_BYTES = $30
+NVG_PALETTE_BYTES = VGC_CUSTOM_PALETTE_BYTES
 NVG_GFX_STRIDE    = 320
 NVG_SCREEN_WIDTH  = 320
 NVG_SCREEN_HEIGHT = 200

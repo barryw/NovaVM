@@ -3021,6 +3021,13 @@ Issue a raw VGC command without waiting for completion.
 Inputs:
 - `A`: VGC command byte.
 
+## VGC.CUSTOM_PALETTE_BYTES
+
+Number of RGB bytes consumed by VGC.PALDATA for one full custom palette.
+
+- Kind: `const`
+- Symbol: `VGC_CUSTOM_PALETTE_BYTES`
+
 ## VGC.DISPLAY_OFF
 
 Blank VGC output while keeping video timing active.
@@ -3238,6 +3245,22 @@ Custom RGB palette data port; writes auto-increment VGC.PALIDX.
 - Symbol: `VGC_PALDATA`
 - Address: `$A0F5`
 
+## VGC.PALETTE_COLORS
+
+Number of color registers in a VGC custom palette.
+
+- Kind: `const`
+- Symbol: `VGC_PALETTE_COLORS`
+- Address: `$10`
+
+## VGC.PALETTE_RGB_STRIDE
+
+Number of bytes per custom palette entry: red, green, blue.
+
+- Kind: `const`
+- Symbol: `VGC_PALETTE_RGB_STRIDE`
+- Address: `$03`
+
 ## VGC.PALIDX
 
 Byte index into the custom RGB palette stream (0-47).
@@ -3350,6 +3373,39 @@ Set the active VGC graphics/text mode.
 Inputs:
 - `X`: Mode byte.
 
+## VGC.SET_PALETTE_C64
+
+Select the default Nova/C64-style fixed VGC palette.
+
+- Kind: `routine`
+- Symbol: `vgc_set_palette_c64`
+
+Outputs:
+- `A`: 0 on success.
+
+## VGC.SET_PALETTE_CUSTOM_XRAM
+
+Upload a 16-entry RGB888 custom VGC palette from XRAM and select it.
+
+- Kind: `routine`
+- Symbol: `vgc_set_palette_custom_xram`
+
+Inputs:
+- `XRAM_ADDRL/M/H`: Source address of 48 RGB bytes.
+
+Outputs:
+- `A`: 0 on success, 1 if the source address is outside XRAM.
+
+## VGC.SET_PALETTE_EGA
+
+Select the fixed IBM EGA VGC palette.
+
+- Kind: `routine`
+- Symbol: `vgc_set_palette_ega`
+
+Outputs:
+- `A`: 0 on success.
+
 ## VGC.UNPLOT
 
 Issue the VGC unplot command using VGC.P0..VGC.P3.
@@ -3362,6 +3418,20 @@ Requires:
 - `VGC_P1`
 - `VGC_P2`
 - `VGC_P3`
+
+## VGC.UPLOAD_PALETTE_RGB_XRAM
+
+Upload a 16-entry RGB888 custom VGC palette from XRAM.
+
+- Kind: `routine`
+- Symbol: `vgc_upload_palette_rgb_xram`
+
+Inputs:
+- `XRAM_ADDRL/M/H`: Source address of 48 RGB bytes.
+- `A`: Palette mode to select after upload.
+
+Outputs:
+- `A`: 0 on success, 1 if the source address is outside XRAM.
 
 ## VGC.VSYNC
 

@@ -672,8 +672,11 @@ def test_runtime_autoboot_contract() -> None:
     novaz_auto = read("examples/novaz/src/autoboot.s")
     novaz_runtime = read("examples/novaz/src/runtime.s")
     novaz_zstory = read("examples/novaz/src/zstory.s")
+    novaz_zvm6 = read("examples/novaz/src/zvm6.s")
     nvg_runtime = read("runtime/asm/nvg.s")
     nvg_inc = read("runtime/asm/nvg.inc")
+    vgc_palette_inc = read("runtime/asm/vgc_palette.inc")
+    vgc_palette = read("runtime/asm/vgc_palette.s")
     xram_inc = read("runtime/asm/xram.inc")
     type_text = debug.split("void DebugServer::cmdTypeText", 1)[1]
     type_text = type_text.split("void DebugServer::cmdReadScreen", 1)[0]
@@ -694,11 +697,34 @@ def test_runtime_autoboot_contract() -> None:
         "shared NVG library exposes native image loader": "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("ehbasic/Makefile")
         and ".export nvg_load" in nvg_runtime
         and ".export nvg_draw" in nvg_runtime,
+        "shared VGC palette library exposes fixed and custom palette helpers": "$(NOVA_ASM)/vgc_palette.inc $(NOVA_ASM)/vgc_palette.s" in read("ehbasic/Makefile")
+        and "VGC_CUSTOM_PALETTE_BYTES" in vgc_palette_inc
+        and ".global vgc_set_palette_c64" in vgc_palette_inc
+        and ".global vgc_set_palette_ega" in vgc_palette_inc
+        and ".global vgc_set_palette_custom_xram" in vgc_palette_inc
+        and "vgc_set_palette_c64:" in vgc_palette
+        and "LDA   #VGC_PALMODE_C64" in vgc_palette
+        and "vgc_set_palette_ega:" in vgc_palette
+        and "LDA   #VGC_PALMODE_EGA" in vgc_palette
+        and "vgc_set_palette_custom_xram:" in vgc_palette
+        and "LDA   #VGC_PALMODE_CUSTOM" in vgc_palette
+        and "vgc_upload_palette_rgb_xram:" in vgc_palette
+        and "STZ   VGC_PALIDX" in vgc_palette
+        and "STA   VGC_PALDATA" in vgc_palette
+        and "STA   VGC_PALETTE" in vgc_palette,
+        "NovaZ V6 uses shared VGC palette helpers": "JSR vgc_set_palette_ega" in novaz_zvm6
+        and "JSR vgc_set_palette_custom_xram" in novaz_zvm6
+        and "JSR vgc_upload_palette_rgb_xram" not in novaz_zvm6,
         "shared NVG library pages packed NVG2 through the blitter": "row-packed 4bpp pixels" in nvg_inc
         and "pager_load_current_file_page" in nvg_runtime
         and "blitter_start_gfx4_unpack" in nvg_runtime
         and "XRAM_NVG_STAGE_L" in nvg_runtime
         and "FIO_CMD_NVGLOAD" not in nvg_runtime,
+        "shared NVG loader uses shared VGC palette helper": ".include \"vgc_palette.s\"" in nvg_runtime
+        and "NVG_PALETTE_BYTES = VGC_CUSTOM_PALETTE_BYTES" in nvg_inc
+        and "JSR   vgc_set_palette_custom_xram" in nvg_runtime
+        and "STA   VGC_PALDATA" not in nvg_runtime
+        and "STA   VGC_PALETTE" not in nvg_runtime,
         "shared XRAM layout reserves non-overlapping runtime workspaces": "XRAM_USER_HEAP_PAGES = 1024" in xram_inc
         and "XRAM_NOVAZ_DYNAMIC_H = $04" in xram_inc
         and "XRAM_NOVAZ_CACHE_H   = $05" in xram_inc

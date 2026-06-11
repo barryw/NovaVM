@@ -74,7 +74,7 @@ $(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fi
 	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
 	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o
 
-$(RUNTIME): src/runtime.s src/runtime.cfg $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/overlay.inc $(NOVA_LIB)/overlay.s $(NOVA_LIB)/nvg.inc $(NOVA_LIB)/nvg.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s $(NOVA_LIB)/nui.inc $(NOVA_LIB)/nui.s | $(BUILD_DIR)
+$(RUNTIME): src/runtime.s src/runtime.cfg $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/overlay.inc $(NOVA_LIB)/overlay.s $(NOVA_LIB)/nvg.inc $(NOVA_LIB)/nvg.s $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s $(NOVA_LIB)/nui.inc $(NOVA_LIB)/nui.s | $(BUILD_DIR)
 	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/runtime.o src/runtime.s
 	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(RUNTIME_SYM) -o $@ $(BUILD_DIR)/runtime.o
 

@@ -13,6 +13,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/nic.inc $(NOVA_ASM)/nic.s \
 	$(NOVA_ASM)/gameserver.inc $(NOVA_ASM)/gameserver.s \
 	$(NOVA_ASM)/vgc.inc $(NOVA_ASM)/vgc.s \
+	$(NOVA_ASM)/vgc_palette.inc $(NOVA_ASM)/vgc_palette.s \
 	$(NOVA_ASM)/sprite.inc $(NOVA_ASM)/sprite.s \
 	$(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s \
 	$(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \

@@ -174,6 +174,60 @@ Foreground, background, and border helpers take their color in X.
       JSR   vgc_locate
 \end{lstlisting}
 
+\section{Palettes}
+
+The VGC is an indexed-color display. Text cells, bitmap pixels, sprites,
+background, foreground, and border registers store color indexes
+\novacode{0..15}. The active palette decides which RGB value each index
+displays.
+
+Nova provides three palette modes:
+
+\begin{description}
+\item[\novacode{VGC\_PALMODE\_C64}] The default Nova/C64-style fixed palette.
+\item[\novacode{VGC\_PALMODE\_EGA}] The IBM EGA 16-color fixed palette.
+\item[\novacode{VGC\_PALMODE\_CUSTOM}] A caller-supplied 16-color RGB palette.
+\end{description}
+
+Use \novacode{vgc\_palette.inc} for declarations and
+\novacode{vgc\_palette.s} for the helper routines. The fixed palette helpers
+return \novacode{A=0}:
+
+\begin{lstlisting}
+      JSR   vgc_set_palette_c64
+      JSR   vgc_set_palette_ega
+\end{lstlisting}
+
+A custom palette is exactly \novacode{VGC\_CUSTOM\_PALETTE\_BYTES} bytes: 16
+RGB entries in byte order \novacode{R0,G0,B0,R1,G1,B1,...,R15,G15,B15}. Callers
+may store full RGB888 values. Current FPGA video output uses the high nibble of
+each channel, so the visible hardware palette is RGB444, or 4096 possible
+colors. Emulators and future display paths may use more of the submitted RGB
+precision.
+
+The shared runtime ABI for asset-driven palettes is XRAM-based. Put the 48 RGB
+bytes in XRAM, point \novacode{XRAM\_ADDRL/M/H} at the first byte, and call
+\novacode{vgc\_set\_palette\_custom\_xram}. The helper resets
+\novacode{VGC\_PALIDX}, streams the bytes through \novacode{VGC\_PALDATA}, then
+selects \novacode{VGC\_PALMODE\_CUSTOM}.
+
+\begin{lstlisting}
+      LDA   #$00
+      STA   XRAM_ADDRL
+      LDA   #$20
+      STA   XRAM_ADDRM
+      LDA   #$04
+      STA   XRAM_ADDRH
+      JSR   vgc_set_palette_custom_xram
+      BNE   palette_error
+\end{lstlisting}
+
+Palette state is global to the display. Changing it affects text, graphics,
+sprites, background, and border together because all of those layers carry
+indexes, not RGB values. Applications that use custom asset palettes should
+restore the expected fixed or custom palette before returning to screens whose
+art was authored for another palette.
+
 \section{Off-Bus VGC Memory}
 
 Character RAM, color RAM, text attributes, graphics pixels, and sprite shapes

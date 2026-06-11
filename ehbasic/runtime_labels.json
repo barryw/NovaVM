@@ -2748,7 +2748,7 @@
     {
       "label": "NVG.ADDRH",
       "source": "../runtime/asm/nvg.inc",
-      "line": 30,
+      "line": 31,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2760,7 +2760,7 @@
     {
       "label": "NVG.ADDRL",
       "source": "../runtime/asm/nvg.inc",
-      "line": 25,
+      "line": 26,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2772,7 +2772,7 @@
     {
       "label": "NVG.DRAW",
       "source": "../runtime/asm/nvg.s",
-      "line": 69,
+      "line": 70,
       "inputs": [],
       "outputs": [
         {
@@ -2791,7 +2791,7 @@
     {
       "label": "NVG.DRAW_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 87,
+      "line": 88,
       "inputs": [],
       "outputs": [
         {
@@ -2815,7 +2815,7 @@
     {
       "label": "NVG.DRAW_NAMED",
       "source": "../runtime/asm/nvg.s",
-      "line": 141,
+      "line": 142,
       "inputs": [],
       "outputs": [
         {
@@ -2835,7 +2835,7 @@
     {
       "label": "NVG.DRAW_NAMED_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 157,
+      "line": 158,
       "inputs": [],
       "outputs": [
         {
@@ -2860,7 +2860,7 @@
     {
       "label": "NVG.FILEH",
       "source": "../runtime/asm/nvg.inc",
-      "line": 61,
+      "line": 62,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2872,7 +2872,7 @@
     {
       "label": "NVG.FILEL",
       "source": "../runtime/asm/nvg.inc",
-      "line": 51,
+      "line": 52,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2884,7 +2884,7 @@
     {
       "label": "NVG.FILEM",
       "source": "../runtime/asm/nvg.inc",
-      "line": 56,
+      "line": 57,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2896,7 +2896,7 @@
     {
       "label": "NVG.LOAD",
       "source": "../runtime/asm/nvg.s",
-      "line": 39,
+      "line": 40,
       "inputs": [],
       "outputs": [
         {
@@ -2915,7 +2915,7 @@
     {
       "label": "NVG.LOAD_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 57,
+      "line": 58,
       "inputs": [],
       "outputs": [
         {
@@ -2936,7 +2936,7 @@
     {
       "label": "NVG.LOAD_NAMED",
       "source": "../runtime/asm/nvg.s",
-      "line": 111,
+      "line": 112,
       "inputs": [],
       "outputs": [
         {
@@ -2956,7 +2956,7 @@
     {
       "label": "NVG.LOAD_NAMED_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 126,
+      "line": 127,
       "inputs": [],
       "outputs": [
         {
@@ -2978,7 +2978,7 @@
     {
       "label": "NVG.NAMELEN",
       "source": "../runtime/asm/nvg.inc",
-      "line": 35,
+      "line": 36,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2990,7 +2990,7 @@
     {
       "label": "NVG.NAMEPTR_H",
       "source": "../runtime/asm/nvg.inc",
-      "line": 45,
+      "line": 46,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3002,7 +3002,7 @@
     {
       "label": "NVG.NAMEPTR_L",
       "source": "../runtime/asm/nvg.inc",
-      "line": 40,
+      "line": 41,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4544,6 +4544,17 @@
       "summary": "Issue a raw VGC command without waiting for completion."
     },
     {
+      "label": "VGC.CUSTOM_PALETTE_BYTES",
+      "source": "../runtime/asm/vgc_palette.inc",
+      "line": 19,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "VGC_CUSTOM_PALETTE_BYTES",
+      "summary": "Number of RGB bytes consumed by VGC.PALDATA for one full custom palette."
+    },
+    {
       "label": "VGC.DISPLAY_OFF",
       "source": "../runtime/asm/vgc.s",
       "line": 172,
@@ -4854,6 +4865,30 @@
       "address": "$A0F5"
     },
     {
+      "label": "VGC.PALETTE_COLORS",
+      "source": "../runtime/asm/vgc_palette.inc",
+      "line": 9,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "VGC_PALETTE_COLORS",
+      "summary": "Number of color registers in a VGC custom palette.",
+      "address": "$10"
+    },
+    {
+      "label": "VGC.PALETTE_RGB_STRIDE",
+      "source": "../runtime/asm/vgc_palette.inc",
+      "line": 14,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "VGC_PALETTE_RGB_STRIDE",
+      "summary": "Number of bytes per custom palette entry: red, green, blue.",
+      "address": "$03"
+    },
+    {
       "label": "VGC.PALIDX",
       "source": "../runtime/asm/nova.inc",
       "line": 492,
@@ -5020,6 +5055,59 @@
       "summary": "Set the active VGC graphics/text mode."
     },
     {
+      "label": "VGC.SET_PALETTE_C64",
+      "source": "../runtime/asm/vgc_palette.s",
+      "line": 16,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_palette_c64",
+      "summary": "Select the default Nova/C64-style fixed VGC palette."
+    },
+    {
+      "label": "VGC.SET_PALETTE_CUSTOM_XRAM",
+      "source": "../runtime/asm/vgc_palette.s",
+      "line": 44,
+      "inputs": [
+        {
+          "name": "XRAM_ADDRL/M/H",
+          "description": "Source address of 48 RGB bytes."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 if the source address is outside XRAM."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_palette_custom_xram",
+      "summary": "Upload a 16-entry RGB888 custom VGC palette from XRAM and select it."
+    },
+    {
+      "label": "VGC.SET_PALETTE_EGA",
+      "source": "../runtime/asm/vgc_palette.s",
+      "line": 28,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_set_palette_ega",
+      "summary": "Select the fixed IBM EGA VGC palette."
+    },
+    {
       "label": "VGC.UNPLOT",
       "source": "../runtime/asm/vgc.s",
       "line": 360,
@@ -5034,6 +5122,31 @@
       "kind": "routine",
       "symbol": "vgc_unplot",
       "summary": "Issue the VGC unplot command using VGC.P0..VGC.P3."
+    },
+    {
+      "label": "VGC.UPLOAD_PALETTE_RGB_XRAM",
+      "source": "../runtime/asm/vgc_palette.s",
+      "line": 60,
+      "inputs": [
+        {
+          "name": "XRAM_ADDRL/M/H",
+          "description": "Source address of 48 RGB bytes."
+        },
+        {
+          "name": "A",
+          "description": "Palette mode to select after upload."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 if the source address is outside XRAM."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_upload_palette_rgb_xram",
+      "summary": "Upload a 16-entry RGB888 custom VGC palette from XRAM."
     },
     {
       "label": "VGC.VSYNC",

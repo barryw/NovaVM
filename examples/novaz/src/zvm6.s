@@ -49,7 +49,7 @@
 .include "zvm6.inc"
 .include "nova.inc"             ; VGC register equates (VGC_PALETTE)
 .include "xram.inc"             ; XRAM_ADDR*/XRAM_DATA pseudo-registers
-.include "vgc_palette.inc"      ; vgc_upload_palette_rgb_xram
+.include "vgc_palette.inc"      ; vgc_set_palette_* helpers
 .include "pager.inc"            ; PAGER_* args for the FIO XPAGE region loader
 .include "zstory.inc"           ; XRAM map (pics index/bounce regions)
 .include "runtime_abi.inc"      ; ROM ABI addresses; must follow zvm6.inc
@@ -604,8 +604,7 @@ nz6_reset_windows:
 ; RESET restores the power-on Nova palette before any non-V6 code runs.
 nz6_op_reset:
         JSR nz6_reset_windows
-        LDA #VGC_PALMODE_EGA            ; fallback for v1/no-palette packs
-        STA VGC_PALETTE
+        JSR vgc_set_palette_ega         ; fallback for v1/no-palette packs
         LDA #$02                        ; mode 2: text over gfx — pictures
         STA VGC_MODE                    ; show wherever cells keep the global
                                         ; background colour (mode-2 rule in
@@ -728,8 +727,7 @@ nz6_pics_preload:
         STA XRAM_ADDRM
         LDA #ZSTORY_XRAM_PICS_INDEX_H
         STA XRAM_ADDRH
-        LDA #VGC_PALMODE_CUSTOM
-        JSR vgc_upload_palette_rgb_xram
+        JSR vgc_set_palette_custom_xram
         BNE @done
 :
         LDA #1
