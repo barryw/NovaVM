@@ -35,7 +35,7 @@ RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
 RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version \
 	nz_screen_flush_word zvm_window_current zvm_clear_whole_screen \
 	vtext_clear_region vtext_set_cursor vtext_scroll_up VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
-	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style pager_load_file_page xram_read8 zstory_read8 zstory_write8 blitter_wait fio_copy_name fio_exec nz_call_z_routine nz_word_len nz_lf_scrolled
+	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style pager_load_file_page xram_read8 zstory_read8 zstory_write8 blitter_wait blitter_start_gfx4_unpack fio_copy_name fio_exec nz_call_z_routine nz_word_len nz_lf_scrolled
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4

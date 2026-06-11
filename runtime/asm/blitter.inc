@@ -10,8 +10,10 @@ BLITTER_RESULT_ERROR = $01
 
 .global blitter_copy
 .global blitter_fill
+.global blitter_gfx4_unpack
 .global blitter_start_copy
 .global blitter_start_fill
+.global blitter_start_gfx4_unpack
 .global blitter_wait
 
 .endif

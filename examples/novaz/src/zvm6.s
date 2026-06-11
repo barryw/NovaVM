@@ -2041,8 +2041,6 @@ nz6_ext_draw_picture:
         LDA nz6_blt_hclip
         STA BLT_HEIGHTL
         STZ BLT_HEIGHTH
-        LDA #BLT_MODE_GFX4_UNPACK
-        STA BLT_MODE_REG
         LDA nz6_pic_flags
         AND #NZ6_PIC_FLAG_TRANSPARENT
         BEQ @opaque_pic
@@ -2057,9 +2055,7 @@ nz6_ext_draw_picture:
         LDA #$FF
         STA BLT_CKEY
 @start_unpack:
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JSR blitter_wait
+        JSR blitter_start_gfx4_unpack
         BEQ :+
         RTS
 :

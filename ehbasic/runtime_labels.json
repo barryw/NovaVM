@@ -961,7 +961,7 @@
     {
       "label": "BLITTER.COPY",
       "source": "../runtime/asm/blitter.s",
-      "line": 20,
+      "line": 22,
       "inputs": [],
       "outputs": [
         {
@@ -994,7 +994,7 @@
     {
       "label": "BLITTER.FILL",
       "source": "../runtime/asm/blitter.s",
-      "line": 29,
+      "line": 31,
       "inputs": [],
       "outputs": [
         {
@@ -1020,9 +1020,43 @@
       "summary": "Start a rectangular blitter fill using destination, size, stride, and fill registers."
     },
     {
+      "label": "BLITTER.GFX4_UNPACK",
+      "source": "../runtime/asm/blitter.s",
+      "line": 47,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "BLT_SRCSPACE",
+        "BLT_DSTSPACE",
+        "BLT_SRCL",
+        "BLT_SRCM",
+        "BLT_SRCH",
+        "BLT_DSTL",
+        "BLT_DSTM",
+        "BLT_DSTH",
+        "BLT_WIDTHL",
+        "BLT_WIDTHH",
+        "BLT_HEIGHTL",
+        "BLT_HEIGHTH",
+        "BLT_SRCSTRL",
+        "BLT_SRCSTRH",
+        "BLT_DSTSTRL",
+        "BLT_DSTSTRH",
+        "BLT_CKEY"
+      ],
+      "kind": "routine",
+      "symbol": "blitter_gfx4_unpack",
+      "summary": "Unpack a row-packed 4bpp source image to the VGC gfx plane."
+    },
+    {
       "label": "BLITTER.START_COPY",
       "source": "../runtime/asm/blitter.s",
-      "line": 45,
+      "line": 56,
       "inputs": [],
       "outputs": [
         {
@@ -1038,7 +1072,7 @@
     {
       "label": "BLITTER.START_FILL",
       "source": "../runtime/asm/blitter.s",
-      "line": 57,
+      "line": 80,
       "inputs": [],
       "outputs": [
         {
@@ -1052,9 +1086,25 @@
       "summary": "Low-level blitter fill start. Call BLITTER.FILL for the public wrapper."
     },
     {
+      "label": "BLITTER.START_GFX4_UNPACK",
+      "source": "../runtime/asm/blitter.s",
+      "line": 68,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "blitter_start_gfx4_unpack",
+      "summary": "Low-level packed-4bpp-to-gfx start. Call BLITTER.GFX4_UNPACK for the public wrapper."
+    },
+    {
       "label": "BLITTER.WAIT",
       "source": "../runtime/asm/blitter.s",
-      "line": 69,
+      "line": 92,
       "inputs": [],
       "outputs": [
         {

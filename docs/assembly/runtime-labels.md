@@ -706,6 +706,35 @@ Requires:
 - `BLT_DSTSTRH`
 - `BLT_FILLVALUE`
 
+## BLITTER.GFX4_UNPACK
+
+Unpack a row-packed 4bpp source image to the VGC gfx plane.
+
+- Kind: `routine`
+- Symbol: `blitter_gfx4_unpack`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `BLT_SRCSPACE`
+- `BLT_DSTSPACE`
+- `BLT_SRCL`
+- `BLT_SRCM`
+- `BLT_SRCH`
+- `BLT_DSTL`
+- `BLT_DSTM`
+- `BLT_DSTH`
+- `BLT_WIDTHL`
+- `BLT_WIDTHH`
+- `BLT_HEIGHTL`
+- `BLT_HEIGHTH`
+- `BLT_SRCSTRL`
+- `BLT_SRCSTRH`
+- `BLT_DSTSTRL`
+- `BLT_DSTSTRH`
+- `BLT_CKEY`
+
 ## BLITTER.START_COPY
 
 Low-level blitter copy start. Call BLITTER.COPY for the public wrapper.
@@ -722,6 +751,16 @@ Low-level blitter fill start. Call BLITTER.FILL for the public wrapper.
 
 - Kind: `routine`
 - Symbol: `blitter_start_fill`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+## BLITTER.START_GFX4_UNPACK
+
+Low-level packed-4bpp-to-gfx start. Call BLITTER.GFX4_UNPACK for the public wrapper.
+
+- Kind: `routine`
+- Symbol: `blitter_start_gfx4_unpack`
 
 Outputs:
 - `A`: 0 on success, 1 on error.

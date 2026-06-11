@@ -13,8 +13,10 @@ BLITTER_IMPLEMENTATION_INCLUDED = 1
 
       .export blitter_copy
       .export blitter_fill
+      .export blitter_gfx4_unpack
       .export blitter_start_copy
       .export blitter_start_fill
+      .export blitter_start_gfx4_unpack
       .export blitter_wait
 
 ; @label BLITTER.COPY
@@ -42,6 +44,15 @@ blitter_fill:
       STZ   BLT_CKEY
       JMP   blitter_start_fill
 
+; @label BLITTER.GFX4_UNPACK
+; @kind routine
+; @symbol blitter_gfx4_unpack
+; @summary Unpack a row-packed 4bpp source image to the VGC gfx plane.
+; @requires BLT_SRCSPACE BLT_DSTSPACE BLT_SRCL BLT_SRCM BLT_SRCH BLT_DSTL BLT_DSTM BLT_DSTH BLT_WIDTHL BLT_WIDTHH BLT_HEIGHTL BLT_HEIGHTH BLT_SRCSTRL BLT_SRCSTRH BLT_DSTSTRL BLT_DSTSTRH BLT_CKEY
+; @out A: 0 on success, 1 on error.
+blitter_gfx4_unpack:
+      JMP   blitter_start_gfx4_unpack
+
 ; @label BLITTER.START_COPY
 ; @kind routine
 ; @symbol blitter_start_copy
@@ -50,6 +61,18 @@ blitter_fill:
 blitter_start_copy:
       STZ   BLT_MODE_REG
       STZ   BLT_CKEY
+      LDA   #BLT_CMD_START
+      STA   BLT_CMD_REG
+      JMP   blitter_wait
+
+; @label BLITTER.START_GFX4_UNPACK
+; @kind routine
+; @symbol blitter_start_gfx4_unpack
+; @summary Low-level packed-4bpp-to-gfx start. Call BLITTER.GFX4_UNPACK for the public wrapper.
+; @out A: 0 on success, 1 on error.
+blitter_start_gfx4_unpack:
+      LDA   #BLT_MODE_GFX4_UNPACK
+      STA   BLT_MODE_REG
       LDA   #BLT_CMD_START
       STA   BLT_CMD_REG
       JMP   blitter_wait
