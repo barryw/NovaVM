@@ -8,7 +8,7 @@ namespace e6502.Browser;
 
 public static class BrowserVm
 {
-    private const int BrowserCpuHz = 1_000_000;
+    private const int BrowserCpuHz = VgcConstants.DefaultCpuHz;
     private static bool _initialized;
 
     private static CompositeBusDevice? _bus;

@@ -31,6 +31,8 @@ public sealed class SidChip : IDisposable
     private float _prevBandPass;
     private float _prevLowPass;
 
+    public Action<ushort, byte>? RegisterWritten { get; set; }
+
     public SidChip(bool enableAudio = false, ushort baseAddress = 0xD400)
     {
         BaseAddress = baseAddress;
@@ -67,8 +69,11 @@ public sealed class SidChip : IDisposable
     public byte Read(ushort address) =>
         _registers[address - BaseAddress];
 
-    public void Write(ushort address, byte data) =>
+    public void Write(ushort address, byte data)
+    {
         _registers[address - BaseAddress] = data;
+        RegisterWritten?.Invoke(address, data);
+    }
 
     public void Reset()
     {

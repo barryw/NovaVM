@@ -110,6 +110,29 @@ public class WavetableSynthTests
     }
 
     [TestMethod]
+    public void NoBank_NoteOn_StillPublishesAudioEvent()
+    {
+        var synth = new WavetableSynth(enableAudio: false);
+        byte eventKind = 0;
+        byte eventVoice = 255;
+        ushort eventValue0 = 0;
+
+        synth.AudioEventWritten = (kind, voice, value0, _) =>
+        {
+            eventKind = kind;
+            eventVoice = voice;
+            eventValue0 = value0;
+        };
+
+        synth.NoteOn(2, 64, 90, 0);
+
+        Assert.AreEqual(WavetableSynth.AudioEventNoteOn, eventKind);
+        Assert.AreEqual((byte)2, eventVoice);
+        Assert.AreEqual(64, eventValue0 & 0xFF);
+        Assert.AreEqual(90, eventValue0 >> 8);
+    }
+
+    [TestMethod]
     public void ActiveVoiceMask_ReflectsPlayingVoices()
     {
         var synth = new WavetableSynth(enableAudio: false);

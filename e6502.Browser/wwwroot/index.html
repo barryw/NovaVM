@@ -3,37 +3,37 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nova VM — 6502 Emulator</title>
+    <title>Nova VM - 6502 Emulator</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background: #0a0a0a;
-            color: #ccc;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0b0d0c;
+            color: #d7d7cf;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             min-height: 100vh;
-            overflow: hidden;
+            overflow: auto;
         }
 
         #header {
             text-align: center;
-            padding: 12px 0 8px 0;
+            padding: 10px 0 8px 0;
         }
 
         #header h1 {
             font-size: 1.1rem;
             font-weight: 600;
-            color: #8cf;
-            letter-spacing: 0.05em;
+            color: #c7f0d8;
+            letter-spacing: 0.04em;
         }
 
         #header p {
             font-size: 0.75rem;
-            color: #666;
+            color: #74776f;
             margin-top: 2px;
         }
 
@@ -41,7 +41,7 @@
             position: relative;
             width: 720px;
             height: 480px;
-            border: 2px solid #333;
+            border: 2px solid #2d342f;
             border-radius: 4px;
             background: #000;
         }
@@ -59,7 +59,7 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: #8cf;
+            color: #c7f0d8;
             font-size: 0.9rem;
             z-index: 10;
         }
@@ -68,8 +68,8 @@
             display: inline-block;
             width: 16px;
             height: 16px;
-            border: 2px solid #333;
-            border-top-color: #8cf;
+            border: 2px solid #2d342f;
+            border-top-color: #c7f0d8;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
             vertical-align: middle;
@@ -82,43 +82,171 @@
             display: none;
             position: fixed;
             bottom: 24px;
-            background: #1a1a2e;
-            color: #8cf;
+            background: #121816;
+            color: #c7f0d8;
             padding: 10px 20px;
             border-radius: 6px;
             font-size: 0.85rem;
             cursor: pointer;
-            border: 1px solid #333;
+            border: 1px solid #344038;
             z-index: 100;
             transition: opacity 0.3s;
         }
 
         #focus-prompt:hover {
-            background: #252545;
+            background: #18211d;
         }
 
-        #footer {
-            text-align: center;
-            padding: 8px 0;
+        #workbench {
+            width: 720px;
+            display: grid;
+            gap: 8px;
+            padding-top: 8px;
+        }
+
+        .control-strip {
+            display: grid;
+            grid-template-columns: 94px 124px 104px 98px 1fr;
+            gap: 8px;
+            align-items: end;
+            padding: 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
+        .control-field {
+            display: grid;
+            gap: 4px;
+        }
+
+        .control-field.wide {
+            grid-template-columns: 1fr auto;
+            align-items: end;
+        }
+
+        label,
+        .field-label {
+            color: #8b948b;
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        select,
+        button,
+        input[type="file"]::file-selector-button {
+            min-height: 30px;
+            background: #090b0a;
+            color: #e5e3d6;
+            border: 1px solid rgba(167, 194, 172, 0.26);
+            border-radius: 4px;
+            font: inherit;
+            font-size: 0.72rem;
+        }
+
+        select {
+            padding: 0 8px;
+        }
+
+        button {
+            padding: 0 10px;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #d6d069;
+            border-color: #ece58a;
+            color: #191914;
+            font-weight: 700;
+        }
+
+        button:disabled,
+        select:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .check {
+            min-height: 30px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            color: #c0c4bb;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.72rem;
+        }
+
+        .media-row {
+            display: grid;
+            grid-template-columns: 86px 1fr auto auto;
+            gap: 8px;
+            align-items: center;
+            padding: 0 8px 8px 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            min-height: 30px;
+            color: #8b948b;
+            font: inherit;
             font-size: 0.7rem;
-            color: #444;
         }
 
-        #footer a {
-            color: #68a;
-            text-decoration: none;
+        #host-status {
+            min-height: 18px;
+            color: #9ca59b;
+            font-size: 0.68rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        #footer a:hover {
-            text-decoration: underline;
+        #metrics {
+            width: 720px;
+            padding: 6px 0 0 0;
+            color: #a1cfb1;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.68rem;
+            line-height: 1.25;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 760px) {
+            #screen-container,
+            #screen,
+            #workbench,
+            #metrics {
+                width: min(100vw - 16px, 720px);
+            }
+
+            #screen-container,
+            #screen {
+                height: auto;
+                aspect-ratio: 3 / 2;
+            }
+
+            .control-strip,
+            .media-row {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .control-field.wide,
+            #host-status {
+                grid-column: 1 / -1;
+            }
         }
     </style>
-
 </head>
 <body>
     <div id="header">
         <h1>Nova VM</h1>
-        <p>MOS 6502 Emulator &mdash; running in your browser via WebAssembly</p>
+        <p>MOS 6502 Emulator - running in your browser via WebAssembly</p>
     </div>
 
     <div id="screen-container">
@@ -128,16 +256,55 @@
         </div>
     </div>
 
+    <div id="workbench">
+        <div class="control-strip">
+            <div class="control-field">
+                <label for="core-select">Core</label>
+                <select id="core-select">
+                    <option value="rust">Rust</option>
+                    <option value="dotnet">.NET</option>
+                </select>
+            </div>
+            <div class="control-field">
+                <label for="runtime-select">Runtime</label>
+                <select id="runtime-select">
+                    <option value="basic">BASIC</option>
+                    <option value="logo">Logo</option>
+                    <option value="forth">Forth</option>
+                    <option value="pascal" disabled>Pascal</option>
+                    <option value="assembler" disabled>Assembler</option>
+                </select>
+            </div>
+            <div class="control-field">
+                <label for="speed-select">Speed</label>
+                <select id="speed-select">
+                    <option value="12000000">12 MHz</option>
+                    <option value="8000000">8 MHz</option>
+                    <option value="4000000">4 MHz</option>
+                    <option value="1000000">1 MHz</option>
+                </select>
+            </div>
+            <label class="check"><input id="autoboot-check" type="checkbox" checked> Autoboot</label>
+            <div class="control-field wide">
+                <button class="primary" id="reboot-btn">Reboot</button>
+                <button id="reload-btn">Reload Page</button>
+            </div>
+        </div>
+        <div class="media-row">
+            <span class="field-label">FD0</span>
+            <input id="fd0-file" type="file" accept=".ndi,.img,.dsk,.bin">
+            <button id="mount-fd0-btn">Mount</button>
+            <button id="unmount-fd0-btn">Unmount</button>
+            <div id="host-status">starting</div>
+        </div>
+    </div>
+
     <div id="focus-prompt">
         Click the screen, then type
     </div>
 
-    <div id="footer">
-        <a href="https://barrywalker.io">barrywalker.io</a> &mdash;
-        Built with .NET + WebAssembly
-    </div>
+    <div id="metrics"></div>
 
-    <!-- main.js starts the worker-hosted .NET WASM VM + canvas renderer -->
     <script type="module" src="./main.js"></script>
 </body>
 </html>

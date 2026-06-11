@@ -21,6 +21,17 @@ public sealed class WavetableSynth : IDisposable
     private readonly byte[] _latchPitchBendLo = new byte[VoiceCount];
     private readonly byte[] _latchPitchBendHi = new byte[VoiceCount];
 
+    public const byte AudioEventNoteOn = 1;
+    public const byte AudioEventNoteOff = 2;
+    public const byte AudioEventVolume = 3;
+    public const byte AudioEventPanning = 4;
+    public const byte AudioEventPitchBend = 5;
+    public const byte AudioEventAllNotesOff = 6;
+    public const byte AudioEventMasterVolume = 7;
+    public const byte AudioEventResetEffects = 8;
+
+    public Action<byte, byte, ushort, ushort>? AudioEventWritten { get; set; }
+
     // Instrument enumeration state
     private byte _enumBank, _enumProgram;
     private byte[] _enumName = new byte[29];
@@ -112,6 +123,11 @@ public sealed class WavetableSynth : IDisposable
         lock (_lock)
         {
             if ((uint)voice >= VoiceCount) return;
+            AudioEventWritten?.Invoke(
+                AudioEventNoteOn,
+                (byte)voice,
+                (ushort)((note & 0xFF) | ((velocity & 0xFF) << 8)),
+                (ushort)(instrument & 0xFFFF));
             if (_bank == null) return;
 
             // Resolve instrument: if high bits encode a bank, use bank+program lookup
@@ -201,6 +217,7 @@ public sealed class WavetableSynth : IDisposable
         lock (_lock)
         {
             if ((uint)voice >= VoiceCount) return;
+            AudioEventWritten?.Invoke(AudioEventNoteOff, (byte)voice, 0, 0);
             var v = _voices[voice];
             if (!v.Active) return;
 
@@ -223,20 +240,29 @@ public sealed class WavetableSynth : IDisposable
 
     public void SetVolume(int voice, byte volume)
     {
-        if ((uint)voice < VoiceCount)
-            _voices[voice].Volume = volume;
+        if ((uint)voice >= VoiceCount)
+            return;
+
+        _voices[voice].Volume = volume;
+        AudioEventWritten?.Invoke(AudioEventVolume, (byte)voice, volume, 0);
     }
 
     public void SetPanning(int voice, byte pan)
     {
-        if ((uint)voice < VoiceCount)
-            _voices[voice].Pan = pan;
+        if ((uint)voice >= VoiceCount)
+            return;
+
+        _voices[voice].Pan = pan;
+        AudioEventWritten?.Invoke(AudioEventPanning, (byte)voice, pan, 0);
     }
 
     public void SetPitchBend(int voice, ushort bend)
     {
-        if ((uint)voice < VoiceCount)
-            _voices[voice].PitchBend = bend;
+        if ((uint)voice >= VoiceCount)
+            return;
+
+        _voices[voice].PitchBend = bend;
+        AudioEventWritten?.Invoke(AudioEventPitchBend, (byte)voice, bend, 0);
     }
 
     public byte ActiveVoiceMask
@@ -453,6 +479,8 @@ public sealed class WavetableSynth : IDisposable
                 _voices[i].Region = null;
             }
         }
+
+        AudioEventWritten?.Invoke(AudioEventAllNotesOff, 0, 0, 0);
     }
 
     public byte ReadRegister(ushort address)
@@ -540,7 +568,12 @@ public sealed class WavetableSynth : IDisposable
         // Global registers
         if (address == VgcConstants.WtsReverbLevel) { ReverbLevel = value; return; }
         if (address == VgcConstants.WtsChorusLevel) { ChorusLevel = value; return; }
-        if (address == VgcConstants.WtsMasterVolume) { MasterVolume = value; return; }
+        if (address == VgcConstants.WtsMasterVolume)
+        {
+            MasterVolume = value;
+            AudioEventWritten?.Invoke(AudioEventMasterVolume, 0, value, 0);
+            return;
+        }
         if (address == VgcConstants.WtsCommand)
         {
             switch (value)
@@ -552,6 +585,7 @@ public sealed class WavetableSynth : IDisposable
                     ReverbLevel = 80;
                     ChorusLevel = 40;
                     MasterVolume = 255;
+                    AudioEventWritten?.Invoke(AudioEventResetEffects, 0, 0, 0);
                     break;
             }
             return;

@@ -56,6 +56,7 @@ public static partial class DirectCanvas
     private static int _bootCpuHz;
     private static int _cursorCounter;
     private static bool _basicReady;
+    private static long _executedCyclesSinceLastRead;
 
     public static void Initialize(
         VirtualGraphicsController vgc,
@@ -106,15 +107,23 @@ public static partial class DirectCanvas
                 ? _bootCpuHz
                 : promptInputMode ? _promptCpuHz : _programCpuHz;
             int targetCycles = Math.Max(1, (int)Math.Min(int.MaxValue, (long)targetHz * Math.Max(1, budgetMs) / 1000));
-            int instructions = RunCpu(targetCycles, promptInputMode ? budgetMs : 0);
+            int executedCycles = RunCpu(targetCycles, promptInputMode ? budgetMs : 0);
 
             if (_vgc != null && !_basicReady)
                 _basicReady = DetectReadyPrompt(_vgc);
 
-            return instructions;
+            return executedCycles;
         }
 
         return 0;
+    }
+
+    [JSExport]
+    public static double DrainExecutedCycles()
+    {
+        long cycles = _executedCyclesSinceLastRead;
+        _executedCyclesSinceLastRead = 0;
+        return cycles;
     }
 
     [JSExport]
@@ -175,6 +184,7 @@ public static partial class DirectCanvas
         long maxSliceTicks = limitByTime
             ? Stopwatch.Frequency * maxMilliseconds / 1000
             : long.MaxValue;
+        int executedCycles = 0;
         int instructions = 0;
 
         while (remaining > 0)
@@ -192,6 +202,7 @@ public static partial class DirectCanvas
                 cpu.IrqWaiting = true;
 
             remaining -= cycles;
+            executedCycles += cycles;
             instructions++;
             if (limitByTime &&
                 (instructions & 0x1FF) == 0 &&
@@ -201,7 +212,8 @@ public static partial class DirectCanvas
             }
         }
 
-        return instructions;
+        _executedCyclesSinceLastRead += executedCycles;
+        return executedCycles;
     }
 
     private static void RenderFramebuffer()

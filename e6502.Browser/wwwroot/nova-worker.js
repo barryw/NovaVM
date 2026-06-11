@@ -11,11 +11,11 @@ const TEXT_ROW_BYTES = TEXT_WIDTH * TEXT_ROW_HEIGHT * 4;
 const TEXT_SCREEN_BYTES = TEXT_WIDTH * TEXT_HEIGHT * 4;
 const params = new URLSearchParams(self.location.search);
 const RENDER_HZ = readNumberParam("renderHz", 30, 1, 60);
-const PROMPT_MS = readNumberParam("promptMs", 2, 1, 20);
-const PROGRAM_MS = readNumberParam("programMs", 25, 1, 100);
+const PROMPT_MS = readNumberParam("promptMs", 33, 1, 100);
+const PROGRAM_MS = readNumberParam("programMs", 33, 1, 100);
 const BOOT_MS = readNumberParam("bootMs", 33, 1, 100);
-const PROMPT_CPU_HZ = readNumberParam("promptHz", 1000000, 100000, 12000000);
-const PROGRAM_CPU_HZ = readNumberParam("programHz", 8000000, 100000, 12000000);
+const PROMPT_CPU_HZ = readNumberParam("promptHz", 12000000, 100000, 12000000);
+const PROGRAM_CPU_HZ = readNumberParam("programHz", 12000000, 100000, 12000000);
 const BOOT_CPU_HZ = readNumberParam("bootHz", 12000000, 100000, 12000000);
 const TARGET_FRAME_MS = 1000 / RENDER_HZ;
 
@@ -26,9 +26,16 @@ let textRowImageData = null;
 let runCpuSlice = null;
 let renderFrame = null;
 let renderPacket = null;
+let drainExecutedCycles = null;
 let queueKey = null;
 let queueText = null;
+let drainAudioEvents = null;
+let getAudioCpuHz = null;
+let setAudioEnabled = null;
+let audioEnabled = false;
 let running = false;
+let statsCycles = 0;
+let statsLastMs = 0;
 
 self.onmessage = async event => {
     const message = event.data || {};
@@ -44,6 +51,12 @@ self.onmessage = async event => {
         case "text":
             if (queueText && message.text) {
                 queueText(message.text);
+            }
+            break;
+        case "audioEnable":
+            audioEnabled = true;
+            if (setAudioEnabled) {
+                setAudioEnabled(true);
             }
             break;
     }
@@ -75,9 +88,18 @@ async function initialize(canvas) {
         runCpuSlice = directCanvas.RunCpuSlice;
         renderFrame = directCanvas.Render;
         renderPacket = directCanvas.RenderPacket;
+        drainExecutedCycles = directCanvas.DrainExecutedCycles;
         directCanvas.ConfigureCpuHz(PROMPT_CPU_HZ, PROGRAM_CPU_HZ, BOOT_CPU_HZ);
         queueKey = exports.e6502.Browser.BrowserInput.QueueKey;
         queueText = exports.e6502.Browser.BrowserInput.QueueText;
+        const browserAudio = exports.e6502.Browser.Audio?.BrowserAudio;
+        if (browserAudio) {
+            drainAudioEvents = browserAudio.DrainEvents;
+            getAudioCpuHz = browserAudio.GetCpuHz;
+            setAudioEnabled = browserAudio.SetEnabled;
+            setAudioEnabled(false);
+            postMessage({ type: "audioConfig", cpuHz: getAudioCpuHz() });
+        }
 
         if (!runCpuSlice || !renderFrame) {
             throw new Error("DirectCanvas worker exports are unavailable");
@@ -85,6 +107,7 @@ async function initialize(canvas) {
 
         postMessage({ type: "ready" });
         running = true;
+        statsLastMs = performance.now();
         setTimeout(cpuLoop, 0);
         setTimeout(renderLoop, 0);
     } catch (error) {
@@ -96,7 +119,10 @@ function cpuLoop() {
     if (!running || !runCpuSlice) return;
 
     try {
-        runCpuSlice(PROMPT_MS, PROGRAM_MS, BOOT_MS);
+        const cycles = runCpuSlice(PROMPT_MS, PROGRAM_MS, BOOT_MS);
+        statsCycles += Number(cycles) || 0;
+        flushStats();
+        flushAudioEvents();
     } catch (error) {
         running = false;
         postMessage({ type: "error", message: formatError(error) });
@@ -104,6 +130,37 @@ function cpuLoop() {
     }
 
     setTimeout(cpuLoop, 0);
+}
+
+function flushStats() {
+    const now = performance.now();
+    const elapsed = now - statsLastMs;
+    if (elapsed < 1000) return;
+
+    const drained = drainExecutedCycles ? Number(drainExecutedCycles()) || 0 : 0;
+    const cycles = drained > 0 ? drained : statsCycles;
+    const mhz = cycles / elapsed / 1000;
+    postMessage({
+        type: "perf",
+        mhz,
+        cycles,
+        elapsedMs: elapsed,
+        promptHz: PROMPT_CPU_HZ,
+        programHz: PROGRAM_CPU_HZ,
+        bootHz: BOOT_CPU_HZ
+    });
+
+    statsCycles = 0;
+    statsLastMs = now;
+}
+
+function flushAudioEvents() {
+    if (!audioEnabled || !drainAudioEvents) return;
+
+    const events = drainAudioEvents();
+    if (events && events.length > 0) {
+        postMessage({ type: "audioEvents", events });
+    }
 }
 
 function renderLoop() {

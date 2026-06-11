@@ -2,6 +2,7 @@ namespace e6502.Avalonia.Hardware;
 
 using System.Diagnostics;
 using System.Reflection;
+using e6502.Browser.Audio;
 using e6502.Storage;
 using KDS.e6502;
 
@@ -30,6 +31,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly int _cpuHz;
     private readonly int _frameRateHz;
     private long _frameNumeratorAccumulator;
+    private long _totalCycles;
     private long _totalFrames;
     private long _lastMusicWallTick;
     private double _musicFrameAccum;
@@ -79,6 +81,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _sid = new SidChip(enableAudio: false);
         _sid2 = new SidChip(enableAudio: false, baseAddress: 0xD420);
         _wts = new WavetableSynth(enableAudio: false);
+        BrowserAudio.Configure(_cpuHz);
+        _sid.RegisterWritten = (address, value) =>
+            BrowserAudio.QueueSidWrite(_totalCycles, 0, _sid.BaseAddress, address, value);
+        _sid2.RegisterWritten = (address, value) =>
+            BrowserAudio.QueueSidWrite(_totalCycles, 1, _sid2.BaseAddress, address, value);
+        _wts.AudioEventWritten = (eventKind, voice, value0, value1) =>
+            BrowserAudio.QueueWtsEvent(_totalCycles, eventKind, voice, value0, value1);
         _sidPlayer = new SidPlayer(this);
         _musicEngine = new MusicEngine(this);
         _midiPlayback = new MidiPlayback(_musicEngine, _frameRateHz);
@@ -375,6 +384,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             if (_vgc.SysResetRequested)
             {
                 _vgc.SysResetRequested = false;
+                BrowserAudio.QueueReset(_totalCycles);
                 _midiPlayback.Stop();
                 _musicEngine.MusicReset();
                 _wts.AllNotesOff();
@@ -405,6 +415,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     {
         if (cycles <= 0) return;
 
+        _totalCycles += cycles;
         _timer.AdvanceCycles(cycles);
         _dma.AdvanceCycles(cycles);
         _blitter.AdvanceCycles(cycles);
