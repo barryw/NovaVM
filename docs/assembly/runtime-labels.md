@@ -1047,7 +1047,7 @@ Host command that streams a 16K file into the primary runtime ROM bank. Callers 
 
 ## FIO.CMD_NVGLOAD
 
-Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
+Host command that decodes a native packed NVG2 file into the graphics bitmap plane.
 
 - Kind: `const`
 - Symbol: `FIO_CMD_NVGLOAD`
@@ -1887,9 +1887,101 @@ Low byte of the graphics bitmap destination offset for NVG.LOAD_AT.
 - Symbol: `NVG_ADDRL`
 - Address: `$B9AB`
 
+## NVG.DRAW
+
+Draw FIO.NAME as an NVG image into graphics bitmap offset 0 without clearing.
+
+- Kind: `routine`
+- Symbol: `nvg_draw`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
+
+## NVG.DRAW_AT
+
+Draw FIO.NAME as an NVG image into graphics bitmap offset NVG.ADDRL/H without clearing.
+
+- Kind: `routine`
+- Symbol: `nvg_draw_at`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
+- `NVG_ADDRL`
+- `NVG_ADDRH`
+- `NVG_FILEL`
+- `NVG_FILEM`
+- `NVG_FILEH`
+
+## NVG.DRAW_NAMED
+
+Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at offset 0 without clearing.
+
+- Kind: `routine`
+- Symbol: `nvg_draw_named`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NVG_NAMELEN`
+- `NVG_NAMEPTR_L`
+- `NVG_NAMEPTR_H`
+
+## NVG.DRAW_NAMED_AT
+
+Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at NVG.ADDRL/H without clearing.
+
+- Kind: `routine`
+- Symbol: `nvg_draw_named_at`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NVG_NAMELEN`
+- `NVG_NAMEPTR_L`
+- `NVG_NAMEPTR_H`
+- `NVG_ADDRL`
+- `NVG_ADDRH`
+- `NVG_FILEL`
+- `NVG_FILEM`
+- `NVG_FILEH`
+
+## NVG.FILEH
+
+High byte of the source image offset inside the current NVG file.
+
+- Kind: `zp`
+- Symbol: `NVG_FILEH`
+- Address: `$2D`
+
+## NVG.FILEL
+
+Low byte of the source image offset inside the current NVG file.
+
+- Kind: `zp`
+- Symbol: `NVG_FILEL`
+- Address: `$2B`
+
+## NVG.FILEM
+
+Middle byte of the source image offset inside the current NVG file.
+
+- Kind: `zp`
+- Symbol: `NVG_FILEM`
+- Address: `$2C`
+
 ## NVG.LOAD
 
-Clear graphics bitmap memory, then decode FIO.NAME as an NVG1 file into graphics bitmap offset 0.
+Load FIO.NAME as an NVG image into graphics bitmap offset 0.
 
 - Kind: `routine`
 - Symbol: `nvg_load`
@@ -1903,7 +1995,7 @@ Requires:
 
 ## NVG.LOAD_AT
 
-Clear graphics bitmap memory, then decode FIO.NAME as an NVG1 file into graphics bitmap offset NVG.ADDRL/H.
+Load FIO.NAME as an NVG image into graphics bitmap offset NVG.ADDRL/H.
 
 - Kind: `routine`
 - Symbol: `nvg_load_at`
@@ -1919,7 +2011,7 @@ Requires:
 
 ## NVG.LOAD_NAMED
 
-Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then clear graphics bitmap memory and decode the NVG1 file at offset 0.
+Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at offset 0.
 
 - Kind: `routine`
 - Symbol: `nvg_load_named`
@@ -1934,7 +2026,7 @@ Requires:
 
 ## NVG.LOAD_NAMED_AT
 
-Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then clear graphics bitmap memory and decode the NVG1 file at NVG.ADDRL/H.
+Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at NVG.ADDRL/H.
 
 - Kind: `routine`
 - Symbol: `nvg_load_named_at`
@@ -2036,6 +2128,29 @@ Low byte of transfer length.
 - Kind: `zp`
 - Symbol: `PAGER_LENL`
 - Address: `$26`
+
+## PAGER.LOAD_CURRENT_FILE_PAGE
+
+Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR.
+
+- Kind: `routine`
+- Symbol: `pager_load_current_file_page`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `PAGER_FILEL`
+- `PAGER_FILEM`
+- `PAGER_FILEH`
+- `PAGER_TARGET`
+- `PAGER_ADDRL`
+- `PAGER_ADDRM`
+- `PAGER_ADDRH`
+- `PAGER_LENL`
+- `PAGER_LENH`
+- `FIO_NAME`
+- `FIO_NAMELEN`
 
 ## PAGER.LOAD_FILE_PAGE
 

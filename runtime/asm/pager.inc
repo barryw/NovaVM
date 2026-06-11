@@ -91,4 +91,7 @@ PAGER_TARGET_RAM  = $01
 ; @summary PAGER.TARGET value for VGC memory destinations.
 PAGER_TARGET_VGC  = $02
 
+.global pager_load_file_page
+.global pager_load_current_file_page
+
 .endif

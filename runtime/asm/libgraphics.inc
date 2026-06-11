@@ -437,23 +437,14 @@ GFN_MS_COMMIT_ONE  = $8B  ; (handle:ARG0)            -> A; msprite_commit_one
 ;     LERR_FILE_FAIL, A==0 -> OK; A is also published to LIB_RESULT byte 0.
 ;
 ;  3. NVG image load into the gfx plane (nvg.s nvg_load / nvg_load_at /
-;     nvg_load_named / nvg_load_named_at). nvg_load(_at) read the filename from
-;     FIO_NAME/FIO_NAMELEN; the _named variants read it from the FIO_ARG_NAME*
-;     ZP cells and self-copy. All four clear the gfx plane then decode the file
-;     via FIO_CMD_NVGLOAD (host-side NVG1 decoder) and return A=0/1. The _AT
-;     variants take a destination offset in NVG_ADDRL/H (= FIO_GADDRL/H). Every
+;     nvg_load_named / nvg_load_named_at). XPAGE reads the packed 4bpp NVG2
+;     payload into XRAM, then the blitter unpacks it into the gfx plane. Every
 ;     NVGload wrapper takes ARG0 = BYTES filename; the _AT/_NAMED_AT variants
-;     additionally take a 16-bit dest offset in ARG1. Result A!=0 ->
+;     additionally take a 16-bit destination offset in ARG1. Result A!=0 ->
 ;     LERR_IMAGE_FAIL, A==0 -> OK; A is also published to LIB_RESULT byte 0.
-;
-;     NVGload HARDWARE effect is host-decoder + real-file dependent (no NVG1
-;     fixture is decodable in the unit-test harness), so these are proven on the
-;     loader axis (dispatch + register marshalling + A=error mapping for the
-;     missing-file path) only. MEMREAD/MEMWRITE/VPEEK/VPOKE and GSAVE/GLOAD are
-;     proven end-to-end against the real VGC/FileIoController on Axis 2.
 GFX_MEMSPACE_GFX = $03      ; VGC_PLANE_GFX — VPEEK/VPOKE fixed space
 LERR_FILE_FAIL   = $86      ; fio_gsave/gload returned A=1 (FIO error / bad geometry)
-LERR_IMAGE_FAIL  = $87      ; nvg_load* returned A=1 (host decode / missing file)
+LERR_IMAGE_FAIL  = $87      ; nvg_load* returned A=1 (decode / missing file)
 
 ; Layouts (ARGn low word unless noted; BYTES args pack ptr16 low / len16 high):
 GFN_MEMREAD          = $A0  ; (space:ARG0, addr:ARG1) reporter -> RESULT = byte; vgc_mem_read

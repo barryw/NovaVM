@@ -35,7 +35,7 @@ Useful tools exposed by the server:
 - `novadraw_flood_fill`, `novadraw_clear_region`, `novadraw_replace_color`: touch up existing art.
 - `novadraw_rename_image`, `novadraw_duplicate_image`, `novadraw_select_image`: manage project images.
 - `novadraw_set_backdrop_image`: embed a PNG/JPEG as a fit-to-canvas tracing backdrop.
-- `novadraw_export_nvg`: export a 320x200 project image as Nova NVG1.
+- `novadraw_export_nvg`: export a 320x200 project image as native Nova NVG.
 
 ## Live Reload
 

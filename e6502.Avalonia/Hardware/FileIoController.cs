@@ -1575,18 +1575,40 @@ public sealed partial class FileIoController
     private bool DecodeNvgToGraphics(byte[] data, byte space, int dest, out int pixelsWritten)
     {
         pixelsWritten = 0;
-        if (data.Length < 12 ||
+        if (data.Length < 16 ||
             data[0] != (byte)'N' ||
             data[1] != (byte)'V' ||
             data[2] != (byte)'G' ||
-            data[3] != (byte)'1')
+            data[3] != (byte)'2')
             return false;
 
         int width = data[4] | (data[5] << 8);
         int height = data[6] | (data[7] << 8);
-        int spanCount = data[8] | (data[9] << 8) | (data[10] << 16) | (data[11] << 24);
-        if (width <= 0 || height <= 0 || width > 320 || height > 200 || spanCount < 0)
+        byte flags = data[8];
+        byte transparent = data[9];
+        int payloadOffset = data[10] | (data[11] << 8);
+        int payloadLength = data[12] | (data[13] << 8) | (data[14] << 16) | (data[15] << 24);
+        if (width <= 0 || height <= 0 || width > 320 || height > 200 ||
+            (flags & ~0x03) != 0 ||
+            ((flags & 0x01) != 0 && transparent > 0x0F) ||
+            payloadOffset < 16 || payloadLength < 0 || payloadOffset + payloadLength > data.Length)
             return false;
+
+        int rowPacked = (width + 1) / 2;
+        if (payloadLength != rowPacked * height)
+            return false;
+
+        if ((flags & 0x02) != 0)
+        {
+            const int paletteBytes = 48;
+            if (payloadOffset < 16 + paletteBytes)
+                return false;
+
+            _busWrite((ushort)VgcConstants.RegPaletteIndex, 0);
+            for (int i = 0; i < paletteBytes; i++)
+                _busWrite((ushort)VgcConstants.RegPaletteData, data[16 + i]);
+            _busWrite((ushort)VgcConstants.RegPaletteMode, 0x02);
+        }
 
         int baseX = dest % 320;
         int baseY = dest / 320;
@@ -1597,41 +1619,38 @@ public sealed partial class FileIoController
         if (spaceLen <= 0)
             return false;
 
-        int imageLen = width * height;
-        int offset = 12;
-        for (int span = 0; span < spanCount; span++)
+        bool keyed = (flags & 0x01) != 0;
+        int offset = payloadOffset;
+        int end = payloadOffset + payloadLength;
+        for (int y = 0; y < height; y++)
         {
-            if (offset + 3 > data.Length)
+            int rowAddr = dest + y * 320;
+            if (rowAddr < 0 || rowAddr + width > spaceLen)
                 return false;
 
-            int addr = data[offset] | (data[offset + 1] << 8);
-            int len = data[offset + 2];
-            offset += 3;
-
-            if (len == 0 || addr < 0 || addr + len > imageLen || offset + len > data.Length)
-                return false;
-
-            int imagePos = addr;
-            int pos = 0;
-            while (pos < len)
+            for (int x = 0; x < width; x += 2)
             {
-                int srcX = imagePos % width;
-                int srcY = imagePos / width;
-                int chunk = Math.Min(len - pos, width - srcX);
-                int vgcAddr = dest + (srcY * 320) + srcX;
-
-                if (vgcAddr < 0 || vgcAddr + chunk > spaceLen)
+                if (offset >= end)
                     return false;
 
-                for (int i = 0; i < chunk; i++)
-                    _vgcWrite!(space, vgcAddr + i, data[offset + pos + i]);
+                byte packed = data[offset++];
+                byte left = (byte)(packed >> 4);
+                if (!keyed || left != transparent)
+                {
+                    _vgcWrite!(space, rowAddr + x, left);
+                    pixelsWritten++;
+                }
 
-                imagePos += chunk;
-                pos += chunk;
-                pixelsWritten += chunk;
+                if (x + 1 < width)
+                {
+                    byte right = (byte)(packed & 0x0F);
+                    if (!keyed || right != transparent)
+                    {
+                        _vgcWrite!(space, rowAddr + x + 1, right);
+                        pixelsWritten++;
+                    }
+                }
             }
-
-            offset += len;
         }
 
         return true;

@@ -510,11 +510,19 @@ static const uint16_t VGC_CURSOR_Y      = 0xA004;
 static const uint16_t VGC_BORDER        = 0xA00D;
 static const uint16_t VGC_CURSOR_ENABLE = 0xA00A;
 static const uint16_t VGC_DISPLAY_DIM   = 0xA0E5;
+static const uint16_t VGC_PALETTE_MODE  = 0xA0E9;
+static const uint16_t VGC_PALETTE_INDEX = 0xA0F4;
+static const uint16_t VGC_PALETTE_DATA  = 0xA0F5;
 static const uint8_t  VGC_SPACE_CHAR    = 0x01;
 static const uint8_t  VGC_SPACE_COLOR   = 0x02;
 static const uint8_t  VGC_SPACE_GFX     = 0x03;
 static const uint8_t  VGC_SPACE_TEXTATTR = 0x07;
 static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
+static const uint8_t  VGC_PALMODE_CUSTOM = 0x02;
+static const uint16_t NVG_HEADER_BYTES   = 16;
+static const uint16_t NVG_PALETTE_BYTES  = 48;
+static const uint8_t  NVG_FLAG_TRANSPARENT = 0x01;
+static const uint8_t  NVG_FLAG_PALETTE     = 0x02;
 
 static BootRuntimeConfig g_runtime_config = {};
 static void parseRuntimeConfigFromFile();
@@ -993,6 +1001,24 @@ bool clearVgcGfx() {
     return true;
 }
 
+bool pokeBootVgcBytes(uint32_t addr, const uint8_t* data, size_t len,
+                      const char* label) {
+    size_t off = 0;
+    while (off < len) {
+        size_t remaining = len - off;
+        size_t chunk = remaining > 256 ? 256 : remaining;
+        uint16_t wire_count = (chunk == 256) ? 0 : (uint16_t)chunk;
+        if (!fpgaBridge.pokeVgcBlock(VGC_SPACE_GFX, (uint16_t)(addr + off),
+                                     data + off, wire_count)) {
+            logLn("Boot splash %s VGC stream failed at gfx offset %u",
+                  label, (unsigned)(addr + off));
+            return false;
+        }
+        off += chunk;
+    }
+    return true;
+}
+
 bool fillVgcRange(uint8_t space, uint16_t start, size_t length,
                   uint8_t value, const char* label) {
     uint8_t tail[256];
@@ -1066,40 +1092,112 @@ bool streamBootLogoNvg(File& f, const char* path) {
     uint8_t magic[4];
     if (f.read(magic, sizeof(magic)) != sizeof(magic) ||
         magic[0] != 'N' || magic[1] != 'V' ||
-        magic[2] != 'G' || magic[3] != '1') {
+        magic[2] != 'G' || magic[3] != '2') {
         logLn("Boot splash invalid NVG header: %s", path);
         return false;
     }
 
     uint16_t width = 0, height = 0;
-    uint32_t span_count = 0;
-    if (!readU16(f, width) || !readU16(f, height) || !readU32(f, span_count)) {
+    uint8_t flags = 0;
+    uint8_t transparent = 0;
+    uint16_t payload_offset = 0;
+    uint32_t payload_length = 0;
+    if (!readU16(f, width) ||
+        !readU16(f, height) ||
+        !readByte(f, flags) ||
+        !readByte(f, transparent) ||
+        !readU16(f, payload_offset) ||
+        !readU32(f, payload_length)) {
         logLn("Boot splash truncated NVG header: %s", path);
         return false;
     }
-    if (width != 320 || height != 200) {
+    if (width != 320 || height != 200 ||
+        (flags & ~(NVG_FLAG_TRANSPARENT | NVG_FLAG_PALETTE)) != 0 ||
+        ((flags & NVG_FLAG_TRANSPARENT) != 0 && transparent > 0x0F) ||
+        payload_offset < NVG_HEADER_BYTES) {
         logLn("Boot splash wrong dimensions: %s is %ux%u", path, width, height);
         return false;
     }
 
-    uint8_t buf[256];
-    for (uint32_t span = 0; span < span_count; span++) {
-        uint16_t addr = 0;
-        uint8_t len = 0;
-        if (!readU16(f, addr) || !readByte(f, len) || len == 0) {
-            logLn("Boot splash bad span %u in %s", (unsigned)span, path);
+    uint16_t row_packed = (uint16_t)((width + 1) / 2);
+    uint32_t expected_payload = (uint32_t)row_packed * height;
+    if (payload_length != expected_payload || row_packed > 160) {
+        logLn("Boot splash invalid NVG payload: %s", path);
+        return false;
+    }
+
+    if ((flags & NVG_FLAG_PALETTE) != 0) {
+        uint8_t palette[NVG_PALETTE_BYTES];
+        if (payload_offset < NVG_HEADER_BYTES + NVG_PALETTE_BYTES ||
+            f.read(palette, NVG_PALETTE_BYTES) != NVG_PALETTE_BYTES) {
+            logLn("Boot splash truncated NVG palette: %s", path);
             return false;
         }
-        if ((uint32_t)addr + len > BOOT_LOGO_GFX_LEN) {
-            logLn("Boot splash span out of range %u in %s", (unsigned)span, path);
+
+        if (!fpgaBridge.poke(VGC_PALETTE_INDEX, 0x00)) {
+            logLn("Boot splash palette index write failed");
             return false;
         }
-        if (f.read(buf, len) != len) {
-            logLn("Boot splash truncated span %u in %s", (unsigned)span, path);
+        for (uint8_t i = 0; i < NVG_PALETTE_BYTES; i++) {
+            if (!fpgaBridge.poke(VGC_PALETTE_DATA, palette[i])) {
+                logLn("Boot splash palette data write failed at byte %u", (unsigned)i);
+                return false;
+            }
+        }
+        if (!fpgaBridge.poke(VGC_PALETTE_MODE, VGC_PALMODE_CUSTOM)) {
+            logLn("Boot splash palette mode write failed");
             return false;
         }
-        if (!fpgaBridge.pokeVgcBlock(VGC_SPACE_GFX, addr, buf, len)) {
-            logLn("Boot splash VGC stream failed at span %u", (unsigned)span);
+    }
+
+    if (!f.seek(payload_offset)) {
+        logLn("Boot splash payload seek failed: %s", path);
+        return false;
+    }
+
+    bool keyed = (flags & NVG_FLAG_TRANSPARENT) != 0;
+    uint8_t packed[160];
+    uint8_t pixels[320];
+    for (uint16_t y = 0; y < height; y++) {
+        if (f.read(packed, row_packed) != row_packed) {
+            logLn("Boot splash truncated NVG row %u in %s", (unsigned)y, path);
+            return false;
+        }
+
+        for (uint16_t x = 0; x < width; x += 2) {
+            uint8_t value = packed[x / 2];
+            pixels[x] = (uint8_t)(value >> 4);
+            if (x + 1 < width)
+                pixels[x + 1] = (uint8_t)(value & 0x0F);
+        }
+
+        uint32_t row_addr = (uint32_t)y * 320UL;
+        if (!keyed) {
+            if (!pokeBootVgcBytes(row_addr, pixels, width, "row"))
+                return false;
+            continue;
+        }
+
+        uint16_t run_start = 0;
+        uint16_t run_len = 0;
+        for (uint16_t x = 0; x < width; x++) {
+            if (pixels[x] == transparent) {
+                if (run_len != 0) {
+                    if (!pokeBootVgcBytes(row_addr + run_start,
+                                          pixels + run_start, run_len, "run"))
+                        return false;
+                    run_len = 0;
+                }
+                continue;
+            }
+
+            if (run_len == 0)
+                run_start = x;
+            run_len++;
+        }
+        if (run_len != 0 &&
+            !pokeBootVgcBytes(row_addr + run_start,
+                              pixels + run_start, run_len, "run")) {
             return false;
         }
     }

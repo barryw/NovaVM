@@ -127,7 +127,7 @@ runtime state.
 | VTEXT | `vtext.inc`, `vtext.s` | Rectangular text regions over VGC character/color/attribute planes. | `vtext_put_char`, `vtext_clear_region`, `vtext_scroll_up`, `vtext_select_region` |
 | EDITUI | `editui.inc`, `editui.s` | Turbo-style TUI shell for native tools: default File/Edit/Help menus, title/help band, shortcut row, CP437 framed panels, and clipped panel body regions. | `editui_init`, `editui_draw_shell`, `editui_menu_open_hotkey`, `editui_select_box_body` |
 | NUI | `nui.inc`, `nui.s` | First-pass modal dialogs over VTEXT and virtual sprites. | `nui_dialog_defaults`, `nui_show_dialog`, `nui_show_error`, `nui_wait_key` |
-| NVG loader | `nvg.inc`, `nvg.s` | Load NovaDraw NVG1 images through NovaHost into graphics bitmap memory. | `nvg_load`, `nvg_load_at`, `nvg_load_named`, `nvg_load_named_at` |
+| NVG loader | `nvg.inc`, `nvg.s` | Load native packed NVG2 images through the NDK blitter path into graphics bitmap memory. | `nvg_load`, `nvg_load_at`, `nvg_load_named`, `nvg_load_named_at` |
 | DMA | `dma.inc`, `dma.s` | Raw DMA copy/fill setup and wait/status handling. | `dma_copy`, `dma_fill`, `dma_wait` |
 | Blitter | `blitter.inc`, `blitter.s` | Raw rectangular copy/fill setup and wait/status handling. | `blitter_copy`, `blitter_fill`, `blitter_wait` |
 

@@ -690,13 +690,14 @@ def test_runtime_autoboot_contract() -> None:
         and "LDA   #FIO_CMD_LOADRUNTIME" in fio,
         "shared RNG library wraps host command": ".export rng_get32" in rng
         and "LDA   #FIO_CMD_RNG" in rng,
-        "shared NVG library wraps host decode command": "FIO_CMD_NVGLOAD  = $2B" in nova_inc
-        and "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("ehbasic/Makefile")
-        and ".export nvg_load" in nvg_runtime,
-        "shared NVG library streams through host decode command": "streamed directly into the graphics" in nvg_inc
-        and "LDA   #VGC_PLANE_GFX" in nvg_runtime
-        and "FIO_CMD_NVGLOAD" in nvg_runtime
-        and "XRAM_NVG_STAGE_L" not in nvg_runtime,
+        "shared NVG library exposes native image loader": "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("ehbasic/Makefile")
+        and ".export nvg_load" in nvg_runtime
+        and ".export nvg_draw" in nvg_runtime,
+        "shared NVG library pages packed NVG2 through the blitter": "row-packed 4bpp pixels" in nvg_inc
+        and "pager_load_current_file_page" in nvg_runtime
+        and "blitter_start_gfx4_unpack" in nvg_runtime
+        and "XRAM_NVG_STAGE_L" in nvg_runtime
+        and "FIO_CMD_NVGLOAD" not in nvg_runtime,
         "shared XRAM layout reserves non-overlapping runtime workspaces": "XRAM_USER_HEAP_PAGES = 1024" in xram_inc
         and "XRAM_NOVAZ_DYNAMIC_H = $04" in xram_inc
         and "XRAM_NOVAZ_CACHE_H   = $05" in xram_inc
@@ -726,10 +727,11 @@ def test_runtime_autoboot_contract() -> None:
         "ESP dispatcher handles hardware RNG command": "case CMD_RNG:" in dispatcher
         and "handle_rng()" in dispatcher
         and "esp_random()" in dispatcher,
-        "ESP dispatcher handles NVG load command": "case CMD_NVGLOAD:" in dispatcher
+        "ESP dispatcher handles NVG2 load command": "case CMD_NVGLOAD:" in dispatcher
         and "handle_nvgload()" in dispatcher
-        and "pokeVgcBlock(space" in dispatcher
-        and "NVGLOAD" in dispatcher,
+        and "magic[3] != '2'" in dispatcher
+        and "NVG_FLAG_PALETTE" in dispatcher
+        and "NVG_FLAG_TRANSPARENT" in dispatcher,
         "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
         and '"%s.bas"' in dispatcher
         and '"%s.bin"' in dispatcher,

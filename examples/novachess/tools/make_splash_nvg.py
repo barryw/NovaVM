@@ -176,28 +176,27 @@ def erase_rects(pixels: bytearray, rects: list[tuple[int, int, int, int, int]]) 
                 pixels[row + px] = color
 
 
-def encode_nvg(pixels: bytes) -> bytes:
-    spans: list[tuple[int, bytes]] = []
+def encode_nvg(pixels: bytes, palette: list[tuple[int, int, int]]) -> bytes:
+    packed = bytearray()
     for y in range(HEIGHT):
         row = y * WIDTH
-        x = 0
-        while x < WIDTH:
-            if pixels[row + x] == 0:
-                x += 1
-                continue
+        for x in range(0, WIDTH, 2):
+            left = pixels[row + x] & 0x0F
+            right = pixels[row + x + 1] & 0x0F if x + 1 < WIDTH else 0
+            packed.append((left << 4) | right)
 
-            start = x
-            run = bytearray()
-            while x < WIDTH and pixels[row + x] != 0 and len(run) < 255:
-                run.append(pixels[row + x])
-                x += 1
-            spans.append((row + start, bytes(run)))
+    header_size = 16
+    palette_bytes = 16 * 3
+    payload_offset = header_size + palette_bytes
 
-    data = bytearray(b"NVG1")
-    data.extend(struct.pack("<HHI", WIDTH, HEIGHT, len(spans)))
-    for address, run in spans:
-        data.extend(struct.pack("<HB", address, len(run)))
-        data.extend(run)
+    data = bytearray(b"NVG2")
+    data.extend(struct.pack("<HH", WIDTH, HEIGHT))
+    data.append(0x02)  # embedded RGB palette
+    data.append(0xFF)  # no transparent color key
+    data.extend(struct.pack("<HI", payload_offset, len(packed)))
+    for r, g, b in palette:
+        data.extend((r & 0xFF, g & 0xFF, b & 0xFF))
+    data.extend(packed)
     return bytes(data)
 
 
@@ -257,7 +256,7 @@ def parse_args() -> argparse.Namespace:
         "--format",
         choices=["nvg", "raw"],
         default="nvg",
-        help="Output format. raw emits a full 320x200 graphics-plane image.",
+        help="Output format. nvg emits native packed NVG2; raw emits a full 320x200 graphics-plane image.",
     )
     parser.add_argument(
         "--resample",
@@ -323,7 +322,7 @@ def main() -> None:
     )
     erase_rects(pixels, args.erase_rect)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    encoded = encode_raw(bytes(pixels)) if args.format == "raw" else encode_nvg(bytes(pixels))
+    encoded = encode_raw(bytes(pixels)) if args.format == "raw" else encode_nvg(bytes(pixels), palette)
     args.output.write_bytes(encoded)
     if args.preview:
         write_preview(args.preview, pixels, palette)

@@ -2304,6 +2304,35 @@ namespace e6502UnitTests
             return dir;
         }
 
+        private static byte[] BuildNvg2(int width, int height, byte[] pixels)
+        {
+            Assert.AreEqual(width * height, pixels.Length, "fixture pixel dimensions must match");
+
+            var packed = new System.Collections.Generic.List<byte>();
+            for (int y = 0; y < height; y++)
+            {
+                int row = y * width;
+                for (int x = 0; x < width; x += 2)
+                {
+                    byte left = (byte)(pixels[row + x] & 0x0F);
+                    byte right = x + 1 < width ? (byte)(pixels[row + x + 1] & 0x0F) : (byte)0;
+                    packed.Add((byte)((left << 4) | right));
+                }
+            }
+
+            var nvg = new System.Collections.Generic.List<byte>
+            {
+                (byte)'N', (byte)'V', (byte)'G', (byte)'2',
+                (byte)(width & 0xFF), (byte)(width >> 8),
+                (byte)(height & 0xFF), (byte)(height >> 8),
+                0x00, 0xFF,             // no embedded palette, no transparent key
+                16, 0,                  // payload offset
+                (byte)(packed.Count & 0xFF), (byte)(packed.Count >> 8), 0, 0,
+            };
+            nvg.AddRange(packed);
+            return nvg.ToArray();
+        }
+
         // --- $A1 MEMWRITE then $A0 MEMREAD: round-trip a byte through a VGC space. ---
         [TestMethod]
         public void Axis2_MemWriteThenMemRead_RoundTripsAByte()
@@ -2439,27 +2468,14 @@ namespace e6502UnitTests
                 "a failed GLOAD must map to LERR_FILE_FAIL");
         }
 
-        // --- $A6 NVGLOAD: decode a real NVG1 fixture into the gfx plane at offset 0. ---
+        // --- $A6 NVGLOAD: load a native packed NVG2 fixture into the gfx plane at offset 0. ---
         [TestMethod]
         public void Axis2_NvgLoad_DecodesFixtureIntoGfxPlane()
         {
             using var bus = MakeAxis2Bus();
 
-            // Build a minimal NVG1 file: 4x2 image, one span covering all 8 pixels.
-            // Header: "NVG1", width(2 LE), height(2 LE), spanCount(4 LE).
-            // Span: addr16 (image-space, LE), len8, then len bytes.
             byte[] pixels = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
-            var nvg = new System.Collections.Generic.List<byte>
-            {
-                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
-                4, 0,   // width = 4
-                2, 0,   // height = 2
-                1, 0, 0, 0,   // spanCount = 1
-                0, 0,   // span addr = image offset 0
-                (byte)pixels.Length,   // span len = 8
-            };
-            nvg.AddRange(pixels);
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.nvg"), nvg.ToArray());
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.nvg"), BuildNvg2(4, 2, pixels));
 
             // Stage filename "NVGFIX"; NVGLOAD reads FIO_NAME via the BYTES arg.
             const ushort nameAddr = 0x0500;
@@ -2478,24 +2494,14 @@ namespace e6502UnitTests
                     $"NVGLOAD row 1 pixel {x}");
         }
 
-        // --- $A7 NVGLOAD_AT: decode the fixture at a non-zero destination offset. ---
+        // --- $A7 NVGLOAD_AT: load the fixture at a non-zero destination offset. ---
         [TestMethod]
         public void Axis2_NvgLoadAt_DecodesFixtureAtDestOffset()
         {
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x0A, 0x0B, 0x0C, 0x0D };
-            var nvg = new System.Collections.Generic.List<byte>
-            {
-                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
-                4, 0,   // width = 4
-                1, 0,   // height = 1
-                1, 0, 0, 0,   // spanCount = 1
-                0, 0,   // span addr = 0
-                (byte)pixels.Length,
-            };
-            nvg.AddRange(pixels);
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.nvg"), nvg.ToArray());
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.nvg"), BuildNvg2(4, 1, pixels));
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGAT");
@@ -2512,20 +2518,14 @@ namespace e6502UnitTests
                 Assert.AreEqual(pixels[x], GfxByte(bus, dest + x), $"NVGLOAD_AT pixel {x} at dest offset");
         }
 
-        // --- $A8 NVGLOAD_NAMED: the named-arg path decodes the same fixture. ---
+        // --- $A8 NVGLOAD_NAMED: the named-arg path loads the same fixture. ---
         [TestMethod]
         public void Axis2_NvgLoadNamed_DecodesViaNamedArgPath()
         {
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x09, 0x08, 0x07, 0x06 };
-            var nvg = new System.Collections.Generic.List<byte>
-            {
-                (byte)'N', (byte)'V', (byte)'G', (byte)'1',
-                4, 0, 1, 0, 1, 0, 0, 0, 0, 0, (byte)pixels.Length,
-            };
-            nvg.AddRange(pixels);
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.nvg"), nvg.ToArray());
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.nvg"), BuildNvg2(4, 1, pixels));
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGNAMED");

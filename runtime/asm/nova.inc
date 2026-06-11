@@ -1171,7 +1171,7 @@ FIO_CMD_RNG      = $2A
 ; @label FIO.CMD_NVGLOAD
 ; @kind const
 ; @symbol FIO_CMD_NVGLOAD
-; @summary Host command that decodes a Nova NVG1 file into the graphics bitmap plane.
+; @summary Host command that decodes a native packed NVG2 file into the graphics bitmap plane.
 FIO_CMD_NVGLOAD  = $2B
 .endif
 .ifndef FIO_CMD_LOAD_MODULE

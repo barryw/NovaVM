@@ -660,7 +660,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $11 | FioCmdMLoop | Set loop. FioSrcL=0 (off) or 1 (on). |
 | $18 | FioCmdXLoad | Load a file directly into XRAM. FioGSpace/GAddrL/GAddrH=24-bit destination, FioGLenL/H=max length or 0 for full file. |
 | $19 | FioCmdXSave | Save XRAM directly to a file. FioGSpace/GAddrL/GAddrH=24-bit source, FioGLenL/H=length. |
-| $2B | FioCmdNvgLoad | Clear graphics bitmap memory, decode a `.nvg`/NVG1 file into the caller-provided 64,000-byte XRAM staging buffer, then blit that buffer into graphics memory. `FioGSpace` must be 3; `FioGAddrL/H` is the bitmap destination offset; `FioSrcL/H` plus `FioEndL` form the 24-bit XRAM staging address. `FioSizeL/H` returns pixels written. |
+| $2B | FioCmdNvgLoad | Clear graphics bitmap memory and decode a native packed `.nvg`/NVG2 file into graphics memory. `FioGSpace` must be 3; `FioGAddrL/H` is the bitmap destination offset. `FioSizeL/H` returns pixels written. |
 
 ### FIO Status Codes
 

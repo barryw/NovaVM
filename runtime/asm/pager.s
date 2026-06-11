@@ -8,6 +8,7 @@ PAGER_IMPLEMENTATION_INCLUDED = 1
       .segment "CODE"
 
       .export pager_load_file_page
+      .export pager_load_current_file_page
 
 .ifndef FIO_EMIT_ALL_RUNTIME
 FIO_EMIT_ALL_RUNTIME = 1
@@ -23,8 +24,18 @@ FIO_EMIT_ALL_RUNTIME = 1
 ; @out A: 0 on success, 1 on error.
 pager_load_file_page:
       JSR   fio_copy_name
-      BNE   @done
+      BEQ   pager_load_current_file_page
+      RTS
 
+; Stream a file slice directly into the selected target using the current
+; FIO.NAME/FIO.NAMELEN.
+; @label PAGER.LOAD_CURRENT_FILE_PAGE
+; @kind routine
+; @symbol pager_load_current_file_page
+; @summary Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR.
+; @requires PAGER_FILEL PAGER_FILEM PAGER_FILEH PAGER_TARGET PAGER_ADDRL PAGER_ADDRM PAGER_ADDRH PAGER_LENL PAGER_LENH FIO_NAME FIO_NAMELEN
+; @out A: 0 on success, 1 on error.
+pager_load_current_file_page:
       LDA   PAGER_FILEL
       STA   FIO_SRCL
       LDA   PAGER_FILEM
@@ -48,7 +59,5 @@ pager_load_file_page:
 
       LDA   #FIO_CMD_XPAGE
       JMP   fio_exec
-@done:
-      RTS
 
 .endif

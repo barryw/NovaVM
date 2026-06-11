@@ -156,7 +156,7 @@ public struct NovaDrawMCPToolRunner: Sendable {
         ),
         tool(
             name: "novadraw_export_nvg",
-            description: "Export the selected or requested 320x200 image to Nova NVG1 format.",
+            description: "Export the selected or requested 320x200 image to native Nova NVG format.",
             properties: [
                 "path": string("Path to the .novadraw project."),
                 "output_path": string("Path for the output .nvg file."),
@@ -399,7 +399,7 @@ public struct NovaDrawMCPToolRunner: Sendable {
             height: project.height
         )
         try data.write(to: outputURL, options: Data.WritingOptions.atomic)
-        return "Exported NVG1 to \(outputURL.path)."
+        return "Exported NVG to \(outputURL.path)."
     }
 
     private struct PixelBlock {

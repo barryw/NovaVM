@@ -196,6 +196,14 @@ uint32_t vgc_space_bytes(uint8_t space) {
 
 constexpr uint8_t VGC_SPACE_GFX = 0x03;
 constexpr uint32_t NVG_BITMAP_BYTES = 320UL * 200UL;
+constexpr uint16_t NVG_HEADER_BYTES = 16;
+constexpr uint16_t NVG_PALETTE_BYTES = 48;
+constexpr uint8_t NVG_FLAG_TRANSPARENT = 0x01;
+constexpr uint8_t NVG_FLAG_PALETTE = 0x02;
+constexpr uint16_t VGC_PALETTE_MODE_ADDR = 0xA0E9;
+constexpr uint16_t VGC_PALETTE_INDEX_ADDR = 0xA0F4;
+constexpr uint16_t VGC_PALETTE_DATA_ADDR = 0xA0F5;
+constexpr uint8_t VGC_PALMODE_CUSTOM = 0x02;
 
 bool clear_vgc_gfx(FpgaBridge& bridge, uint8_t* zero_buf) {
     memset(zero_buf, 0, 256);
@@ -208,6 +216,24 @@ bool clear_vgc_gfx(FpgaBridge& bridge, uint8_t* zero_buf) {
                   (unsigned)off);
             return false;
         }
+    }
+    return true;
+}
+
+bool poke_vgc_bytes(FpgaBridge& bridge, uint8_t space, uint32_t addr,
+                    const uint8_t* data, uint16_t len, const char* label) {
+    uint16_t off = 0;
+    while (off < len) {
+        uint16_t remaining = (uint16_t)(len - off);
+        uint16_t chunk = remaining > 256 ? 256 : remaining;
+        uint16_t wire_count = (chunk == 256) ? 0 : chunk;
+        if (!bridge.pokeVgcBlock(space, (uint16_t)(addr + off),
+                                 data + off, wire_count)) {
+            logLn("[fio] %s VGC write failed at VGC space %u:$%04X\n",
+                  label, (unsigned)space, (unsigned)(addr + off));
+            return false;
+        }
+        off += chunk;
     }
     return true;
 }
@@ -4045,26 +4071,55 @@ void FioDispatcher::handle_nvgload() {
     }
 
     uint8_t* cache = _transfer_buf;
-    uint8_t* pixels = _transfer_buf + 256;
+    uint8_t* packed = _transfer_buf + 256;
+    uint8_t* pixels = _transfer_buf + 512;
+    uint8_t palette[NVG_PALETTE_BYTES];
     NdiFileReader reader(img, idx, e.size_bytes, cache, 256);
 
     uint8_t magic[4];
     if (!reader.read(magic, sizeof(magic)) ||
         magic[0] != 'N' || magic[1] != 'V' ||
-        magic[2] != 'G' || magic[3] != '1') {
+        magic[2] != 'G' || magic[3] != '2') {
         respond_err(ERR_IO);
         return;
     }
 
     uint16_t width = 0, height = 0;
-    uint32_t span_count = 0;
+    uint8_t flags = 0;
+    uint8_t transparent = 0;
+    uint16_t payload_offset = 0;
+    uint32_t payload_length = 0;
     if (!reader.read_u16(width) ||
         !reader.read_u16(height) ||
-        !reader.read_u32(span_count) ||
+        !reader.read_u8(flags) ||
+        !reader.read_u8(transparent) ||
+        !reader.read_u16(payload_offset) ||
+        !reader.read_u32(payload_length) ||
         width == 0 || height == 0 ||
-        width > 320 || height > 200) {
+        width > 320 || height > 200 ||
+        (flags & ~(NVG_FLAG_TRANSPARENT | NVG_FLAG_PALETTE)) != 0 ||
+        ((flags & NVG_FLAG_TRANSPARENT) != 0 && transparent > 0x0F) ||
+        payload_offset < NVG_HEADER_BYTES ||
+        payload_offset > e.size_bytes ||
+        payload_length > e.size_bytes - payload_offset) {
         respond_err(ERR_IO);
         return;
+    }
+
+    uint16_t row_packed = (uint16_t)((width + 1) / 2);
+    uint32_t expected_payload = (uint32_t)row_packed * height;
+    if (payload_length != expected_payload || row_packed > 256) {
+        respond_err(ERR_IO);
+        return;
+    }
+
+    bool has_palette = (flags & NVG_FLAG_PALETTE) != 0;
+    if (has_palette) {
+        if (payload_offset < NVG_HEADER_BYTES + NVG_PALETTE_BYTES ||
+            !reader.read(palette, NVG_PALETTE_BYTES)) {
+            respond_err(ERR_IO);
+            return;
+        }
     }
 
     uint16_t base_x = dest % 320;
@@ -4081,50 +4136,86 @@ void FioDispatcher::handle_nvgload() {
     // still land while paused, then the guard resumes and the CPU reads FIO_STATUS.
     CpuPauseGuard pauseGuard(_bridge);
 
-    if (!clear_vgc_gfx(_bridge, pixels)) {
+    if (has_palette) {
+        if (!_bridge.poke(VGC_PALETTE_INDEX_ADDR, 0x00)) {
+            respond_err(ERR_IO);
+            return;
+        }
+        for (uint8_t i = 0; i < NVG_PALETTE_BYTES; i++) {
+            if (!_bridge.poke(VGC_PALETTE_DATA_ADDR, palette[i])) {
+                respond_err(ERR_IO);
+                return;
+            }
+        }
+        if (!_bridge.poke(VGC_PALETTE_MODE_ADDR, VGC_PALMODE_CUSTOM)) {
+            respond_err(ERR_IO);
+            return;
+        }
+    }
+
+    bool keyed = (flags & NVG_FLAG_TRANSPARENT) != 0;
+    bool full_screen_opaque = !keyed && dest == 0 && width == 320 && height == 200;
+    if (!full_screen_opaque && !clear_vgc_gfx(_bridge, pixels)) {
         respond_err(ERR_IO);
         return;
     }
 
-    uint32_t image_len = (uint32_t)width * height;
+    if (!reader.seek(payload_offset)) {
+        respond_err(ERR_IO);
+        return;
+    }
+
     uint32_t written = 0;
-    for (uint32_t span = 0; span < span_count; span++) {
-        uint16_t addr = 0;
-        uint8_t len = 0;
-        if (!reader.read_u16(addr) ||
-            !reader.read_u8(len) ||
-            len == 0 ||
-            (uint32_t)addr + len > image_len ||
-            !reader.read(pixels, len)) {
+    for (uint16_t y = 0; y < height; y++) {
+        if (!reader.read(packed, row_packed)) {
             respond_err(ERR_IO);
             return;
         }
 
-        uint32_t image_pos = addr;
-        uint8_t pos = 0;
-        while (pos < len) {
-            uint16_t src_x = image_pos % width;
-            uint16_t src_y = image_pos / width;
-            uint16_t row_remaining = width - src_x;
-            uint8_t chunk = len - pos;
-            if (chunk > row_remaining) chunk = (uint8_t)row_remaining;
+        for (uint16_t x = 0; x < width; x += 2) {
+            uint8_t value = packed[x / 2];
+            pixels[x] = (uint8_t)(value >> 4);
+            if (x + 1 < width)
+                pixels[x + 1] = (uint8_t)(value & 0x0F);
+        }
 
-            uint32_t gfx_addr = (uint32_t)dest + ((uint32_t)src_y * 320UL) + src_x;
-            if (gfx_addr + chunk > NVG_BITMAP_BYTES) {
+        uint32_t row_addr = (uint32_t)dest + ((uint32_t)y * 320UL);
+        if (!keyed) {
+            if (!poke_vgc_bytes(_bridge, space, row_addr, pixels, width, "NVGLOAD")) {
                 respond_err(ERR_IO);
                 return;
             }
-            uint16_t wire_count = (chunk == 256) ? 0 : chunk;
-            if (!_bridge.pokeVgcBlock(space, (uint16_t)gfx_addr, pixels + pos, wire_count)) {
-                logLn("[fio] NVGLOAD gfx write failed at VGC gfx:$%04X\n",
-                      (unsigned)gfx_addr);
+            written += width;
+            continue;
+        }
+
+        uint16_t run_start = 0;
+        uint16_t run_len = 0;
+        for (uint16_t x = 0; x < width; x++) {
+            if (pixels[x] == transparent) {
+                if (run_len != 0) {
+                    if (!poke_vgc_bytes(_bridge, space, row_addr + run_start,
+                                        pixels + run_start, run_len, "NVGLOAD")) {
+                        respond_err(ERR_IO);
+                        return;
+                    }
+                    written += run_len;
+                    run_len = 0;
+                }
+                continue;
+            }
+
+            if (run_len == 0)
+                run_start = x;
+            run_len++;
+        }
+        if (run_len != 0) {
+            if (!poke_vgc_bytes(_bridge, space, row_addr + run_start,
+                                pixels + run_start, run_len, "NVGLOAD")) {
                 respond_err(ERR_IO);
                 return;
             }
-
-            image_pos += chunk;
-            pos += chunk;
-            written += chunk;
+            written += run_len;
         }
     }
 

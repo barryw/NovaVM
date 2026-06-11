@@ -149,7 +149,7 @@ import Testing
             "path": url.path,
             "output_path": outputURL.path,
         ])
-        #expect(exported.contains("Exported NVG1"))
+        #expect(exported.contains("Exported NVG"))
 
         let data = try Data(contentsOf: outputURL)
         #expect(Array(data.prefix(4)) == [0x4E, 0x56, 0x47, 0x31])

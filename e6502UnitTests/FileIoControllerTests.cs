@@ -68,23 +68,35 @@ public class FileIoControllerTests
 
     private static byte[] MakeNvg(int width, int height, params (ushort Address, byte[] Pixels)[] spans)
     {
+        var pixels = new byte[width * height];
+        foreach (var (address, spanPixels) in spans)
+            Array.Copy(spanPixels, 0, pixels, address, spanPixels.Length);
+
         using var ms = new MemoryStream();
-        ms.Write([(byte)'N', (byte)'V', (byte)'G', (byte)'1']);
+        ms.Write([(byte)'N', (byte)'V', (byte)'G', (byte)'2']);
         ms.WriteByte((byte)(width & 0xFF));
         ms.WriteByte((byte)((width >> 8) & 0xFF));
         ms.WriteByte((byte)(height & 0xFF));
         ms.WriteByte((byte)((height >> 8) & 0xFF));
-        ms.WriteByte((byte)(spans.Length & 0xFF));
-        ms.WriteByte((byte)((spans.Length >> 8) & 0xFF));
-        ms.WriteByte((byte)((spans.Length >> 16) & 0xFF));
-        ms.WriteByte((byte)((spans.Length >> 24) & 0xFF));
+        ms.WriteByte(0x01); // transparent color key
+        ms.WriteByte(0x00);
+        ms.WriteByte(16);
+        ms.WriteByte(0);
+        int payloadLength = ((width + 1) / 2) * height;
+        ms.WriteByte((byte)(payloadLength & 0xFF));
+        ms.WriteByte((byte)((payloadLength >> 8) & 0xFF));
+        ms.WriteByte(0);
+        ms.WriteByte(0);
 
-        foreach (var (address, pixels) in spans)
+        for (int y = 0; y < height; y++)
         {
-            ms.WriteByte((byte)(address & 0xFF));
-            ms.WriteByte((byte)((address >> 8) & 0xFF));
-            ms.WriteByte((byte)pixels.Length);
-            ms.Write(pixels);
+            int row = y * width;
+            for (int x = 0; x < width; x += 2)
+            {
+                byte left = (byte)(pixels[row + x] & 0x0F);
+                byte right = x + 1 < width ? (byte)(pixels[row + x + 1] & 0x0F) : (byte)0;
+                ms.WriteByte((byte)((left << 4) | right));
+            }
         }
 
         return ms.ToArray();

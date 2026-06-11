@@ -84,7 +84,7 @@ struct NovaDrawApp: App {
                         .disabled(document == nil)
                     Button("Trace Sheet Image...") { importTraceSheetImage() }
                     Divider()
-                    Button("NVG1...") { importFormat { NvgFormat.decode(data: $0)?.pixels } }
+                    Button("NVG...") { importFormat { NvgFormat.decode(data: $0)?.pixels } }
                         .disabled(document == nil)
                     Button("GFX...") {
                         importFormat { GfxFormat.decode(data: $0, width: document?.width ?? 320, height: document?.height ?? 200) }
@@ -97,7 +97,7 @@ struct NovaDrawApp: App {
                 Menu("Export") {
                     Button("ca65 Include (.inc)...") { showingCa65Export = true }
                     Divider()
-                    Button("NVG1 (.nvg)...") { exportNvg() }
+                    Button("NVG (.nvg)...") { exportNvg() }
                         .disabled(document?.width != 320 || document?.height != 200)
                     Button("GFX (.gfx)...") { exportGfx() }
                         .disabled(document?.width != 320 || document?.height != 200)

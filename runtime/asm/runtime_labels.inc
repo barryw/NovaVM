@@ -2,7 +2,7 @@
 ; Runtime label hash table for ADDR("LABEL") in the SYSTEM module.
 
 RUNTIME_LABEL_BUCKET_COUNT = 64
-RUNTIME_LABEL_COUNT = 107
+RUNTIME_LABEL_COUNT = 110
 
 RuntimeLabelBuckets:
       .word @bucket_00
@@ -89,6 +89,9 @@ RuntimeLabelBuckets:
       .byte 10
       .word $B9A7
       .byte "AUDIO.STRH"
+      .byte 9
+      .word $002D
+      .byte "NVG.FILEH"
       .byte 0
 
 @bucket_02:
@@ -128,6 +131,9 @@ RuntimeLabelBuckets:
       .byte 10
       .word $B9A6
       .byte "AUDIO.STRL"
+      .byte 9
+      .word $002B
+      .byte "NVG.FILEL"
       .byte 11
       .word $0021
       .byte "PAGER.ADDRM"
@@ -152,6 +158,9 @@ RuntimeLabelBuckets:
       .byte 11
       .word $002A
       .byte "FIO.CMD_RNG"
+      .byte 9
+      .word $002C
+      .byte "NVG.FILEM"
       .byte 0
 
 @bucket_07:
