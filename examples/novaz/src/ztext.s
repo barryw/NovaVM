@@ -21,6 +21,8 @@ ztext_escape_value:    .res 1
 ztext_abbrev_command:  .res 1
 ztext_abbrev_index:    .res 1
 ztext_abbrev_offset:   .res 1
+; nz_call_z_routine saves this whole block by index — keep it contiguous.
+.assert ztext_abbrev_offset - ztext_word_limit = 14, error, "ztext state block must stay 15 contiguous bytes"
 
 .segment "CODE"
 

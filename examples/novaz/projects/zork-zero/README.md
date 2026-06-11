@@ -2,10 +2,11 @@
 
 NovaZ project for a local, user-supplied Zork Zero (V6) story file.
 
-Expected local file:
+Expected local files (both gitignored):
 
 ```text
-examples/novaz/projects/zork-zero/STORY.BIN
+examples/novaz/projects/zork-zero/STORY.BIN   # Zork0.z6
+examples/novaz/projects/zork-zero/PICS.BLB    # Zork0.blb (graphics blorb)
 ```
 
 Build:
@@ -14,49 +15,48 @@ Build:
 make -C examples/novaz ndi PROJECT=zork-zero
 ```
 
-The generated image is written to `examples/novaz/dist/zork-zero/fd0.ndi`.
+The generated image is written to `examples/novaz/dist/zork-zero/fd0.ndi`
+and includes `PICS.PAK` — 503 pictures (396 custom-palette 4bpp bitmaps +
+107 Rect placeholders, release 14) pre-converted by the Packer.
 
-## M2 status (real window rendering, text-only V6)
+## M3 status (pictures on Avalonia)
 
-This project runs against the M2 V6 milestone: units are cells, and the
-window property table drives real vtext regions — Zork Zero's own layout
-renders as designed: window 1 = 5-row full-width banner (rows 0-4), window 0
-= 45x70 playfield inset at (5,5) with the game's 1-cell left margin, prompt
-at the window bottom row. Text scrolls inside the playfield rect with vacated
-rows blanked — the M1 bottom-anchored layout and stale-line-end artifacts are
-gone — and `scroll_window` is real. `smoke.txt` + `project.mk` pin the layout
-with absolute-cell `--expect-at` / `.expect-at` asserts.
+The game runs with its real art and picture-driven layout:
 
-Remaining limitations (verified against the post-M2 capture, dfrotz as the
-text-only reference, and the published Zork Zero ZIL source — see the
-"post-M2 capture" section of `docs/plans/2026-06-10-zork-zero-window-ops.md`):
+- **Pictures render.** `draw_picture` streams pak bitmap regions into the
+  VGC gfx layer (host-assisted 4bpp unpack with per-pixel transparency);
+  the title sequence, the playfield border art, and the per-refresh border
+  pic `$D8` all draw. The VGC runs mode 2 (text over gfx); v2 picture packs
+  upload a generated 16-entry RGB palette at V6 boot. `--expect-gfx-color`
+  probes in `project.mk` pin live picture indices against values derived
+  from the blorb PNGs.
+- **The banner garble is gone.** `picture_data` answers from the pak index
+  (pixel dimensions under the 320x200-unit V6 header), so
+  `INIT-STATUS-LINE` lays the banner out as designed:
+  "Banquet Hall … Flatheadia" / "Moves: 0 … Score: 0".
+- **The boot newline storm is gone.** With real picture metrics the
+  CR-interrupt countdown arms with a real height instead of -1, so
+  `CLEAR-CRCNT` prints a handful of newlines instead of ~65.5K —
+  morePrompts collapsed 1489 → 0 and `NOVAZ_SMOKE_MAX_STEPS` dropped
+  480M → 80M.
+- **The CR interrupt fires.** Each newline decrements window prop 9 and
+  calls the prop-8 routine at 0 (Frotz r393 ordering): `RESET-MARGIN`
+  releases the drop-cap margins, and the prologue flows at the real border
+  margin with the prompt inside the picture-derived 40x58 playfield
+  (`move_window 0,11,12` in the post-M3 capture).
 
-- **Pictures are M3 scope** — `picture_data` still gives the honest
-  "no pictures" answer; `draw_picture` is a no-op. Borders, title art, and
-  the graphical status area need the picture file + cell→pixel blitting.
-- **Garbled banner detail is game-side** — the game positions every banner
-  element from picture metadata (`PICINF` results feed the `CURSET` calls in
-  `INIT-STATUS-LINE`/`UPDATE-STATUS-LINE`, `globals.zil`). With no pictures
-  those metrics are absent and the labels collide ("Moves:Sc3" on row 1).
-  dfrotz renders the same garble; our `set_cursor` out-of-range clamp matches
-  the Infocom YZIP spec ("it will be set to the appropriate dimension of the
-  window"). Not our bug; M3's real picture metrics fix it.
-- **Boot newline storm (game-side)** — with the drop-cap picture missing the
-  game arms its CR-interrupt countdown (window prop 9) with -1, and its
-  `CLEAR-CRCNT` routine (`prologue.zil`) then reads the countdown back and
-  prints that many newlines: a ~65.5K-newline flood ending the prologue.
-  dfrotz exhibits the same blank-line flood. Through our 45-row playfield
-  that is floor(65525/44) full pages = exactly the **1489** boot `[ MORE ]` prompts the
-  smoke auto-answers (M1's 1337 was the same storm through 49-row pages —
-  the old capture's "stale-MORE harness spam" theory, finding 9, was wrong).
-  The storm is why `NOVAZ_SMOKE_MAX_STEPS` stays large (~480M steps).
-- **CR-interrupt countdown not decremented** — per the YZIP spec the
-  interpreter decrements prop 9 before each newline and calls the prop-8
-  routine when it hits zero (Frotz implements this, with a Zork Zero r393
-  ordering quirk). M2 stores the props verbatim and never fires (per-plan
-  de-scope). In text-only mode the only observable effect is the storm
-  running 65535 instead of ~65525 newlines; in M3 the countdown becomes
-  load-bearing (drop-cap margin release via `RESET-MARGIN`).
+Remaining limitations:
+
+- **Stale title art under the playfield** — the game never erases the gfx
+  layer after the title sequence (no `erase_window`/`erase_picture` calls);
+  text cells with the parchment background cover it, but gutter pixels
+  outside text regions can show title remnants. Verify in a GUI session;
+  per-window gfx erase semantics are a quirk candidate for M4.
 - **Premature ready-detection** — the game's event pump polls `read_char`
   between output paragraphs, so the smoke runner may see "ready" before a
-  response finishes; `smoke.txt` pins only the first line of each response.
+  response finishes; `smoke.txt` pins response text and stable banner
+  rows, not exact response rows.
+- **Hardware (M6)** — the FPGA gfx plane is 4bpp packed, so the Avalonia
+  host-assisted unpack (`FioPageTargetGfx4`) does not apply there; the RTL
+  blitter grows the nibble-granular color key (`BltModeColorKey4`, already
+  pinned by Avalonia tests) and NovaHost streams pak bytes as-is.

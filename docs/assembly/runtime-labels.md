@@ -3075,6 +3075,22 @@ Requires:
 - `VGC_P2`
 - `VGC_P3`
 
+## VGC.PALDATA
+
+Custom RGB palette data port; writes auto-increment VGC.PALIDX.
+
+- Kind: `const`
+- Symbol: `VGC_PALDATA`
+- Address: `$A0F5`
+
+## VGC.PALIDX
+
+Byte index into the custom RGB palette stream (0-47).
+
+- Kind: `const`
+- Symbol: `VGC_PALIDX`
+- Address: `$A0F4`
+
 ## VGC.PLOT
 
 Issue the VGC plot command using VGC.P0..VGC.P3.

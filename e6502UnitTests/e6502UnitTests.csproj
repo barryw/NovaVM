@@ -27,6 +27,7 @@
     <ProjectReference Include="..\e6502.Storage\e6502.Storage.csproj" />
     <ProjectReference Include="..\e6502.MCP\e6502.MCP.csproj" />
     <ProjectReference Include="..\e6502.GameServer\e6502.GameServer.csproj" />
+    <ProjectReference Include="..\examples\novaz\tools\Nova.NovaZ.Packer\Nova.NovaZ.Packer.csproj" />
   </ItemGroup>
 
 

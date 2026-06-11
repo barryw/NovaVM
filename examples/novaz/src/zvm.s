@@ -996,6 +996,24 @@ zvm_return:
 @return_discarded:
         RTS
 
+zvm_throw:
+        LDA zvm_operand_hi + 1
+        BNE @unsupported
+        LDA zvm_operand_lo + 1
+        BEQ @unsupported
+        CMP zvm_frame_count
+        BEQ @ok
+        BCS @unsupported
+@ok:
+        STA zvm_frame_count
+        LDA zvm_operand_lo
+        STA zvm_value_lo
+        LDA zvm_operand_hi
+        STA zvm_value_hi
+        JMP zvm_return
+@unsupported:
+        JMP zvm_unsupported
+
 zvm_call_vs:
         JSR zvm_fetch
         STA zvm_store_var
@@ -3545,6 +3563,8 @@ zvm_clear_upper_window:
         RTS
 
 zvm_set_text_style:
+        LDX #NZ6_OP_TEXT_STYLE
+        JSR zvm_v6_maybe_route  ; V6: colour-relative styles in the segment
         JSR nz_screen_flush_word
         ; Styles are cumulative: style 0 resets, any other value adds its bits.
         ; Only roman/reverse (bit0) and bold (bit1) change the colour cell;
@@ -3812,6 +3832,7 @@ zvm_set_font:
         JMP zvm_store_a_lo_zero_hi
 
 zvm_read_char:
+        JSR nz_screen_flush_word
         LDX #$01                ; read_char operands: [1, time, routine]
         JSR nz_timed_arm
         JSR nz_cursor_on
@@ -3967,6 +3988,25 @@ nz_call_z_routine:
         STZ zvm_value_hi
         LDA zvm_store_var       ; preserve the in-progress read's store var
         PHA
+        LDA zvm_timed_depth     ; reentrant: a CR interrupt can fire inside
+        PHA                     ; a sound/timed routine's own output
+        ; The CR interrupt fires MID-OUTPUT (between two lines of a wrapped
+        ; print): preserve the string-decode state — the ztext block and the
+        ; shared zstory_addr cursor — so the outer print resumes exactly
+        ; where it stopped after the routine's Z-code ran.
+        LDX #0
+@save_ztext:
+        LDA ztext_word_limit,X
+        PHA
+        INX
+        CPX #15
+        BNE @save_ztext
+        LDA zstory_addr_l
+        PHA
+        LDA zstory_addr_m
+        PHA
+        LDA zstory_addr_h
+        PHA
         LDA #$01
         STA zvm_operand_count   ; routine only, no arguments
         LDA #$FF
@@ -3983,6 +4023,20 @@ nz_call_z_routine:
         JSR zvm_step
         BRA @run
 @done:
+        PLA
+        STA zstory_addr_h
+        PLA
+        STA zstory_addr_m
+        PLA
+        STA zstory_addr_l
+        LDX #14
+@restore_ztext:
+        PLA
+        STA ztext_word_limit,X
+        DEX
+        BPL @restore_ztext
+        PLA
+        STA zvm_timed_depth
         PLA
         STA zvm_store_var
         RTS
@@ -4042,8 +4096,17 @@ zvm_clear_whole_screen:
         STA VTEXT_WIDTH
         LDA #50
         STA VTEXT_HEIGHT
+        LDA zstory_version
+        CMP #$06
+        BNE @classic_colour
+        LDA VTEXT_COLOR         ; V6: cells clear to a TRANSPARENT background
+        AND #$0F                ; (bg 0 = the global bg) — the parchment
+        STA VTEXT_COLOR         ; field lives in the gfx plane now
+        BRA @colour_done
+@classic_colour:
         LDA #ZVM_COLOR_NORMAL
         STA VTEXT_COLOR
+@colour_done:
         STZ VTEXT_ATTR
         LDA #(VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL)
         STA VTEXT_FLAGS
@@ -4887,6 +4950,7 @@ zvm_2op_table:
         .word zvm_call_2s
         .word zvm_call_2n
         .word zvm_set_colour
+        .word zvm_throw
 zvm_2op_count = (* - zvm_2op_table) / 2
 
 zvm_var_table:

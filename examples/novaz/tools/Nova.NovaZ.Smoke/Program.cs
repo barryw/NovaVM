@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -10,7 +11,7 @@ if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|])");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--skip-manifest-check]");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
     return 1;
 }
 
@@ -29,12 +30,15 @@ bool expectTimeStatus = args.Skip(1).Contains("--expect-time-status", StringComp
 bool skipManifestCheck = args.Skip(1).Contains("--skip-manifest-check", StringComparer.Ordinal);
 bool noStatusLine = args.Skip(1).Contains("--no-status-line", StringComparer.Ordinal);
 bool expectSoundfont = args.Skip(1).Contains("--expect-soundfont", StringComparer.Ordinal);
+bool expectZork0BootGfxReplay = args.Skip(1).Contains("--expect-zork0-boot-gfx-replay", StringComparer.Ordinal);
 List<string> expectedScreens = LoadExpectedScreens(args);
 int? expectStop = LoadExpectStop(args);
 List<ExpectedAt> expectedAts = LoadExpectedAts(args);
 List<string> screenInputs = LoadScreenInputs(args);
 List<ExpectedTextColor> expectedTextColors = LoadExpectedTextColors(args);
+List<ExpectedTextAttr> expectedTextAttrs = LoadExpectedTextAttrs(args);
 List<ExpectedGfxColor> expectedGfxColors = LoadExpectedGfxColors(args);
+string? dumpGfxPath = LoadOptionValue(args, "--dump-gfx");
 List<SmokeCommand> commands = LoadCommands(args, bootOnly, screenOnly);
 JsonNode? manifest = TryReadManifest(imagePath);
 int? rawInputModeAddress = TryReadRuntimeSymbol("nz_raw_input_mode");
@@ -82,6 +86,7 @@ try
             throw new InvalidOperationException($"Expected zvm_stop_reason={expectedStopReason}, saw {actualStop}.\n{stopScreen}");
         foreach (string expected in expectedScreens)
             RequireContains(stopScreen, expected);
+        DumpGfxPlane(bus.Vgc, dumpGfxPath);
         Console.WriteLine($"NovaZ stop smoke passed. stop={actualStop}");
         Console.WriteLine(stopScreen);
         return 0;
@@ -89,19 +94,21 @@ try
 
     if (screenOnly)
     {
-        if (expectedScreens.Count == 0 && expectedAts.Count == 0 && expectedTextColors.Count == 0 && expectedGfxColors.Count == 0)
-            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-at, --expect-text-color, or --expect-gfx-color check.");
+        if (expectedScreens.Count == 0 && expectedAts.Count == 0 && expectedTextColors.Count == 0 && expectedTextAttrs.Count == 0 && expectedGfxColors.Count == 0)
+            throw new InvalidOperationException("--screen-only requires at least one --expect-screen, --expect-at, --expect-text-color, --expect-text-attr, or --expect-gfx-color check.");
 
         foreach (string input in screenInputs)
             SendRaw(cpu, bus, editor, input);
 
-        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedGfxColors, ref morePrompts);
+        string screenOnlySnapshot = RunUntilScreenMatches(cpu, bus, editor, maxSteps, expectedScreens, expectedAts, expectedTextColors, expectedTextAttrs, expectedGfxColors, ref morePrompts);
         foreach (string expected in expectedScreens)
             RequireContains(screenOnlySnapshot, expected);
         foreach (var expected in expectedAts)
             RequireAt(screenOnlySnapshot, expected);
         foreach (var expected in expectedTextColors)
             RequireTextColor(bus.Vgc, screenOnlySnapshot, expected);
+        foreach (var expected in expectedTextAttrs)
+            RequireTextAttr(bus.Vgc, screenOnlySnapshot, expected);
         foreach (var expected in expectedGfxColors)
             RequireGfxColor(bus.Vgc, screenOnlySnapshot, expected);
         if (expectMore && morePrompts == 0)
@@ -109,6 +116,7 @@ try
         if (expectSoundfont)
             RequireSoundfontLoaded(bus, screenOnlySnapshot);
 
+        DumpGfxPlane(bus.Vgc, dumpGfxPath);
         Console.WriteLine($"NovaZ screen smoke passed. morePrompts={morePrompts}");
         Console.WriteLine(screenOnlySnapshot);
         return 0;
@@ -138,9 +146,13 @@ try
         RequireContains(screen, expected);
     foreach (var expected in expectedAts)
         RequireAt(screen, expected);
+    foreach (var expected in expectedGfxColors)
+        RequireGfxColor(bus.Vgc, screen, expected);
     RequireReadyPrompt(cpu, bus, screen, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
     if (expectSoundfont)
         RequireSoundfontLoaded(bus, screen);
+    if (expectZork0BootGfxReplay)
+        RequireZorkZeroBootGfxReplay(bus.Vgc, imagePath, screen);
 
     string bootScreen = screen;
 
@@ -206,7 +218,7 @@ try
         }
         else if (command.Expected.Count > 0)
         {
-            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], ref morePrompts);
+            screen = RunUntilScreenMatches(cpu, bus, editor, maxSteps, command.Expected, [], [], [], [], ref morePrompts);
         }
         else
         {
@@ -255,6 +267,7 @@ try
     if (expectMore && morePrompts == 0)
         throw new InvalidOperationException($"Expected at least one [ MORE ] prompt.\n{SnapshotScreen(bus.Vgc)}");
 
+    DumpGfxPlane(bus.Vgc, dumpGfxPath);
     Console.WriteLine($"NovaZ smoke passed. morePrompts={morePrompts}");
     Console.WriteLine(SnapshotScreen(bus.Vgc));
     return 0;
@@ -374,6 +387,7 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
             case "--skip-manifest-check":
             case "--no-status-line":
             case "--expect-soundfont":
+            case "--expect-zork0-boot-gfx-replay":
                 break;
             case "--expect-screen":
                 if (i + 1 >= args.Length)
@@ -395,9 +409,24 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
                     throw new ArgumentException("--expect-text-color requires text=>hex.");
                 i++;
                 break;
+            case "--expect-text-attr":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-text-attr requires text=>hex.");
+                i++;
+                break;
+            case "--expect-gfx-color":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--expect-gfx-color requires x,y=>hex.");
+                i++;
+                break;
             case "--expect-stop":
                 if (i + 1 >= args.Length)
                     throw new ArgumentException("--expect-stop requires a byte value.");
+                i++;
+                break;
+            case "--dump-gfx":
+                if (i + 1 >= args.Length)
+                    throw new ArgumentException("--dump-gfx requires a file path.");
                 i++;
                 break;
             case "--script":
@@ -425,6 +454,20 @@ static List<SmokeCommand> LoadCommands(string[] args, bool bootOnly, bool screen
     }
 
     return commands;
+}
+
+static string? LoadOptionValue(string[] args, string option)
+{
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals(option, StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException($"{option} requires a value.");
+        return args[i + 1];
+    }
+
+    return null;
 }
 
 static SmokeCommand ParseCommandSpec(string spec)
@@ -678,6 +721,33 @@ static List<ExpectedTextColor> LoadExpectedTextColors(string[] args)
     return expected;
 }
 
+static List<ExpectedTextAttr> LoadExpectedTextAttrs(string[] args)
+{
+    var expected = new List<ExpectedTextAttr>();
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].Equals("--expect-text-attr", StringComparison.Ordinal))
+            continue;
+        if (i + 1 >= args.Length)
+            throw new ArgumentException("--expect-text-attr requires text=>hex.");
+
+        string spec = args[++i];
+        string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+            throw new ArgumentException($"Expected text attr must be '<text=>hex>': {spec}");
+
+        string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? parts[1][2..]
+            : parts[1];
+        if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte attr))
+            throw new ArgumentException($"Expected text attr must use a one-byte hex value: {spec}");
+
+        expected.Add(new ExpectedTextAttr(parts[0], attr));
+    }
+
+    return expected;
+}
+
 static List<ExpectedGfxColor> LoadExpectedGfxColors(string[] args)
 {
     var expected = new List<ExpectedGfxColor>();
@@ -721,10 +791,11 @@ static string RunUntilScreenMatches(
     IReadOnlyList<string> expectedScreens,
     IReadOnlyList<ExpectedAt> expectedAts,
     IReadOnlyList<ExpectedTextColor> expectedTextColors,
+    IReadOnlyList<ExpectedTextAttr> expectedTextAttrs,
     IReadOnlyList<ExpectedGfxColor> expectedGfxColors,
     ref int morePrompts)
 {
-    const int snapshotMask = 0x3FFF;
+    int snapshotMask = ReadEnvHex("NOVAZ_SMOKE_SNAPSHOT_MASK", 0x3FFF);
     string? lastMatchSnapshot = null;
     for (int i = 0; i < maxSteps; i++)
     {
@@ -765,9 +836,10 @@ static string RunUntilScreenMatches(
 
         bool hasExpectedScreens = expectedScreens.All(expected => ContainsNormalized(screen, expected));
         bool hasExpectedAts = expectedAts.All(expected => MatchesAt(screen, expected));
-        bool hasExpectedColorText = expectedTextColors.All(expected => FindText(screen, expected.Text) is not null);
+        bool hasExpectedColorText = expectedTextColors.All(expected => MatchesTextColor(bus.Vgc, screen, expected));
+        bool hasExpectedAttrText = expectedTextAttrs.All(expected => MatchesTextAttr(bus.Vgc, screen, expected));
         bool hasExpectedGfxColors = expectedGfxColors.All(expected => bus.Vgc.GetGfxPixelColor(expected.X, expected.Y) == expected.Color);
-        if (hasExpectedScreens && hasExpectedAts && hasExpectedColorText && hasExpectedGfxColors)
+        if (hasExpectedScreens && hasExpectedAts && hasExpectedColorText && hasExpectedAttrText && hasExpectedGfxColors)
             return screen;
     }
 
@@ -804,7 +876,7 @@ static string RunUntilReadyPrompt(
     int? readKeyLoopAddress,
     int? readTimedLoopAddress)
 {
-    const int snapshotMask = 0x3FFF;
+    int snapshotMask = ReadEnvHex("NOVAZ_SMOKE_SNAPSHOT_MASK", 0x3FFF);
     var trace = new Queue<string>();
     int lastOpcodePc = -1;
     bool traceTopRow = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_TOP_ROW") == "1";
@@ -1122,6 +1194,9 @@ static void SendRaw(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string
 
 static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, bool screenStable)
 {
+    if (Environment.GetEnvironmentVariable("NOVAZ_SMOKE_STOP_AT_STARTUP_PROMPT") == "1")
+        return false;
+
     if (screen.Contains("Hit any key", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("Press any key", StringComparison.OrdinalIgnoreCase))
     {
@@ -1293,6 +1368,9 @@ static void RequireSoundfontLoaded(CompositeBusDevice bus, string screen)
 
 static void RequireTextColor(VirtualGraphicsController vgc, string screen, ExpectedTextColor expected)
 {
+    if (MatchesTextColor(vgc, screen, expected))
+        return;
+
     (int row, int col)? position = FindText(screen, expected.Text);
     if (position is null)
         throw new InvalidOperationException($"Expected screen to contain text for color check '{expected.Text}'.\n{screen}");
@@ -1312,6 +1390,66 @@ static void RequireTextColor(VirtualGraphicsController vgc, string screen, Expec
     }
 }
 
+static bool MatchesTextColor(VirtualGraphicsController vgc, string screen, ExpectedTextColor expected)
+{
+    (int row, int col)? position = FindText(screen, expected.Text);
+    if (position is null)
+        return false;
+
+    (int row, int col) = position.Value;
+    for (int i = 0; i < expected.Text.Length; i++)
+    {
+        if (expected.Text[i] == ' ')
+            continue;
+        if (vgc.GetScreenColor(col + i, row) != expected.Color)
+            return false;
+    }
+
+    return true;
+}
+
+static void RequireTextAttr(VirtualGraphicsController vgc, string screen, ExpectedTextAttr expected)
+{
+    if (MatchesTextAttr(vgc, screen, expected))
+        return;
+
+    (int row, int col)? position = FindText(screen, expected.Text);
+    if (position is null)
+        throw new InvalidOperationException($"Expected screen to contain text for attr check '{expected.Text}'.\n{screen}");
+
+    (int row, int col) = position.Value;
+    for (int i = 0; i < expected.Text.Length; i++)
+    {
+        if (expected.Text[i] == ' ')
+            continue;
+        byte actual = vgc.GetScreenTextAttr(col + i, row);
+        if (actual == expected.Attr)
+            continue;
+
+        throw new InvalidOperationException(
+            $"Expected '{expected.Text}' at {col},{row} to use text attr ${expected.Attr:X2}; " +
+            $"cell {col + i},{row} was ${actual:X2}.\n{screen}");
+    }
+}
+
+static bool MatchesTextAttr(VirtualGraphicsController vgc, string screen, ExpectedTextAttr expected)
+{
+    (int row, int col)? position = FindText(screen, expected.Text);
+    if (position is null)
+        return false;
+
+    (int row, int col) = position.Value;
+    for (int i = 0; i < expected.Text.Length; i++)
+    {
+        if (expected.Text[i] == ' ')
+            continue;
+        if (vgc.GetScreenTextAttr(col + i, row) != expected.Attr)
+            return false;
+    }
+
+    return true;
+}
+
 static void RequireGfxColor(VirtualGraphicsController vgc, string screen, ExpectedGfxColor expected)
 {
     byte actual = vgc.GetGfxPixelColor(expected.X, expected.Y);
@@ -1322,6 +1460,178 @@ static void RequireGfxColor(VirtualGraphicsController vgc, string screen, Expect
         $"Expected graphics pixel {expected.X},{expected.Y} to use color ${expected.Color:X2}; " +
         $"was ${actual:X2}.\n{screen}");
 }
+
+static void DumpGfxPlane(VirtualGraphicsController vgc, string? path)
+{
+    if (string.IsNullOrWhiteSpace(path))
+        return;
+
+    string fullPath = Path.GetFullPath(path);
+    string? dir = Path.GetDirectoryName(fullPath);
+    if (!string.IsNullOrEmpty(dir))
+        Directory.CreateDirectory(dir);
+
+    var data = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    for (int y = 0; y < VgcConstants.GfxHeight; y++)
+    {
+        int row = y * VgcConstants.GfxWidth;
+        for (int x = 0; x < VgcConstants.GfxWidth; x++)
+            data[row + x] = vgc.GetGfxPixelColor(x, y);
+    }
+
+    File.WriteAllBytes(fullPath, data);
+    Console.Error.WriteLine($"dumped gfx plane to {fullPath} ({data.Length} bytes)");
+}
+
+static void RequireZorkZeroBootGfxReplay(VirtualGraphicsController vgc, string imagePath, string screen)
+{
+    using var image = NdiImage.Open(imagePath);
+    byte[] pak = image.ReadFile("PICS.PAK", 0xFFFF);
+    var entries = ReadPicturePackIndex(pak);
+
+    // Zork Zero first-prompt gfx state, from the pixel-unit V6 boot trace
+    // (build/nz6-trace-zork-zero-pixel.log).
+    // erase_window -1 fills the MCGA framebuffer with the current window
+    // background (Z-machine white -> EGA index 15), then these boot/title and
+    // first-refresh picture draws land before "--- boot: first prompt".
+    var expected = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    Array.Fill(expected, (byte)0x0F);
+
+    foreach (var draw in ZorkZeroBootDraws())
+        ReplayPictureDraw(pak, entries, expected, draw);
+
+    int mismatchCount = 0;
+    (int X, int Y, byte Expected, byte Actual)? first = null;
+    for (int y = 0; y < VgcConstants.GfxHeight; y++)
+    {
+        int row = y * VgcConstants.GfxWidth;
+        for (int x = 0; x < VgcConstants.GfxWidth; x++)
+        {
+            byte actual = vgc.GetGfxPixelColor(x, y);
+            byte want = expected[row + x];
+            if (actual == want)
+                continue;
+
+            mismatchCount++;
+            first ??= (x, y, want, actual);
+        }
+    }
+
+    if (mismatchCount == 0)
+    {
+        Console.Error.WriteLine("Zork Zero boot gfx replay matched live plane.");
+        return;
+    }
+
+    var f = first!.Value;
+    throw new InvalidOperationException(
+        $"Zork Zero boot gfx replay mismatch: {mismatchCount} pixels differ; " +
+        $"first at {f.X},{f.Y}: expected ${f.Expected:X2}, got ${f.Actual:X2}.\n{screen}");
+}
+
+static Dictionary<int, PictureEntry> ReadPicturePackIndex(byte[] pak)
+{
+    if (pak.Length < 9 ||
+        pak[0] != (byte)'N' || pak[1] != (byte)'Z' || pak[2] != (byte)'P' || pak[3] != (byte)'K' ||
+        pak[4] is not (1 or 2))
+        throw new InvalidDataException("PICS.PAK header is invalid or unsupported.");
+
+    int headerSize = pak[4] == 2 ? 57 : 9;
+    int count = BinaryPrimitives.ReadUInt16LittleEndian(pak.AsSpan(5));
+    int indexEnd = headerSize + count * 15;
+    if (indexEnd > pak.Length)
+        throw new InvalidDataException("PICS.PAK index extends past EOF.");
+
+    var entries = new Dictionary<int, PictureEntry>(count);
+    for (int i = 0; i < count; i++)
+    {
+        int e = headerSize + i * 15;
+        int number = BinaryPrimitives.ReadUInt16LittleEndian(pak.AsSpan(e));
+        int width = BinaryPrimitives.ReadUInt16LittleEndian(pak.AsSpan(e + 2));
+        int height = BinaryPrimitives.ReadUInt16LittleEndian(pak.AsSpan(e + 4));
+        byte flags = pak[e + 6];
+        int offset = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(pak.AsSpan(e + 7)));
+        int length = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(pak.AsSpan(e + 11)));
+        entries[number] = new PictureEntry(width, height, flags, offset, length);
+    }
+
+    return entries;
+}
+
+static void ReplayPictureDraw(
+    byte[] pak,
+    IReadOnlyDictionary<int, PictureEntry> entries,
+    byte[] expected,
+    ZorkZeroDraw draw)
+{
+    if (!entries.TryGetValue(draw.Number, out var entry) || entry.Length == 0)
+        return;
+
+    int rowBytes = (entry.Width + 1) / 2;
+    if (entry.Offset < 0 || entry.Length < rowBytes * entry.Height ||
+        entry.Offset + entry.Length > pak.Length)
+        throw new InvalidDataException($"PICS.PAK entry ${draw.Number:X} has invalid bitmap bounds.");
+
+    (int originY, int originX) = draw.Window switch
+    {
+        0 => (40, 44),
+        1 => (1, 1),
+        7 => (1, 1),
+        _ => throw new InvalidDataException($"Unexpected Zork Zero boot draw window {draw.Window}.")
+    };
+    int dstY = originY + draw.RelY - 2;
+    int dstX = originX + draw.RelX - 2;
+    bool transparent = (entry.Flags & 0x01) != 0;
+    byte transparentIndex = (byte)(entry.Flags >> 4);
+    if ((entry.Flags & 0x08) != 0 && entry.Width <= 64 && entry.Height <= 64)
+    {
+        int offset = dstY & 0x03;
+        if (offset != 0)
+            dstY -= offset + 1;
+    }
+    if ((entry.Flags & 0x04) != 0 && entry.Width <= 32 && entry.Height <= 32)
+        dstY -= 2;
+
+    for (int y = 0; y < entry.Height; y++)
+    {
+        int gy = dstY + y;
+        if ((uint)gy >= VgcConstants.GfxHeight)
+            continue;
+
+        int src = entry.Offset + y * rowBytes;
+        int dst = gy * VgcConstants.GfxWidth + dstX;
+        for (int x = 0; x < entry.Width; x++)
+        {
+            int gx = dstX + x;
+            if ((uint)gx >= VgcConstants.GfxWidth)
+                continue;
+
+            byte pair = pak[src + x / 2];
+            byte color = (x & 1) == 0 ? (byte)(pair >> 4) : (byte)(pair & 0x0F);
+            if (transparent && color == transparentIndex)
+                continue;
+            expected[dst + x] = color;
+        }
+    }
+}
+
+static ZorkZeroDraw[] ZorkZeroBootDraws() =>
+[
+    new(0x0005, 0x0001, 0x0001, 7),
+    new(0x01F1, 0x0023, 0x0001, 7),
+    new(0x01F2, 0x0023, 0x011C, 7),
+    new(0x0011, 0x0001, 0x008B, 7),
+    new(0x000A, 0x0001, 0x008B, 7),
+    new(0x000B, 0x0001, 0x008B, 7),
+    new(0x0014, 0x0001, 0x008B, 7),
+    new(0x000D, 0x0001, 0x008B, 7),
+    new(0x0016, 0x0001, 0x008B, 7),
+    new(0x000F, 0x0001, 0x008B, 7),
+    new(0x0018, 0x0001, 0x008B, 7),
+    new(0x01E1, 0x000E, 0x00C0, 7),
+    new(0x0002, 0x0005, 0x0001, 0),
+    new(0x00D8, 0x002D, 0x0001, 0),
+];
 
 static (int Row, int Col)? FindText(string screen, string text)
 {
@@ -1566,8 +1876,11 @@ sealed record SmokeCommand(
     SmokeInputMode Mode = SmokeInputMode.Line,
     bool WaitForPrompt = true);
 sealed record ExpectedTextColor(string Text, byte Color);
+sealed record ExpectedTextAttr(string Text, byte Attr);
 sealed record ExpectedAt(int Col, int Row, string Text);
 sealed record ExpectedGfxColor(int X, int Y, byte Color);
+sealed record PictureEntry(int Width, int Height, byte Flags, int Offset, int Length);
+sealed record ZorkZeroDraw(int Number, int RelY, int RelX, int Window);
 
 // Cached nz_more_key_wait symbol for AtMorePrompt (top-level statements
 // cannot host static fields).

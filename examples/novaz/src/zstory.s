@@ -44,6 +44,7 @@ zstory_filebytes_l:    .res 1
 zstory_checksum_hi:    .res 1
 zstory_checksum_lo:    .res 1
 zstory_page_no:        .res 1
+zstory_page_no_hi:     .res 1
 zstory_slot:           .res 1
 zstory_next_slot:      .res 1
 zstory_tmp:            .res 1
@@ -53,6 +54,7 @@ zstory_serial:         .res 6
 
 zstory_cache_valid:    .res ZSTORY_CACHE_SLOTS
 zstory_cache_page:     .res ZSTORY_CACHE_SLOTS
+zstory_cache_page_hi:  .res ZSTORY_CACHE_SLOTS
 zstory_dynamic_base_l: .res 1
 zstory_dynamic_base_m: .res 1
 zstory_dynamic_base_h: .res 1
@@ -293,18 +295,51 @@ zstory_configure_flags1:
         LDA #ZHEADER_FLAGS1
         LDX #%10010100
         JSR zstory_write_header_byte_value
-        BNE @done
+        BEQ :+
+        RTS
+:
 
         LDA #$20                ; screen height in lines
         LDX #50
         JSR zstory_write_header_byte_value
-        BNE @done
+        BEQ :+
+        RTS
+:
 
         LDA #$21                ; screen width in characters
         LDX #80
         JSR zstory_write_header_byte_value
-        BNE @done
+        BEQ :+
+        RTS
+:
 
+        LDA zstory_version
+        CMP #6
+        BCC @text_units
+        LDA #$22                ; V6 screen width in units (gfx pixels)
+        STA zstory_addr_l
+        STZ zstory_addr_m
+        STZ zstory_addr_h
+        LDA #$01
+        STA zstory_word_hi
+        LDA #$40
+        STA zstory_word_lo
+        JSR zstory_write16      ; 320
+        BNE @done
+        LDA #$24                ; V6 screen height in units (gfx pixels)
+        LDX #200
+        JSR zstory_write_header_word_value
+        BNE @done
+        LDA #$26                ; font height in units
+        LDX #$04
+        JSR zstory_write_header_byte_value
+        BNE @done
+        LDA #$27                ; font width in units
+        LDX #$04
+        JSR zstory_write_header_byte_value
+        BNE @done
+        BRA @colours
+@text_units:
         LDA #$22                ; screen width in units
         LDX #80
         JSR zstory_write_header_word_value
@@ -325,6 +360,7 @@ zstory_configure_flags1:
         JSR zstory_write_header_byte_value
         BNE @done
 
+@colours:
         LDA #$2C                ; default background colour
         LDX #$02
         JSR zstory_write_header_byte_value
@@ -571,6 +607,10 @@ zstory_resolve_page:
         LSR
         STA zstory_page_no
         LDA zstory_addr_h
+        LSR
+        LSR
+        STA zstory_page_no_hi
+        LDA zstory_addr_h
         ASL
         ASL
         ASL
@@ -586,6 +626,9 @@ zstory_resolve_page:
         BEQ @next
         LDA zstory_cache_page,X
         CMP zstory_page_no
+        BNE @next
+        LDA zstory_cache_page_hi,X
+        CMP zstory_page_no_hi
         BEQ @hit
 @next:
         INX
@@ -605,6 +648,8 @@ zstory_resolve_page:
         LDX zstory_slot
         LDA zstory_page_no
         STA zstory_cache_page,X
+        LDA zstory_page_no_hi
+        STA zstory_cache_page_hi,X
         LDA #$01
         STA zstory_cache_valid,X
         LDA #ZSTORY_ERR_NONE
@@ -653,6 +698,11 @@ zstory_load_cache_slot:
         LSR
         LSR
         LSR
+        STA zstory_tmp
+        LDA zstory_page_no_hi
+        ASL
+        ASL
+        ORA zstory_tmp
         STA PAGER_FILEH
         JMP pager_load_file_page
 

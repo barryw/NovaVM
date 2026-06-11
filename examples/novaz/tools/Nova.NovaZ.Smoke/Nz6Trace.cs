@@ -24,7 +24,8 @@ static class Nz6Trace
     static readonly string[] VarOpNames =
     [
         "reset", "split_window", "set_window", "erase_window",
-        "set_cursor", "get_cursor", "set_colour", "pull"
+        "set_cursor", "get_cursor", "set_colour", "pull",
+        "select", "set_text_style", "cr_newline"
     ];
 
     // EXT opnum -> name; indices mirror nz6_ext_table in src/zvm6.s.
@@ -48,6 +49,14 @@ static class Nz6Trace
     static int _eraseLinePc = -1;
     static int _setTextStylePc = -1;
     static int _bufferModePc = -1;
+    static int _outputStreamPc = -1;
+    static int _logShiftPc = -1;
+    static int _artShiftPc = -1;
+    static int _scanTablePc = -1;
+    static int _copyTablePc = -1;
+    static int _printTablePc = -1;
+    static int _printAddrPc = -1;
+    static int _printPaddrPc = -1;
     static int _operandLo;
     static int _operandHi;
     static int _operandCount;
@@ -68,6 +77,22 @@ static class Nz6Trace
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_set_text_style in build/runtime.sym.");
         _bufferModePc = ReadSymbol("runtime.sym", "zvm_buffer_mode")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_buffer_mode in build/runtime.sym.");
+        _outputStreamPc = ReadSymbol("runtime.sym", "zvm_output_stream")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_output_stream in build/runtime.sym.");
+        _logShiftPc = ReadSymbol("runtime.sym", "zvm_log_shift")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_log_shift in build/runtime.sym.");
+        _artShiftPc = ReadSymbol("runtime.sym", "zvm_art_shift")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_art_shift in build/runtime.sym.");
+        _scanTablePc = ReadSymbol("runtime.sym", "zvm_scan_table")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_scan_table in build/runtime.sym.");
+        _copyTablePc = ReadSymbol("runtime.sym", "zvm_copy_table")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_copy_table in build/runtime.sym.");
+        _printTablePc = ReadSymbol("runtime.sym", "zvm_print_table")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_print_table in build/runtime.sym.");
+        _printAddrPc = ReadSymbol("runtime.sym", "zvm_print_addr")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_print_addr in build/runtime.sym.");
+        _printPaddrPc = ReadSymbol("runtime.sym", "zvm_print_paddr")
+            ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_print_paddr in build/runtime.sym.");
         _operandLo = ReadSymbol("runtime.sym", "zvm_operand_lo")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_lo in build/runtime.sym.");
         _operandHi = ReadSymbol("runtime.sym", "zvm_operand_hi")
@@ -81,7 +106,7 @@ static class Nz6Trace
         _writer = new StreamWriter(path, append: false) { AutoFlush = true };
         _writer.WriteLine("# NZ6 dispatch trace (NOVAZ_SMOKE_TRACE_NZ6)");
         _writer.WriteLine("# regenerate: make -C examples/novaz capture-z6-trace PROJECT=zork-zero");
-        _writer.WriteLine($"# nz6_entry=${_entryPc:X4} zvm_erase_line=${_eraseLinePc:X4} zvm_set_text_style=${_setTextStylePc:X4} zvm_buffer_mode=${_bufferModePc:X4}");
+        _writer.WriteLine($"# nz6_entry=${_entryPc:X4} zvm_erase_line=${_eraseLinePc:X4} zvm_set_text_style=${_setTextStylePc:X4} zvm_buffer_mode=${_bufferModePc:X4} zvm_output_stream=${_outputStreamPc:X4} zvm_log_shift=${_logShiftPc:X4} zvm_art_shift=${_artShiftPc:X4} zvm_scan_table=${_scanTablePc:X4} zvm_copy_table=${_copyTablePc:X4} zvm_print_table=${_printTablePc:X4} zvm_print_addr=${_printAddrPc:X4} zvm_print_paddr=${_printPaddrPc:X4}");
         _writer.WriteLine("# <seq> <id> <opname> count=<n> ops=<op0>,<op1>,<op2>,<op3>  (ops hex; id '--' = ROM-side hook)");
     }
 
@@ -99,6 +124,22 @@ static class Nz6Trace
             LogRomOp("set_text_style", bus);
         else if (pc == _bufferModePc)
             LogRomOp("buffer_mode", bus);
+        else if (pc == _outputStreamPc)
+            LogRomOp("output_stream", bus);
+        else if (pc == _logShiftPc)
+            LogRomOp("log_shift", bus);
+        else if (pc == _artShiftPc)
+            LogRomOp("art_shift", bus);
+        else if (pc == _scanTablePc)
+            LogRomOp("scan_table", bus);
+        else if (pc == _copyTablePc)
+            LogRomOp("copy_table", bus);
+        else if (pc == _printTablePc)
+            LogRomOp("print_table", bus);
+        else if (pc == _printAddrPc)
+            LogRomOp("print_addr", bus);
+        else if (pc == _printPaddrPc)
+            LogRomOp("print_paddr", bus);
     }
 
     public static void Marker(string text) => _writer?.WriteLine(text);

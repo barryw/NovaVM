@@ -317,6 +317,17 @@ public class AvaloniaCompositeBusTests
     }
 
     [TestMethod]
+    public void GfxTransparentColor_AcceptsDisableValueAbove15()
+    {
+        var bus = MakeBus();
+        bus.Write((ushort)VgcConstants.RegGfxTransparentColor, 0xFF);
+        Assert.AreEqual(0xFF, bus.Vgc.GetGfxTransparentColor(),
+            "values above 15 park transparency off (no 4bpp pixel matches)");
+        bus.Write((ushort)VgcConstants.RegGfxTransparentColor, 0x07);
+        Assert.AreEqual(0x07, bus.Vgc.GetGfxTransparentColor());
+    }
+
+    [TestMethod]
     public void Rom_WritesIgnored()
     {
         var bus = MakeBus();

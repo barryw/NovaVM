@@ -31,7 +31,13 @@ const int StaticMemory = 0x0600;
 const int CodeBase = 0x0600;                       // routines region; packed (0x600-0x200)/4
 const int PackedStrings = 0x1600;                  // strings region;  packed (0x1600-0x400)/4
 
-(string outputPath, int version, bool mainReturns) = ParseArgs(args);
+static int CellUnit(int oneBasedCell) => (oneBasedCell - 1) * 4 + 1;
+static int CellCountUnits(int cells) => cells * 4;
+static Operand UnitOperand(int units) => units <= 0xFF ? Operand.Small(units) : Operand.Large(units);
+static Operand CellUnitOperand(int oneBasedCell) => UnitOperand(CellUnit(oneBasedCell));
+static Operand CellCountOperand(int cells) => UnitOperand(CellCountUnits(cells));
+
+(string outputPath, int version, bool mainReturns, string? fixture, string? picturesPakPath) = ParseArgs(args);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".");
 
 var story = new byte[StorySize];
@@ -45,6 +51,8 @@ WritePackedText(story, PackedStrings, "ok");
 var code = new ZCode(CodeBase, packedAddressScale: 4, routinesByteOffset: RoutinesByteOffset);
 if (mainReturns)
     EmitMainReturnsProgram(code);
+else if (fixture == "colours")
+    EmitColoursProgram(code);
 else
     EmitSpecProgram(code);
 byte[] codeBytes = code.ToArray();
@@ -54,13 +62,21 @@ Array.Copy(codeBytes, 0, story, CodeBase, codeBytes.Length);
 
 WriteBE16(story, 0x1C, Checksum(story));
 File.WriteAllBytes(outputPath, story);
+if (picturesPakPath is not null)
+{
+    byte[] pak = BuildSyntheticPicturesPak();
+    File.WriteAllBytes(picturesPakPath, pak);
+    Console.WriteLine($"Wrote {picturesPakPath} ({pak.Length} bytes)");
+}
 Console.WriteLine($"Wrote {outputPath} ({story.Length} bytes, code {codeBytes.Length} bytes, version {version})");
 
-static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
+static (string Output, int Version, bool MainReturns, string? Fixture, string? PicturesPak) ParseArgs(string[] args)
 {
     string output = "build/z6-spec.z6";
     int version = 6;
     bool mainReturns = false;
+    string? fixture = null;
+    string? picturesPak = null;
     for (int i = 0; i < args.Length; i++)
     {
         string? value = i + 1 < args.Length ? args[i + 1] : null;
@@ -78,6 +94,16 @@ static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
             case "--main-returns":
                 mainReturns = true;
                 break;
+            case "--pictures-pak" when value is not null:
+                picturesPak = value;
+                i++;
+                break;
+            case "--fixture" when value is not null:
+                if (value != "colours")
+                    throw new ArgumentException($"Unknown fixture: {value}");
+                fixture = value;
+                i++;
+                break;
             case "-h" or "--help":
                 PrintUsage();
                 Environment.Exit(0);
@@ -90,7 +116,7 @@ static (string Output, int Version, bool MainReturns) ParseArgs(string[] args)
         }
     }
 
-    return (output, version, mainReturns);
+    return (output, version, mainReturns, fixture, picturesPak);
 }
 
 static void PrintUsage()
@@ -99,6 +125,8 @@ static void PrintUsage()
     Console.Error.WriteLine("  --output <story.z6>");
     Console.Error.WriteLine("  --version <n>   header version byte only (default 6; 7 for rejection tests)");
     Console.Error.WriteLine("  --main-returns  main routine is a bare rtrue (frame-0 return quit test)");
+    Console.Error.WriteLine("  --fixture colours  V6 colour/style fixture (EGA mapping asserts)");
+    Console.Error.WriteLine("  --pictures-pak <pics.pak>  also emit the synthetic 2-picture PICS.PAK");
 }
 
 static void WriteHeader(byte[] story, int version)
@@ -193,10 +221,98 @@ static void WritePackedText(byte[] story, int offset, string text)
 // --main-returns: the smallest possible V6 story — the main routine is a
 // bare rtrue. Returning from frame 0 must halt the machine cleanly with
 // ZVM_STOP_QUIT (the smoke target asserts the stop reason directly).
+// Synthetic PICS.PAK for the spec image (format mirrors BlorbPictures):
+// "NZPK" v1, count=3, release=7. Pic 3 = 8x8 px solid magenta ($5), pic 7 =
+// 6x10 px solid cyan ($3) — ceil-divide by 4 gives 2x2 and 2(w)x3(h) cells.
+// Pic 9 = 4x4 px with transparency (flags $11: bit 0 + transparent index 1):
+// each row E,1,1,E — yellow edges around a 2px transparent middle, the
+// nibble-keyed blit fixture. Offsets are absolute; two pixels per byte.
+static byte[] BuildSyntheticPicturesPak()
+{
+    const int headerSize = 9, entrySize = 15;
+    int dataStart = headerSize + 3 * entrySize;
+    int len3 = 4 * 8;      // 8 px = 4 bytes/row, 8 rows
+    int len7 = 3 * 10;     // 6 px = 3 bytes/row, 10 rows
+    int len9 = 2 * 4;      // 4 px = 2 bytes/row, 4 rows
+    var pak = new byte[dataStart + len3 + len7 + len9];
+    pak[0] = (byte)'N'; pak[1] = (byte)'Z'; pak[2] = (byte)'P'; pak[3] = (byte)'K';
+    pak[4] = 1;
+    pak[5] = 3; pak[6] = 0;          // count
+    pak[7] = 7; pak[8] = 0;          // release
+    WriteEntry(pak, headerSize, z: 3, w: 8, h: 8, offset: dataStart, len: len3);
+    WriteEntry(pak, headerSize + entrySize, z: 7, w: 6, h: 10, offset: dataStart + len3, len: len7);
+    WriteEntry(pak, headerSize + 2 * entrySize, z: 9, w: 4, h: 4, offset: dataStart + len3 + len7, len: len9, flags: 0x11);
+    for (int i = 0; i < len3; i++) pak[dataStart + i] = 0x55;
+    for (int i = 0; i < len7; i++) pak[dataStart + len3 + i] = 0x33;
+    for (int r = 0; r < 4; r++)
+    {
+        pak[dataStart + len3 + len7 + r * 2] = 0xE1;     // E 1
+        pak[dataStart + len3 + len7 + r * 2 + 1] = 0x1E; // 1 E
+    }
+    return pak;
+
+    static void WriteEntry(byte[] pak, int at, int z, int w, int h, int offset, int len, byte flags = 0)
+    {
+        pak[at] = (byte)z; pak[at + 1] = (byte)(z >> 8);
+        pak[at + 2] = (byte)w; pak[at + 3] = (byte)(w >> 8);
+        pak[at + 4] = (byte)h; pak[at + 5] = (byte)(h >> 8);
+        pak[at + 6] = flags;
+        pak[at + 7] = (byte)offset; pak[at + 8] = (byte)(offset >> 8);
+        pak[at + 9] = (byte)(offset >> 16); pak[at + 10] = (byte)(offset >> 24);
+        pak[at + 11] = (byte)len; pak[at + 12] = (byte)(len >> 8);
+        pak[at + 13] = (byte)(len >> 16); pak[at + 14] = (byte)(len >> 24);
+    }
+}
+
 static void EmitMainReturnsProgram(ZCode z)
 {
     z.Byte(0);       // locals count
     z.ZeroOp(0);     // rtrue
+}
+
+// V6 colour fixture (M3 Task 2): set_colour drives the live text colour
+// through the segment's Z->EGA mapping, set_text_style derives bold from the
+// current colour pair and reverse from the text-attr plane. The V6 boot
+// default is EGA white-on-black ($0F). Asserted by test-z6-colours via
+// --expect-text-color/--expect-text-attr (palette-mode independent).
+static void EmitColoursProgram(ZCode z)
+{
+    z.Byte(0); // locals count
+
+    z.Print("egadef");                                        // boot default 0F
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(4), Operand.Small(6));          // green on blue
+    z.Print("egagrnblu");                                     // -> 12
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(9), Operand.Small(2));          // white on black
+    z.Print("egawhite");                                      // -> 0F
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(2), Operand.Small(9));          // Zork Zero's pair
+    z.Print("egaparch");                                      // -> F0
+    z.NewLine();
+    z.VarOp(17, Operand.Small(1));                            // reverse
+    z.Print("egarev");                                        // colour F0, attr 02
+    z.NewLine();
+    z.VarOp(17, Operand.Small(0));
+    z.Print("egaroman");                                      // -> F0
+    z.NewLine();
+    z.VarOp(17, Operand.Small(2));                            // bold: fg|8
+    z.Print("egabold");                                       // -> F8
+    z.NewLine();
+    z.VarOp(17, Operand.Small(0));
+    z.TwoOp(27, Operand.Small(0), Operand.Small(0));          // 0,0 = keep
+    z.Print("egakeep");                                       // -> F0
+    z.NewLine();
+    z.TwoOpVar(27, Operand.Small(3), Operand.Large(0xFFFF));  // red fg; bg -1 =
+    z.Print("egaredkeep");                                    // pixel under cursor
+    // (no art here -> 0) -> 04
+    z.NewLine();
+    z.TwoOp(27, Operand.Small(1), Operand.Small(1));          // 1,1 = defaults
+    z.Print("egadflt");                                       // -> 0F
+    z.NewLine();
+    z.Print("colour fixture done");
+    z.NewLine();
+    z.ZeroOp(10); // quit
 }
 
 static void EmitSpecProgram(ZCode z)
@@ -214,6 +330,8 @@ static void EmitSpecProgram(ZCode z)
     // (the M2 banner now owns cell 0,0).
     z.Call1S("routine_return_42", 0x11);
     z.AssertVarEquals(0x11, 42, "v6-call");
+    z.Call1S("routine_catch_throw", 0x11);
+    z.AssertVarEquals(0x11, 99, "catch-throw");
 
     // --- Task 6: V6 dispatch routing into the NOVAZ6 segment ---
     // set_window 0 (VAR:11): already current — must be a clean no-op.
@@ -223,25 +341,61 @@ static void EmitSpecProgram(ZCode z)
     // mis-consumed store byte derails the instruction stream.
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(4));
     z.AssertVarEquals(0x12, 1, "windprop-default");
-    // picture_data N table ?(label) (EXT:6): no pictures in M1. PicTable is
-    // baked with $BEEF words so the write-asserts below prove real writes.
-    // N>0 first: queries a specific picture — writes NOTHING, branches false.
-    z.ExtOpBranch(6, "picn_taken", branchIf: true, Operand.Small(6), Operand.Large(PicTable));
+    // picture_data N table ?(label) (EXT:6) against the synthetic PICS.PAK
+    // on the spec image (pic 3 = 8x8 px, pic 7 = 6x10 px, release 7; see
+    // BuildSyntheticPicturesPak). Dimensions come back in V6 units/pixels.
+    z.ExtOpBranch(6, "pic3_known", branchIf: true, Operand.Small(3), Operand.Large(PicTable));
+    z.Fail("pic3-branch");
+    z.Label("pic3_known");
+    z.AssertWordEquals(PicTable, 0, 8, "pic3-h");
+    z.AssertWordEquals(PicTable, 1, 8, "pic3-w");
+    z.ExtOpBranch(6, "pic7_known", branchIf: true, Operand.Small(7), Operand.Large(PicTable));
+    z.Fail("pic7-branch");
+    z.Label("pic7_known");
+    z.AssertWordEquals(PicTable, 0, 10, "pic7-h");
+    z.AssertWordEquals(PicTable, 1, 6, "pic7-w");
+    // Unknown picture: writes NOTHING (the $BEEF poison survives), branch
+    // false. Re-poison first — pic3/pic7 above overwrote the table.
+    z.VarOp(1, Operand.Large(PicTable), Operand.Small(0), Operand.Large(0xBEEF));
+    z.VarOp(1, Operand.Large(PicTable), Operand.Small(1), Operand.Large(0xBEEF));
+    z.ExtOpBranch(6, "picn_taken", branchIf: true, Operand.Small(99), Operand.Large(PicTable));
     z.Jump("picn_ok");
     z.Label("picn_taken");
     z.Fail("picn-branch");
     z.Label("picn_ok");
     z.AssertWordEquals(PicTable, 0, 0xBEEF, "picn-nowrite0");
     z.AssertWordEquals(PicTable, 1, 0xBEEF, "picn-nowrite1");
-    // N=0: writes word 0 = picture count (0) and word 1 = release (0), and
-    // still branches false — the branch means "any pictures available".
+    // N=0: word 0 = picture count, word 1 = release; branch TRUE because
+    // pictures exist on this image.
     z.ExtOpBranch(6, "pic0_taken", branchIf: true, Operand.Small(0), Operand.Large(PicTable));
-    z.Jump("pic0_ok");
+    z.Fail("pic0-branch");
     z.Label("pic0_taken");
-    z.Fail("pic-branch");
-    z.Label("pic0_ok");
-    z.AssertWordEquals(PicTable, 0, 0, "piccount");
-    z.AssertWordEquals(PicTable, 1, 0, "picrel");
+    z.AssertWordEquals(PicTable, 0, 3, "piccount");
+    z.AssertWordEquals(PicTable, 1, 7, "picrel");
+    // Flags1 bit 1 (pictures available) must be set once the pak loaded.
+    z.TwoOpStore(16, Operand.Large(0), Operand.Small(1), 0x11); // loadb hdr $01
+    z.TwoOpStore(9, Operand.Var(0x11), Operand.Small(2), 0x11); // and #2
+    z.AssertVarEquals(0x11, 2, "flags1-pics");
+
+    // --- CR interrupt (window props 8/9): each newline printed to the
+    // window decrements the countdown; reaching 0 fires the prop-8 routine
+    // exactly once, AFTER the newline (the Frotz r393 ordering Zork Zero
+    // was tuned against). $FFFF decrements harmlessly forever.
+    z.Store(0x60, 0);                                  // fired counter
+    z.ExtOp(25, Operand.Small(0), Operand.Small(9), Operand.Small(3));
+    z.ExtOpWithPackedRoutine(25, Operand.Small(0), Operand.Small(8), "cr_routine");
+    z.NewLine();
+    z.NewLine();
+    z.AssertVarEquals(0x60, 0, "cr-early");            // 2 of 3: not yet
+    z.NewLine();
+    z.AssertVarEquals(0x60, 1, "cr-fired");            // exactly once
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(9));
+    z.AssertVarEquals(0x12, 0, "cr-count0");
+    z.ExtOp(25, Operand.Small(0), Operand.Small(9), Operand.Large(0xFFFF));
+    z.NewLine();
+    z.AssertVarEquals(0x60, 1, "cr-never");
+    z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(9));
+    z.AssertVarEquals(0x12, 0xFFFE, "cr-ffff-dec");
     // buffer_screen 0 (EXT:29, store): stub stores 0.
     z.ExtOpStore(29, 0x12, Operand.Small(0));
     z.AssertVarEquals(0x12, 0, "bufscreen-stub");
@@ -370,6 +524,11 @@ static void EmitSpecProgram(ZCode z)
     z.AssertVarEquals(0x12, 80, "winsize-y");
     z.ExtOpStore(19, 0x12, Operand.Small(2), Operand.Small(3));
     z.AssertVarEquals(0x12, 120, "winsize-x");
+    // V6 window operand -3 means "current window". Zork Zero's hint UI asks
+    // for the current window height this way before doing arithmetic with it.
+    z.VarOp(11, Operand.Small(2));
+    z.ExtOpStore(19, 0x12, Operand.Large(0xFFFD), Operand.Small(2));
+    z.AssertVarEquals(0x12, 80, "windprop-current");
 
     // window_style 2 against prop 14: set, or, and-not, xor.
     z.ExtOp(18, Operand.Small(2), Operand.Small(0b1010), Operand.Small(0));
@@ -398,28 +557,28 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpStore(19, 0x12, Operand.Small(3), Operand.Small(11));
     z.AssertVarEquals(0x12, (5 << 8) | 4, "colour-rec");
 
-    // Units ARE cells: the header advertises an 80x50-unit screen with a
-    // 1x1 font (zstory.s), so every coordinate below is a 1-based text
-    // cell — exactly what Zork Zero computes and sends (capture finding 1).
+    // Units are gfx pixels: the header advertises a 320x200-unit screen with
+    // a 4x4 font (zstory.s). Most coordinates below target a specific text
+    // cell; CellUnitOperand converts that 1-based cell to a 1-based V6 unit.
     // V6 split_window is a pure table op (Zork Zero never calls it): window
-    // 1 y-size = 40, window 0 origin y = 41, y-size = 10.
+    // 1 y-size = 160 units, window 0 origin y = 161, y-size = 40 units.
     z.VarOp(10, Operand.Small(40));
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(2));
-    z.AssertVarEquals(0x12, 40, "split-w1size");
+    z.AssertVarEquals(0x12, CellCountUnits(40), "split-w1size");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(0));
-    z.AssertVarEquals(0x12, 41, "split-w0y");
+    z.AssertVarEquals(0x12, CellUnit(41), "split-w0y");
     z.ExtOpStore(19, 0x12, Operand.Small(0), Operand.Small(2));
-    z.AssertVarEquals(0x12, 10, "split-w0size");
+    z.AssertVarEquals(0x12, CellCountUnits(10), "split-w0size");
 
-    // Zork Zero's real layout, verbatim (capture boot seqs 15-18): window 0
-    // = 45x70 playfield inset at (6,6), window 1 = top 5 rows full width.
+    // Zork Zero's real cell layout: window 0 = 45x70 playfield inset at
+    // cell (6,6), window 1 = top 5 rows full width.
     // These REPLACE the split geometry above — windows are vtext regions now.
-    z.ExtOp(16, Operand.Small(0), Operand.Small(6), Operand.Small(6));   // move_window 0,6,6
-    z.ExtOp(17, Operand.Small(0), Operand.Small(45), Operand.Small(70)); // window_size 0,45,70
-    z.ExtOp(16, Operand.Small(1), Operand.Small(1), Operand.Small(1));   // move_window 1,1,1
-    z.ExtOp(17, Operand.Small(1), Operand.Small(5), Operand.Small(80));  // window_size 1,5,80
+    z.ExtOp(16, Operand.Small(0), CellUnitOperand(6), CellUnitOperand(6));       // move_window 0,21,21
+    z.ExtOp(17, Operand.Small(0), CellCountOperand(45), CellCountOperand(70));   // window_size 0,180,280
+    z.ExtOp(16, Operand.Small(1), CellUnitOperand(1), CellUnitOperand(1));       // move_window 1,1,1
+    z.ExtOp(17, Operand.Small(1), CellCountOperand(5), CellCountOperand(80));    // window_size 1,20,320
     z.VarOp(11, Operand.Small(0));                          // set_window 0
-    z.VarOp(15, Operand.Small(1), Operand.Small(1));        // set_cursor 1,1
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));    // set_cursor 1,1
     z.Print("INSET");                                       // -> abs cell (col 5, row 5)
 
     // Banner separation: window 1 renders at the real screen top-left.
@@ -441,22 +600,23 @@ static void EmitSpecProgram(ZCode z)
     z.NewLine();
 
     // Cursor readback: set_cursor with no printing in between must read
-    // back exactly (cells, relative to the window; 13,17 is inside 45x70).
-    z.VarOp(15, Operand.Small(13), Operand.Small(17));      // set_cursor 13,17
+    // back exactly (units, relative to the window; cell 13,17 is inside
+    // 45x70).
+    z.VarOp(15, CellUnitOperand(13), CellUnitOperand(17));  // set_cursor 49,65
     z.VarOp(16, Operand.Large(CursorArray));                // get_cursor array
-    z.AssertWordEquals(CursorArray, 0, 13, "getcursor-y");
-    z.AssertWordEquals(CursorArray, 1, 17, "getcursor-x");
+    z.AssertWordEquals(CursorArray, 0, CellUnit(13), "getcursor-y");
+    z.AssertWordEquals(CursorArray, 1, CellUnit(17), "getcursor-x");
 
     // set_cursor on a NON-current window only updates the table.
-    z.VarOp(15, Operand.Small(29), Operand.Small(33), Operand.Small(4));
+    z.VarOp(15, CellUnitOperand(29), CellUnitOperand(33), Operand.Small(4));
     z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(4));
-    z.AssertVarEquals(0x12, 29, "setcursor-other-y");
+    z.AssertVarEquals(0x12, CellUnit(29), "setcursor-other-y");
     z.ExtOpStore(19, 0x12, Operand.Small(4), Operand.Small(5));
-    z.AssertVarEquals(0x12, 33, "setcursor-other-x");
+    z.AssertVarEquals(0x12, CellUnit(33), "setcursor-other-x");
 
     // M1 print markers (literal + packed string via S_O), now landing inside
     // the inset playfield: set_cursor 3,1 -> abs cell (col 5, row 7).
-    z.VarOp(15, Operand.Small(3), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(3), CellUnitOperand(1));
     z.Print("z6 m1 ");
     z.OneOp(13, Operand.Large((PackedStrings - StringsByteOffset) / 4)); // print_paddr "ok"
     z.NewLine();
@@ -466,7 +626,7 @@ static void EmitSpecProgram(ZCode z)
     // banner row, directly above the playfield — must survive the playfield
     // scrolling below, rect-clipped.
     z.VarOp(11, Operand.Small(1));                          // set_window 1
-    z.VarOp(15, Operand.Small(5), Operand.Small(5));        // set_cursor 5,5 -> abs (4,4)
+    z.VarOp(15, CellUnitOperand(5), CellUnitOperand(5));    // set_cursor 17,17 -> abs (4,4)
     z.Print("SENT");
     z.VarOp(11, Operand.Small(0));                          // set_window 0; cursor rel (3,0)
 
@@ -511,32 +671,32 @@ static void EmitSpecProgram(ZCode z)
     // to window 0, then scroll window 3 by one cell while window 0 is live.
     // AA scrolls off, EE lands on row 12, the vacated bottom row (abs 13)
     // comes back blank. Amount 0 must be a clean no-op.
-    z.ExtOp(16, Operand.Small(3), Operand.Small(10), Operand.Small(76)); // move_window 3,10,76
-    z.ExtOp(17, Operand.Small(3), Operand.Small(5), Operand.Small(5));   // window_size 3,5,5
+    z.ExtOp(16, Operand.Small(3), CellUnitOperand(10), CellUnitOperand(76)); // move_window 3,37,301
+    z.ExtOp(17, Operand.Small(3), CellCountOperand(5), CellCountOperand(5)); // window_size 3,20,20
     z.VarOp(11, Operand.Small(3));                          // set_window 3
-    z.VarOp(15, Operand.Small(1), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));
     z.Print("AA");
-    z.VarOp(15, Operand.Small(2), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(2), CellUnitOperand(1));
     z.Print("BB");
-    z.VarOp(15, Operand.Small(3), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(3), CellUnitOperand(1));
     z.Print("CC");
-    z.VarOp(15, Operand.Small(4), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(4), CellUnitOperand(1));
     z.Print("DD");
-    z.VarOp(15, Operand.Small(5), Operand.Small(1));
+    z.VarOp(15, CellUnitOperand(5), CellUnitOperand(1));
     z.Print("EE");
     z.VarOp(11, Operand.Small(0));                          // back to window 0
-    z.ExtOp(20, Operand.Small(3), Operand.Small(1));        // scroll_window 3,1 (non-current)
+    z.ExtOp(20, Operand.Small(3), CellCountOperand(1));     // scroll_window 3,4 (non-current)
     z.ExtOp(20, Operand.Small(3), Operand.Small(0));        // amount 0: no-op
 
     // scroll_window on the CURRENT window: the game's page-reset (capture
-    // finding 4). Amount is in CELLS (units = cells). Content moves up 3
+    // finding 4). Amount is in units/pixels. Content moves up 3 cell
     // rows, 3 blank rows open at the bottom, and the cursor does NOT move
     // (it sits at rel 44,0 from scroll #3 above — Zork Zero always follows
     // with set_cursor): the prompt below must still land on the bare bottom
     // row. Final window 0 rows: rel 0 = F06, rel 38 = LONG, rel 39 = Z2,
     // rel 40 = "ZLAST ok", rel 41-44 blank (41 was blank already; 42-44
     // vacated and blanked by the scroll).
-    z.ExtOp(20, Operand.Small(0), Operand.Small(3));        // scroll_window 0,3
+    z.ExtOp(20, Operand.Small(0), CellCountOperand(3));     // scroll_window 0,12
 
     // Object-tree integrity across remove_obj of a MIDDLE child (the
     // zobject_remove previous-sibling scan path). Baked tree: 1 parents
@@ -564,6 +724,51 @@ static void EmitSpecProgram(ZCode z)
     z.Label("objins-sib");
     z.AssertVarEquals(0x12, 2, "objins-sib4");                 // sibling(4) == 2
 
+    // --- draw_picture / erase_picture blits. This block runs at the TAIL:
+    // newline scrolls now move the gfx layer with the text (MCGA semantics),
+    // so art drawn early would scroll away with the program's output. The
+    // px targets are unchanged; coords are window-0-relative V6 units.
+    // Pic 3 at cells (20,10) -> px x 40-47, y 80-87, solid magenta ($5).
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(16), CellUnitOperand(6));
+    // Pic 9 (4x4, E 1 1 E rows, transparent index 1) over its top-left
+    // corner: opaque yellow edges land, the transparent middle keeps the
+    // magenta underneath — the nibble-keyed unpack fixture.
+    z.ExtOp(5, Operand.Small(9), CellUnitOperand(16), CellUnitOperand(6));
+    // Pic 7 (6x10 cyan) at cells (30,40) -> px x 160-165, y 120-129, then
+    // erased: the rect refills with the window background (black).
+    z.ExtOp(5, Operand.Small(7), CellUnitOperand(26), CellUnitOperand(36));
+    z.ExtOp(7, Operand.Small(7), CellUnitOperand(26), CellUnitOperand(36));
+    // Clipping: pic 3 at x cell 79 -> px 316-323 clips at 320 without
+    // derailing; fully off-screen draw (y cell 59) is a clean no-op.
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(1), CellUnitOperand(75));
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(56), CellUnitOperand(1));
+
+    // MCGA-faithful compositing: drawing a picture overwrites the text
+    // pixels under it, so the blit blanks the covered cells (space, bg 0 =
+    // the global background -> the art shows through in mode 2). This runs
+    // LAST: earlier program output scrolls the full-screen window. The
+    // markers live in the left gutter (col 1, rows 30/36) outside the final
+    // 45x70 inset, which later scrolling never touches. PP's cell must go
+    // blank under the draw; the uncovered control QQ must survive (it
+    // proves window-4 printing landed at all; window 2 is unusable here —
+    // the earlier set_margins fixture left it with margins 8+12).
+    z.ExtOp(16, Operand.Small(4), CellUnitOperand(31), CellUnitOperand(2)); // move_window 4 -> (121,5)
+    z.ExtOp(17, Operand.Small(4), CellCountOperand(10), CellCountOperand(4)); // window_size 4: 40x16
+    z.VarOp(11, Operand.Small(4));                                      // set_window 4
+    z.VarOp(15, CellUnitOperand(1), CellUnitOperand(1));                // cursor home
+    z.Print("PP");
+    z.VarOp(15, CellUnitOperand(7), CellUnitOperand(1));                // cursor row 7 -> abs row 36
+    z.Print("QQ");
+    // draw from window 4 itself (coords are window-relative; window 0 is
+    // the inset here): rel (1,1) = window 4's origin = cell (1,30)
+    z.ExtOp(5, Operand.Small(3), CellUnitOperand(1), CellUnitOperand(1));
+    // Art scrolls WITH the text (the MCGA framebuffer is one surface):
+    // scroll_window 4 by one cell row moves QQ up to row 35 AND shifts the
+    // picture's gfx rows up 4px — its old bottom rows go empty.
+    z.ExtOp(20, Operand.Small(4), CellCountOperand(1));
+    z.VarOp(11, Operand.Small(0));                                      // back to window 0
+
+
     z.Label("prompt");
     z.Print(">");
     z.VarOpStore(4, 0x11, Operand.Large(TextBuffer), Operand.Large(ParseBuffer)); // read
@@ -575,6 +780,27 @@ static void EmitSpecProgram(ZCode z)
     z.Label("routine_return_42");
     z.Byte(0);
     z.OneOp(11, Operand.Small(42));
+
+    z.Align(4);
+    z.Label("routine_catch_throw");
+    z.Byte(0);
+    z.ZeroOpStore(9, 0x12);        // catch -> g2
+    z.Call1N("routine_throw_99");
+    z.OneOp(11, Operand.Small(1)); // would fail the caller's assertion
+
+    z.Align(4);
+    z.Label("routine_throw_99");
+    z.Byte(0);
+    z.TwoOp(28, Operand.Small(99), Operand.Var(0x12));
+    z.OneOp(11, Operand.Small(2)); // unreachable if throw unwinds correctly
+
+    // CR-interrupt routine: bump the fired counter (global var $60), no
+    // printing (a printing CR routine would re-enter the newline path).
+    z.Align(4);
+    z.Label("cr_routine");
+    z.Byte(0);
+    z.OneOp(5, Operand.Small(0x60));   // inc
+    z.ZeroOp(0);                       // rtrue
 }
 
 static void WriteBE16(byte[] data, int offset, int value)
@@ -736,6 +962,17 @@ sealed class ZCode
         Emit(TypeByte(operands));
         foreach (var operand in operands)
             EmitOperand(operand);
+    }
+
+    /// <summary>EXT op whose LAST operand is the packed address of a routine.</summary>
+    public void ExtOpWithPackedRoutine(int op, Operand a, Operand b, string routineLabel)
+    {
+        Emit(0xBE);
+        Emit(op & 0xFF);
+        Emit(TypeByte([a, b, Operand.Large(0)]));
+        EmitOperand(a);
+        EmitOperand(b);
+        EmitPackedAddressPatch(routineLabel);
     }
 
     public void ExtOpStore(int op, byte store, params Operand[] operands)

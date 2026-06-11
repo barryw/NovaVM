@@ -63,6 +63,11 @@ public static class ColorPalette
     public static ReadOnlySpan<uint> GetBgraPalette(byte paletteMode) =>
         (paletteMode & 0x01) != 0 ? _egaBgraPalette : _c64BgraPalette;
 
+    public static ReadOnlySpan<uint> GetBgraPalette(byte paletteMode, ReadOnlySpan<uint> customPalette) =>
+        (paletteMode & 0x02) != 0 && customPalette.Length >= 16
+            ? customPalette[..16]
+            : GetBgraPalette(paletteMode);
+
     private static Color[] GetPalette(byte paletteMode) =>
         (paletteMode & 0x01) != 0 ? _egaPalette : _c64Palette;
 

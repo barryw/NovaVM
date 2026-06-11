@@ -105,6 +105,7 @@ ShelfN                        = $04
 FioPageTargetXram             = $00
 FioPageTargetRam              = $01
 FioPageTargetVgc              = $02
+FioPageTargetGfx4             = $03
 FioDirTypeBas                 = $00
 FioDirTypeSid                 = $01
 FioDirTypeBin                 = $02
@@ -361,6 +362,7 @@ BltErrWriteProt               = $05
 BltModeFill                   = $01
 BltModeColorKey               = $02
 BltModeRotate                 = $04
+BltModeColorKey4              = $08
 
 ; --- Board input registers ($BA9C-$BAA1) ---
 BoardInputBase                = $BA9C
@@ -646,6 +648,8 @@ ScrollCtlGfx                  = $02
 ScrollCtlText                 = $04
 PaletteModeC64                = $00
 PaletteModeEga                = $01
+PaletteModeCustom             = $02
+PaletteModeMask               = $03
 VramPlaneChar                 = $01
 VramPlaneColor                = $02
 VramPlaneGfx                  = $03
@@ -664,6 +668,7 @@ TextFlagReverse               = $01
 TextFlagReverseExplicit       = $02
 TextFlagFlash                 = $04
 TextAttrFlash                 = $01
+TextAttrReverse               = $02
 
 ; --- VGC core registers ($A000-$A00F) ---
 RegMode                       = $A000
@@ -708,6 +713,8 @@ RegIrqEnable                  = $A0F0
 RegIrqStatus                  = $A0F1
 RegIrqForce                   = $A0F2
 RegIrqValid                   = $A0F3
+RegPaletteIndex               = $A0F4
+RegPaletteData                = $A0F5
 IrqValidMask                  = $7F
 IrqVBlank                     = $01
 IrqCopper0                    = $02

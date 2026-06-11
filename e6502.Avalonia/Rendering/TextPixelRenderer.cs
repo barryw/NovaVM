@@ -37,6 +37,9 @@ internal static class TextPixelRenderer
 
         byte fgColor = (byte)(colorAttr & 0x0F);
         byte cellBgColor = (byte)((colorAttr >> 4) & 0x0F);
+        bool reverse = (textAttr & VgcConstants.TextAttrReverse) != 0;
+        if (reverse)
+            (fgColor, cellBgColor) = (cellBgColor, fgColor);
 
         bool isCursor = cursorEnabled && col == cursorX && displayRow == cursorY;
         if (isCursor)
@@ -49,7 +52,7 @@ internal static class TextPixelRenderer
         if ((textAttr & VgcConstants.TextAttrFlash) != 0 && !flashVisible)
             set = false;
 
-        if (mode == 2 && !set && !isCursor && cellBgColor == (bgColor & 0x0F))
+        if (mode == 2 && !set && !isCursor && !reverse && cellBgColor == (bgColor & 0x0F))
         {
             colorIndex = 0;
             return false;

@@ -368,7 +368,7 @@ public class EmulatorCanvas : Control
         int copperIndex = 0;
 
         var state = RenderVideoState.FromVgc(_vgc);
-        ReadOnlySpan<uint> palette = ColorPalette.GetBgraPalette(state.PaletteMode);
+        ReadOnlySpan<uint> palette = ColorPalette.GetBgraPalette(state.PaletteMode, _vgc.GetCustomBgraPalette());
         uint borderPixel = palette[state.BorderColor & 0x0F];
         if (state.DisplayDim != 15)
             borderPixel = DimColor(borderPixel, state.DisplayDim);

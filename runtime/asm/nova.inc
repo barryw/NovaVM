@@ -370,6 +370,15 @@ VGC_GFXTRANS      = $A0E8
 .ifndef VGC_PALETTE
 VGC_PALETTE       = $A0E9
 .endif
+.ifndef VGC_PALMODE_C64
+VGC_PALMODE_C64   = $00
+.endif
+.ifndef VGC_PALMODE_EGA
+VGC_PALMODE_EGA   = $01
+.endif
+.ifndef VGC_PALMODE_CUSTOM
+VGC_PALMODE_CUSTOM = $02
+.endif
 .ifndef VGC_SCROLLCTL
 VGC_SCROLLCTL     = $A0EA
 .endif
@@ -463,6 +472,9 @@ VTXT_FLASH        = $04
 .ifndef VTXT_ATTR_FLASH
 VTXT_ATTR_FLASH   = $01
 .endif
+.ifndef VTXT_ATTR_REV
+VTXT_ATTR_REV     = $02
+.endif
 
 ; VGC IRQ and command constants.
 .ifndef VGC_IRQ_ENABLE
@@ -476,6 +488,20 @@ VGC_IRQ_FORCE     = $A0F2
 .endif
 .ifndef VGC_IRQ_VALID
 VGC_IRQ_VALID     = $A0F3
+.endif
+; @label VGC.PALIDX
+; @kind const
+; @symbol VGC_PALIDX
+; @summary Byte index into the custom RGB palette stream (0-47).
+.ifndef VGC_PALIDX
+VGC_PALIDX        = $A0F4
+.endif
+; @label VGC.PALDATA
+; @kind const
+; @symbol VGC_PALDATA
+; @summary Custom RGB palette data port; writes auto-increment VGC.PALIDX.
+.ifndef VGC_PALDATA
+VGC_PALDATA       = $A0F5
 .endif
 .ifndef VGC_IRQ_VBLANK
 VGC_IRQ_VBLANK    = $01

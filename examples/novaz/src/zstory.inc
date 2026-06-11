@@ -20,6 +20,20 @@ ZSTORY_XRAM_NOVAZ6_STAGE_L = $00       ; 24-bit XRAM address $060000,
 ZSTORY_XRAM_NOVAZ6_STAGE_M = $00       ; decomposed low/mid/high.
 ZSTORY_XRAM_NOVAZ6_STAGE_H = $06
 
+; V6 picture regions, also inside the $060000-$06FFFF hole (above the 8KB
+; NOVAZ6 stage, below the NVG stage at $070000 — no lifetime handoff needed):
+;   $062000-$063FFF  PICS.PAK header + index (9 + count*15 bytes; the 8KB
+;                    region caps count at 545 — Zork Zero ships 503, Arthur
+;                    171, Journey 134, Shogun 48)
+;   $064000-$06BFFF  picture bounce buffer (worst case 320x200 4bpp = 32000
+;                    bytes) for draw_picture bitmap region loads
+ZSTORY_XRAM_PICS_INDEX_L  = $00        ; $062000
+ZSTORY_XRAM_PICS_INDEX_M  = $20
+ZSTORY_XRAM_PICS_INDEX_H  = $06
+ZSTORY_XRAM_PICS_BOUNCE_L = $00        ; $064000
+ZSTORY_XRAM_PICS_BOUNCE_M = $40
+ZSTORY_XRAM_PICS_BOUNCE_H = $06
+
 ZSTORY_ERR_NONE        = $00
 ZSTORY_ERR_IO          = $01
 ZSTORY_ERR_UNSUPPORTED = $02
