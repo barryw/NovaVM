@@ -23,6 +23,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s \
 	$(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s \
 	$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s \
+	$(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s \
 	$(NOVA_ASM)/tween.inc $(NOVA_ASM)/tween.s \
 	$(NOVA_ASM)/xmc.s
 

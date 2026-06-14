@@ -200,10 +200,8 @@ constexpr uint16_t NVG_HEADER_BYTES = 16;
 constexpr uint16_t NVG_PALETTE_BYTES = 48;
 constexpr uint8_t NVG_FLAG_TRANSPARENT = 0x01;
 constexpr uint8_t NVG_FLAG_PALETTE = 0x02;
-constexpr uint16_t VGC_PALETTE_MODE_ADDR = 0xA0E9;
 constexpr uint16_t VGC_PALETTE_INDEX_ADDR = 0xA0F4;
 constexpr uint16_t VGC_PALETTE_DATA_ADDR = 0xA0F5;
-constexpr uint8_t VGC_PALMODE_CUSTOM = 0x02;
 
 bool clear_vgc_gfx(FpgaBridge& bridge, uint8_t* zero_buf) {
     memset(zero_buf, 0, 256);
@@ -4146,10 +4144,6 @@ void FioDispatcher::handle_nvgload() {
                 respond_err(ERR_IO);
                 return;
             }
-        }
-        if (!_bridge.poke(VGC_PALETTE_MODE_ADDR, VGC_PALMODE_CUSTOM)) {
-            respond_err(ERR_IO);
-            return;
         }
     }
 

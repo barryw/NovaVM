@@ -48,10 +48,10 @@ jsr editui_select_box_body ; select the frame's clipped text body
 jsr editui_menu_open_hotkey ; A=menu hotkey, returns selected command in A
 ```
 
-`editui_init` keeps the default Nova/C64 fixed palette (`VGC_PALETTE = 0`) so
-tooling that previews or edits Nova assets sees the same palette indices the
-runtime uses. EDITUI color constants are packed `bg/fg` text attributes in
-that Nova palette.
+`editui_init` does not change the active palette. EDITUI color constants are
+packed `bg/fg` text attributes authored for the default Nova/C64 palette, so a
+caller that switches to an asset-specific palette should restore the expected
+palette before entering the editor.
 
 Menu and status strings use `&` to mark hotkey characters. For example,
 `"&File   &Edit"` renders the `F` and `E` in the configured hotkey color.

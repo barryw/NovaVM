@@ -22,12 +22,12 @@ public interface IScreenInput
 ///   $A040-$A0BF  Sprite registers (8 bytes × 16 sprites)
 ///   $A0E0-$A0E4  VDC-style VRAM port for char/color/gfx/sprite/text-attr memory
 ///   $A0E5        Display dimmer (0=black, 15=full brightness)
-///   $A0E8        Graphics-plane transparent color (0-15)
-///   $A0E9        VGC palette mode (0=C64/Nova, 1=IBM EGA, 2/3=custom RGB)
+///   $A0E8        Graphics-plane transparent color key; values >15 disable transparency
+///   $A0E9        Legacy palette-mode compatibility register (reads 0; writes ignored)
 ///   $A0EA        Scroll control (bit0=SCROLLX high, bit1=gfx, bit2=text)
 ///   $A0EB-$A0EC  High bytes for 16-sprite collision masks
 ///   $A0ED-$A0EF  Text ring scroll base/window
-///   $A0F4-$A0F5  Custom palette byte-index/data stream
+///   $A0F4-$A0F5  Active palette byte-index/data stream
 ///
 /// Sprite shape data stored in 256 × 128-byte slots (32KB), accessible via
 /// memory space I/O and DMA. Each sprite has a shape index register pointing
@@ -84,8 +84,8 @@ public class VirtualGraphicsController : IBusDevice
     // Block graphics bitmap (320x200, NOT 6502-addressable)
     private readonly byte[] _gfxBitmap = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
 
-    private readonly byte[] _customPaletteRgb = new byte[VgcConstants.PaletteSize * 3];
-    private readonly uint[] _customBgraPalette = new uint[VgcConstants.PaletteSize];
+    private readonly byte[] _activePaletteRgb = new byte[VgcConstants.PaletteSize * 3];
+    private readonly uint[] _activeBgraPalette = new uint[VgcConstants.PaletteSize];
 
     // Current graphics draw color (0 = use text foreground color)
     private byte _gfxDrawColor;
@@ -103,7 +103,6 @@ public class VirtualGraphicsController : IBusDevice
     private byte _textScrollRows;
     private byte _textReverseAttr;
     private byte _gfxTransparentColor;
-    private byte _paletteMode;
     private byte _paletteWriteIndex;
     private byte _scrollCtl;
     private ushort _collisionSpriteSprite;
@@ -128,7 +127,10 @@ public class VirtualGraphicsController : IBusDevice
     // Screen input source
     private IScreenInput? _screenEditor;
 
-    public VirtualGraphicsController() => Reset();
+    public VirtualGraphicsController()
+    {
+        Reset();
+    }
 
     public void SetFont(BitmapFont font) => _bitmapFont = font;
     public void SetBusMemory(byte[] mem) => _busMemory = mem;
@@ -157,9 +159,8 @@ public class VirtualGraphicsController : IBusDevice
         _textScrollStart = 0;
         _textScrollRows = VgcConstants.ScreenRows;
         _gfxTransparentColor = 0;
-        _paletteMode = VgcConstants.PaletteModeC64;
         _paletteWriteIndex = 0;
-        ResetCustomPalette();
+        LoadDefaultPalette();
         _scrollCtl = VgcConstants.ScrollCtlDefault;
         _collisionSpriteSprite = 0;
         _collisionSpriteBackground = 0;
@@ -263,7 +264,7 @@ public class VirtualGraphicsController : IBusDevice
             return _gfxTransparentColor;
 
         if (address == VgcConstants.RegPaletteMode)
-            return _paletteMode;
+            return 0;
 
         if (address == VgcConstants.RegScrollCtl)
             return (byte)(_scrollCtl & 0x07);
@@ -374,7 +375,6 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.RegPaletteMode)
         {
-            _paletteMode = (byte)(data & VgcConstants.PaletteModeMask);
             return;
         }
 
@@ -674,13 +674,15 @@ public class VirtualGraphicsController : IBusDevice
         IsCursorEnabled && IsTextLayerVisible(GetMode());
 
     public static bool IsTextLayerVisible(byte mode) =>
-        mode != 3 && mode != 4;
+        mode != VgcConstants.ModeGfxOnly && mode != VgcConstants.ModeGfxSprites;
 
     public byte GetDisplayDim() => _displayDim;
 
-    public byte GetPaletteMode() => _paletteMode;
+    public byte GetPaletteMode() => VgcConstants.PaletteModeC64;
 
-    public ReadOnlySpan<uint> GetCustomBgraPalette() => _customBgraPalette;
+    public ReadOnlySpan<uint> GetBgraPalette() => _activeBgraPalette;
+
+    public ReadOnlySpan<uint> GetCustomBgraPalette() => _activeBgraPalette;
 
     public bool IrqPending => (_irqStatus & _irqEnable) != 0;
     public bool IsCopperEnabled => _copperEnabled;
@@ -956,7 +958,7 @@ public class VirtualGraphicsController : IBusDevice
             VgcConstants.RegIrqStatus => _irqStatus,
             VgcConstants.RegIrqValid => VgcConstants.IrqValidMask,
             VgcConstants.RegPaletteIndex => _paletteWriteIndex,
-            VgcConstants.RegPaletteData => _customPaletteRgb[_paletteWriteIndex],
+            VgcConstants.RegPaletteData => _activePaletteRgb[_paletteWriteIndex],
             _ => 0
         };
 
@@ -965,12 +967,12 @@ public class VirtualGraphicsController : IBusDevice
         switch (address)
         {
             case VgcConstants.RegPaletteIndex:
-                _paletteWriteIndex = (byte)(data % _customPaletteRgb.Length);
+                _paletteWriteIndex = (byte)(data % _activePaletteRgb.Length);
                 break;
             case VgcConstants.RegPaletteData:
-                _customPaletteRgb[_paletteWriteIndex] = data;
-                UpdateCustomPaletteEntry(_paletteWriteIndex / 3);
-                _paletteWriteIndex = (byte)((_paletteWriteIndex + 1) % _customPaletteRgb.Length);
+                _activePaletteRgb[_paletteWriteIndex] = QuantizePaletteByte(data);
+                UpdateActivePaletteEntry(_paletteWriteIndex / 3);
+                _paletteWriteIndex = (byte)((_paletteWriteIndex + 1) % _activePaletteRgb.Length);
                 break;
             case VgcConstants.RegIrqEnable:
                 _irqEnable = (byte)(data & VgcConstants.IrqValidMask);
@@ -984,26 +986,34 @@ public class VirtualGraphicsController : IBusDevice
         }
     }
 
-    private void ResetCustomPalette()
+    private void LoadDefaultPalette()
     {
         for (int i = 0; i < VgcConstants.PaletteSize; i++)
         {
             var color = ColorPalette.Get(i, VgcConstants.PaletteModeC64);
             int offset = i * 3;
-            _customPaletteRgb[offset] = color.R;
-            _customPaletteRgb[offset + 1] = color.G;
-            _customPaletteRgb[offset + 2] = color.B;
-            _customBgraPalette[i] = ToBgra(color.R, color.G, color.B);
+            _activePaletteRgb[offset] = QuantizePaletteByte(color.R);
+            _activePaletteRgb[offset + 1] = QuantizePaletteByte(color.G);
+            _activePaletteRgb[offset + 2] = QuantizePaletteByte(color.B);
+            UpdateActivePaletteEntry(i);
         }
     }
 
-    private void UpdateCustomPaletteEntry(int index)
+    private void UpdateActivePaletteEntry(int index)
     {
         int offset = index * 3;
-        _customBgraPalette[index] = ToBgra(
-            _customPaletteRgb[offset],
-            _customPaletteRgb[offset + 1],
-            _customPaletteRgb[offset + 2]);
+        _activeBgraPalette[index] = ToBgra(
+            ExpandRgb444Byte(_activePaletteRgb[offset]),
+            ExpandRgb444Byte(_activePaletteRgb[offset + 1]),
+            ExpandRgb444Byte(_activePaletteRgb[offset + 2]));
+    }
+
+    private static byte QuantizePaletteByte(byte value) => (byte)(value & 0xF0);
+
+    private static byte ExpandRgb444Byte(byte value)
+    {
+        int nibble = value & 0xF0;
+        return (byte)(nibble | (nibble >> 4));
     }
 
     private static uint ToBgra(byte r, byte g, byte b) =>

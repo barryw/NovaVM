@@ -15,19 +15,21 @@ clone:
 
 steps:
   - name: build-and-test
-    image: ghcr.io/barryw/novavm-ci:2
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
+      - sh .woodpecker/install-linux-ci-deps.sh build
       - cog check || true
       - dotnet workload install wasm-tools
       - dotnet build -c Release
       - dotnet test -c Release --verbosity normal
 
   - name: version-and-release
-    image: ghcr.io/barryw/novavm-ci:2
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     environment:
       GITHUB_TOKEN:
         from_secret: github_token
     commands:
+      - sh .woodpecker/install-linux-ci-deps.sh release
       - |
         # Check if a version bump is needed
         NEW_VERSION=$$(cog bump --auto --dry-run 2>/dev/null || true)

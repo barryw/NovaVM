@@ -93,9 +93,6 @@ COLOR_WHITE_PIECE    = 1
 COLOR_BLACK_PIECE    = 0
 COLOR_WHITE_DETAIL   = 11
 COLOR_BLACK_DETAIL   = 15
-COLOR_BLACK_REMAP_MAIN = 11
-COLOR_BLACK_REMAP_HILITE = 12
-COLOR_BLACK_REMAP_SHADOW = 0
 
 PIECE_EMPTY          = 0
 PIECE_PAWN           = 1
@@ -321,9 +318,10 @@ halt:
         BRA halt
 
 init_video:
-        LDA #$02
+        LDA #VGC_MODE_TEXT_OVER_GFX
         STA VGC_MODE
-        STZ VGC_BGCOL
+        LDA #VGC_TEXT_BGKEY_DEFAULT
+        STA VGC_BGCOL
         STZ VGC_BORDER
         LDA #COLOR_WHITE
         STA VGC_FGCOL
@@ -1098,24 +1096,15 @@ copy_novadraw_piece_buffer_indexed:
         BNE @row
         RTS
 
+; Black pieces are the white art pushed through a 16-entry color map:
+; body/shade collapse to black, band/detail colors become white linework,
+; matching the source sprite sheet's dedicated black-piece art.
 @black_row:
         LDY #$00
 @black_col:
         LDA (mask_ptr),Y
-        CMP #COLOR_WHITE
-        BNE @not_main
-        LDA #COLOR_BLACK_REMAP_MAIN
-        BRA @black_store
-@not_main:
-        CMP #COLOR_FRAME
-        BNE @not_hilite
-        LDA #COLOR_BLACK_REMAP_HILITE
-        BRA @black_store
-@not_hilite:
-        CMP #COLOR_DARK_SQUARE
-        BNE @black_store
-        LDA #COLOR_BLACK_REMAP_SHADOW
-@black_store:
+        TAX
+        LDA black_piece_color_map,X
         STA (buf_ptr),Y
         INY
         CPY #PIECE_SIZE
@@ -3734,6 +3723,13 @@ novadraw_piece_lo:
         .byte <pieces_pawn, <pieces_knight, <pieces_bishop, <pieces_rook, <pieces_queen, <pieces_king
 novadraw_piece_hi:
         .byte >pieces_pawn, >pieces_knight, >pieces_bishop, >pieces_rook, >pieces_queen, >pieces_king
+
+; White-art color -> black-piece color. $01 body goes dark grey, $0F shade
+; goes mid grey, $0C bands go black, $0B details go black so they read on
+; the grey body, transparent/outline pass through.
+black_piece_color_map:
+        .byte $00, $0B, $02, $03, $04, $05, $06, $07
+        .byte $08, $09, $0A, $00, $00, $0D, $0E, $0C
 
 msg_title:
         .byte "NOVA CHESS", 0

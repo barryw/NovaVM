@@ -36,7 +36,7 @@ paths:
 
 \begin{itemize}
 \item Direct registers for state such as mode, color, cursor position, frame
-      counter, sprite attributes, palette mode, and IRQ latches.
+      counter, sprite attributes, palette upload cursor, and IRQ latches.
 \item The command port at \novacode{\$A010-\$A01F} for drawing primitives,
       sprite shape commands, copper list operations, and byte-level memory
       commands.
@@ -181,35 +181,55 @@ background, foreground, and border registers store color indexes
 \novacode{0..15}. The active palette decides which RGB value each index
 displays.
 
-Nova provides three palette modes:
+The short version:
 
-\begin{description}
-\item[\novacode{VGC\_PALMODE\_C64}] The default Nova/C64-style fixed palette.
-\item[\novacode{VGC\_PALMODE\_EGA}] The IBM EGA 16-color fixed palette.
-\item[\novacode{VGC\_PALMODE\_CUSTOM}] A caller-supplied 16-color RGB palette.
-\end{description}
+\begin{itemize}
+\item A screen pixel stores a color number, not an RGB value.
+\item There are always 16 active color registers, numbered \novacode{0..15}.
+\item C64 and EGA are helper-loaded palettes, not separate hardware modes.
+\item Custom palettes use the same 16 active color registers.
+\item Nova stores the high nibble of each RGB byte: \novacode{\$A7} becomes
+      \novacode{\$A0}. On screen that channel displays as \novacode{\$AA}.
+\end{itemize}
 
 Use \novacode{vgc\_palette.inc} for declarations and
-\novacode{vgc\_palette.s} for the helper routines. The fixed palette helpers
-return \novacode{A=0}:
+\novacode{vgc\_palette.s} for the helper routines. Nova provides convenience
+loaders for the default Nova/C64-style colors and IBM EGA colors. They write
+the same active palette registers used by asset-supplied palettes and return
+\novacode{A=0}:
 
 \begin{lstlisting}
       JSR   vgc_set_palette_c64
       JSR   vgc_set_palette_ega
 \end{lstlisting}
 
-A custom palette is exactly \novacode{VGC\_CUSTOM\_PALETTE\_BYTES} bytes: 16
+The active palette is exactly \novacode{VGC\_CUSTOM\_PALETTE\_BYTES} bytes: 16
 RGB entries in byte order \novacode{R0,G0,B0,R1,G1,B1,...,R15,G15,B15}. Callers
-may store full RGB888 values. Current FPGA video output uses the high nibble of
-each channel, so the visible hardware palette is RGB444, or 4096 possible
-colors. Emulators and future display paths may use more of the submitted RGB
-precision.
+may submit full RGB888 values, but Nova stores and displays the high nibble of
+each channel. The visible palette is RGB444, or 4096 possible colors. Reads
+from \novacode{VGC\_PALDATA} report that quantized high nibble in the upper
+half of the returned byte.
+
+For example, this uploads color register 1 as RGB \novacode{\$12,\$34,\$56}.
+Nova stores it as RGB444 \novacode{\$1,\$3,\$5}; a readback from each component
+returns \novacode{\$10}, \novacode{\$30}, and \novacode{\$50}.
+
+\begin{lstlisting}
+      LDA   #3            ; color 1 red byte: 1 * 3
+      STA   VGC_PALIDX
+      LDA   #$12
+      STA   VGC_PALDATA
+      LDA   #$34
+      STA   VGC_PALDATA
+      LDA   #$56
+      STA   VGC_PALDATA
+\end{lstlisting}
 
 The shared runtime ABI for asset-driven palettes is XRAM-based. Put the 48 RGB
 bytes in XRAM, point \novacode{XRAM\_ADDRL/M/H} at the first byte, and call
 \novacode{vgc\_set\_palette\_custom\_xram}. The helper resets
-\novacode{VGC\_PALIDX}, streams the bytes through \novacode{VGC\_PALDATA}, then
-selects \novacode{VGC\_PALMODE\_CUSTOM}.
+\novacode{VGC\_PALIDX}, streams the bytes through \novacode{VGC\_PALDATA}, and
+leaves those colors as the active palette.
 
 \begin{lstlisting}
       LDA   #$00
@@ -227,6 +247,15 @@ sprites, background, and border together because all of those layers carry
 indexes, not RGB values. Applications that use custom asset palettes should
 restore the expected fixed or custom palette before returning to screens whose
 art was authored for another palette.
+
+Machine reset reloads the default Nova/C64 palette into the active palette.
+Do not depend on a palette left behind by an earlier program. Programs that
+need EGA colors or an asset-specific palette should load that palette during
+their own startup, before drawing indexed colors.
+
+Use the helpers instead of writing \novacode{VGC\_PALETTE}. Old programs may
+still poke \novacode{\$A0E9}, but current hardware ignores that register and
+reads it back as zero.
 
 \section{Off-Bus VGC Memory}
 
@@ -352,7 +381,61 @@ and full-screen changes.
 Set \novacode{VGC\_GFXTRANS} deliberately. It defaults to color 0 so black
 graphics pixels are transparent. If a program needs visible black pixels in the
 graphics layer, move the transparent color to a palette index that the art does
-not use and keep blitter color keys in sync with that choice.
+not use, or store \novacode{VGC\_GFXTRANS\_DISABLE} (\novacode{\$FF}) to disable
+graphics transparency entirely. Keep blitter color keys in sync with that choice.
+
+\subsection{Mode 2: Text Over Graphics}
+
+Mode 2 is the normal mode for a bitmap picture with text on top. Think of it as
+one graphics sheet with one character sheet laid over it.
+
+\begin{lstlisting}
+      LDA   #VGC_MODE_TEXT_OVER_GFX
+      STA   VGC_MODE
+      LDA   #VGC_TEXT_BGKEY_DEFAULT
+      STA   VGC_BGCOL
+\end{lstlisting}
+
+The text sheet has one simple transparency rule:
+
+\begin{itemize}
+\item A set glyph pixel always draws the cell foreground color.
+\item A blank glyph pixel is transparent when the cell background equals
+      \novacode{VGC\_BGCOL}.
+\item A blank glyph pixel is opaque when the cell background does not equal
+      \novacode{VGC\_BGCOL}.
+\item Reverse text is opaque. Use it for menu selections and highlights.
+\end{itemize}
+
+For ordinary text over a picture, set the cell background to the background key
+and put the real background color in the graphics plane:
+
+\begin{lstlisting}
+      LDA   #((VGC_TEXT_BGKEY_DEFAULT << 4) | 15)
+      STA   VTEXT_COLOR       ; transparent cell background, white foreground
+\end{lstlisting}
+
+For an opaque label, selection bar, or solid text box, use a background nibble
+that is not the key. This is usually faster than filling the graphics plane
+behind the text: put the desired background in the high nibble of each text
+cell and let the VGC compositor draw the blank glyph pixels.
+
+\begin{lstlisting}
+      LDA   #((2 << 4) | 15)  ; red background, white foreground
+      STA   VTEXT_COLOR
+\end{lstlisting}
+
+For a full-screen indexed image where color 0 must be visible, turn graphics
+transparency off:
+
+\begin{lstlisting}
+      LDA   #VGC_GFXTRANS_DISABLE
+      STA   VGC_GFXTRANS
+\end{lstlisting}
+
+Do not confuse the two transparent-color mechanisms. \novacode{VGC\_GFXTRANS}
+controls transparent pixels in the graphics plane. \novacode{VGC\_BGCOL}
+controls transparent blank pixels in the text plane when mode 2 is active.
 
 Use the copper for scanline work instead of tight CPU timing loops. Copper
 events are tied to the video beam and continue to run while the 6502 works on

@@ -296,6 +296,7 @@ const BLT_STATUS_OK: u8 = 0x02;
 const BLT_STATUS_ERROR: u8 = 0x03;
 const BLT_MODE_FILL: u8 = 0x01;
 const BLT_MODE_COLOR_KEY: u8 = 0x02;
+const BLT_MODE_ROTATE: u8 = 0x04;
 const BOARD_INPUT_BASE: u16 = 0xBA9C;
 const BOARD_INPUT_END: u16 = 0xBAA1;
 const BOARD_INPUT_BUTTONS: u16 = 0xBA9C;
@@ -438,6 +439,21 @@ pub extern "C" fn nova_init(rom_len: usize, skip_autoboot: u32) {
         }
         vm.pc = vm.read_word(0xFFFC);
         vm.p = I | U;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn nova_load_primary_rom(rom_len: usize) {
+    unsafe {
+        let vm = vm_mut();
+        let len = min_usize(rom_len, ROM_SIZE);
+        vm.basic_rom.fill(0);
+        core::ptr::copy_nonoverlapping(
+            addr_of!(ROM_BUFFER).cast::<u8>(),
+            vm.basic_rom.as_mut_ptr(),
+            len,
+        );
+        vm.map_basic_rom();
     }
 }
 
@@ -3468,6 +3484,7 @@ impl Vm {
         let dst_stride = self.blt_u16(BLT_DST_STRIDE_L);
         let mode = self.blt_regs[Self::blt_index(BLT_MODE)];
         let fill = mode & BLT_MODE_FILL != 0;
+        let rotate = mode & BLT_MODE_ROTATE != 0;
         let color_key = self.blt_regs[Self::blt_index(BLT_COLOR_KEY)];
         let fill_value = self.blt_regs[Self::blt_index(BLT_FILL_VALUE)];
         if dst_stride == 0 || (!fill && src_stride == 0) {
@@ -3475,26 +3492,57 @@ impl Vm {
             self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_BAD_ARGS);
             return;
         }
+        if rotate && (fill || width != height || width > 256) {
+            self.write_blt_count(0);
+            self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_BAD_ARGS);
+            return;
+        }
+        if rotate
+            && src_space == dst_space
+            && rect_linear_ranges_overlap(
+                src_base, width, height, src_stride, dst_base, width, height, dst_stride,
+            )
+        {
+            self.write_blt_count(0);
+            self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_BAD_ARGS);
+            return;
+        }
+        if !self.dma_range_ok(dst_space, dst_base, rect_extent(width, height, dst_stride))
+            || !self.dma_can_write_rect(dst_space, dst_base, width, height, dst_stride)
+        {
+            self.write_blt_count(0);
+            self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_RANGE);
+            return;
+        }
+        if !fill && !self.dma_range_ok(src_space, src_base, rect_extent(width, height, src_stride))
+        {
+            self.write_blt_count(0);
+            self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_RANGE);
+            return;
+        }
         let mut written = 0usize;
+        let angle = self.blt_regs[Self::blt_index(BLT_ROTATE_ANGLE)];
         for row in 0..height {
-            let src_row = src_base + row * src_stride;
             let dst_row = dst_base + row * dst_stride;
-            if !self.dma_range_ok(dst_space, dst_row, width)
-                || !self.dma_can_write_range(dst_space, dst_row, width)
-            {
-                self.write_blt_count(written);
-                self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_RANGE);
-                return;
-            }
-            if !fill && !self.dma_range_ok(src_space, src_row, width) {
-                self.write_blt_count(written);
-                self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_RANGE);
-                return;
-            }
             for col in 0..width {
                 let value = if fill {
                     fill_value
+                } else if rotate {
+                    match rotated_source_offset(width, row, col, angle) {
+                        Some((src_row, src_col)) => match self
+                            .dma_read(src_space, src_base + src_row * src_stride + src_col)
+                        {
+                            Some(value) => value,
+                            None => {
+                                self.write_blt_count(written);
+                                self.write_blt_status(BLT_STATUS_ERROR, DMA_ERR_RANGE);
+                                return;
+                            }
+                        },
+                        None => color_key,
+                    }
                 } else {
+                    let src_row = src_base + row * src_stride;
                     match self.dma_read(src_space, src_row + col) {
                         Some(value) => value,
                         None => {
@@ -3518,6 +3566,22 @@ impl Vm {
         self.write_blt_count(written);
         self.write_blt_status(BLT_STATUS_OK, DMA_ERR_NONE);
         self.dirty();
+    }
+
+    fn dma_can_write_rect(
+        &self,
+        space: u8,
+        base: usize,
+        width: usize,
+        height: usize,
+        stride: usize,
+    ) -> bool {
+        for row in 0..height {
+            if !self.dma_can_write_range(space, base + row * stride, width) {
+                return false;
+            }
+        }
+        true
     }
 
     fn dma_space_len(&self, space: u8) -> usize {
@@ -4350,6 +4414,47 @@ fn next_rng(state: u32) -> u32 {
     }
 }
 
+fn rect_extent(width: usize, height: usize, stride: usize) -> usize {
+    if height == 0 {
+        0
+    } else {
+        (height - 1).saturating_mul(stride).saturating_add(width)
+    }
+}
+
+fn rect_linear_ranges_overlap(
+    a_base: usize,
+    a_width: usize,
+    a_height: usize,
+    a_stride: usize,
+    b_base: usize,
+    b_width: usize,
+    b_height: usize,
+    b_stride: usize,
+) -> bool {
+    let a_end = a_base.saturating_add(rect_extent(a_width, a_height, a_stride));
+    let b_end = b_base.saturating_add(rect_extent(b_width, b_height, b_stride));
+    a_base < b_end && b_base < a_end
+}
+
+fn rotated_source_offset(size: usize, row: usize, col: usize, angle: u8) -> Option<(usize, usize)> {
+    let sin = sin1p7(angle) as i8 as i64;
+    let cos = sin1p7(angle.wrapping_add(64)) as i8 as i64;
+    let center_fp = ((size as i64) - 1) << 7;
+    let dx = ((col as i64) << 8) - center_fp;
+    let dy = ((row as i64) << 8) - center_fp;
+    let src_x_fp = center_fp + (((dx * cos) + (dy * sin)) >> 7);
+    let src_y_fp = center_fp + (((dy * cos) - (dx * sin)) >> 7);
+    let src_x = (src_x_fp + 128) >> 8;
+    let src_y = (src_y_fp + 128) >> 8;
+
+    if src_x < 0 || src_y < 0 || src_x >= size as i64 || src_y >= size as i64 {
+        None
+    } else {
+        Some((src_y as usize, src_x as usize))
+    }
+}
+
 fn saturate_i16(value: i64) -> (u16, u8) {
     if value > i16::MAX as i64 {
         (0x7FFF, MATH_STATUS_OVERFLOW)
@@ -4874,6 +4979,42 @@ mod tests {
         assert_eq!(7, vm.gfx[2]);
         assert_eq!(7, vm.gfx[GFX_WIDTH]);
         assert_eq!(7, vm.gfx[GFX_WIDTH + 2]);
+    }
+
+    #[test]
+    fn blitter_rotates_square_into_destination_buffer() {
+        let mut vm = blank_vm();
+        let src = 0x3600usize;
+        let dst = 0x3700usize;
+        for row in 0..3 {
+            for col in 0..3 {
+                vm.ram[src + row * 3 + col] = (row * 3 + col + 1) as u8;
+            }
+        }
+
+        vm.write_io(BLT_SRC_SPACE, DMA_SPACE_CPU_RAM);
+        vm.write_io(BLT_DST_SPACE, DMA_SPACE_CPU_RAM);
+        vm.write_io(BLT_SRC_L, src as u8);
+        vm.write_io(BLT_SRC_L + 1, (src >> 8) as u8);
+        vm.write_io(BLT_SRC_L + 2, 0);
+        vm.write_io(BLT_DST_L, dst as u8);
+        vm.write_io(BLT_DST_L + 1, (dst >> 8) as u8);
+        vm.write_io(BLT_DST_L + 2, 0);
+        vm.write_io(BLT_WIDTH_L, 3);
+        vm.write_io(BLT_WIDTH_L + 1, 0);
+        vm.write_io(BLT_HEIGHT_L, 3);
+        vm.write_io(BLT_HEIGHT_L + 1, 0);
+        vm.write_io(BLT_SRC_STRIDE_L, 3);
+        vm.write_io(BLT_SRC_STRIDE_L + 1, 0);
+        vm.write_io(BLT_DST_STRIDE_L, 3);
+        vm.write_io(BLT_DST_STRIDE_L + 1, 0);
+        vm.write_io(BLT_MODE, BLT_MODE_ROTATE);
+        vm.write_io(BLT_ROTATE_ANGLE, 64);
+        vm.write_io(BLT_CMD, BLT_CMD_START);
+
+        assert_eq!(BLT_STATUS_OK, vm.read_io(BLT_STATUS));
+        assert_eq!(9, vm.read_io(BLT_COUNT_L));
+        assert_eq!([7, 4, 1, 8, 5, 2, 9, 6, 3], vm.ram[dst..dst + 9]);
     }
 
     #[test]

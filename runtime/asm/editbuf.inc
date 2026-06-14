@@ -75,7 +75,7 @@ EDITBUF_SAVE_ERROR   = $02      ; rejected: stays dirty
 ;   The hook returns nothing. If unset, the default color is used for all.
 ; ---------------------------------------------------------------------
 
-; Default editor colors (bg = high nibble, fg = low nibble; palette mode 0).
+; Default editor colors (bg = high nibble, fg = low nibble; Nova/C64 palette).
 EDITBUF_COLOR_TEXT   = $01      ; white on black body
 EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
 

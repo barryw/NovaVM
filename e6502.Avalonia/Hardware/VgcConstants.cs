@@ -796,8 +796,8 @@ public static class VgcConstants
     public const int DisplayDim        = 0xA0E5;   // 0=black, 15=full brightness
     public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
     public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
-    public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color, default 0
-    public const int RegPaletteMode    = 0xA0E9;   // bits0-1: 0=C64/Nova, 1=IBM EGA, 2/3=custom RGB palette
+    public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color key; >15 disables transparency
+    public const int RegPaletteMode    = 0xA0E9;   // legacy compatibility register; writes ignored, reads 0
     public const int RegScrollCtl      = 0xA0EA;   // bit0=SCROLLX high, bit1=gfx scroll, bit2=text scroll
     public const int RegColStHi        = 0xA0EB;   // sprite-sprite collision high byte (sprites 8-15, write clears)
     public const int RegColBgHi        = 0xA0EC;   // sprite-background collision high byte (sprites 8-15, write clears)
@@ -810,6 +810,8 @@ public static class VgcConstants
     public const byte ScrollCtlText    = 0x04;
     public const byte ScrollCtlDefault = ScrollCtlGfx | ScrollCtlText;
 
+    // Palette mode constants are legacy/convenience values. Current VGC
+    // hardware has one active RGB palette loaded through RegPaletteIndex/Data.
     public const byte PaletteModeC64    = 0x00;
     public const byte PaletteModeEga    = 0x01;
     public const byte PaletteModeCustom = 0x02;
@@ -848,7 +850,13 @@ public static class VgcConstants
     // -------------------------------------------------------------------------
 
     public const int RegMode           = 0xA000;   // 0=text only, 1=gfx over text, 2=text over gfx, 3/4=gfx+sprites no text
+    public const byte ModeTextOnly     = 0x00;
+    public const byte ModeGfxOverText  = 0x01;
+    public const byte ModeTextOverGfx  = 0x02;
+    public const byte ModeGfxOnly      = 0x03;
+    public const byte ModeGfxSprites   = 0x04;
     public const int RegBgCol          = 0xA001;
+    public const byte TextBackgroundTransparentKeyDefault = 0x00;
     public const int RegFgCol          = 0xA002;
     public const int RegCursorX        = 0xA003;   // 0-79
     public const int RegCursorY        = 0xA004;   // 0-49
@@ -863,6 +871,7 @@ public static class VgcConstants
     public const int RegBorder         = 0xA00D;
     public const int RegCharOut        = 0xA00E;   // character output
     public const int RegCharIn         = 0xA00F;   // character input
+    public const byte GfxTransparentColorDisable = 0xFF;
 
     // -------------------------------------------------------------------------
     // Command register and parameters ($A010-$A01F)
@@ -895,8 +904,8 @@ public static class VgcConstants
     public const int RegIrqStatus      = 0xA0F1;
     public const int RegIrqForce       = 0xA0F2;
     public const int RegIrqValid       = 0xA0F3;
-    public const int RegPaletteIndex   = 0xA0F4;   // byte index into custom palette RGB stream (0-47)
-    public const int RegPaletteData    = 0xA0F5;   // write RGB byte, auto-increments RegPaletteIndex
+    public const int RegPaletteIndex   = 0xA0F4;   // byte index into active palette RGB stream (0-47)
+    public const int RegPaletteData    = 0xA0F5;   // write RGB byte, auto-increments RegPaletteIndex; reads quantized RGB444 byte
     public const byte IrqValidMask     = 0x7F;
     public const byte IrqVBlank        = 0x01;
     public const byte IrqCopper0       = 0x02;

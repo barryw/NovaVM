@@ -16,7 +16,9 @@ EDITUI_SCREEN_COLS = VTEXT_SCREEN_COLS
 EDITUI_SCREEN_ROWS = VTEXT_SCREEN_ROWS
 
 ; Black background with light-grey bars. bg = high nibble, fg = low nibble.
-; Palette mode 0: 0=black, 1=white, 2=red, 12=grey-med, 15=grey-light.
+; Authored for the Nova/C64 active palette: 0=black, 1=white, 2=red,
+; 12=grey-med, 15=grey-light.
+; Legacy source-compatibility constant; editui_init does not write VGC.PALETTE.
 EDITUI_PALETTE_MODE     = $00
 EDITUI_COLOR_BG         = $00      ; black
 EDITUI_COLOR_FG         = $01      ; white

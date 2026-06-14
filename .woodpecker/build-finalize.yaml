@@ -12,9 +12,10 @@ labels:
 
 steps:
   - name: finalize
-    image: ghcr.io/barryw/novavm-ci:2
+    image: mcr.microsoft.com/dotnet/sdk:10.0
     environment:
       GITHUB_TOKEN:
         from_secret: github_token
     commands:
+      - sh .woodpecker/install-linux-ci-deps.sh release
       - gh release edit "$$CI_COMMIT_TAG" --draft=false --repo "$$CI_REPO"

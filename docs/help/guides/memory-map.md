@@ -206,8 +206,8 @@ The VGC IRQ block lives at A0F0--A0FF.
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $A000 | RegMode | R/W | Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics and sprites only (no text). |
-| $A001 | RegBgCol | R/W | Background color index (0--15); reset value is 0 (black). |
+| $A000 | RegMode | R/W | Display mode: 0=text only, 1=graphics over text, 2=text over graphics, 3=graphics and sprites only (no text). In mode 2, unset text pixels fall through to graphics when the cell background nibble matches RegBgCol. |
+| $A001 | RegBgCol | R/W | Background color index (0--15); reset value is 0 (black). Also the transparent text-background key for mode 2. |
 | $A002 | RegFgCol | R/W | Default foreground color index (0--15); reset value is 15 (light grey). |
 | $A003 | RegCursorX | R/W | Text cursor column (0--79). |
 | $A004 | RegCursorY | R/W | Text cursor row (0--49). |
@@ -229,8 +229,8 @@ The VGC IRQ block lives at A0F0--A0FF.
 | --- | --- | --- | --- |
 | $A0E6 | RegTextFlags | R/W | Text output flags: bit 0=reverse, bit 1=use explicit reverse attribute, bit 2=flash. |
 | $A0E7 | RegTextReverseAttr | R/W | Packed reverse color attribute used when bit 1 is set: high nibble=background, low nibble=foreground. |
-| $A0E8 | RegGfxTransparentColor | R/W | Graphics-plane transparent color index (0--15); reset value is 0. |
-| $A0E9 | RegPaletteMode | R/W | VGC palette selector. Low bits: 0=C64/Nova palette, 1=IBM EGA palette, 2=custom RGB palette. Reset value is 0. |
+| $A0E8 | RegGfxTransparentColor | R/W | Graphics-plane transparent color index; reset value is 0. Values 0--15 key that color transparent; values above 15 disable graphics transparency. |
+| $A0E9 | RegPaletteMode | R/W | Legacy compatibility register. Current VGC hardware ignores writes and reads back 0; use RegPaletteIndex/RegPaletteData or NDK helpers for palette changes. Machine reset reloads the default Nova/C64 active palette. |
 | $A0EA | RegScrollCtl | R/W | Scroll control. Bit 0=RegScrollX bit 8, bit 1=apply scroll to graphics, bit 2=apply scroll to text. Reset value is 6 (graphics+text enabled, X bit 8 clear). |
 | $A0EB | RegColStHi | R/WC | Sprite-to-sprite collision high byte for sprites 8--15; write any value to clear this byte. |
 | $A0EC | RegColBgHi | R/WC | Sprite-to-background collision high byte for sprites 8--15; write any value to clear this byte. |
@@ -243,8 +243,8 @@ The VGC IRQ block lives at A0F0--A0FF.
 | $A0F1 | RegIrqStatus | R/W1C | Pending IRQ source mask. Write `1` bits to acknowledge/clear pending sources. |
 | $A0F2 | RegIrqForce | WO | Set enabled pending bits for diagnostics/tests. |
 | $A0F3 | RegIrqValid | RO | Valid implemented source mask (`$7F`). |
-| $A0F4 | RegPaletteIndex | R/W | Byte index into the custom RGB palette stream (0--47). |
-| $A0F5 | RegPaletteData | W | Custom RGB palette data port. Writes store one byte and auto-increment RegPaletteIndex. |
+| $A0F4 | RegPaletteIndex | R/W | Byte index into the active RGB palette stream (0--47). |
+| $A0F5 | RegPaletteData | R/W | Active RGB palette data port. Writes store one RGB byte and auto-increment RegPaletteIndex; reads return the quantized RGB444 byte for the current index. |
 
 The CPU IRQ line is asserted while `(RegIrqStatus & RegIrqEnable) != 0`.
 Use `$A0F1` to acknowledge handled sources before returning from an IRQ handler.

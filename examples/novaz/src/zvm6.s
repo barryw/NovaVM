@@ -139,8 +139,8 @@ nz6_blt_hclip:   .res 1         ; erase: clipped rect height in rows
         .byte NZ6_MAGIC0, NZ6_MAGIC1   ; $2000: magic word
 
 ; A = dispatch id (see zvm6.inc):
-;   $00-$06           VAR screen ops → nz6_var_table
-;   $20 + ext opnum   EXT ops → nz6_ext_table (opnums 0-29)
+;   $00-$0B           VAR/ROM screen ops -> nz6_var_table
+;   $20 + ext opnum   EXT ops -> nz6_ext_table (opnums 0-29)
 ; Dispatch via 65C02 JMP (abs,X): each handler RTSes straight back to the
 ; interpreter step loop, exactly like a ROM table handler would.
 nz6_entry:                              ; $2002: dispatch entry, A = id
@@ -151,8 +151,8 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_NEWLINE + 1
-        BCS nz6_bug             ; reserved VAR ids $0B-$1F are never routed
+        CMP #NZ6_OP_PRE_NEWLINE_SCROLL + 1
+        BCS nz6_bug             ; reserved VAR ids $0C-$1F are never routed
         ASL
         TAX
         JMP (nz6_var_table,X)
@@ -605,17 +605,20 @@ nz6_reset_windows:
 nz6_op_reset:
         JSR nz6_reset_windows
         JSR vgc_set_palette_ega         ; fallback for v1/no-palette packs
-        LDA #$02                        ; mode 2: text over gfx — pictures
+        LDA #VGC_MODE_TEXT_OVER_GFX     ; mode 2: text over gfx — pictures
         STA VGC_MODE                    ; show wherever cells keep the global
                                         ; background colour (mode-2 rule in
                                         ; the VGC compositor)
-        LDA #$FF                        ; gfx transparency OFF: the plane is
+        LDA #VGC_TEXT_BGKEY_DEFAULT
+        STA VGC_BGCOL
+        LDA #VGC_GFXTRANS_DISABLE       ; gfx transparency OFF: the plane is
         STA VGC_GFXTRANS                ; the whole MCGA framebuffer, and
                                         ; opaque BLACK art (index 0) must
                                         ; render, not punch holes
         LDA #NZ6_COLOR_DEFAULT
         STA nz6_colour
         STA VTEXT_COLOR
+        JSR nz6_sync_border_to_bg
         STZ zvm_text_style
         LDA #0
         JSR nz6_gfx_clear
@@ -1199,6 +1202,31 @@ nz6_apply_colour_style:
         STA VTEXT_COLOR
         RTS
 
+; Keep the physical display border aligned with the V6 logical background.
+; V6 paper colour lives in nz6_colour and per-cell colour bytes; VGC_BGCOL is
+; only the mode-2 text-background key, so the border must be synced explicitly.
+nz6_sync_border_to_bg:
+        LDA nz6_colour
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        STA VGC_BORDER
+        RTS
+
+; ROM pre-newline-scroll hook (NZ6_OP_PRE_NEWLINE_SCROLL): if the next LF will
+; scroll the live text region, scroll the matching gfx rect before VTEXT moves
+; text. The V6 MCGA framebuffer is one surface; on Nova it is split into gfx
+; and text planes, so text-first scrolling can expose the wrong bottom strip.
+nz6_op_pre_newline_scroll:
+        LDA nz_lf_scrolled
+        BEQ @rts
+        STZ nz_lf_scrolled
+        LDA #1
+        JMP nz6_gfx_scroll_live
+@rts:
+        RTS
+
 ; ROM newline hook (NZ6_OP_NEWLINE): the V6 carriage-return interrupt
 ; (YZIP "CRCNT/CRFUNC", window props 9/8). A non-zero countdown decrements
 ; on every newline printed to the live window; reaching 0 calls the prop-8
@@ -1211,14 +1239,6 @@ nz6_apply_colour_style:
 ; Z-code (audited callers: nz_screen_flush_word sites set their state
 ; after flushing).
 nz6_op_cr_newline:
-        ; the MCGA framebuffer is one surface: when the newline scrolled the
-        ; text, the gfx rect under the live window scrolls with it
-        LDA nz_lf_scrolled
-        BEQ :+
-        STZ nz_lf_scrolled
-        LDA #1
-        JSR nz6_gfx_scroll_live
-:
         LDA nz6_win_current
         STA nz6_tmp_win
         LDX #9
@@ -2572,6 +2592,7 @@ nz6_gfx_scroll_live:
 ; parchment field lives here and partial picture-edge cells reveal it.
 ; Reset passes 0 (display-transparent).
 nz6_gfx_fill_bg:
+        JSR nz6_sync_border_to_bg
         LDA nz6_colour                  ; window background colour
         LSR A
         LSR A
@@ -2647,7 +2668,7 @@ nz6_ext_read_mouse:
 
 ; --- Dispatch tables ---------------------------------------------------------
 
-nz6_var_table:                  ; ids $00-$07
+nz6_var_table:                  ; ids $00-$0B
         .word nz6_op_reset      ; $00 reset (ROM invokes per game start)
         .word nz6_op_split      ; $01 split_window
         .word nz6_op_set_window ; $02 set_window
@@ -2659,7 +2680,8 @@ nz6_var_table:                  ; ids $00-$07
         .word nz6_apply_current_window ; $08 select (zvm_select_active_window V6 path)
         .word nz6_op_text_style ; $09 set_text_style (colour-relative styles)
         .word nz6_op_cr_newline ; $0A newline hook (CR-interrupt countdown)
-.assert (* - nz6_var_table) / 2 = NZ6_OP_NEWLINE + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_NEWLINE"
+        .word nz6_op_pre_newline_scroll ; $0B pre-scroll gfx before newline
+.assert (* - nz6_var_table) / 2 = NZ6_OP_PRE_NEWLINE_SCROLL + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_PRE_NEWLINE_SCROLL"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)

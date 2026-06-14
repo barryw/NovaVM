@@ -119,18 +119,23 @@ runtime state.
 | Library | Files | Use For | Key Symbols |
 | --- | --- | --- | --- |
 | VGC | `vgc.inc`, `vgc.s` | Raw VGC commands, text controls, graphics primitives, VGC IRQ control. | `vgc_exec`, `vgc_vsync`, `vgc_gcls`, `vgc_plot`, `vgc_line`, `vgc_irq_enable` |
-| VGC palettes | `vgc_palette.inc`, `vgc_palette.s` | Select built-in palettes or upload a 16-entry RGB custom palette from XRAM. | `vgc_set_palette_c64`, `vgc_set_palette_ega`, `vgc_set_palette_custom_xram` |
+| VGC palettes | `vgc_palette.inc`, `vgc_palette.s` | Load C64, EGA, or asset-supplied colors into the active 16-entry RGB palette. | `vgc_set_palette_c64`, `vgc_set_palette_ega`, `vgc_set_palette_custom_xram` |
 | Copper | `copper.inc`, `copper.s` | Building and enabling copper lists. | `copper_clear`, `copper_list`, `copper_add`, `copper_use`, `copper_on` |
 | Hardware sprites | `sprite.inc`, `sprite.s` | Low-level 16 hardware sprite control and collision latches. | `sprite_pos`, `sprite_set_shape`, `sprite_enable`, `sprite_collision_read_clear` |
 | Meta-sprites | `msprite.inc`, `msprite.s` | Treat multiple hardware sprites as one object. | `msprite_spawn`, `msprite_set_pos`, `msprite_set_frame`, `msprite_commit` |
 | Animation | `anim.inc`, `anim.s` | Timed shape/frame animation for sprites and meta-sprites, plus bulk shape loading. | `anim_start`, `anim_tick`, `anim_set_frame`, `anim_load_xram_shapes`, `anim_load_disk_shapes` |
 | Virtual sprites | `vsprite.inc`, `vsprite.s` | Blitter-backed rectangular software sprites and saved-background scenes. | `vsprite_gfx_save_bg`, `vsprite_gfx_blit`, `vsprite_scene_commit`, `vsprite_scene_commit_atomic` |
-| VTEXT | `vtext.inc`, `vtext.s` | Rectangular text regions over VGC character/color/attribute planes. | `vtext_put_char`, `vtext_clear_region`, `vtext_scroll_up`, `vtext_select_region` |
+| VTEXT | `vtext.inc`, `vtext.s` | Rectangular text regions over VGC character/color/attribute planes. | `vtext_put_char`, `vtext_put_run`, `vtext_clear_region`, `vtext_fill_style_region`, `vtext_scroll_up`, `vtext_select_region` |
 | EDITUI | `editui.inc`, `editui.s` | Turbo-style TUI shell for native tools: default File/Edit/Help menus, title/help band, shortcut row, CP437 framed panels, and clipped panel body regions. | `editui_init`, `editui_draw_shell`, `editui_menu_open_hotkey`, `editui_select_box_body` |
 | NUI | `nui.inc`, `nui.s` | First-pass modal dialogs over VTEXT and virtual sprites. | `nui_dialog_defaults`, `nui_show_dialog`, `nui_show_error`, `nui_wait_key` |
 | NVG loader | `nvg.inc`, `nvg.s` | Load native packed NVG2 images through the NDK blitter path into graphics bitmap memory. | `nvg_load`, `nvg_load_at`, `nvg_load_named`, `nvg_load_named_at` |
 | DMA | `dma.inc`, `dma.s` | Raw DMA copy/fill setup and wait/status handling. | `dma_copy`, `dma_fill`, `dma_wait` |
 | Blitter | `blitter.inc`, `blitter.s` | Raw rectangular copy/fill setup and wait/status handling. | `blitter_copy`, `blitter_fill`, `blitter_wait` |
+
+The raw blitter routines return `A=0` for success and `A=1` for failure. On
+failure, read `BLT_STATUS` and `BLT_ERRCODE` for hardware detail. `blitter_wait`
+does not spin forever: if `BLT_STATUS` remains BUSY past its software guard it
+returns failure, so callers can fail visibly instead of freezing the machine.
 
 ### Files, XRAM, And Overlays
 
@@ -213,23 +218,24 @@ The VGC remains an indexed-color display. Text, graphics, sprites, border, and
 background registers store palette indexes `0..15`; the palette selects the RGB
 value displayed for each index.
 
-Use `vgc_set_palette_c64` for the default Nova/C64-style palette and
-`vgc_set_palette_ega` for the IBM EGA palette:
+Use `vgc_set_palette_c64` for the default Nova/C64-style colors and
+`vgc_set_palette_ega` for IBM EGA colors. These are convenience loaders; both
+write the same active palette registers used by custom palettes.
 
 ```asm
         jsr vgc_set_palette_ega
 ```
 
-Custom palettes are one global 16-color table. The byte layout is 48 bytes:
-`R0,G0,B0,R1,G1,B1,...,R15,G15,B15`. Code may provide full RGB888 bytes. The
-current FPGA video path displays the high 4 bits of each channel, so the
-visible hardware palette is RGB444/4096 colors; emulators and future hardware
-can preserve the remaining precision.
+The active palette is one global 16-color table. The byte layout is 48 bytes:
+`R0,G0,B0,R1,G1,B1,...,R15,G15,B15`. Code may submit full RGB888 bytes, but
+Nova stores and displays the high 4 bits of each channel, so the visible
+palette is RGB444/4096 colors. Reads from `VGC.PALDATA` report that quantized
+high nibble in the upper half of the returned byte.
 
 For asset loaders and runtime code, prefer staging those 48 bytes in XRAM and
 calling `vgc_set_palette_custom_xram`. The helper resets `VGC.PALIDX`, streams
-`VGC_CUSTOM_PALETTE_BYTES` bytes through `VGC.PALDATA`, then selects
-`VGC_PALMODE_CUSTOM`.
+`VGC_CUSTOM_PALETTE_BYTES` bytes through `VGC.PALDATA`, and leaves those colors
+as the active palette.
 
 ```asm
         lda #$00
@@ -243,8 +249,12 @@ calling `vgc_set_palette_custom_xram`. The helper resets `VGC.PALIDX`, streams
 ```
 
 Palette changes are global display state. Treat them like a theme or screen
-mode change: if a program switches away from a custom asset palette, restore the
-palette expected by the next screen before drawing indexed colors.
+mode change: if a program switches away from an asset palette, restore the
+palette expected by the next screen before drawing indexed colors. Do not use
+`VGC.PALETTE` (`$A0E9`) for new code; it is a legacy compatibility register.
+Machine reset reloads the default C64 palette into the active palette. Programs
+that require EGA or asset-specific colors must load that palette during their
+own startup.
 
 ## Virtual Sprite Stack
 

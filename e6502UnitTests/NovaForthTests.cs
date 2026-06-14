@@ -942,8 +942,8 @@ public class NovaForthTests
 
         Assert.AreEqual(1, bus.Read((ushort)VgcConstants.RegMode),
             "GRAPHICS should switch the VGC into graphics-over-text mode.");
-        Assert.AreEqual(VgcConstants.PaletteModeC64, bus.Read((ushort)VgcConstants.RegPaletteMode),
-            "NOVA-PALETTE should select the Nova/C64 fixed palette.");
+        Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegPaletteMode),
+            "The legacy palette mode register should remain a compatibility no-op.");
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegCmd),
             "VGC-CMD! should wait until the VGC command register is idle.");
         Assert.AreEqual(5, GfxPixel(bus, 120, 100),

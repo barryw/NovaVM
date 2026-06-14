@@ -27,4 +27,26 @@ cp "$repo_root/e6502.Avalonia/Resources/memory.bin" "$out_dir/memory.bin"
 cp "$repo_root/e6502.Avalonia/Resources/net.bin" "$out_dir/net.bin"
 cp "$repo_root/e6502.Avalonia/Resources/turtle.bin" "$out_dir/turtle.bin"
 
+forth_disk="$repo_root/e6502.Browser/wwwroot/forth.ndi"
+tmp_forth_disk="$(mktemp "${TMPDIR:-/tmp}/novavm-forth.XXXXXX.ndi")"
+rm -f "$tmp_forth_disk"
+
+nova=(dotnet run --project "$repo_root/e6502.Nova" --)
+"${nova[@]}" create "$tmp_forth_disk" --size 800 --label FORTH >/dev/null
+
+while IFS= read -r dir; do
+  rel="${dir#$repo_root/novaforth/}"
+  "${nova[@]}" mkdir "$tmp_forth_disk" "/$rel" >/dev/null
+done < <(find "$repo_root/novaforth/forth" -type d | sort)
+
+while IFS= read -r file; do
+  rel="${file#$repo_root/novaforth/}"
+  dest_dir="/${rel%/*}"
+  "${nova[@]}" import "$tmp_forth_disk" "$file" "$dest_dir" >/dev/null
+done < <(find "$repo_root/novaforth/forth" -type f \( -name '*.4th' -o -name '*.fth' -o -name '*.fr' -o -name '*.fs' \) | sort)
+
+"${nova[@]}" validate "$tmp_forth_disk" >/dev/null
+cp "$tmp_forth_disk" "$forth_disk"
+rm -f "$tmp_forth_disk"
+
 echo "Rust browser core assets written to $out_dir"

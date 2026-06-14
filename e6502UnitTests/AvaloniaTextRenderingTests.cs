@@ -47,7 +47,7 @@ public class AvaloniaTextRenderingTests
             font,
             px: 1,
             py: 0,
-            mode: 2,
+            mode: VgcConstants.ModeTextOverGfx,
             scrollX: 0,
             scrollY: 0,
             bgColor: 4,
@@ -88,7 +88,7 @@ public class AvaloniaTextRenderingTests
             font,
             px: 1,
             py: 0,
-            mode: 2,
+            mode: VgcConstants.ModeTextOverGfx,
             scrollX: 0,
             scrollY: 0,
             bgColor: 4,
@@ -100,6 +100,33 @@ public class AvaloniaTextRenderingTests
             out _);
 
         Assert.IsFalse(opaque);
+    }
+
+    [TestMethod]
+    public void TextPixelRenderer_Mode2KeepsNonMatchingCellBackgroundOpaque()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x42, textAttr: 0);
+
+        bool opaque = TextPixelRenderer.TrySample(
+            vgc,
+            font,
+            px: 1,
+            py: 0,
+            mode: VgcConstants.ModeTextOverGfx,
+            scrollX: 0,
+            scrollY: 0,
+            bgColor: 3,
+            fontIndex: 0,
+            flashVisible: true,
+            cursorX: 10,
+            cursorY: 10,
+            cursorEnabled: false,
+            out byte colorIndex);
+
+        Assert.IsTrue(opaque);
+        Assert.AreEqual(4, colorIndex);
     }
 
     [TestMethod]

@@ -510,7 +510,6 @@ static const uint16_t VGC_CURSOR_Y      = 0xA004;
 static const uint16_t VGC_BORDER        = 0xA00D;
 static const uint16_t VGC_CURSOR_ENABLE = 0xA00A;
 static const uint16_t VGC_DISPLAY_DIM   = 0xA0E5;
-static const uint16_t VGC_PALETTE_MODE  = 0xA0E9;
 static const uint16_t VGC_PALETTE_INDEX = 0xA0F4;
 static const uint16_t VGC_PALETTE_DATA  = 0xA0F5;
 static const uint8_t  VGC_SPACE_CHAR    = 0x01;
@@ -518,11 +517,16 @@ static const uint8_t  VGC_SPACE_COLOR   = 0x02;
 static const uint8_t  VGC_SPACE_GFX     = 0x03;
 static const uint8_t  VGC_SPACE_TEXTATTR = 0x07;
 static const uint8_t  VGC_MODE_GFX_ONLY = 0x03;
-static const uint8_t  VGC_PALMODE_CUSTOM = 0x02;
 static const uint16_t NVG_HEADER_BYTES   = 16;
 static const uint16_t NVG_PALETTE_BYTES  = 48;
 static const uint8_t  NVG_FLAG_TRANSPARENT = 0x01;
 static const uint8_t  NVG_FLAG_PALETTE     = 0x02;
+static const uint8_t VGC_DEFAULT_C64_PALETTE[NVG_PALETTE_BYTES] = {
+    0x00,0x00,0x00, 0xFF,0xFF,0xFF, 0x88,0x00,0x00, 0xAA,0xFF,0xEE,
+    0xCC,0x44,0xCC, 0x00,0xCC,0x55, 0x00,0x00,0xAA, 0xEE,0xEE,0x77,
+    0xDD,0x88,0x55, 0x66,0x44,0x00, 0xFF,0x77,0x77, 0x33,0x33,0x33,
+    0x77,0x77,0x77, 0xAA,0xFF,0x66, 0x00,0x88,0xFF, 0xBB,0xBB,0xBB,
+};
 
 static BootRuntimeConfig g_runtime_config = {};
 static void parseRuntimeConfigFromFile();
@@ -1048,11 +1052,28 @@ bool fillVgcRange(uint8_t space, uint16_t start, size_t length,
     return true;
 }
 
-bool clearVgcText() {
+bool resetVgcDefaultPalette() {
     bool ok =
+        fpgaBridge.poke(VGC_PALETTE_INDEX, 0x00);
+
+    for (uint16_t i = 0; i < NVG_PALETTE_BYTES; i++) {
+        ok = fpgaBridge.poke(VGC_PALETTE_DATA, VGC_DEFAULT_C64_PALETTE[i]) && ok;
+    }
+
+    return ok;
+}
+
+bool clearVgcText() {
+    bool ok = resetVgcDefaultPalette();
+    ok =
         fillVgcRange(VGC_SPACE_CHAR, 0, VGC_TEXT_LEN, 0x20, "chars") &&
+        ok;
+    ok =
         fillVgcRange(VGC_SPACE_COLOR, 0, VGC_TEXT_LEN, 0x0F, "colors") &&
-        fillVgcRange(VGC_SPACE_TEXTATTR, 0, VGC_TEXT_LEN, 0x00, "attrs");
+        ok;
+    ok =
+        fillVgcRange(VGC_SPACE_TEXTATTR, 0, VGC_TEXT_LEN, 0x00, "attrs") &&
+        ok;
 
     ok = fpgaBridge.poke(VGC_BGCOL, 0x00) && ok;
     ok = fpgaBridge.poke(VGC_FGCOL, 0x0F) && ok;
@@ -1144,10 +1165,6 @@ bool streamBootLogoNvg(File& f, const char* path) {
                 return false;
             }
         }
-        if (!fpgaBridge.poke(VGC_PALETTE_MODE, VGC_PALMODE_CUSTOM)) {
-            logLn("Boot splash palette mode write failed");
-            return false;
-        }
     }
 
     if (!f.seek(payload_offset)) {
@@ -1206,14 +1223,16 @@ bool streamBootLogoNvg(File& f, const char* path) {
 }
 
 bool setBootSplashVideoState(uint8_t dim) {
-    return fpgaBridge.poke(VGC_DISPLAY_DIM, dim) &&
+    return resetVgcDefaultPalette() &&
+           fpgaBridge.poke(VGC_DISPLAY_DIM, dim) &&
            fpgaBridge.poke(VGC_BGCOL, 0x00) &&
-           fpgaBridge.poke(VGC_BORDER, 0x00) &&
+           fpgaBridge.poke(VGC_BORDER, 0x0B) &&
            fpgaBridge.poke(VGC_CURSOR_ENABLE, 0x00) &&
            fpgaBridge.poke(VGC_MODE, VGC_MODE_GFX_ONLY);
 }
 
 void restoreBootSplashVideoState() {
+    resetVgcDefaultPalette();
     fpgaBridge.poke(VGC_MODE, 0x00);
     fpgaBridge.poke(VGC_DISPLAY_DIM, 0x0F);
 }

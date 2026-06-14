@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="NovaVM is a custom 6502/65C02 computer implemented as an emulator, FPGA core, and ESP32 host bridge.">
+    <title>NovaVM - 6502/65C02 computer platform</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="site-header" aria-label="Site header">
+        <a class="brand" href="#top" aria-label="NovaVM home">
+            <span class="brand-mark">NV</span>
+            <span>NovaVM</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary navigation">
+            <a href="#emulator">Emulator</a>
+            <a href="#targets">Targets</a>
+            <a href="#hardware">Hardware</a>
+            <a href="#downloads">Books</a>
+        </nav>
+        <a class="header-link" href="https://github.com/barryw/NovaVM">Source</a>
+    </header>
+
+    <main id="top">
+        <section class="hero" aria-labelledby="hero-title">
+            <div class="hero-media" aria-hidden="true"></div>
+            <div class="hero-overlay" aria-hidden="true"></div>
+            <div class="hero-content">
+                <p class="eyebrow">6502/65C02 computer platform</p>
+                <h1 id="hero-title">NovaVM</h1>
+                <p class="hero-copy">
+                    One machine model across a desktop emulator, a browser host experiment,
+                    Verilator simulation, and ULX3S FPGA hardware with ESP32 NovaHost services.
+                </p>
+                <div class="hero-actions" aria-label="Primary actions">
+                    <a class="button primary" href="emulator/">Launch browser emulator</a>
+                    <a class="button secondary" href="#quickstart">Clone and run</a>
+                    <a class="button secondary" href="#downloads">Download books</a>
+                </div>
+                <dl class="hero-facts" aria-label="NovaVM summary">
+                    <div>
+                        <dt>CPU</dt>
+                        <dd>6502/65C02</dd>
+                    </div>
+                    <div>
+                        <dt>Display</dt>
+                        <dd>720x480 output, 640x400 canvas</dd>
+                    </div>
+                    <div>
+                        <dt>XRAM</dt>
+                        <dd>512 KB flat expansion memory</dd>
+                    </div>
+                </dl>
+            </div>
+        </section>
+
+        <section class="intro-band" aria-label="Project summary">
+            <p>
+                NovaVM keeps the approachable 6502 programming model and adds a Nova-specific
+                video controller, sprites, DMA, blitter, copper lists, file I/O, audio, storage,
+                networking, and host debug control.
+            </p>
+        </section>
+
+        <section id="emulator" class="section emulator-section" aria-labelledby="emulator-title">
+            <div class="section-copy">
+                <p class="eyebrow">Run it here</p>
+                <h2 id="emulator-title">NovaVM in the browser.</h2>
+                <p>
+                    The static site includes the browser emulator, using the Rust WebAssembly
+                    core by default. Boot NovaBASIC, switch to Logo or Forth, change speed,
+                    paste text into the machine, and mount local disk images without a server.
+                </p>
+                <div class="section-actions">
+                    <a class="button primary" href="emulator/">Open emulator</a>
+                    <a class="button secondary" href="emulator/?runtime=logo">Boot Logo</a>
+                </div>
+            </div>
+            <a class="emulator-preview" href="emulator/" aria-label="Open NovaVM browser emulator">
+                <img src="assets/screenshots/desktop-boot.png" alt="NovaVM browser emulator boot preview" width="1034" height="618" loading="lazy">
+                <span>Launch</span>
+            </a>
+        </section>
+
+        <section id="targets" class="section split-section" aria-labelledby="targets-title">
+            <div class="section-copy">
+                <p class="eyebrow">One machine, multiple hosts</p>
+                <h2 id="targets-title">Built to keep software and hardware honest.</h2>
+                <p>
+                    The desktop host is the reference development surface. Verilator tests keep
+                    the RTL implementation measurable. The ULX3S plus ESP32 path brings the same
+                    register model to physical video, SDRAM, storage, and debug hardware.
+                </p>
+            </div>
+            <div class="target-grid" aria-label="Implementation targets">
+                <article class="target-card">
+                    <h3>Avalonia</h3>
+                    <p>Reference desktop VM with NovaBASIC, rendering, audio, storage, network, and development tooling.</p>
+                </article>
+                <article class="target-card">
+                    <h3>Verilator</h3>
+                    <p>Fast RTL simulation for validating VGC, DMA, blitter, XRAM, SID, NIC, and bus behavior.</p>
+                </article>
+                <article class="target-card">
+                    <h3>ULX3S + NovaHost</h3>
+                    <p>FPGA target with HDMI output, SDRAM-backed XRAM, SD assets, ROM loading, and ESP32 debug services.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="media-strip" aria-labelledby="media-title">
+            <div class="section-heading">
+                <p class="eyebrow">Current machine views</p>
+                <h2 id="media-title">Screens from the real project.</h2>
+            </div>
+            <div class="screenshot-grid">
+                <figure class="screenshot large">
+                    <img src="assets/screenshots/desktop-boot.png" alt="NovaBASIC boot screen in the desktop host" width="1034" height="618" loading="lazy">
+                    <figcaption>Reference desktop boot</figcaption>
+                </figure>
+                <figure class="screenshot">
+                    <img src="assets/screenshots/ncc-editor.png" alt="Nova C Compiler editor running on the Nova display" width="1034" height="618" loading="lazy">
+                    <figcaption>Nova C compiler editor</figcaption>
+                </figure>
+                <figure class="screenshot">
+                    <img src="assets/screenshots/music-demo.png" alt="Bach keyboard visualizer running on NovaVM" width="640" height="400" loading="lazy">
+                    <figcaption>Music visualizer demo</figcaption>
+                </figure>
+            </div>
+        </section>
+
+        <section id="hardware" class="section hardware-section" aria-labelledby="hardware-title">
+            <div class="section-heading">
+                <p class="eyebrow">Hardware surface</p>
+                <h2 id="hardware-title">A small computer with modern development affordances.</h2>
+            </div>
+            <div class="hardware-list">
+                <article>
+                    <h3>Video and graphics</h3>
+                    <p>80x50 text, 320x200 4-bit graphics, 16 hardware sprites, tiles, copper lists, DMA, and blitter paths.</p>
+                </article>
+                <article>
+                    <h3>Memory model</h3>
+                    <p>64 KB CPU-visible address space plus 512 KB expansion RAM exposed through flat 24-bit XRAM tooling.</p>
+                </article>
+                <article>
+                    <h3>Storage and host services</h3>
+                    <p>Host directories, NDI disk images, file I/O registers, ROM loading, mounted assets, and debug transport.</p>
+                </article>
+                <article>
+                    <h3>Audio and networking</h3>
+                    <p>Dual SID model, hosted MIDI and music streams, wavetable synth work, and a message-oriented TCP NIC.</p>
+                </article>
+            </div>
+        </section>
+
+        <section id="downloads" class="section downloads-section" aria-labelledby="downloads-title">
+            <div class="section-copy">
+                <p class="eyebrow">Downloadable books</p>
+                <h2 id="downloads-title">PDFs become the stable public docs.</h2>
+                <p>
+                    The site ships with the currently built books. As more manuals are generated,
+                    they can be added as static PDF assets without changing the rest of the site.
+                </p>
+            </div>
+            <div class="download-list" aria-label="Book downloads">
+                <a href="assets/books/mapping-the-novavm.pdf" download>
+                    <span>Mapping the NovaVM</span>
+                    <small>Architecture reference, 1.1 MB</small>
+                </a>
+                <a href="assets/books/novabasic-user-guide.pdf" download>
+                    <span>NovaBASIC User Guide</span>
+                    <small>Language guide, 631 KB</small>
+                </a>
+                <a href="assets/books/ndk-reference.pdf" download>
+                    <span>NDK Reference</span>
+                    <small>Assembly libraries, 538 KB</small>
+                </a>
+                <a href="assets/books/nova-cli-guide.pdf" download>
+                    <span>Nova CLI Guide</span>
+                    <small>Tooling and disk images, 257 KB</small>
+                </a>
+                <a href="assets/books/nova-fun-n-games.pdf" download>
+                    <span>Nova Fun &amp; Games</span>
+                    <small>Program collection, 2.2 MB</small>
+                </a>
+            </div>
+        </section>
+
+        <section id="quickstart" class="section quickstart-section" aria-labelledby="quickstart-title">
+            <div class="quickstart-copy">
+                <p class="eyebrow">Start locally</p>
+                <h2 id="quickstart-title">Run the desktop reference host.</h2>
+                <p>
+                    Install the .NET 10 SDK, clone the repository, restore the solution,
+                    and launch the Avalonia host. For full ROM and book rebuilds, add
+                    ca65, ld65, Python, pandoc, and a LaTeX toolchain.
+                </p>
+            </div>
+            <div class="code-panel">
+                <button class="copy-button" type="button" data-copy-target="quickstart-code">Copy</button>
+                <pre id="quickstart-code"><code>git clone https://github.com/barryw/NovaVM.git
+cd NovaVM
+dotnet restore e6502.sln
+dotnet run --project e6502.Avalonia</code></pre>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <p>NovaVM is built on the e6502 codebase and the project documentation in this repository.</p>
+        <a href="https://github.com/barryw/NovaVM">github.com/barryw/NovaVM</a>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

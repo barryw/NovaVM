@@ -93,7 +93,7 @@ module test_vgc_regs;
         force dut.reset_display_blank = 1'b0;
         force dut.mode = 3'd3;
         force dut.bg_color = 4'd1;
-        force dut.gfx_trans_color = 4'd2;
+        force dut.gfx_trans_color = 8'd2;
         force dut.spr_pixel_hit = 1'b0;
 
         force dut.gfx_b_dout = 4'd0;
@@ -106,6 +106,11 @@ module test_vgc_regs;
         check_eq("configured transparent gfx color falls through to background",
                  int'(dut.pixel_color), 12'hFFF);
 
+        force dut.gfx_trans_color = 8'hFE;
+        #1;
+        check_eq("transparent color >15 disables transparency",
+                 int'(dut.pixel_color), 12'h800);
+
         release dut.visible_d2;
         release dut.in_text_area_d2;
         release dut.reset_display_blank;
@@ -114,6 +119,57 @@ module test_vgc_regs;
         release dut.gfx_trans_color;
         release dut.spr_pixel_hit;
         release dut.gfx_b_dout;
+    endtask
+
+    task automatic test_mode2_text_background_key_compositor();
+        $display("");
+        $display("Test: mode 2 uses RegBgCol as the transparent text-background key");
+
+        force dut.visible_d2 = 1'b1;
+        force dut.in_text_area_d2 = 1'b1;
+        force dut.reset_display_blank = 1'b0;
+        force dut.mode = 3'd2;
+        force dut.bg_color = 4'd0;
+        force dut.gfx_trans_color = 8'hFF;
+        force dut.gfx_b_dout = 4'd5;
+        force dut.font_pixel_d2 = 3'd0;
+        force dut.spr_pixel_hit = 1'b0;
+
+        force dut.attr_b_dout = 8'h00;
+        force dut.color_b_dout = 8'h0F; // bg matches key 0, fg 15
+        force dut.font_b_dout = 8'h00;
+        #1;
+        check_eq("matching blank text background falls through to gfx",
+                 int'(dut.pixel_color_idx), 5);
+
+        force dut.color_b_dout = 8'h2F; // bg 2 does not match key 0
+        #1;
+        check_eq("non-matching blank text background is opaque",
+                 int'(dut.pixel_color_idx), 2);
+
+        force dut.font_b_dout = 8'h80;
+        #1;
+        check_eq("set glyph pixel stays on top of gfx",
+                 int'(dut.pixel_color_idx), 15);
+
+        force dut.attr_b_dout = 8'h02; // reverse
+        force dut.font_b_dout = 8'h00;
+        #1;
+        check_eq("reverse background remains opaque in mode 2",
+                 int'(dut.pixel_color_idx), 15);
+
+        release dut.visible_d2;
+        release dut.in_text_area_d2;
+        release dut.reset_display_blank;
+        release dut.mode;
+        release dut.bg_color;
+        release dut.gfx_trans_color;
+        release dut.gfx_b_dout;
+        release dut.font_pixel_d2;
+        release dut.spr_pixel_hit;
+        release dut.attr_b_dout;
+        release dut.color_b_dout;
+        release dut.font_b_dout;
     endtask
 
     task automatic test_sprite_bg_collision_irq_gated_to_canvas();
@@ -130,7 +186,7 @@ module test_vgc_regs;
         force dut.spr_pixel_hit = 1'b1;
         force dut.spr_pixel_owner = 4'd10;
         force dut.gfx_b_dout = 4'd3;
-        force dut.gfx_trans_color = 4'd0;
+        force dut.gfx_trans_color = 8'd0;
         #1;
         check_eq("border-area collision predicate is false",
                  int'(dut.sprite_bg_collision_now), 0);
@@ -309,6 +365,62 @@ module test_vgc_regs;
         check_eq("cursor draw disabled when cursor register is off", int'(dut.cursor_draw_enable), 0);
     endtask
 
+    task automatic test_cursor_reverses_text_cell_colors();
+        $display("");
+        $display("Test: cursor renders as a reversed text cell, not global foreground");
+
+        force dut.visible_d2 = 1'b1;
+        force dut.in_text_area_d2 = 1'b1;
+        force dut.reset_display_blank = 1'b0;
+        force dut.mode = 3'd2;
+        force dut.text_layer_visible = 1'b1;
+        force dut.cursor_enable = 1'b1;
+        force dut.cursor_blink = 1'b1;
+        force dut.text_col_d2 = 7'd11;
+        force dut.text_row_d2 = 6'd33;
+        force dut.cursor_x = 7'd11;
+        force dut.cursor_y = 6'd33;
+        force dut.color_b_dout = 8'hC5;  // cell bg=C, fg=5
+        force dut.attr_b_dout = 8'h00;
+        force dut.font_pixel_d2 = 3'd0;
+        force dut.gfx_b_dout = 4'd4;
+        force dut.gfx_trans_color = 8'hFF;
+        force dut.bg_color = 4'd0;
+        force dut.fg_color = 4'd15;
+        force dut.spr_pixel_hit = 1'b0;
+
+        force dut.font_b_dout = 8'h00;
+        #1;
+        check_eq("cursor blank pixel uses cell foreground, not global foreground",
+                 int'(dut.pixel_color_idx), 5);
+
+        force dut.font_b_dout = 8'h80;
+        #1;
+        check_eq("cursor glyph pixel uses cell background",
+                 int'(dut.pixel_color_idx), 12);
+
+        release dut.visible_d2;
+        release dut.in_text_area_d2;
+        release dut.reset_display_blank;
+        release dut.mode;
+        release dut.text_layer_visible;
+        release dut.cursor_enable;
+        release dut.cursor_blink;
+        release dut.text_col_d2;
+        release dut.text_row_d2;
+        release dut.cursor_x;
+        release dut.cursor_y;
+        release dut.color_b_dout;
+        release dut.attr_b_dout;
+        release dut.font_pixel_d2;
+        release dut.gfx_b_dout;
+        release dut.gfx_trans_color;
+        release dut.bg_color;
+        release dut.fg_color;
+        release dut.spr_pixel_hit;
+        release dut.font_b_dout;
+    endtask
+
     task automatic test_collision_clear_on_write();
         logic [7:0] rb;
         $display("");
@@ -438,7 +550,7 @@ module test_vgc_regs;
     task automatic test_gfx_transparent_color_register();
         logic [7:0] rb;
         $display("");
-        $display("Test: graphics transparent color register at $A0E8 — 4-bit");
+        $display("Test: graphics transparent color register at $A0E8 — byte-wide");
         do_reset();
         check_eq("gfx_trans_color reset default is 0", int'(dut.gfx_trans_color), 0);
         bus_write(REG_GFXTRANS_A, 8'h02); step(2);
@@ -446,73 +558,127 @@ module test_vgc_regs;
         bus_read(REG_GFXTRANS_A, rb); step(2);
         check_eq("$A0E8 CPU readback sees gfx_trans_color=2", int'(rb), 2);
         bus_write(REG_GFXTRANS_A, 8'hFE); step(2);
-        check_eq("gfx_trans_color masks to 4 bits (0xFE -> 14)",
-                 int'(dut.gfx_trans_color), 14);
+        check_eq("gfx_trans_color stores raw byte 0xFE",
+                 int'(dut.gfx_trans_color), 8'hFE);
+        bus_read(REG_GFXTRANS_A, rb); step(2);
+        check_eq("$A0E8 CPU readback sees raw 0xFE", int'(rb), 8'hFE);
         dbg_write(REG_GFXTRANS_A, 8'h0B);
         check_eq("debug write gfx_trans_color=11", int'(dut.gfx_trans_color), 11);
         dbg_read(REG_GFXTRANS_A, rb);
         check_eq("$A0E8 debug readback sees debug-written gfx_trans_color=11", int'(rb), 11);
     endtask
 
-    task automatic test_palette_mode_register();
+    task automatic test_palette_legacy_mode_register_noop();
         logic [7:0] rb;
         $display("");
-        $display("Test: palette mode register at $A0E9 — low two bits select C64/EGA/custom");
+        $display("Test: legacy palette mode register at $A0E9 is compatibility no-op");
         do_reset();
-        check_eq("palette_mode reset default is C64/Nova", int'(dut.palette_mode), 0);
+        dut.active_palette_rgb444[1] = 12'h135;
         bus_read(REG_PALETTE_MODE_A, rb); step(2);
-        check_eq("$A0E9 CPU readback reset default is 0", int'(rb), 0);
+        check_eq("$A0E9 CPU readback is fixed legacy zero", int'(rb), 0);
 
         bus_write(REG_PALETTE_MODE_A, 8'h01); step(2);
-        check_eq("palette_mode=1 selects EGA", int'(dut.palette_mode), 1);
+        check_eq("$A0E9 CPU write does not alter active palette",
+                 int'(dut.active_palette_rgb444[1]), 12'h135);
         bus_read(REG_PALETTE_MODE_A, rb); step(2);
-        check_eq("$A0E9 CPU readback sees EGA", int'(rb), 1);
+        check_eq("$A0E9 CPU readback remains zero after write 1", int'(rb), 0);
 
         bus_write(REG_PALETTE_MODE_A, 8'h02); step(2);
-        check_eq("palette_mode=2 selects custom", int'(dut.palette_mode), 2);
+        check_eq("$A0E9 custom-mode write is ignored",
+                 int'(dut.active_palette_rgb444[1]), 12'h135);
         bus_read(REG_PALETTE_MODE_A, rb); step(2);
-        check_eq("$A0E9 CPU readback sees custom", int'(rb), 2);
+        check_eq("$A0E9 CPU readback remains zero after write 2", int'(rb), 0);
 
         bus_write(REG_PALETTE_MODE_A, 8'hFF); step(2);
-        check_eq("palette_mode uses low two bits (0xFF -> 3)", int'(dut.palette_mode), 3);
+        check_eq("$A0E9 high-bit write is ignored",
+                 int'(dut.active_palette_rgb444[1]), 12'h135);
 
         dbg_write(REG_PALETTE_MODE_A, 8'h01);
-        check_eq("debug write palette_mode=1", int'(dut.palette_mode), 1);
+        check_eq("$A0E9 debug write does not alter active palette",
+                 int'(dut.active_palette_rgb444[1]), 12'h135);
         dbg_read(REG_PALETTE_MODE_A, rb);
-        check_eq("$A0E9 debug readback sees debug-written palette_mode=1", int'(rb), 1);
+        check_eq("$A0E9 debug readback is fixed legacy zero", int'(rb), 0);
     endtask
 
-    task automatic test_custom_palette_registers();
+    task automatic test_active_palette_registers();
         logic [7:0] rb;
         $display("");
-        $display("Test: custom palette byte stream at $A0F4/$A0F5");
+        $display("Test: active palette byte stream at $A0F4/$A0F5");
+        do_reset();
+
+        check_eq("power-up active palette keeps C64 color 1 white",
+                 int'(dut.active_palette_rgb444[1]), 12'hFFF);
+        check_eq("power-up active palette keeps C64 color 14 blue",
+                 int'(dut.active_palette_rgb444[14]), 12'h08F);
+        check_eq("power-up active palette keeps C64 color 13 light green",
+                 int'(dut.active_palette_rgb444[13]), 12'hAF6);
 
         bus_write(REG_PALETTE_IDX_A, 8'd3); step(2);
         check_eq("palette index write selects byte 3", int'(dut.palette_write_index), 3);
+        check_eq("byte 3 selects color 1", int'(dut.palette_write_color), 1);
+        check_eq("byte 3 selects red component", int'(dut.palette_write_component), 0);
         bus_write(REG_PALETTE_DATA_A, 8'h12); step(2);
         bus_write(REG_PALETTE_DATA_A, 8'h34); step(2);
         bus_write(REG_PALETTE_DATA_A, 8'h56); step(2);
         check_eq("palette data write auto-increments index", int'(dut.palette_write_index), 6);
-        check_eq("custom palette entry 1 red byte", int'(dut.custom_palette_rgb[3]), 8'h12);
-        check_eq("custom palette entry 1 green byte", int'(dut.custom_palette_rgb[4]), 8'h34);
-        check_eq("custom palette entry 1 blue byte", int'(dut.custom_palette_rgb[5]), 8'h56);
+        check_eq("active palette entry 1 packs RGB444 high nibbles",
+                 int'(dut.active_palette_rgb444[1]), 12'h135);
         bus_read(REG_PALETTE_IDX_A, rb); step(2);
         check_eq("$A0F4 CPU readback sees palette index", int'(rb), 6);
         bus_read(REG_PALETTE_DATA_A, rb); step(2);
-        check_eq("$A0F5 CPU readback sees current palette byte", int'(rb), int'(dut.custom_palette_rgb[6]));
+        check_eq("$A0F5 CPU readback exposes quantized current byte", int'(rb), 8'h80);
+        bus_write(REG_PALETTE_IDX_A, 8'd3); step(2);
+        bus_read(REG_PALETTE_DATA_A, rb); step(2);
+        check_eq("$A0F5 CPU readback exposes uploaded red high nibble", int'(rb), 8'h10);
+
+        bus_write(REG_PALETTE_IDX_A, 8'd48); step(2);
+        check_eq("palette index 48 wraps to byte 0", int'(dut.palette_write_index), 0);
+        bus_write(REG_PALETTE_IDX_A, 8'd95); step(2);
+        check_eq("palette index 95 wraps to byte 47", int'(dut.palette_write_index), 47);
+        bus_write(REG_PALETTE_IDX_A, 8'd255); step(2);
+        check_eq("palette index 255 folds into byte 15", int'(dut.palette_write_index), 15);
+        check_eq("byte 15 selects color 5", int'(dut.palette_write_color), 5);
+        check_eq("byte 15 selects red component", int'(dut.palette_write_component), 0);
 
         dbg_write(REG_PALETTE_IDX_A, 8'd47);
         check_eq("debug palette index write", int'(dut.palette_write_index), 47);
         dbg_write(REG_PALETTE_DATA_A, 8'hAB);
         check_eq("debug palette data wraps index", int'(dut.palette_write_index), 0);
-        check_eq("debug palette data writes byte 47", int'(dut.custom_palette_rgb[47]), 8'hAB);
+        check_eq("debug palette data updates packed blue nibble",
+                 int'(dut.active_palette_rgb444[15]), 12'hBBA);
         dbg_read(REG_PALETTE_IDX_A, rb);
         check_eq("$A0F4 debug readback sees wrapped index", int'(rb), 0);
+
+        dbg_write(REG_PALETTE_IDX_A, 8'd4);
+        dbg_write(REG_PALETTE_DATA_A, 8'hE0);
+        check_eq("debug palette data updates selected green nibble",
+                 int'(dut.active_palette_rgb444[1]), 12'h1E5);
+        dbg_read(REG_PALETTE_DATA_A, rb);
+        check_eq("$A0F5 debug readback exposes next blue byte", int'(rb), 8'h50);
     endtask
 
-    task automatic test_palette_mode_compositor();
+    task automatic test_active_palette_reset_restores_c64();
         $display("");
-        $display("Test: palette mode changes fixed-index compositor colors");
+        $display("Test: VGC reset restores the default C64 active palette");
+        do_reset();
+
+        bus_write(REG_PALETTE_IDX_A, 8'd3); step(2);
+        bus_write(REG_PALETTE_DATA_A, 8'h10); step(2);
+        bus_write(REG_PALETTE_DATA_A, 8'h20); step(2);
+        bus_write(REG_PALETTE_DATA_A, 8'h30); step(2);
+        check_eq("palette entry changed before reset",
+                 int'(dut.active_palette_rgb444[1]), 12'h123);
+
+        do_reset();
+        check_eq("active palette color 1 resets to C64 white",
+                 int'(dut.active_palette_rgb444[1]), 12'hFFF);
+        check_eq("palette byte cursor resets",
+                 int'(dut.palette_write_index), 0);
+    endtask
+
+    task automatic test_active_palette_compositor();
+        $display("");
+        $display("Test: compositor reads the single active palette");
 
         force dut.visible_d2 = 1'b1;
         force dut.in_text_area_d2 = 1'b0;
@@ -520,30 +686,29 @@ module test_vgc_regs;
         force dut.border_color = 4'd1;
         force dut.spr_pixel_hit = 1'b0;
 
-        force dut.palette_mode = 2'd0;
+        dut.active_palette_rgb444[1] = 12'h135;
         #1;
-        check_eq("C64/Nova color index 1 is white",
-                 int'(dut.pixel_color), 12'hFFF);
-
-        force dut.palette_mode = 2'd1;
-        #1;
-        check_eq("EGA color index 1 is blue",
-                 int'(dut.pixel_color), 12'h00A);
-
-        dut.custom_palette_rgb[3] = 8'h12;
-        dut.custom_palette_rgb[4] = 8'h34;
-        dut.custom_palette_rgb[5] = 8'h56;
-        force dut.palette_mode = 2'd2;
-        #1;
-        check_eq("custom palette color index 1 uses uploaded RGB nibbles",
+        check_eq("color index 1 uses active palette RGB nibbles",
                  int'(dut.pixel_color), 12'h135);
+
+        dut.active_palette_rgb444[1] = 12'h246;
+        #1;
+        check_eq("active palette edits immediately change compositor color",
+                 int'(dut.pixel_color), 12'h246);
+
+        bus_write(REG_PALETTE_MODE_A, 8'h01); step(2);
+        check_eq("legacy mode write cannot switch compositor away from active palette",
+                 int'(dut.pixel_color), 12'h246);
+
+        dbg_write(REG_PALETTE_MODE_A, 8'h02);
+        check_eq("legacy debug mode write cannot switch compositor away from active palette",
+                 int'(dut.pixel_color), 12'h246);
 
         release dut.visible_d2;
         release dut.in_text_area_d2;
         release dut.reset_display_blank;
         release dut.border_color;
         release dut.spr_pixel_hit;
-        release dut.palette_mode;
     endtask
 
     task automatic test_debug_write_paths();
@@ -555,8 +720,11 @@ module test_vgc_regs;
         check_eq("debug write display_dim=4", int'(dut.display_dim), 4);
         dbg_write(REG_GFXTRANS_A, 8'd6);
         check_eq("debug write gfx_trans_color=6", int'(dut.gfx_trans_color), 6);
-        dbg_write(REG_PALETTE_MODE_A, 8'd1);
-        check_eq("debug write palette_mode=1", int'(dut.palette_mode), 1);
+        dut.active_palette_rgb444[3] = 12'h000;
+        dbg_write(REG_PALETTE_IDX_A, 8'd9);
+        dbg_write(REG_PALETTE_DATA_A, 8'hC0);
+        check_eq("debug write palette data updates active palette",
+                 int'(dut.active_palette_rgb444[3]), 12'hC00);
         dbg_vmem_write(VPLANE_GFX_A, 16'h1234, 8'h0B);
         check_eq("debug vmem write gfx[0x1234]=0xB",
                  int'(dut.gfx_inst.gfx_mem.mem[16'h1234]), 4'hB);
@@ -805,6 +973,7 @@ module test_vgc_regs;
     endtask
 
     task automatic test_independent_registers();
+        logic [7:0] rb;
         $display("");
         $display("Test: writing each register does not disturb others");
         // Set a recognizable fingerprint
@@ -834,7 +1003,8 @@ module test_vgc_regs;
         check_eq("font_slot stable",    int'(dut.font_slot),     1);
         check_eq("gfx_color stable",    int'(dut.gfx_color),     9);
         check_eq("gfx_trans_color stable", int'(dut.gfx_trans_color), 12);
-        check_eq("palette_mode stable", int'(dut.palette_mode), 1);
+        bus_read(REG_PALETTE_MODE_A, rb); step(2);
+        check_eq("legacy palette mode readback remains zero", int'(rb), 0);
         check_eq("cursor_enable stable", int'(dut.cursor_enable), 1);
         check_eq("irq_enable stable",   int'(dut.irq_enable),    8'h13);
     endtask
@@ -941,6 +1111,7 @@ module test_vgc_regs;
         test_color_registers();
         test_border_masks_sprites();
         test_gfx_transparent_color_compositor();
+        test_mode2_text_background_key_compositor();
         test_sprite_bg_collision_irq_gated_to_canvas();
         test_sprite_scanline_read_prefetch();
         test_cursor_xy();
@@ -949,14 +1120,16 @@ module test_vgc_regs;
         test_gfx_color();
         test_cursor_enable();
         test_cursor_draw_enable_tracks_text_modes();
+        test_cursor_reverses_text_cell_colors();
         test_collision_clear_on_write();
         test_irq_block();
         test_timer_irq();
         test_display_dim_register();
         test_gfx_transparent_color_register();
-        test_palette_mode_register();
-        test_custom_palette_registers();
-        test_palette_mode_compositor();
+        test_active_palette_registers();
+        test_palette_legacy_mode_register_noop();
+        test_active_palette_reset_restores_c64();
+        test_active_palette_compositor();
         test_debug_write_paths();
         test_memread_char();
         test_memread_color();

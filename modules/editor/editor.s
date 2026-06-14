@@ -12,8 +12,9 @@
       .include "editbuf.inc"           ; EDITBUF_* config + editbuf_run/_reset_state
 
 ; Editor display colors. Mirrors the extension's NovaLogo editor styling. The
-; shared engine no longer dictates the global palette/colors; the caller's prior
-; display is snapshotted and restored exactly. (Palette mode 0: 0=black, 1=white.)
+; shared engine no longer dictates the active palette/colors; the caller's prior
+; display is snapshotted and restored exactly. The editor colors are authored for
+; the default Nova/C64 palette (0=black, 1=white).
 EDITOR_BGCOL      = $00                ; black background
 EDITOR_BORDER     = $00                ; black border
 EDITOR_FGCOL      = $01                ; white text
@@ -211,7 +212,7 @@ sys_edit:
       STA   LIB_ARG1+1
 
       ; --- restore the display exactly (never clear graphics) ---
-      ; Restore the host's palette + colors FIRST: the form-feed clear below fills
+      ; Restore the host's legacy palette register + colors FIRST: the form-feed clear below fills
       ; color RAM with the *current* text color, so the host's colors must be back
       ; in place before we clear, or the editor's panel color leaks into the
       ; restored text area.

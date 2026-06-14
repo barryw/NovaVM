@@ -52,7 +52,7 @@ internal static class TextPixelRenderer
         if ((textAttr & VgcConstants.TextAttrFlash) != 0 && !flashVisible)
             set = false;
 
-        if (mode == 2 && !set && !isCursor && !reverse && cellBgColor == (bgColor & 0x0F))
+        if (mode == VgcConstants.ModeTextOverGfx && !set && !isCursor && !reverse && cellBgColor == (bgColor & 0x0F))
         {
             colorIndex = 0;
             return false;

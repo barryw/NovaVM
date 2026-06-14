@@ -325,6 +325,79 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void VTextExposeGfxSpacesIsPublicAndDocumented()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+
+        StringAssert.Contains(inc, ".global vtext_expose_gfx_spaces_region");
+        StringAssert.Contains(impl, ".export vtext_expose_gfx_spaces_region");
+        StringAssert.Contains(impl, "; @label VTEXT.EXPOSE_GFX_SPACES_REGION");
+        StringAssert.Contains(impl, "without");
+        StringAssert.Contains(impl, "deleting non-space text");
+    }
+
+    [TestMethod]
+    public void VTextCommitsStylePlanesBeforeGlyphPlanes()
+    {
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+
+        // VTEXT updates are visible to the raster as they happen. Style planes
+        // must be committed before the char plane so clears, runs, and scrolls
+        // never briefly expose old/default cell backgrounds.
+        AssertPlaneOrder(
+            SliceRoutine(impl, "vtext_write_current_cell:", "; ---------------------------------------------------------------------\n; Character output"),
+            "vtext_write_current_cell");
+
+        AssertPlaneOrder(
+            SliceRoutine(impl, "vtext_put_run:", "; @label VTEXT.PUT_HEX_NIBBLE"),
+            "vtext_put_run");
+
+        AssertPlaneOrder(
+            SliceRoutine(impl, "vtext_clear_region:", "; @label VTEXT.FILL_STYLE_REGION"),
+            "vtext_clear_region");
+
+        AssertPlaneOrder(
+            SliceRoutine(impl, "vtext_clear_line:", "; @label VTEXT.SCROLL_UP"),
+            "vtext_clear_line");
+
+        string scroll = SliceRoutine(impl, "vtext_scroll_up:", "vtext_blt_fill_plane:");
+        int copyChar = AssertPlaneOrder(scroll, "vtext_scroll_up copy");
+        AssertPlaneOrder(
+            scroll[(copyChar + "LDA   #VTEXT_PLANE_CHAR".Length)..],
+            "vtext_scroll_up bottom-row clear");
+
+        static string SliceRoutine(string source, string startMarker, string endMarker)
+        {
+            int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0, $"Missing start marker {startMarker}.");
+            int end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+            Assert.IsTrue(end > start, $"Missing end marker {endMarker} after {startMarker}.");
+            return source[start..end];
+        }
+
+        static int AssertPlaneOrder(string routine, string name)
+        {
+            int color = IndexOfOrFail(routine, "LDA   #VTEXT_PLANE_COLOR", name);
+            int attr = IndexOfOrFail(routine, "LDA   #VTEXT_PLANE_TEXTATTR", name);
+            int ch = IndexOfOrFail(routine, "LDA   #VTEXT_PLANE_CHAR", name);
+
+            Assert.IsTrue(
+                color < attr && attr < ch,
+                $"{name} must write COLOR, then TEXTATTR, then CHAR.");
+
+            return ch;
+        }
+
+        static int IndexOfOrFail(string source, string value, string name)
+        {
+            int index = source.IndexOf(value, StringComparison.Ordinal);
+            Assert.IsTrue(index >= 0, $"{name} missing {value}.");
+            return index;
+        }
+    }
+
+    [TestMethod]
     public void VSpriteRotateAbiUsesCallerOwnedBuffersAndStableRoutineSymbols()
     {
         string inc = File.ReadAllText(RepoPath("runtime", "asm", "vsprite.inc"));

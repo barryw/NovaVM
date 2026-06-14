@@ -22,6 +22,8 @@
 #   BEAST_CLEAN=0          # preserve remote build/ for faster iteration
 #   NEXTPNR_THREADS=8      # optional nextpnr thread count
 #   NEXTPNR_SEED=1         # deterministic by default
+#   NEXTPNR_SEEDS='1 2 3 4 5'
+#                           seed list for the seed-sweep target
 #   NEXTPNR_PLACER_CELL_TIMEOUT=8
 #                           placer retry budget per cell
 #   NEXTPNR_EXTRA_FLAGS='--router router2'
@@ -47,6 +49,7 @@ DEFAULT_EXTRA_DEFINES="-DVIDEO_720X480 -DGPDI_P_ONLY -DLATTICE_ECP5"
 BEAST_CLEAN="${BEAST_CLEAN:-1}"
 NEXTPNR_THREADS="${NEXTPNR_THREADS:-}"
 NEXTPNR_SEED="${NEXTPNR_SEED:-1}"
+NEXTPNR_SEEDS="${NEXTPNR_SEEDS:-1 2 3 4 5}"
 NEXTPNR_PLACER_CELL_TIMEOUT="${NEXTPNR_PLACER_CELL_TIMEOUT:-8}"
 NEXTPNR_EXTRA_FLAGS="${NEXTPNR_EXTRA_FLAGS:-}"
 PLACE_TIMING_GATE="${PLACE_TIMING_GATE:-0}"
@@ -140,6 +143,7 @@ echo "label:         ${LABEL:-none}"
 echo "extra_defines: ${EXTRA_DEFINES:-none}"
 echo "clean_build:   $BEAST_CLEAN"
 echo "nextpnr_seed:  $NEXTPNR_SEED"
+echo "nextpnr_seeds: $NEXTPNR_SEEDS"
 echo "nextpnr_jobs:  ${NEXTPNR_THREADS:-default}"
 echo "placer_retry:  $NEXTPNR_PLACER_CELL_TIMEOUT"
 echo "nextpnr_extra: ${NEXTPNR_EXTRA_FLAGS:-none}"
@@ -154,7 +158,7 @@ remote_clean_cmd=""
 if [ "$BEAST_CLEAN" != "0" ]; then
     remote_clean_cmd="rm -rf build &&"
 fi
-remote_make_base="make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_THREADS='$NEXTPNR_THREADS' NEXTPNR_PLACER_CELL_TIMEOUT='$NEXTPNR_PLACER_CELL_TIMEOUT' NEXTPNR_EXTRA_FLAGS='$NEXTPNR_EXTRA_FLAGS' NEXTPNR_PLACE_MARGIN_MHZ='$PLACE_TIMING_MARGIN_MHZ' NOVA_FLOORPLAN_MODE='$NOVA_FLOORPLAN_MODE' NOVA_FLOORPLAN_ENFORCE='$NOVA_FLOORPLAN_ENFORCE' -o ehbasic"
+remote_make_base="make OSS_CAD_SUITE_BIN=$YOSYS_BIN EXTRA_DEFINES='$EXTRA_DEFINES' NEXTPNR_SEED=$NEXTPNR_SEED NEXTPNR_SEEDS='$NEXTPNR_SEEDS' NEXTPNR_THREADS='$NEXTPNR_THREADS' NEXTPNR_PLACER_CELL_TIMEOUT='$NEXTPNR_PLACER_CELL_TIMEOUT' NEXTPNR_EXTRA_FLAGS='$NEXTPNR_EXTRA_FLAGS' NEXTPNR_PLACE_MARGIN_MHZ='$PLACE_TIMING_MARGIN_MHZ' NOVA_FLOORPLAN_MODE='$NOVA_FLOORPLAN_MODE' NOVA_FLOORPLAN_ENFORCE='$NOVA_FLOORPLAN_ENFORCE' -o ehbasic"
 if [ "$TARGET" = "bitstream" ] && [ "$PLACE_TIMING_GATE" != "0" ]; then
     remote_build_cmd="$remote_make_base placecheck && $remote_make_base bitstream"
 else

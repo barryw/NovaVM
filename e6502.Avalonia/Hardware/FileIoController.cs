@@ -1607,7 +1607,6 @@ public sealed partial class FileIoController
             _busWrite((ushort)VgcConstants.RegPaletteIndex, 0);
             for (int i = 0; i < paletteBytes; i++)
                 _busWrite((ushort)VgcConstants.RegPaletteData, data[16 + i]);
-            _busWrite((ushort)VgcConstants.RegPaletteMode, 0x02);
         }
 
         int baseX = dest % 320;

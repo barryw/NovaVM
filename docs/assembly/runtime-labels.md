@@ -3023,7 +3023,7 @@ Inputs:
 
 ## VGC.CUSTOM_PALETTE_BYTES
 
-Number of RGB bytes consumed by VGC.PALDATA for one full custom palette.
+Number of RGB bytes consumed by VGC.PALDATA for one full active palette.
 
 - Kind: `const`
 - Symbol: `VGC_CUSTOM_PALETTE_BYTES`
@@ -3102,7 +3102,7 @@ Requires:
 
 ## VGC.GFXTRANS
 
-Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.
+Graphics-plane transparent color register. Defaults to 0; values above 15 disable graphics transparency.
 
 - Kind: `const`
 - Symbol: `VGC_GFXTRANS`
@@ -3239,7 +3239,7 @@ Requires:
 
 ## VGC.PALDATA
 
-Custom RGB palette data port; writes auto-increment VGC.PALIDX.
+Active RGB palette data port; writes auto-increment VGC.PALIDX, reads return quantized RGB444.
 
 - Kind: `const`
 - Symbol: `VGC_PALDATA`
@@ -3247,7 +3247,7 @@ Custom RGB palette data port; writes auto-increment VGC.PALIDX.
 
 ## VGC.PALETTE_COLORS
 
-Number of color registers in a VGC custom palette.
+Number of color registers in the active VGC palette.
 
 - Kind: `const`
 - Symbol: `VGC_PALETTE_COLORS`
@@ -3255,7 +3255,7 @@ Number of color registers in a VGC custom palette.
 
 ## VGC.PALETTE_RGB_STRIDE
 
-Number of bytes per custom palette entry: red, green, blue.
+Number of bytes per VGC palette entry: red, green, blue.
 
 - Kind: `const`
 - Symbol: `VGC_PALETTE_RGB_STRIDE`
@@ -3263,7 +3263,7 @@ Number of bytes per custom palette entry: red, green, blue.
 
 ## VGC.PALIDX
 
-Byte index into the custom RGB palette stream (0-47).
+Byte index into the active RGB palette stream (0-47).
 
 - Kind: `const`
 - Symbol: `VGC_PALIDX`
@@ -3375,7 +3375,7 @@ Inputs:
 
 ## VGC.SET_PALETTE_C64
 
-Select the default Nova/C64-style fixed VGC palette.
+Load the default Nova/C64-style palette into the active VGC palette.
 
 - Kind: `routine`
 - Symbol: `vgc_set_palette_c64`
@@ -3385,7 +3385,7 @@ Outputs:
 
 ## VGC.SET_PALETTE_CUSTOM_XRAM
 
-Upload a 16-entry RGB888 custom VGC palette from XRAM and select it.
+Upload a 16-entry RGB888 palette from XRAM into the active VGC palette.
 
 - Kind: `routine`
 - Symbol: `vgc_set_palette_custom_xram`
@@ -3398,7 +3398,7 @@ Outputs:
 
 ## VGC.SET_PALETTE_EGA
 
-Select the fixed IBM EGA VGC palette.
+Load the IBM EGA palette into the active VGC palette.
 
 - Kind: `routine`
 - Symbol: `vgc_set_palette_ega`
@@ -3421,14 +3421,13 @@ Requires:
 
 ## VGC.UPLOAD_PALETTE_RGB_XRAM
 
-Upload a 16-entry RGB888 custom VGC palette from XRAM.
+Upload a 16-entry RGB888 palette from XRAM into the active VGC palette.
 
 - Kind: `routine`
 - Symbol: `vgc_upload_palette_rgb_xram`
 
 Inputs:
 - `XRAM_ADDRL/M/H`: Source address of 48 RGB bytes.
-- `A`: Palette mode to select after upload.
 
 Outputs:
 - `A`: 0 on success, 1 if the source address is outside XRAM.
@@ -4270,6 +4269,372 @@ Graphics-plane Y coordinate used by VSPRITE.GFX_* helpers.
 
 - Kind: `u8`
 - Symbol: `VSPRITE_Y`
+
+## VTEXT.CLEAR_LINE
+
+Clear the current VTEXT row across the full region width.
+
+- Kind: `routine`
+- Symbol: `vtext_clear_line`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.CLEAR_REGION
+
+Fill the current VTEXT rectangle with spaces and the current color/attribute.
+
+- Kind: `routine`
+- Symbol: `vtext_clear_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.DEFINE_REGION
+
+Store the current VTEXT region state into the caller-owned region table slot.
+
+- Kind: `routine`
+- Symbol: `vtext_define_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_TABLEL`
+- `VTEXT_TABLEH`
+- `VTEXT_REGION_ID`
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+
+## VTEXT.EXPOSE_GFX_SPACES_REGION
+
+Apply the current color/attribute only to space cells in the current VTEXT region.
+
+- Kind: `routine`
+- Symbol: `vtext_expose_gfx_spaces_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.FILL_STYLE_REGION
+
+Fill only the color and text-attribute planes of the current VTEXT region.
+
+- Kind: `routine`
+- Symbol: `vtext_fill_style_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.HOME
+
+Move the current VTEXT cursor to the upper-left cell of the current region.
+
+- Kind: `routine`
+- Symbol: `vtext_home`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+
+## VTEXT.NEWLINE
+
+Move to the start of the next VTEXT row, scrolling when enabled.
+
+- Kind: `routine`
+- Symbol: `vtext_newline`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+
+## VTEXT.PUTS
+
+Print a zero-terminated string into the current VTEXT region.
+
+- Kind: `routine`
+- Symbol: `vtext_puts`
+
+Inputs:
+- `A/Y`: Pointer to the zero-terminated string, low byte in A and high byte in Y.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.PUT_CHAR
+
+Print one character or control byte at the current VTEXT cursor.
+
+- Kind: `routine`
+- Symbol: `vtext_put_char`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+- `VTEXT_CHAR`
+
+## VTEXT.PUT_HEX_BYTE
+
+Print A as two uppercase hexadecimal digits.
+
+- Kind: `routine`
+- Symbol: `vtext_put_hex_byte`
+
+Inputs:
+- `A`: Byte value to print.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+
+## VTEXT.PUT_HEX_NIBBLE
+
+Print the low nibble of A as one uppercase hexadecimal digit.
+
+- Kind: `routine`
+- Symbol: `vtext_put_hex_nibble`
+
+Inputs:
+- `A`: Value whose low nibble should be printed.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+
+## VTEXT.PUT_RUN
+
+Write a same-style printable byte run on the current text row.
+
+- Kind: `routine`
+- Symbol: `vtext_put_run`
+
+Inputs:
+- `A/Y`: Pointer to the run bytes, low byte in A and high byte in Y.
+- `X`: Number of bytes to write.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.SCROLL_UP
+
+Scroll the current VTEXT rectangle up by one text row and clear the bottom row.
+
+- Kind: `routine`
+- Symbol: `vtext_scroll_up`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
+## VTEXT.SELECT_REGION
+
+Load a region table slot into the current VTEXT state and sync the visible cursor.
+
+- Kind: `routine`
+- Symbol: `vtext_select_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_TABLEL`
+- `VTEXT_TABLEH`
+- `VTEXT_REGION_ID`
+
+## VTEXT.SET_CURSOR
+
+Validate the current region and cursor, then sync the visible VGC cursor.
+
+- Kind: `routine`
+- Symbol: `vtext_set_cursor`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+
+## VTEXT.STORE_REGION
+
+Validate and sync the current cursor, then store the current VTEXT state into the selected table slot.
+
+- Kind: `routine`
+- Symbol: `vtext_store_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_TABLEL`
+- `VTEXT_TABLEH`
+- `VTEXT_REGION_ID`
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_FLAGS`
+
+## VTEXT.SYNC_CURSOR
+
+Copy the current region-relative cursor to the absolute VGC cursor registers.
+
+- Kind: `routine`
+- Symbol: `vtext_sync_cursor`
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+
+## VTEXT.VALIDATE_REGION
+
+Validate that the current VTEXT rectangle is non-empty and inside the 80x50 text screen.
+
+- Kind: `routine`
+- Symbol: `vtext_validate_region`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+
+## VTEXT.WAIT_BLITTER
+
+Wait for the current blitter operation and convert the result to the VTEXT 0/1 status convention.
+
+- Kind: `routine`
+- Symbol: `vtext_wait_blitter`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
 
 ## XMC.ALLOC
 

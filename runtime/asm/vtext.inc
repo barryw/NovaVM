@@ -83,11 +83,14 @@ VTEXT_REGION_SIZE = 10
 .global vtext_sync_cursor
 .global vtext_home
 .global vtext_put_char
+.global vtext_put_run
 .global vtext_puts
 .global vtext_put_hex_nibble
 .global vtext_put_hex_byte
 .global vtext_newline
 .global vtext_clear_region
+.global vtext_fill_style_region
+.global vtext_expose_gfx_spaces_region
 .global vtext_clear_line
 .global vtext_scroll_up
 .global vtext_wait_blitter

@@ -283,9 +283,9 @@ To test whether sprite 2 participated in any sprite-sprite collision, check bit
 
 NovaBASIC starts with a 16-color palette inspired by the Commodore 64.
 All fixed-index graphics, text, sprite, background, and border colors use
-the same indices. `RegPaletteMode` at `$A0E9` selects the active palette:
-write `0` for the default C64/Nova palette, `1` for IBM EGA colors, or `2`
-after uploading a custom palette.
+the same indices. The active palette is a single 16-color RGB table. Runtime
+helpers can load the default C64/Nova colors, IBM EGA colors, or asset-specific
+colors into that same table.
 
 | **Index** | **Color** | **Index** | **Color** |
 | --- | --- | --- | --- |
@@ -304,23 +304,22 @@ background, and border colors. Text cells store both foreground and background
 in Color RAM; `REVERSE` swaps them for subsequent output, and `FLASH` marks
 subsequent text cells as blinking.
 
-The EGA mode keeps the same 0--15 color indices but changes the RGB values to
-the IBM EGA 16-color palette. This is useful for DOS EGA asset ports:
+The EGA colors keep the same 0--15 color indices but change the RGB values to
+the IBM EGA 16-color palette. This is useful for DOS EGA asset ports. Assembly
+code should use the NDK helper `vgc_set_palette_ega`; BASIC-facing loaders can
+write the same RGB bytes directly through the palette data port.
 
-```basic
-POKE $A0E9,1 : REM IBM EGA palette
-POKE $A0E9,0 : REM C64/Nova palette
-```
-
-Custom palettes contain 16 RGB entries, 48 bytes total, in byte order
+Palettes contain 16 RGB entries, 48 bytes total, in byte order
 `R0,G0,B0,R1,G1,B1,...,R15,G15,B15`. Write `0` to `$A0F4`, then write the 48
-RGB bytes to `$A0F5`; each data write advances the palette index. Finally write
-`2` to `$A0E9` to select the custom palette. The current FPGA output uses the
-high nibble of each RGB byte, giving an RGB444 hardware palette with 4096
-possible visible colors.
+RGB bytes to `$A0F5`; each data write advances the palette index. Nova uses
+the high nibble of each RGB byte, giving an RGB444 palette with 4096 possible
+visible colors. Reads from `$A0F5` report that quantized high nibble in the
+upper half of the returned byte.
 
-`RegPaletteMode` controls the VGC palette used by text, bitmap graphics,
-sprites, background, and border.
+`RegPaletteMode` at `$A0E9` is a legacy compatibility register. New code should
+use `$A0F4/$A0F5` or the NDK palette helpers. Machine reset reloads the default
+Nova/C64 palette into the active palette; programs that need EGA or asset
+colors must load them at startup.
 
 ## The Copper (Raster Effects)
 
@@ -355,6 +354,17 @@ block:
 | RegScrollY | $A006 | Shift vertical scroll offset |
 | RegScrollCtl | $A0EA | Bit 0 = RegScrollX bit 8, bit 1 = apply scroll to graphics, bit 2 = apply scroll to text |
 | A040--A0BF | (sprite regs) | All sprite register fields (see below) |
+
+In display mode 2, text is composited over graphics. Set glyph pixels always
+draw with the cell foreground. Unset glyph pixels draw the cell background only
+when that background differs from `RegBgCol`; if it matches `RegBgCol`, the
+graphics pixel underneath shows through. Use this as the platform-wide
+transparent text-background key, and use a different cell background or reverse
+text for opaque highlights.
+
+For a solid label or text panel, prefer an opaque cell background over filling
+the graphics plane behind the text. The VGC compositor already draws blank
+glyph pixels from the cell background when it is not the `RegBgCol` key.
 
 ### COPPER BASIC keyword
 

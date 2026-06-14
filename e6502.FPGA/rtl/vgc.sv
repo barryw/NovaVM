@@ -168,9 +168,6 @@ module vgc (
     localparam IRQ_TIMER_MID  = 4'h9;       // R/W: programmable timer period bits 15:8
     localparam COPPER_REG_IRQ = 8'hFE;
 
-    localparam PALETTE_MODE_C64    = 2'd0;
-    localparam PALETTE_MODE_EGA    = 2'd1;
-    localparam PALETTE_MODE_CUSTOM = 2'd2;
     localparam PALETTE_RGB_BYTES   = 6'd48;
 
     // VDC-style VRAM port registers at $A0E0-$A0E4
@@ -355,9 +352,10 @@ module vgc (
     // =========================================================================
     // Palette (16 color indices -> 12-bit RGB)
     // =========================================================================
-    logic [1:0] palette_mode = PALETTE_MODE_C64; // 0=C64/Nova, 1=IBM EGA, 2/3=custom RGB
     logic [5:0] palette_write_index = 6'd0;
-    logic [7:0] custom_palette_rgb [0:47];
+    logic [3:0] palette_write_color = 4'd0;
+    logic [1:0] palette_write_component = 2'd0;
+    logic [11:0] active_palette_rgb444 [0:15];
 
     function automatic logic [5:0] palette_index_mod(input logic [7:0] value);
         logic [7:0] reduced;
@@ -374,76 +372,97 @@ module vgc (
         palette_index_next = (value == (PALETTE_RGB_BYTES - 6'd1)) ? 6'd0 : (value + 6'd1);
     endfunction
 
-    function automatic logic [11:0] fixed_palette_rgb(input logic [1:0] mode_sel, input logic [3:0] idx);
-        if (mode_sel == PALETTE_MODE_EGA) begin
-            case (idx)
-                4'h0: fixed_palette_rgb = 12'h000;
-                4'h1: fixed_palette_rgb = 12'h00A;
-                4'h2: fixed_palette_rgb = 12'h0A0;
-                4'h3: fixed_palette_rgb = 12'h0AA;
-                4'h4: fixed_palette_rgb = 12'hA00;
-                4'h5: fixed_palette_rgb = 12'hA0A;
-                4'h6: fixed_palette_rgb = 12'hA50;
-                4'h7: fixed_palette_rgb = 12'hAAA;
-                4'h8: fixed_palette_rgb = 12'h555;
-                4'h9: fixed_palette_rgb = 12'h55F;
-                4'hA: fixed_palette_rgb = 12'h5F5;
-                4'hB: fixed_palette_rgb = 12'h5FF;
-                4'hC: fixed_palette_rgb = 12'hF55;
-                4'hD: fixed_palette_rgb = 12'hF5F;
-                4'hE: fixed_palette_rgb = 12'hFF5;
-                default: fixed_palette_rgb = 12'hFFF;
-            endcase
-        end else begin
-            case (idx)
-                4'h0: fixed_palette_rgb = 12'h000;
-                4'h1: fixed_palette_rgb = 12'hFFF;
-                4'h2: fixed_palette_rgb = 12'h800;
-                4'h3: fixed_palette_rgb = 12'hAFE;
-                4'h4: fixed_palette_rgb = 12'hC4C;
-                4'h5: fixed_palette_rgb = 12'h0C5;
-                4'h6: fixed_palette_rgb = 12'h00A;
-                4'h7: fixed_palette_rgb = 12'hEE7;
-                4'h8: fixed_palette_rgb = 12'hD85;
-                4'h9: fixed_palette_rgb = 12'h640;
-                4'hA: fixed_palette_rgb = 12'hF77;
-                4'hB: fixed_palette_rgb = 12'h333;
-                4'hC: fixed_palette_rgb = 12'h777;
-                4'hD: fixed_palette_rgb = 12'h8F6;
-                4'hE: fixed_palette_rgb = 12'h08F;
-                default: fixed_palette_rgb = 12'hBBB;
-            endcase
-        end
+    function automatic logic [3:0] palette_index_color(input logic [5:0] value);
+        case (value)
+            6'd0,  6'd1,  6'd2:  palette_index_color = 4'd0;
+            6'd3,  6'd4,  6'd5:  palette_index_color = 4'd1;
+            6'd6,  6'd7,  6'd8:  palette_index_color = 4'd2;
+            6'd9,  6'd10, 6'd11: palette_index_color = 4'd3;
+            6'd12, 6'd13, 6'd14: palette_index_color = 4'd4;
+            6'd15, 6'd16, 6'd17: palette_index_color = 4'd5;
+            6'd18, 6'd19, 6'd20: palette_index_color = 4'd6;
+            6'd21, 6'd22, 6'd23: palette_index_color = 4'd7;
+            6'd24, 6'd25, 6'd26: palette_index_color = 4'd8;
+            6'd27, 6'd28, 6'd29: palette_index_color = 4'd9;
+            6'd30, 6'd31, 6'd32: palette_index_color = 4'd10;
+            6'd33, 6'd34, 6'd35: palette_index_color = 4'd11;
+            6'd36, 6'd37, 6'd38: palette_index_color = 4'd12;
+            6'd39, 6'd40, 6'd41: palette_index_color = 4'd13;
+            6'd42, 6'd43, 6'd44: palette_index_color = 4'd14;
+            default:             palette_index_color = 4'd15;
+        endcase
     endfunction
 
-    function automatic logic [7:0] palette_default_byte(input logic [5:0] byte_index);
-        logic [11:0] rgb;
-        logic [3:0] component;
-        begin
-            rgb = fixed_palette_rgb(PALETTE_MODE_C64, byte_index / 6'd3);
-            case (byte_index % 6'd3)
-                6'd0: component = rgb[11:8];
-                6'd1: component = rgb[7:4];
-                default: component = rgb[3:0];
-            endcase
-            palette_default_byte = {component, component};
-        end
+    function automatic logic [1:0] palette_index_component(input logic [5:0] value);
+        case (value)
+            6'd0,  6'd3,  6'd6,  6'd9,  6'd12, 6'd15, 6'd18, 6'd21,
+            6'd24, 6'd27, 6'd30, 6'd33, 6'd36, 6'd39, 6'd42, 6'd45:
+                palette_index_component = 2'd0;
+            6'd1,  6'd4,  6'd7,  6'd10, 6'd13, 6'd16, 6'd19, 6'd22,
+            6'd25, 6'd28, 6'd31, 6'd34, 6'd37, 6'd40, 6'd43, 6'd46:
+                palette_index_component = 2'd1;
+            default:
+                palette_index_component = 2'd2;
+        endcase
+    endfunction
+
+    function automatic logic [3:0] palette_color_next(
+        input logic [3:0] color,
+        input logic [1:0] component
+    );
+        palette_color_next = (component == 2'd2) ? (color + 4'd1) : color;
+    endfunction
+
+    function automatic logic [1:0] palette_component_next(input logic [1:0] component);
+        palette_component_next = (component == 2'd2) ? 2'd0 : (component + 2'd1);
+    endfunction
+
+    function automatic logic [11:0] palette_apply_byte(
+        input logic [11:0] current,
+        input logic [1:0] component,
+        input logic [7:0] value
+    );
+        case (component)
+            2'd0: palette_apply_byte = {value[7:4], current[7:0]};
+            2'd1: palette_apply_byte = {current[11:8], value[7:4], current[3:0]};
+            default: palette_apply_byte = {current[11:4], value[7:4]};
+        endcase
+    endfunction
+
+    function automatic logic [11:0] c64_palette_rgb(input logic [3:0] idx);
+        case (idx)
+            4'h0: c64_palette_rgb = 12'h000;
+            4'h1: c64_palette_rgb = 12'hFFF;
+            4'h2: c64_palette_rgb = 12'h800;
+            4'h3: c64_palette_rgb = 12'hAFE;
+            4'h4: c64_palette_rgb = 12'hC4C;
+            4'h5: c64_palette_rgb = 12'h0C5;
+            4'h6: c64_palette_rgb = 12'h00A;
+            4'h7: c64_palette_rgb = 12'hEE7;
+            4'h8: c64_palette_rgb = 12'hD85;
+            4'h9: c64_palette_rgb = 12'h640;
+            4'hA: c64_palette_rgb = 12'hF77;
+            4'hB: c64_palette_rgb = 12'h333;
+            4'hC: c64_palette_rgb = 12'h777;
+            4'hD: c64_palette_rgb = 12'hAF6;
+            4'hE: c64_palette_rgb = 12'h08F;
+            default: c64_palette_rgb = 12'hBBB;
+        endcase
     endfunction
 
     function automatic logic [11:0] palette_rgb(input logic [3:0] idx);
-        int base;
-        begin
-            if (palette_mode >= PALETTE_MODE_CUSTOM) begin
-                base = int'(idx) * 3;
-                palette_rgb = {
-                    custom_palette_rgb[base + 0][7:4],
-                    custom_palette_rgb[base + 1][7:4],
-                    custom_palette_rgb[base + 2][7:4]
-                };
-            end else begin
-                palette_rgb = fixed_palette_rgb(palette_mode, idx);
-            end
-        end
+        palette_rgb = active_palette_rgb444[idx];
+    endfunction
+
+    function automatic logic [7:0] palette_read_byte(
+        input logic [11:0] rgb,
+        input logic [1:0] component
+    );
+        case (component)
+            2'd0: palette_read_byte = {rgb[11:8], 4'h0};
+            2'd1: palette_read_byte = {rgb[7:4], 4'h0};
+            default: palette_read_byte = {rgb[3:0], 4'h0};
+        endcase
     endfunction
 
     // =========================================================================
@@ -804,7 +823,8 @@ module vgc (
     logic [7:0]  regs [0:31];
     logic [6:0]  cursor_x;
     logic [5:0]  cursor_y;
-    logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim, gfx_trans_color;
+    logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim;
+    logic [7:0]  gfx_trans_color;
     logic [2:0]  mode;
     logic        cursor_enable;
     logic        text_layer_visible;
@@ -898,7 +918,7 @@ module vgc (
     assign rdy_out = !(vgc_reset_pending || scroll_pending || reset_clear_busy || txtcls_pending);
     wire sprite_bg_collision_now =
         in_text_area_d2 && gfx_x_d2 < GFX_W &&
-        spr_pixel_hit && gfx_b_dout != gfx_trans_color;
+        spr_pixel_hit && {4'h0, gfx_b_dout} != gfx_trans_color;
 
     wire irq_timer_active = irq_timer_enable && (irq_timer_period != 24'd0);
 
@@ -996,9 +1016,10 @@ module vgc (
         border_color = 4'd11; fg_color = 4'd15; bg_color = 4'd0;
         display_dim = 4'd15;
         gfx_color = 4'd1; mode = 0; cursor_enable = 0; text_layer_visible = 1'b1;
-        palette_mode = PALETTE_MODE_C64; palette_write_index = 6'd0;
-        for (int i = 0; i < PALETTE_RGB_BYTES; i++)
-            custom_palette_rgb[i] = palette_default_byte(6'(i));
+        palette_write_index = 6'd0;
+        palette_write_color = 4'd0; palette_write_component = 2'd0;
+        for (int i = 0; i < 16; i++)
+            active_palette_rgb444[i] = c64_palette_rgb(4'(i));
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
@@ -1133,9 +1154,9 @@ module vgc (
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
     wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
-    wire palette_mode_sel_w = (r_cpu_addr_w == PALETTE_MODE_ADDR);
     wire palette_index_sel_w = (r_cpu_addr_w == PALETTE_INDEX_ADDR);
     wire palette_data_sel_w = (r_cpu_addr_w == PALETTE_DATA_ADDR);
+    wire [5:0] palette_index_mod_w = palette_index_mod(r_cpu_wdata_w);
     wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
     wire text_top_row_sel_w = (r_cpu_addr_w == TEXT_TOP_ROW_ADDR);
     wire screen_win_sel_w   = (r_cpu_addr_w >= SCREENWIN_BASE && r_cpu_addr_w <= SCREENWIN_END);
@@ -1279,7 +1300,8 @@ module vgc (
                 IRQ_STATUS: cpu_rdata = irq_pending;
                 4'h3:       cpu_rdata = IRQ_VALID;
                 4'h4:       cpu_rdata = {2'b0, palette_write_index};
-                4'h5:       cpu_rdata = custom_palette_rgb[palette_write_index];
+                4'h5:       cpu_rdata = palette_read_byte(active_palette_rgb444[palette_write_color],
+                                                           palette_write_component);
                 IRQ_TIMER_LO:   cpu_rdata = irq_timer_period[7:0];
                 IRQ_TIMER_MID:  cpu_rdata = irq_timer_period[15:8];
                 IRQ_TIMER_HI:   cpu_rdata = irq_timer_period[23:16];
@@ -1305,7 +1327,7 @@ module vgc (
             endcase
         end
         else if (dim_reg_sel) cpu_rdata = {4'b0, display_dim};
-        else if (palette_mode_sel) cpu_rdata = {6'b0, palette_mode};
+        else if (palette_mode_sel) cpu_rdata = 8'h00;
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_top_row_sel) cpu_rdata = {2'b0, text_top_row};
         else if (screen_win_sel) cpu_rdata = vram_cpu_read_latch;
@@ -1317,7 +1339,7 @@ module vgc (
                 default:           cpu_rdata = 8'h00;
             endcase
         end
-        else if (gfx_trans_sel) cpu_rdata = {4'b0, gfx_trans_color};
+        else if (gfx_trans_sel) cpu_rdata = gfx_trans_color;
         else if (spr_reg_sel) begin
             // 8 regs per sprite: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans
             // Flags byte layout matches the write path (bit 7 = enable,
@@ -1358,7 +1380,6 @@ module vgc (
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
     wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR);
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
-    wire dbg_write_palette_mode_sel = dbg_we && (dbg_waddr == PALETTE_MODE_ADDR);
     wire dbg_write_palette_index_sel = dbg_we && (dbg_waddr == PALETTE_INDEX_ADDR);
     wire dbg_write_palette_data_sel = dbg_we && (dbg_waddr == PALETTE_DATA_ADDR);
     wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
@@ -1405,7 +1426,8 @@ module vgc (
                 IRQ_STATUS: dbg_rdata = irq_pending;
                 4'h3:       dbg_rdata = IRQ_VALID;
                 4'h4:       dbg_rdata = {2'b0, palette_write_index};
-                4'h5:       dbg_rdata = custom_palette_rgb[palette_write_index];
+                4'h5:       dbg_rdata = palette_read_byte(active_palette_rgb444[palette_write_color],
+                                                           palette_write_component);
                 IRQ_TIMER_LO:   dbg_rdata = irq_timer_period[7:0];
                 IRQ_TIMER_MID:  dbg_rdata = irq_timer_period[15:8];
                 IRQ_TIMER_HI:   dbg_rdata = irq_timer_period[23:16];
@@ -1424,7 +1446,7 @@ module vgc (
             endcase
         end
         else if (dbg_dim_sel) dbg_rdata = {4'b0, display_dim};
-        else if (dbg_palette_mode_sel) dbg_rdata = {6'b0, palette_mode};
+        else if (dbg_palette_mode_sel) dbg_rdata = 8'h00;
         else if (dbg_scroll_ctl_sel) dbg_rdata = {5'b0, scroll_ctl[2:0]};
         else if (dbg_text_top_row_sel) dbg_rdata = {2'b0, text_top_row};
         else if (dbg_collision_hi_sel) begin
@@ -1441,7 +1463,7 @@ module vgc (
                 default:           dbg_rdata = 8'h00;
             endcase
         end
-        else if (dbg_gfx_trans_sel) dbg_rdata = {4'b0, gfx_trans_color};
+        else if (dbg_gfx_trans_sel) dbg_rdata = gfx_trans_color;
         else if (dbg_spr_sel) begin
             case (dbg_spr_field)
                 3'd0: dbg_rdata = spr_next_x[dbg_spr_index][7:0];
@@ -1465,8 +1487,11 @@ module vgc (
             cursor_x <= 0; cursor_y <= 0; mode <= 0;
             text_layer_visible <= 1'b1;
             border_color <= 4'd11; fg_color <= 4'd15; bg_color <= 4'd0;
-            gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 4'd0;
-            cursor_enable <= 0; palette_mode <= PALETTE_MODE_C64; palette_write_index <= 6'd0; font_slot <= 0;
+            gfx_color <= 4'd1; display_dim <= 4'd15; gfx_trans_color <= 8'd0;
+            cursor_enable <= 0; palette_write_index <= 6'd0; font_slot <= 0;
+            palette_write_color <= 4'd0; palette_write_component <= 2'd0;
+            for (int i = 0; i < 16; i++)
+                active_palette_rgb444[i] <= c64_palette_rgb(4'(i));
             scroll_ctl <= SCROLL_CTL_DEFAULT;
             scroll_x_fetch <= 0;
             scroll_y_fetch <= 0;
@@ -1532,8 +1557,6 @@ module vgc (
                 copper_list_count[i] <= 0;
             for (int i = 0; i < 64; i++)
                 fio_name[i] <= 0;
-            for (int i = 0; i < PALETTE_RGB_BYTES; i++)
-                custom_palette_rgb[i] <= palette_default_byte(6'(i));
             fio_name_len <= 0;
             for (int i = 0; i < 8; i++)
                 sprrow_data[i] <= 8'h00;
@@ -2245,17 +2268,22 @@ module vgc (
                     display_dim <= r_cpu_wdata_w[3:0];
 
                 if (gfx_trans_sel_w)
-                    gfx_trans_color <= r_cpu_wdata_w[3:0];
+                    gfx_trans_color <= r_cpu_wdata_w;
 
-                if (palette_mode_sel_w)
-                    palette_mode <= r_cpu_wdata_w[1:0];
-
-                if (palette_index_sel_w)
-                    palette_write_index <= palette_index_mod(r_cpu_wdata_w);
+                if (palette_index_sel_w) begin
+                    palette_write_index <= palette_index_mod_w;
+                    palette_write_color <= palette_index_color(palette_index_mod_w);
+                    palette_write_component <= palette_index_component(palette_index_mod_w);
+                end
 
                 if (palette_data_sel_w) begin
-                    custom_palette_rgb[palette_write_index] <= r_cpu_wdata_w;
+                    active_palette_rgb444[palette_write_color] <=
+                        palette_apply_byte(active_palette_rgb444[palette_write_color],
+                                           palette_write_component,
+                                           r_cpu_wdata_w);
                     palette_write_index <= palette_index_next(palette_write_index);
+                    palette_write_color <= palette_color_next(palette_write_color, palette_write_component);
+                    palette_write_component <= palette_component_next(palette_write_component);
                 end
 
                 if (scroll_ctl_sel_w) begin
@@ -2444,17 +2472,22 @@ module vgc (
             end
 
             if (dbg_write_gfx_trans_sel)
-                gfx_trans_color <= dbg_wdata[3:0];
+                    gfx_trans_color <= dbg_wdata;
 
-            if (dbg_write_palette_mode_sel)
-                palette_mode <= dbg_wdata[1:0];
-
-            if (dbg_write_palette_index_sel)
+            if (dbg_write_palette_index_sel) begin
                 palette_write_index <= palette_index_mod(dbg_wdata);
+                palette_write_color <= palette_index_color(palette_index_mod(dbg_wdata));
+                palette_write_component <= palette_index_component(palette_index_mod(dbg_wdata));
+            end
 
             if (dbg_write_palette_data_sel) begin
-                custom_palette_rgb[palette_write_index] <= dbg_wdata;
+                active_palette_rgb444[palette_write_color] <=
+                    palette_apply_byte(active_palette_rgb444[palette_write_color],
+                                       palette_write_component,
+                                       dbg_wdata);
                 palette_write_index <= palette_index_next(palette_write_index);
+                palette_write_color <= palette_color_next(palette_write_color, palette_write_component);
+                palette_write_component <= palette_component_next(palette_write_component);
             end
 
             if (dbg_write_scroll_ctl_sel) begin
@@ -2849,6 +2882,22 @@ module vgc (
     end
 `endif
 
+    // Cursor blink — POR determinism via declaration init.
+    logic [4:0] blink_count = 0;
+    logic       cursor_blink = 0;
+    always_ff @(posedge clk) begin
+        if (h_count == 0 && v_count == 0) begin
+            if (blink_count >= 14) begin
+                blink_count <= 0;
+                cursor_blink <= ~cursor_blink;
+            end else
+                blink_count <= blink_count + 1;
+        end
+    end
+    wire cursor_draw_enable = cursor_enable && text_layer_visible;
+    wire cursor_here = cursor_draw_enable && !reset_display_active && in_text_area_d2 &&
+                       (text_col_d2 == cursor_x) && (text_row_d2 == cursor_y);
+
     // =========================================================================
     // Pixel compositing
     // =========================================================================
@@ -2858,6 +2907,7 @@ module vgc (
     logic        pixel_on_d2;
     logic        text_flash_hidden_d2;
     logic        text_reverse_d2;
+    logic        cursor_active_d2;
     logic [3:0]  text_pixel_idx_d2;
     logic [3:0]  pixel_color_idx;
     logic        reset_display_blank = 1'b1;
@@ -2889,7 +2939,10 @@ module vgc (
         cur_bg_d2     = text_reverse_d2 ? color_b_dout[3:0] : color_b_dout[7:4];
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
         pixel_on_d2   = font_b_dout[3'd7 - font_pixel_d2] && !text_flash_hidden_d2;
+        cursor_active_d2 = cursor_here && cursor_blink;
         text_pixel_idx_d2 = pixel_on_d2 ? cur_fg_d2 : cur_bg_d2;
+        if (cursor_active_d2)
+            text_pixel_idx_d2 = pixel_on_d2 ? cur_bg_d2 : cur_fg_d2;
 
         cur_gfx_d2    = gfx_b_dout;
 
@@ -2908,11 +2961,12 @@ module vgc (
             end else begin
                 case (mode)
                     3'd0: pixel_color_idx = text_pixel_idx_d2;
-                    3'd1: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : text_pixel_idx_d2;
-                    3'd2: pixel_color_idx = pixel_on_d2 ? cur_fg_d2 :
-                                             (cur_gfx_d2 != gfx_trans_color && cur_bg_d2 == bg_color && !text_reverse_d2) ? cur_gfx_d2 : cur_bg_d2;
-                    3'd3: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : bg_color;
-                    3'd4: pixel_color_idx = (cur_gfx_d2 != gfx_trans_color) ? cur_gfx_d2 : bg_color;
+                    3'd1: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : text_pixel_idx_d2;
+                    3'd2: pixel_color_idx = cursor_active_d2 ? text_pixel_idx_d2 :
+                                             pixel_on_d2 ? cur_fg_d2 :
+                                             ({4'h0, cur_gfx_d2} != gfx_trans_color && cur_bg_d2 == bg_color && !text_reverse_d2) ? cur_gfx_d2 : cur_bg_d2;
+                    3'd3: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
+                    3'd4: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
                     default: pixel_color_idx = text_pixel_idx_d2;
                 endcase
             end
@@ -2920,7 +2974,7 @@ module vgc (
             if (spr_pixel_hit && in_text_area_d2) begin
                 if (mode == 3'd4) begin
                     if (spr_pixel_pri == 2'd0) begin
-                        if (cur_gfx_d2 == gfx_trans_color) pixel_color_idx = spr_pixel;
+                        if ({4'h0, cur_gfx_d2} == gfx_trans_color) pixel_color_idx = spr_pixel;
                     end else if (spr_pixel_pri == 2'd1) begin
                         pixel_color_idx = spr_pixel;
                     end else begin
@@ -2928,7 +2982,7 @@ module vgc (
                     end
                 end else begin
                     if (spr_pixel_pri == 2'd0) begin
-                        if (!pixel_on_d2 && cur_gfx_d2 == gfx_trans_color)
+                        if (!pixel_on_d2 && !cursor_active_d2 && {4'h0, cur_gfx_d2} == gfx_trans_color)
                             pixel_color_idx = spr_pixel;
                     end else begin
                         pixel_color_idx = spr_pixel;
@@ -2937,22 +2991,6 @@ module vgc (
             end
         end
     end
-
-    // Cursor blink — POR determinism via declaration init.
-    logic [4:0] blink_count = 0;
-    logic       cursor_blink = 0;
-    always_ff @(posedge clk) begin
-        if (h_count == 0 && v_count == 0) begin
-            if (blink_count >= 14) begin
-                blink_count <= 0;
-                cursor_blink <= ~cursor_blink;
-            end else
-                blink_count <= blink_count + 1;
-        end
-    end
-    wire cursor_draw_enable = cursor_enable && text_layer_visible;
-    wire cursor_here = cursor_draw_enable && !reset_display_active && in_text_area_d2 &&
-                       (text_col_d2 == cursor_x) && (text_row_d2 == cursor_y);
 
     assign irq_out = |(irq_pending & irq_enable);
 
@@ -3070,7 +3108,7 @@ module vgc (
     assign vid_b     = vid_b_r;
 
     always_comb begin
-        post_cursor_color_idx = (cursor_here && cursor_blink) ? fg_color : pixel_color_idx;
+        post_cursor_color_idx = pixel_color_idx;
         post_cursor_color = palette_rgb(pixel_color_idx_d3);
         dim_r = post_cursor_color[11:8] * display_dim;
         dim_g = post_cursor_color[7:4] * display_dim;

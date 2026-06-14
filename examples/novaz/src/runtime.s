@@ -11,6 +11,7 @@
 .include "pager.inc"
 .include "rng.inc"
 .include "vtext.inc"
+.include "vgc_palette.inc"
 .include "zstory.inc"
 .include "ztext.inc"
 .include "zobject.inc"
@@ -20,6 +21,7 @@
 .include "ztext.s"
 .include "zobject.s"
 .include "zvm.s"
+.include "vgc_palette.s"
 
 .export nz_raw_input_mode
 
@@ -192,8 +194,10 @@ init_screen:
         JMP vtext_home
 
 init_video_colors:
+        JSR vgc_set_palette_c64
         STZ VGC_BGCOL
-        STZ VGC_BORDER
+        LDA #$0B
+        STA VGC_BORDER
         LDA #$0F
         STA VGC_FGCOL
         RTS
@@ -423,8 +427,8 @@ nz_screen_linefeed:
         STZ nz_auto_wrap
         JSR nz_screen_maybe_more
         ; record whether this linefeed will scroll the live region (mirrors
-        ; vtext_advance_line: bottom row + scroll attribute) — the V6 hook
-        ; scrolls the gfx rect along with the text
+        ; vtext_advance_line: bottom row + scroll attribute). V6 pre-scrolls
+        ; the matching gfx rect before VTEXT moves the text plane.
         STZ nz_lf_scrolled
         LDA VTEXT_FLAGS
         AND #VTEXT_FLAG_SCROLL
@@ -434,6 +438,10 @@ nz_screen_linefeed:
         CMP VTEXT_CURY
         BNE :+
         INC nz_lf_scrolled
+:
+        LDA nz_lf_scrolled
+        BEQ :+
+        JSR nz_screen_v6_pre_newline_scroll
 :
         LDA #$0A
         STA VTEXT_CHAR
@@ -454,6 +462,21 @@ nz_screen_linefeed:
         CMP #NZ6_MAGIC1
         BNE @done
         LDA #NZ6_OP_NEWLINE
+        JSR NZ6_ENTRY
+@done:
+        RTS
+
+nz_screen_v6_pre_newline_scroll:
+        LDA zstory_version
+        CMP #$06
+        BNE @done
+        LDA NZ6_BASE
+        CMP #NZ6_MAGIC0
+        BNE @done
+        LDA NZ6_BASE+1
+        CMP #NZ6_MAGIC1
+        BNE @done
+        LDA #NZ6_OP_PRE_NEWLINE_SCROLL
         JSR NZ6_ENTRY
 @done:
         RTS

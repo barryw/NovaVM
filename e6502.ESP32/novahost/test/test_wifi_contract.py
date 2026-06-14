@@ -672,6 +672,7 @@ def test_runtime_autoboot_contract() -> None:
     novaz_auto = read("examples/novaz/src/autoboot.s")
     novaz_runtime = read("examples/novaz/src/runtime.s")
     novaz_zstory = read("examples/novaz/src/zstory.s")
+    novaz_zvm6_inc = read("examples/novaz/src/zvm6.inc")
     novaz_zvm6 = read("examples/novaz/src/zvm6.s")
     nvg_runtime = read("runtime/asm/nvg.s")
     nvg_inc = read("runtime/asm/nvg.inc")
@@ -680,6 +681,9 @@ def test_runtime_autoboot_contract() -> None:
     xram_inc = read("runtime/asm/xram.inc")
     type_text = debug.split("void DebugServer::cmdTypeText", 1)[1]
     type_text = type_text.split("void DebugServer::cmdReadScreen", 1)[0]
+    novaz_linefeed = novaz_runtime.split("nz_screen_linefeed:", 1)[1].split("nz_screen_flush_word:", 1)[0]
+    novaz_pre_newline = novaz_zvm6.split("nz6_op_pre_newline_scroll:", 1)[1].split("nz6_op_cr_newline:", 1)[0]
+    novaz_cr_newline = novaz_zvm6.split("nz6_op_cr_newline:", 1)[1].split("nz6_sample_cursor_pixel:", 1)[0]
 
     checks = {
         "BASIC exposes primary runtime ROM swap label": "ROMSWAP_PRIMARY" in nova_inc
@@ -703,18 +707,34 @@ def test_runtime_autoboot_contract() -> None:
         and ".global vgc_set_palette_ega" in vgc_palette_inc
         and ".global vgc_set_palette_custom_xram" in vgc_palette_inc
         and "vgc_set_palette_c64:" in vgc_palette
-        and "LDA   #VGC_PALMODE_C64" in vgc_palette
+        and "$AA,$FF,$66" in vgc_palette
         and "vgc_set_palette_ega:" in vgc_palette
-        and "LDA   #VGC_PALMODE_EGA" in vgc_palette
+        and "$55,$55,$FF" in vgc_palette
         and "vgc_set_palette_custom_xram:" in vgc_palette
-        and "LDA   #VGC_PALMODE_CUSTOM" in vgc_palette
         and "vgc_upload_palette_rgb_xram:" in vgc_palette
         and "STZ   VGC_PALIDX" in vgc_palette
         and "STA   VGC_PALDATA" in vgc_palette
-        and "STA   VGC_PALETTE" in vgc_palette,
+        and "STA   VGC_PALETTE" not in vgc_palette,
         "NovaZ V6 uses shared VGC palette helpers": "JSR vgc_set_palette_ega" in novaz_zvm6
         and "JSR vgc_set_palette_custom_xram" in novaz_zvm6
         and "JSR vgc_upload_palette_rgb_xram" not in novaz_zvm6,
+        "NovaZ runtime initializes with shared C64 palette and reset border": ".include \"vgc_palette.s\"" in novaz_runtime
+        and "JSR vgc_set_palette_c64" in novaz_runtime
+        and "LDA #$0B" in novaz_runtime.split("init_video_colors:", 1)[1].split("setup_text_region:", 1)[0]
+        and "STA VGC_BORDER" in novaz_runtime.split("init_video_colors:", 1)[1].split("setup_text_region:", 1)[0]
+        and "STZ VGC_BORDER" not in novaz_runtime,
+        "NovaZ V6 updates the physical border only on real background fills": "nz6_sync_border_to_bg:" in novaz_zvm6
+        and "STA VGC_BORDER" in novaz_zvm6
+        and "JSR nz6_sync_border_to_bg" in novaz_zvm6.split("nz6_op_reset:", 1)[1].split("; --- PICS.PAK index", 1)[0]
+        and "JSR nz6_sync_border_to_bg" not in novaz_zvm6.split("nz6_apply_colour_style:", 1)[1].split("nz6_sync_border_to_bg:", 1)[0]
+        and "JSR nz6_sync_border_to_bg" in novaz_zvm6.split("nz6_gfx_fill_bg:", 1)[1].split("nz6_gfx_clear:", 1)[0],
+        "NovaZ V6 scrolls graphics before text on newline scroll": "NZ6_OP_PRE_NEWLINE_SCROLL = $0B" in novaz_zvm6_inc
+        and "LDA #NZ6_OP_PRE_NEWLINE_SCROLL" in novaz_linefeed
+        and "JSR nz_screen_v6_pre_newline_scroll" in novaz_linefeed
+        and "JSR vtext_put_char" in novaz_linefeed
+        and novaz_linefeed.find("JSR nz_screen_v6_pre_newline_scroll") < novaz_linefeed.find("JSR vtext_put_char")
+        and "JMP nz6_gfx_scroll_live" in novaz_pre_newline
+        and "nz6_gfx_scroll_live" not in novaz_cr_newline,
         "shared NVG library pages packed NVG2 through the blitter": "row-packed 4bpp pixels" in nvg_inc
         and "pager_load_current_file_page" in nvg_runtime
         and "blitter_start_gfx4_unpack" in nvg_runtime
@@ -758,7 +778,10 @@ def test_runtime_autoboot_contract() -> None:
         and "handle_nvgload()" in dispatcher
         and "magic[3] != '2'" in dispatcher
         and "NVG_FLAG_PALETTE" in dispatcher
-        and "NVG_FLAG_TRANSPARENT" in dispatcher,
+        and "NVG_FLAG_TRANSPARENT" in dispatcher
+        and "VGC_PALETTE_DATA_ADDR" in dispatcher
+        and "VGC_PALETTE_MODE_ADDR" not in dispatcher
+        and "VGC_PALMODE_CUSTOM" not in dispatcher,
         "ESP load mirrors BAS-before-BIN resolution": "find_load_entry" in dispatcher
         and '"%s.bas"' in dispatcher
         and '"%s.bin"' in dispatcher,
@@ -876,6 +899,17 @@ def test_boot_splash_handoff_contract() -> None:
         "NovaHost clears text attributes from ESP": "VGC_SPACE_TEXTATTR" in novahost
         and "fillVgcRange(VGC_SPACE_TEXTATTR" in novahost
         and "0x00, \"attrs\"" in novahost,
+        "boot splash uploads an embedded palette through the active palette port": "VGC_PALETTE_INDEX" in novahost
+        and "VGC_PALETTE_DATA" in novahost
+        and "VGC_PALETTE_MODE" not in novahost
+        and "VGC_PALMODE_CUSTOM" not in novahost,
+        "NovaHost resets active palette to C64 for boot handoff": "VGC_DEFAULT_C64_PALETTE" in novahost
+        and "bool resetVgcDefaultPalette()" in novahost
+        and "fpgaBridge.poke(VGC_PALETTE_INDEX, 0x00)" in novahost
+        and "fpgaBridge.poke(VGC_PALETTE_DATA, VGC_DEFAULT_C64_PALETTE[i])" in novahost
+        and "resetVgcDefaultPalette()" in novahost.split("bool clearVgcText()", 1)[1].split("bool readByte", 1)[0]
+        and "resetVgcDefaultPalette()" in novahost.split("bool setBootSplashVideoState", 1)[1].split("void restoreBootSplashVideoState", 1)[0]
+        and "resetVgcDefaultPalette();" in novahost.split("void restoreBootSplashVideoState", 1)[1].split("void fadeBootSplash", 1)[0],
         "boot splash clears text before restoring text mode": fade_out >= 0
         and clear_text > fade_out
         and restore_text > clear_text,

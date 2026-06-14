@@ -961,7 +961,7 @@
     {
       "label": "BLITTER.COPY",
       "source": "../runtime/asm/blitter.s",
-      "line": 22,
+      "line": 29,
       "inputs": [],
       "outputs": [
         {
@@ -994,7 +994,7 @@
     {
       "label": "BLITTER.FILL",
       "source": "../runtime/asm/blitter.s",
-      "line": 31,
+      "line": 38,
       "inputs": [],
       "outputs": [
         {
@@ -1022,7 +1022,7 @@
     {
       "label": "BLITTER.GFX4_UNPACK",
       "source": "../runtime/asm/blitter.s",
-      "line": 47,
+      "line": 54,
       "inputs": [],
       "outputs": [
         {
@@ -1056,7 +1056,7 @@
     {
       "label": "BLITTER.START_COPY",
       "source": "../runtime/asm/blitter.s",
-      "line": 56,
+      "line": 63,
       "inputs": [],
       "outputs": [
         {
@@ -1072,7 +1072,7 @@
     {
       "label": "BLITTER.START_FILL",
       "source": "../runtime/asm/blitter.s",
-      "line": 80,
+      "line": 87,
       "inputs": [],
       "outputs": [
         {
@@ -1088,7 +1088,7 @@
     {
       "label": "BLITTER.START_GFX4_UNPACK",
       "source": "../runtime/asm/blitter.s",
-      "line": 68,
+      "line": 75,
       "inputs": [],
       "outputs": [
         {
@@ -1104,7 +1104,7 @@
     {
       "label": "BLITTER.WAIT",
       "source": "../runtime/asm/blitter.s",
-      "line": 92,
+      "line": 99,
       "inputs": [],
       "outputs": [
         {
@@ -1115,7 +1115,8 @@
       "requires": [],
       "kind": "routine",
       "symbol": "blitter_wait",
-      "summary": "Wait for the blitter controller to leave BUSY and return shared status."
+      "summary": "Wait for the blitter controller to leave BUSY and return shared status.",
+      "note": "BUSY is polled with a bounded software guard so a stale hardware BUSY"
     },
     {
       "label": "COPPER.ADD",
@@ -1504,7 +1505,7 @@
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1150,
+      "line": 1178,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1516,7 +1517,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1171,
+      "line": 1199,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1528,7 +1529,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1164,
+      "line": 1192,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1540,7 +1541,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1157,
+      "line": 1185,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1870,7 +1871,7 @@
     {
       "label": "FIO.NAME",
       "source": "../runtime/asm/nova.inc",
-      "line": 817,
+      "line": 845,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1882,7 +1883,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "../runtime/asm/nova.inc",
-      "line": 771,
+      "line": 799,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1959,7 +1960,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1221,
+      "line": 1249,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1971,7 +1972,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1228,
+      "line": 1256,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1983,7 +1984,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1235,
+      "line": 1263,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1995,7 +1996,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1242,
+      "line": 1270,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3359,7 +3360,7 @@
     {
       "label": "ROMSWAP.PRIMARY",
       "source": "../runtime/asm/nova.inc",
-      "line": 244,
+      "line": 264,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4552,7 +4553,7 @@
       "requires": [],
       "kind": "const",
       "symbol": "VGC_CUSTOM_PALETTE_BYTES",
-      "summary": "Number of RGB bytes consumed by VGC.PALDATA for one full custom palette."
+      "summary": "Number of RGB bytes consumed by VGC.PALDATA for one full active palette."
     },
     {
       "label": "VGC.DISPLAY_OFF",
@@ -4661,13 +4662,13 @@
     {
       "label": "VGC.GFXTRANS",
       "source": "../runtime/asm/nova.inc",
-      "line": 363,
+      "line": 383,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "const",
       "symbol": "VGC_GFXTRANS",
-      "summary": "Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.",
+      "summary": "Graphics-plane transparent color register. Defaults to 0; values above 15 disable graphics transparency.",
       "address": "$A0E8"
     },
     {
@@ -4855,13 +4856,13 @@
     {
       "label": "VGC.PALDATA",
       "source": "../runtime/asm/nova.inc",
-      "line": 499,
+      "line": 527,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "const",
       "symbol": "VGC_PALDATA",
-      "summary": "Custom RGB palette data port; writes auto-increment VGC.PALIDX.",
+      "summary": "Active RGB palette data port; writes auto-increment VGC.PALIDX, reads return quantized RGB444.",
       "address": "$A0F5"
     },
     {
@@ -4873,7 +4874,7 @@
       "requires": [],
       "kind": "const",
       "symbol": "VGC_PALETTE_COLORS",
-      "summary": "Number of color registers in a VGC custom palette.",
+      "summary": "Number of color registers in the active VGC palette.",
       "address": "$10"
     },
     {
@@ -4885,19 +4886,19 @@
       "requires": [],
       "kind": "const",
       "symbol": "VGC_PALETTE_RGB_STRIDE",
-      "summary": "Number of bytes per custom palette entry: red, green, blue.",
+      "summary": "Number of bytes per VGC palette entry: red, green, blue.",
       "address": "$03"
     },
     {
       "label": "VGC.PALIDX",
       "source": "../runtime/asm/nova.inc",
-      "line": 492,
+      "line": 520,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "const",
       "symbol": "VGC_PALIDX",
-      "summary": "Byte index into the custom RGB palette stream (0-47).",
+      "summary": "Byte index into the active RGB palette stream (0-47).",
       "address": "$A0F4"
     },
     {
@@ -5068,12 +5069,12 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_palette_c64",
-      "summary": "Select the default Nova/C64-style fixed VGC palette."
+      "summary": "Load the default Nova/C64-style palette into the active VGC palette."
     },
     {
       "label": "VGC.SET_PALETTE_CUSTOM_XRAM",
       "source": "../runtime/asm/vgc_palette.s",
-      "line": 44,
+      "line": 56,
       "inputs": [
         {
           "name": "XRAM_ADDRL/M/H",
@@ -5089,12 +5090,12 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_palette_custom_xram",
-      "summary": "Upload a 16-entry RGB888 custom VGC palette from XRAM and select it."
+      "summary": "Upload a 16-entry RGB888 palette from XRAM into the active VGC palette."
     },
     {
       "label": "VGC.SET_PALETTE_EGA",
       "source": "../runtime/asm/vgc_palette.s",
-      "line": 28,
+      "line": 34,
       "inputs": [],
       "outputs": [
         {
@@ -5105,7 +5106,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_set_palette_ega",
-      "summary": "Select the fixed IBM EGA VGC palette."
+      "summary": "Load the IBM EGA palette into the active VGC palette."
     },
     {
       "label": "VGC.UNPLOT",
@@ -5126,15 +5127,11 @@
     {
       "label": "VGC.UPLOAD_PALETTE_RGB_XRAM",
       "source": "../runtime/asm/vgc_palette.s",
-      "line": 60,
+      "line": 70,
       "inputs": [
         {
           "name": "XRAM_ADDRL/M/H",
           "description": "Source address of 48 RGB bytes."
-        },
-        {
-          "name": "A",
-          "description": "Palette mode to select after upload."
         }
       ],
       "outputs": [
@@ -5146,7 +5143,7 @@
       "requires": [],
       "kind": "routine",
       "symbol": "vgc_upload_palette_rgb_xram",
-      "summary": "Upload a 16-entry RGB888 custom VGC palette from XRAM."
+      "summary": "Upload a 16-entry RGB888 palette from XRAM into the active VGC palette."
     },
     {
       "label": "VGC.VSYNC",
@@ -6366,6 +6363,479 @@
       "kind": "u8",
       "symbol": "VSPRITE_Y",
       "summary": "Graphics-plane Y coordinate used by VSPRITE.GFX_* helpers."
+    },
+    {
+      "label": "VTEXT.CLEAR_LINE",
+      "source": "../runtime/asm/vtext.s",
+      "line": 811,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_clear_line",
+      "summary": "Clear the current VTEXT row across the full region width."
+    },
+    {
+      "label": "VTEXT.CLEAR_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 659,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_clear_region",
+      "summary": "Fill the current VTEXT rectangle with spaces and the current color/attribute."
+    },
+    {
+      "label": "VTEXT.DEFINE_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 95,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_TABLEL",
+        "VTEXT_TABLEH",
+        "VTEXT_REGION_ID",
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_define_region",
+      "summary": "Store the current VTEXT region state into the caller-owned region table slot."
+    },
+    {
+      "label": "VTEXT.EXPOSE_GFX_SPACES_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 718,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_expose_gfx_spaces_region",
+      "summary": "Apply the current color/attribute only to space cells in the current VTEXT region.",
+      "note": "This is for split text/graphics compositing: callers can set VTEXT_COLOR"
+    },
+    {
+      "label": "VTEXT.FILL_STYLE_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 692,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_fill_style_region",
+      "summary": "Fill only the color and text-attribute planes of the current VTEXT region."
+    },
+    {
+      "label": "VTEXT.HOME",
+      "source": "../runtime/asm/vtext.s",
+      "line": 267,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_home",
+      "summary": "Move the current VTEXT cursor to the upper-left cell of the current region."
+    },
+    {
+      "label": "VTEXT.NEWLINE",
+      "source": "../runtime/asm/vtext.s",
+      "line": 621,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_newline",
+      "summary": "Move to the start of the next VTEXT row, scrolling when enabled."
+    },
+    {
+      "label": "VTEXT.PUTS",
+      "source": "../runtime/asm/vtext.s",
+      "line": 476,
+      "inputs": [
+        {
+          "name": "A/Y",
+          "description": "Pointer to the zero-terminated string, low byte in A and high byte in Y."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_puts",
+      "summary": "Print a zero-terminated string into the current VTEXT region."
+    },
+    {
+      "label": "VTEXT.PUT_CHAR",
+      "source": "../runtime/asm/vtext.s",
+      "line": 409,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS",
+        "VTEXT_CHAR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_put_char",
+      "summary": "Print one character or control byte at the current VTEXT cursor."
+    },
+    {
+      "label": "VTEXT.PUT_HEX_BYTE",
+      "source": "../runtime/asm/vtext.s",
+      "line": 599,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Byte value to print."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_put_hex_byte",
+      "summary": "Print A as two uppercase hexadecimal digits."
+    },
+    {
+      "label": "VTEXT.PUT_HEX_NIBBLE",
+      "source": "../runtime/asm/vtext.s",
+      "line": 585,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Value whose low nibble should be printed."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_put_hex_nibble",
+      "summary": "Print the low nibble of A as one uppercase hexadecimal digit."
+    },
+    {
+      "label": "VTEXT.PUT_RUN",
+      "source": "../runtime/asm/vtext.s",
+      "line": 502,
+      "inputs": [
+        {
+          "name": "A/Y",
+          "description": "Pointer to the run bytes, low byte in A and high byte in Y."
+        },
+        {
+          "name": "X",
+          "description": "Number of bytes to write."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_put_run",
+      "summary": "Write a same-style printable byte run on the current text row.",
+      "note": "Does not interpret controls, wrap, or scroll. The run must fit on the"
+    },
+    {
+      "label": "VTEXT.SCROLL_UP",
+      "source": "../runtime/asm/vtext.s",
+      "line": 849,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_scroll_up",
+      "summary": "Scroll the current VTEXT rectangle up by one text row and clear the bottom row."
+    },
+    {
+      "label": "VTEXT.SELECT_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 139,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_TABLEL",
+        "VTEXT_TABLEH",
+        "VTEXT_REGION_ID"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_select_region",
+      "summary": "Load a region table slot into the current VTEXT state and sync the visible cursor."
+    },
+    {
+      "label": "VTEXT.SET_CURSOR",
+      "source": "../runtime/asm/vtext.s",
+      "line": 245,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_set_cursor",
+      "summary": "Validate the current region and cursor, then sync the visible VGC cursor."
+    },
+    {
+      "label": "VTEXT.STORE_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 180,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_TABLEL",
+        "VTEXT_TABLEH",
+        "VTEXT_REGION_ID",
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_FLAGS"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_store_region",
+      "summary": "Validate and sync the current cursor, then store the current VTEXT state into the selected table slot."
+    },
+    {
+      "label": "VTEXT.SYNC_CURSOR",
+      "source": "../runtime/asm/vtext.s",
+      "line": 229,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_CURX",
+        "VTEXT_CURY"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_sync_cursor",
+      "summary": "Copy the current region-relative cursor to the absolute VGC cursor registers."
+    },
+    {
+      "label": "VTEXT.VALIDATE_REGION",
+      "source": "../runtime/asm/vtext.s",
+      "line": 198,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_validate_region",
+      "summary": "Validate that the current VTEXT rectangle is non-empty and inside the 80x50 text screen."
+    },
+    {
+      "label": "VTEXT.WAIT_BLITTER",
+      "source": "../runtime/asm/vtext.s",
+      "line": 976,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vtext_wait_blitter",
+      "summary": "Wait for the current blitter operation and convert the result to the VTEXT 0/1 status convention."
     },
     {
       "label": "XMC.ALLOC",

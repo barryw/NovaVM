@@ -189,6 +189,17 @@
             border-radius: 4px;
         }
 
+        .showcase-row {
+            display: grid;
+            grid-template-columns: 86px 1fr auto;
+            gap: 8px;
+            align-items: center;
+            padding: 0 8px 8px 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
         input[type="file"] {
             width: 100%;
             min-height: 30px;
@@ -232,12 +243,14 @@
             }
 
             .control-strip,
-            .media-row {
+            .media-row,
+            .showcase-row {
                 grid-template-columns: 1fr 1fr;
             }
 
             .control-field.wide,
-            #host-status {
+            #host-status,
+            .showcase-row select {
                 grid-column: 1 / -1;
             }
         }
@@ -297,6 +310,11 @@
             <button id="unmount-fd0-btn">Unmount</button>
             <div id="host-status">starting</div>
         </div>
+        <div class="showcase-row">
+            <label for="showcase-select" class="field-label">Quick Mount</label>
+            <select id="showcase-select"></select>
+            <button id="quick-mount-btn">Mount + Boot</button>
+        </div>
     </div>
 
     <div id="focus-prompt">
@@ -305,6 +323,6 @@
 
     <div id="metrics"></div>
 
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=2026-06-12-novachess-tt"></script>
 </body>
 </html>

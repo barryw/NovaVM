@@ -186,9 +186,10 @@ GFN_COPPER_SET_SPRITE_REG = $49 ; (x:ARG0 s16, y:ARG1, sprIdx|field:ARG2, val:AR
 ; unified memory "spaces" (CPU=0, VGC_CHAR=1, VGC_COLOR=2, VGC_GFX=3,
 ; VGC_SPRITE=4, XRAM=5, VGC_TEXTATTR=7 — BLT_SPACE_* alias the DMA_SPACE_*).
 ; The drivers load the hardware registers, write *_CMD_REG = *_CMD_START, then
-; spin in *_wait on *_STATUS_REG until it leaves BUSY; they return A=0 on OK,
-; A=1 on error (detail left in *_ERRCODE_REG). The wrappers marshal the ARG
-; cells into the hardware registers, JSR the driver, and set STATUS=OK (the
+; wait on *_STATUS_REG until it leaves BUSY; they return A=0 on OK, A=1 on
+; error (detail left in *_STATUS_REG/*_ERRCODE_REG). BLT wait has a bounded
+; guard so stale BUSY cannot trap the caller forever. The wrappers marshal the
+; ARG cells into the hardware registers, JSR the driver, and set STATUS=OK (the
 ; driver already self-waited; the reporters expose the controller's status/
 ; errcode/count for callers that want the detail).
 ;
@@ -327,9 +328,9 @@ GFX_VS_CFG_MAX            = 58
 ; WAIT MODEL (VERIFIED against vsprite.s + blitter.s): vsprite_gfx_blit,
 ; vsprite_gfx_save_bg, vsprite_gfx_restore_bg, vsprite_gfx_fill, vsprite_fill,
 ; vsprite_rotate and the scene helpers all reach the blitter via
-; blitter_start_copy/blitter_fill -> blitter_wait, which self-spins on
-; BLT_STATUS until not-BUSY (the emulator completes the blit synchronously on
-; the BLT_CMD write). So none of these need a pumped bus. ONLY the two
+; blitter_start_copy/blitter_fill -> blitter_wait, which polls BLT_STATUS until
+; not-BUSY or until its software guard expires (the emulator completes the blit
+; synchronously on the BLT_CMD write). So none of these need a pumped bus. ONLY the two
 ; frame-pacing rotate variants (vsprite_gfx_rotate_blit / _keyed) additionally
 ; poll VGC_FRAME via vsprite_wait_frame, which only advances when the bus is
 ; pumped (AdvanceCycles) -> those two are flagged PUMPED below.

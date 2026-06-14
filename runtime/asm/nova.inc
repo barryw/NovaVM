@@ -124,8 +124,28 @@ CPU_IRQ_VECTOR    = $FFFE
 .ifndef VGC_MODE
 VGC_MODE          = $A000
 .endif
+.ifndef VGC_MODE_TEXT
+VGC_MODE_TEXT          = $00
+.endif
+.ifndef VGC_MODE_GFX_OVER_TEXT
+VGC_MODE_GFX_OVER_TEXT = $01
+.endif
+.ifndef VGC_MODE_TEXT_OVER_GFX
+VGC_MODE_TEXT_OVER_GFX = $02
+.endif
+.ifndef VGC_MODE_GFX_ONLY
+VGC_MODE_GFX_ONLY      = $03
+.endif
+.ifndef VGC_MODE_GFX_SPRITES
+VGC_MODE_GFX_SPRITES   = $04
+.endif
 .ifndef VGC_BGCOL
 VGC_BGCOL         = $A001
+.endif
+.ifndef VGC_TEXT_BGKEY_DEFAULT
+; In VGC mode 2, unset text pixels fall through to the graphics plane when the
+; cell background nibble matches VGC_BGCOL. This is the default key value.
+VGC_TEXT_BGKEY_DEFAULT = $00
 .endif
 .ifndef VGC_FGCOL
 VGC_FGCOL         = $A002
@@ -363,20 +383,28 @@ VGC_TXTREVATTR    = $A0E7
 ; @label VGC.GFXTRANS
 ; @kind const
 ; @symbol VGC_GFXTRANS
-; @summary Graphics-plane transparent color register. Defaults to 0; set to another palette index when graphics code needs visible palette-0 black pixels.
+; @summary Graphics-plane transparent color register. Defaults to 0; values above 15 disable graphics transparency.
 .ifndef VGC_GFXTRANS
 VGC_GFXTRANS      = $A0E8
 .endif
+.ifndef VGC_GFXTRANS_DISABLE
+VGC_GFXTRANS_DISABLE = $FF
+.endif
 .ifndef VGC_PALETTE
+; Legacy palette-mode register. Kept for old code; current VGC hardware ignores writes.
+; Use vgc_palette.s helpers or VGC_PALIDX/VGC_PALDATA to load the active palette.
 VGC_PALETTE       = $A0E9
 .endif
 .ifndef VGC_PALMODE_C64
+; Convenience value for old code; use vgc_set_palette_c64 for current hardware.
 VGC_PALMODE_C64   = $00
 .endif
 .ifndef VGC_PALMODE_EGA
+; Convenience value for old code; use vgc_set_palette_ega for current hardware.
 VGC_PALMODE_EGA   = $01
 .endif
 .ifndef VGC_PALMODE_CUSTOM
+; Convenience value for old code; custom colors are loaded through VGC_PALDATA.
 VGC_PALMODE_CUSTOM = $02
 .endif
 .ifndef VGC_SCROLLCTL
@@ -492,14 +520,14 @@ VGC_IRQ_VALID     = $A0F3
 ; @label VGC.PALIDX
 ; @kind const
 ; @symbol VGC_PALIDX
-; @summary Byte index into the custom RGB palette stream (0-47).
+; @summary Byte index into the active RGB palette stream (0-47).
 .ifndef VGC_PALIDX
 VGC_PALIDX        = $A0F4
 .endif
 ; @label VGC.PALDATA
 ; @kind const
 ; @symbol VGC_PALDATA
-; @summary Custom RGB palette data port; writes auto-increment VGC.PALIDX.
+; @summary Active RGB palette data port; writes auto-increment VGC.PALIDX, reads return quantized RGB444.
 .ifndef VGC_PALDATA
 VGC_PALDATA       = $A0F5
 .endif

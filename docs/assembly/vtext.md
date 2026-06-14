@@ -39,11 +39,13 @@ jsr vtext_validate_region
 jsr vtext_set_cursor
 jsr vtext_home
 jsr vtext_put_char
+jsr vtext_put_run    ; A/Y = bytes pointer, X = length
 jsr vtext_puts       ; A/Y = zero-terminated string pointer
 jsr vtext_put_hex_nibble
 jsr vtext_put_hex_byte
 jsr vtext_newline
 jsr vtext_clear_region
+jsr vtext_fill_style_region
 jsr vtext_clear_line
 jsr vtext_scroll_up
 ```
@@ -72,3 +74,39 @@ For a Z3-style Infocom screen, NovaZ can define:
 
 VTEXT handles row-local output, clear, and scroll. NovaZ remains responsible
 for interpreting story-file window rules and formatting the status line.
+
+## Row Runs
+
+Use `vtext_put_run` when you already have a short run of printable bytes that
+all share the same `VTEXT_COLOR` and `VTEXT_ATTR`.
+
+```asm
+        lda #<text
+        ldy #>text
+        ldx #text_end-text
+        jsr vtext_put_run
+```
+
+`vtext_put_run` is deliberately row-local. It does not parse control
+characters, wrap to the next line, or scroll. The run must fit from the current
+cursor to the right edge of the current region. If it exactly fills the row,
+the cursor remains on the final cell because Nova has no valid one-past-right
+cursor position; callers that want a newline should call their own newline
+logic after the run.
+
+## Mode 2 Backgrounds
+
+In `VGC_MODE_TEXT_OVER_GFX`, `VTEXT_COLOR` still uses the normal packed VGC
+color byte: high nibble background, low nibble foreground.
+
+The high nibble also controls whether blank glyph pixels cover the graphics
+plane:
+
+- If the high nibble equals `VGC_BGCOL`, blank glyph pixels are transparent
+  and the graphics pixel underneath shows through.
+- If the high nibble differs from `VGC_BGCOL`, blank glyph pixels are opaque
+  and draw the cell background.
+
+Use the transparent key for cells reserved for pictures. Use an opaque
+background for ordinary solid text boxes; that lets the VGC paint the text
+background without a software graphics fill behind every character.

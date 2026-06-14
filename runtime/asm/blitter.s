@@ -19,6 +19,13 @@ BLITTER_IMPLEMENTATION_INCLUDED = 1
       .export blitter_start_gfx4_unpack
       .export blitter_wait
 
+      .segment "BSS"
+
+BLITTER_WAITL: .res 1
+BLITTER_WAITH: .res 1
+
+      .segment "CODE"
+
 ; @label BLITTER.COPY
 ; @kind routine
 ; @symbol blitter_copy
@@ -94,11 +101,22 @@ blitter_start_fill:
 ; @symbol blitter_wait
 ; @summary Wait for the blitter controller to leave BUSY and return shared status.
 ; @out A: 0 on success, 1 on error.
+; @note BUSY is polled with a bounded software guard so a stale hardware BUSY
+;       status cannot trap the caller forever.
 blitter_wait:
+      STZ   BLITTER_WAITL
+      STZ   BLITTER_WAITH
 @loop:
       LDA   BLT_STATUS_REG
       CMP   #BLT_STATUS_BUSY
-      BEQ   @loop
+      BNE   @status
+      INC   BLITTER_WAITL
+      BNE   @loop
+      INC   BLITTER_WAITH
+      BNE   @loop
+      LDA   #BLITTER_RESULT_ERROR
+      RTS
+@status:
       CMP   #BLT_STATUS_OK
       BEQ   @ok
       LDA   #BLITTER_RESULT_ERROR

@@ -368,7 +368,7 @@ public class EmulatorCanvas : Control
         int copperIndex = 0;
 
         var state = RenderVideoState.FromVgc(_vgc);
-        ReadOnlySpan<uint> palette = ColorPalette.GetBgraPalette(state.PaletteMode, _vgc.GetCustomBgraPalette());
+        ReadOnlySpan<uint> palette = _vgc.GetBgraPalette();
         uint borderPixel = palette[state.BorderColor & 0x0F];
         if (state.DisplayDim != 15)
             borderPixel = DimColor(borderPixel, state.DisplayDim);
@@ -465,14 +465,14 @@ public class EmulatorCanvas : Control
                         if (VirtualGraphicsController.IsTextLayerVisible(state.Mode))
                             textOpaque = TrySampleTextPixel(canvasPx, canvasPy, state, cursorX, cursorY, cursorEnabled, palette, out textPixel);
 
-                        if (state.Mode == 3 || state.Mode == 4)
+                        if (state.Mode == VgcConstants.ModeGfxOnly || state.Mode == VgcConstants.ModeGfxSprites)
                         {
                             if (gfxOpaque)
                                 pixel = gfxPixel;
                             if (spriteBetween != 0)
                                 pixel = palette[spriteBetween & 0x0F];
                         }
-                        else if (state.Mode == 2)
+                        else if (state.Mode == VgcConstants.ModeTextOverGfx)
                         {
                             if (gfxOpaque)
                                 pixel = gfxPixel;
@@ -587,7 +587,6 @@ public class EmulatorCanvas : Control
         public byte BorderColor;
         public int FontIndex;
         public byte DisplayDim;
-        public byte PaletteMode;
         public bool FlashVisible;
 
         public static RenderVideoState FromVgc(VirtualGraphicsController vgc) =>
@@ -601,7 +600,6 @@ public class EmulatorCanvas : Control
                 BorderColor = vgc.GetBorderColor(),
                 FontIndex = vgc.GetFontIndex(),
                 DisplayDim = vgc.GetDisplayDim(),
-                PaletteMode = vgc.GetPaletteMode(),
                 FlashVisible = ((Environment.TickCount64 / 500) & 1) == 0
             };
 

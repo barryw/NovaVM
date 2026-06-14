@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NovaVM Browser Emulator</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0b0d0c;
+            color: #d7d7cf;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            overflow: auto;
+        }
+
+        #header {
+            width: min(720px, 100vw - 16px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 10px 0 8px 0;
+        }
+
+        #header h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #c7f0d8;
+            letter-spacing: 0.04em;
+        }
+
+        #header p {
+            font-size: 0.75rem;
+            color: #74776f;
+            margin-top: 2px;
+        }
+
+        #header a {
+            color: #c7f0d8;
+            font-size: 0.72rem;
+            text-decoration: none;
+            border: 1px solid #344038;
+            border-radius: 4px;
+            padding: 6px 9px;
+            white-space: nowrap;
+        }
+
+        #header a:hover,
+        #header a:focus-visible {
+            background: #18211d;
+            outline: 2px solid #c7f0d8;
+            outline-offset: 2px;
+        }
+
+        #screen-container {
+            position: relative;
+            width: 720px;
+            height: 480px;
+            border: 2px solid #2d342f;
+            border-radius: 4px;
+            background: #000;
+        }
+
+        #screen {
+            display: block;
+            width: 720px;
+            height: 480px;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #c7f0d8;
+            font-size: 0.9rem;
+            z-index: 10;
+        }
+
+        #loading .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #2d342f;
+            border-top-color: #c7f0d8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #focus-prompt {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            background: #121816;
+            color: #c7f0d8;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: 1px solid #344038;
+            z-index: 100;
+            transition: opacity 0.3s;
+        }
+
+        #focus-prompt:hover {
+            background: #18211d;
+        }
+
+        #workbench {
+            width: 720px;
+            display: grid;
+            gap: 8px;
+            padding-top: 8px;
+        }
+
+        .control-strip {
+            display: grid;
+            grid-template-columns: 94px 124px 104px 98px 1fr;
+            gap: 8px;
+            align-items: end;
+            padding: 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
+        .control-field {
+            display: grid;
+            gap: 4px;
+        }
+
+        .control-field.wide {
+            grid-template-columns: 1fr auto;
+            align-items: end;
+        }
+
+        label,
+        .field-label {
+            color: #8b948b;
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        select,
+        button,
+        input[type="file"]::file-selector-button {
+            min-height: 30px;
+            background: #090b0a;
+            color: #e5e3d6;
+            border: 1px solid rgba(167, 194, 172, 0.26);
+            border-radius: 4px;
+            font: inherit;
+            font-size: 0.72rem;
+        }
+
+        select {
+            padding: 0 8px;
+        }
+
+        button {
+            padding: 0 10px;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #d6d069;
+            border-color: #ece58a;
+            color: #191914;
+            font-weight: 700;
+        }
+
+        button:disabled,
+        select:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .check {
+            min-height: 30px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            color: #c0c4bb;
+            text-transform: none;
+            letter-spacing: 0;
+            font-size: 0.72rem;
+        }
+
+        .media-row {
+            display: grid;
+            grid-template-columns: 86px 1fr auto auto;
+            gap: 8px;
+            align-items: center;
+            padding: 0 8px 8px 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
+        .showcase-row {
+            display: grid;
+            grid-template-columns: 86px 1fr auto;
+            gap: 8px;
+            align-items: center;
+            padding: 0 8px 8px 8px;
+            background: #111411;
+            border: 1px solid rgba(167, 194, 172, 0.18);
+            border-radius: 4px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            min-height: 30px;
+            color: #8b948b;
+            font: inherit;
+            font-size: 0.7rem;
+        }
+
+        #host-status {
+            min-height: 18px;
+            color: #9ca59b;
+            font-size: 0.68rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #metrics {
+            width: 720px;
+            padding: 6px 0 0 0;
+            color: #a1cfb1;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 0.68rem;
+            line-height: 1.25;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 760px) {
+            #header {
+                align-items: flex-start;
+            }
+
+            #screen-container,
+            #screen,
+            #workbench,
+            #metrics {
+                width: min(100vw - 16px, 720px);
+            }
+
+            #screen-container,
+            #screen {
+                height: auto;
+                aspect-ratio: 3 / 2;
+            }
+
+            .control-strip,
+            .media-row,
+            .showcase-row {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .control-field.wide,
+            #host-status,
+            .showcase-row select {
+                grid-column: 1 / -1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div>
+            <h1>NovaVM Browser Emulator</h1>
+            <p>6502/65C02 machine running locally in your browser via WebAssembly</p>
+        </div>
+        <a href="../">Back to site</a>
+    </div>
+
+    <div id="screen-container">
+        <canvas id="screen" width="720" height="480"></canvas>
+        <div id="loading">
+            <span class="spinner"></span>Loading Nova VM...
+        </div>
+    </div>
+
+    <div id="workbench">
+        <div class="control-strip">
+            <div class="control-field">
+                <label for="core-select">Core</label>
+                <select id="core-select">
+                    <option value="rust">Rust</option>
+                    <option value="dotnet" disabled>.NET</option>
+                </select>
+            </div>
+            <div class="control-field">
+                <label for="runtime-select">Runtime</label>
+                <select id="runtime-select">
+                    <option value="basic">BASIC</option>
+                    <option value="logo">Logo</option>
+                    <option value="forth">Forth</option>
+                    <option value="pascal" disabled>Pascal</option>
+                    <option value="assembler" disabled>Assembler</option>
+                </select>
+            </div>
+            <div class="control-field">
+                <label for="speed-select">Speed</label>
+                <select id="speed-select">
+                    <option value="12000000">12 MHz</option>
+                    <option value="8000000">8 MHz</option>
+                    <option value="4000000">4 MHz</option>
+                    <option value="1000000">1 MHz</option>
+                </select>
+            </div>
+            <label class="check"><input id="autoboot-check" type="checkbox" checked> Autoboot</label>
+            <div class="control-field wide">
+                <button class="primary" id="reboot-btn">Reboot</button>
+                <button id="reload-btn">Reload Page</button>
+            </div>
+        </div>
+        <div class="media-row">
+            <span class="field-label">FD0</span>
+            <input id="fd0-file" type="file" accept=".ndi,.img,.dsk,.bin">
+            <button id="mount-fd0-btn">Mount</button>
+            <button id="unmount-fd0-btn">Unmount</button>
+            <div id="host-status">starting</div>
+        </div>
+        <div class="showcase-row">
+            <label for="showcase-select" class="field-label">Quick Mount</label>
+            <select id="showcase-select"></select>
+            <button id="quick-mount-btn">Mount + Boot</button>
+        </div>
+    </div>
+
+    <div id="focus-prompt">
+        Click the screen, then type
+    </div>
+
+    <div id="metrics"></div>
+
+    <script type="module" src="./main.js?v=2026-06-12-novachess-tt"></script>
+</body>
+</html>

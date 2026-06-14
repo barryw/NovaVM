@@ -123,10 +123,7 @@ editui_init:
       STA   VGC_MODE
       ; The editor paints every cell via per-cell color RAM, so it does NOT
       ; dictate the global background/border/foreground — the host runtime owns
-      ; those (and is responsible for restoring them on exit). We only set the
-      ; palette mode the editor's color constants are authored against.
-      LDA   #EDITUI_PALETTE_MODE
-      STA   VGC_PALETTE
+      ; those and the active palette.
       STZ   VTEXT_TOPROW
       STZ   VGC_TEXT_TOPROW
       STZ   VTEXT_SCROLL_TOP

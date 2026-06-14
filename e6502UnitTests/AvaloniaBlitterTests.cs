@@ -205,6 +205,61 @@ public class AvaloniaBlitterTests
     }
 
     [TestMethod]
+    public void Blitter_VgcCharWindowScroll_PreservesLeftEdgeAcrossRepeatedRows()
+    {
+        var bus = MakeBus();
+        const int left = 10;
+        const int top = 9;
+        const int width = 59;
+        const int height = 40;
+        int baseAddr = top * VgcConstants.ScreenCols + left;
+
+        for (int row = 0; row < height; row++)
+        {
+            for (int col = 0; col < width; col++)
+            {
+                byte ch = col == 0
+                    ? (byte)('A' + (row % 26))
+                    : (byte)('a' + (col % 26));
+                bus.WriteVramByte(VgcConstants.VramPlaneChar, baseAddr + row * VgcConstants.ScreenCols + col, ch);
+            }
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+            StartBlit(
+                bus,
+                srcSpace: VgcConstants.DmaSpaceVgcChar,
+                dstSpace: VgcConstants.DmaSpaceVgcChar,
+                srcAddr: baseAddr + VgcConstants.ScreenCols,
+                dstAddr: baseAddr,
+                width: width,
+                height: height - 1,
+                srcStride: VgcConstants.ScreenCols,
+                dstStride: VgcConstants.ScreenCols);
+            AssertBlitOk(bus, expectedCount: width * (height - 1));
+
+            StartBlit(
+                bus,
+                srcSpace: VgcConstants.DmaSpaceCpuRam,
+                dstSpace: VgcConstants.DmaSpaceVgcChar,
+                srcAddr: 0,
+                dstAddr: baseAddr + (height - 1) * VgcConstants.ScreenCols,
+                width: width,
+                height: 1,
+                srcStride: width,
+                dstStride: VgcConstants.ScreenCols,
+                mode: VgcConstants.BltModeFill,
+                fillValue: (byte)' ');
+            AssertBlitOk(bus, expectedCount: width);
+        }
+
+        Assert.AreEqual((byte)'G', bus.ReadVramByte(VgcConstants.VramPlaneChar, baseAddr));
+        Assert.AreEqual((byte)'H', bus.ReadVramByte(VgcConstants.VramPlaneChar, baseAddr + VgcConstants.ScreenCols));
+        Assert.AreEqual((byte)'I', bus.ReadVramByte(VgcConstants.VramPlaneChar, baseAddr + 2 * VgcConstants.ScreenCols));
+    }
+
+    [TestMethod]
     public void Blitter_RotateMode_RotatesSquareIntoDestinationBuffer()
     {
         var bus = MakeBus();
