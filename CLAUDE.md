@@ -31,6 +31,9 @@ CI runs on Windows with `dotnet build -c Release` then `dotnet test -c Release`.
 | `e6502.MCP` | net10.0 | MCP server bridging AI clients to the emulator via TCP |
 | `e6502.CLI` | net10.0 | Console-based BASIC interpreter |
 | `e6502.Tools` | net10.0 | CLI tool for SID file relocation |
+| `e6502.NovaHost` | net10.0 | Shared client library for NovaHost TCP protocols (management 6504 CBOR + debug 6503 JSON) |
+| `e6502.NovaPanel` | net10.0 | Avalonia remote-control app for Nova hardware: on-screen keyboard + web-admin parity |
+| `e6502.NovaPanel.Tests` | net10.0 | xUnit + Avalonia.Headless tests for NovaPanel |
 | `e6502Debugger` | net6.0-windows | WinForms debugger (Windows only) |
 
 ## Namespace
