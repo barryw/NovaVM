@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="e6502.NovaPanel.Views.KeyboardView">
+  <UserControl.Styles>
+    <Style Selector="Button.key">
+      <Setter Property="Background" Value="#1e1e2e"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="Margin" Value="2"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="ToggleButton.mod-key">
+      <Setter Property="Background" Value="#313244"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="Margin" Value="2"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="ToggleButton.mod-key:checked">
+      <Setter Property="Background" Value="#89b4fa"/>
+      <Setter Property="Foreground" Value="#1e1e2e"/>
+    </Style>
+  </UserControl.Styles>
+
+  <!-- RootRows is populated in code-behind -->
+  <StackPanel x:Name="RootRows" Spacing="2" Background="#11111b"/>
+</UserControl>
