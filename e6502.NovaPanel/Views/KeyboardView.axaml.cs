@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.VisualTree;
 using e6502.NovaPanel.Input;
 
 namespace e6502.NovaPanel.Views;
@@ -21,9 +23,52 @@ public partial class KeyboardView : UserControl
 
     public KeyboardView()
     {
+        Focusable = true;
         InitializeComponent();
         BuildKeyboard();
     }
+
+    // -----------------------------------------------------------------------
+    // Focus the view as soon as it is part of the visual tree.
+    // -----------------------------------------------------------------------
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        Focus();
+    }
+
+    // -----------------------------------------------------------------------
+    // Physical keyboard: key-down handling
+    // -----------------------------------------------------------------------
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        KeyModifiers effective = e.KeyModifiers | _latched;
+        string? token = KeyDispatch.Resolve(e.Key, effective);
+        if (token is not null)
+        {
+            KeyActivated?.Invoke(token);
+            e.Handled = true;
+            if (_keyToControl.TryGetValue(e.Key, out var ctl) && !ctl.Classes.Contains("active"))
+                ctl.Classes.Add("active");
+        }
+        // Unresolved keys bubble (don't call base to avoid double-dispatch; just don't set Handled).
+    }
+
+    // -----------------------------------------------------------------------
+    // Physical keyboard: key-up handling — clear highlight
+    // -----------------------------------------------------------------------
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (_keyToControl.TryGetValue(e.Key, out var ctl))
+            ctl.Classes.Remove("active");
+        base.OnKeyUp(e);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test helper: returns true while the physical key is highlighted.
+    // -----------------------------------------------------------------------
+    public bool IsKeyActive(Key key) =>
+        _keyToControl.TryGetValue(key, out var c) && c.Classes.Contains("active");
 
     // -----------------------------------------------------------------------
     // Public test-hook: mirrors exactly what a click does.

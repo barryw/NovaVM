@@ -34,6 +34,14 @@
       <Setter Property="Background" Value="#89b4fa"/>
       <Setter Property="Foreground" Value="#1e1e2e"/>
     </Style>
+    <Style Selector="Button.active">
+      <Setter Property="Background" Value="#a6e3a1"/>
+      <Setter Property="Foreground" Value="#1e1e2e"/>
+    </Style>
+    <Style Selector="ToggleButton.active">
+      <Setter Property="Background" Value="#a6e3a1"/>
+      <Setter Property="Foreground" Value="#1e1e2e"/>
+    </Style>
   </UserControl.Styles>
 
   <!-- RootRows is populated in code-behind -->
