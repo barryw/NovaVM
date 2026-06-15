@@ -4,7 +4,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-sealed class NovaHostManagementClient : IDisposable
+namespace e6502.NovaHost;
+
+public sealed class NovaHostManagementClient : IDisposable
 {
     private const ushort Version = 1;
     private const int HeaderBytes = 24;
@@ -532,14 +534,14 @@ sealed class NovaHostManagementClient : IDisposable
         bool Ok, string? Code, string? Error, JsonObject Data, byte[] Raw);
 }
 
-sealed class NovaHostCommandException : Exception
+public sealed class NovaHostCommandException : Exception
 {
     public NovaHostCommandException(string message) : base(message) {}
 }
 
-sealed record NovaTransferProgress(long Done, long Total);
+public sealed record NovaTransferProgress(long Done, long Total);
 
-sealed record NovaFileChunk(byte[] Data, long Size, bool Eof);
+public sealed record NovaFileChunk(byte[] Data, long Size, bool Eof);
 
 static class CborLite
 {

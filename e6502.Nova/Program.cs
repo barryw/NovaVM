@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using e6502.NovaHost;
 using e6502.Storage;
 
 if (args.Length < 1)
