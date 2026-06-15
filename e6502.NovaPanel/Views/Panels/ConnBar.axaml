@@ -1,0 +1,94 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="e6502.NovaPanel.Views.Panels.ConnBar"
+             Background="#11111b">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.chip">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="Padding" Value="4,2"/>
+      <Setter Property="Margin" Value="2,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.chip">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Margin" Value="2,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.action">
+      <Setter Property="Background" Value="#1e1e2e"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#3b1a1a"/>
+      <Setter Property="Foreground" Value="#f38ba8"/>
+      <Setter Property="BorderBrush" Value="#f38ba8"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="8,4"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+  </UserControl.Styles>
+
+  <StackPanel Orientation="Horizontal" Spacing="4"
+              VerticalAlignment="Center" Margin="8,4">
+
+    <!-- Host input -->
+    <TextBox x:Name="HostBox"
+             Text="novahost.local"
+             Width="160"
+             FontSize="11"
+             FontFamily="Monospace"
+             VerticalAlignment="Center"
+             PlaceholderText="hostname"/>
+
+    <!-- Connect / Disconnect -->
+    <Button x:Name="ConnectBtn" Classes="action" Content="Connect"/>
+    <Button x:Name="DisconnectBtn" Classes="action" Content="Disconnect"/>
+
+    <!-- Separator -->
+    <Rectangle Width="1" Height="20" Fill="#45475a" Margin="4,0"/>
+
+    <!-- Status chips -->
+    <Border x:Name="StateChipBorder" Classes="chip">
+      <TextBlock x:Name="StateChip" Classes="chip" Text="Disconnected"/>
+    </Border>
+
+    <Border Classes="chip">
+      <TextBlock x:Name="BootPhaseChip" Classes="chip" Text="—"/>
+    </Border>
+
+    <Border Classes="chip">
+      <TextBlock x:Name="SdChip" Classes="chip" Text="SD: —"/>
+    </Border>
+
+    <Border Classes="chip">
+      <TextBlock x:Name="FpgaChip" Classes="chip" Text="FPGA: —"/>
+    </Border>
+
+    <Border Classes="chip">
+      <TextBlock x:Name="WifiChip" Classes="chip" Text="WiFi: —"/>
+    </Border>
+
+    <Border Classes="chip">
+      <TextBlock x:Name="AudioChip" Classes="chip" Text="Audio: —"/>
+    </Border>
+
+    <!-- Separator -->
+    <Rectangle Width="1" Height="20" Fill="#45475a" Margin="4,0"/>
+
+    <!-- Action buttons -->
+    <Button x:Name="VmResetBtn" Classes="action" Content="VM Reset"/>
+    <Button x:Name="HostRebootBtn" Classes="danger" Content="Host Reboot"/>
+
+  </StackPanel>
+</UserControl>

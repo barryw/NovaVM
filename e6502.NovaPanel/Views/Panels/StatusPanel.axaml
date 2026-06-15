@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="e6502.NovaPanel.Views.Panels.StatusPanel"
+             Background="#11111b">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#6c7086"/>
+      <Setter Property="Width" Value="100"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.value">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Ellipse.lamp">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="Height" Value="8"/>
+      <Setter Property="Margin" Value="0,0,8,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+  </UserControl.Styles>
+
+  <StackPanel x:Name="RootStack" Spacing="6" Margin="12,8">
+
+    <!-- Boot Phase -->
+    <StackPanel Orientation="Horizontal">
+      <Ellipse x:Name="BootLamp" Classes="lamp" Fill="#6c7086"/>
+      <TextBlock Classes="label" Text="Boot Phase"/>
+      <TextBlock x:Name="BootValue" Classes="value" Text="—"/>
+    </StackPanel>
+
+    <!-- SD Card -->
+    <StackPanel Orientation="Horizontal">
+      <Ellipse x:Name="SdLamp" Classes="lamp" Fill="#6c7086"/>
+      <TextBlock Classes="label" Text="SD Card"/>
+      <TextBlock x:Name="SdValue" Classes="value" Text="—"/>
+    </StackPanel>
+
+    <!-- FPGA Bridge -->
+    <StackPanel Orientation="Horizontal">
+      <Ellipse x:Name="FpgaLamp" Classes="lamp" Fill="#6c7086"/>
+      <TextBlock Classes="label" Text="FPGA Bridge"/>
+      <TextBlock x:Name="FpgaValue" Classes="value" Text="—"/>
+    </StackPanel>
+
+    <!-- WiFi -->
+    <StackPanel Orientation="Horizontal">
+      <Ellipse x:Name="WifiLamp" Classes="lamp" Fill="#6c7086"/>
+      <TextBlock Classes="label" Text="WiFi"/>
+      <TextBlock x:Name="WifiValue" Classes="value" Text="—"/>
+    </StackPanel>
+
+    <!-- Audio -->
+    <StackPanel Orientation="Horizontal">
+      <Ellipse x:Name="AudioLamp" Classes="lamp" Fill="#6c7086"/>
+      <TextBlock Classes="label" Text="Audio"/>
+      <TextBlock x:Name="AudioValue" Classes="value" Text="—"/>
+    </StackPanel>
+
+  </StackPanel>
+</UserControl>
