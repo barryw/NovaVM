@@ -19,4 +19,8 @@
     <ProjectReference Include="..\e6502.NovaPanel\e6502.NovaPanel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures/status-sample.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

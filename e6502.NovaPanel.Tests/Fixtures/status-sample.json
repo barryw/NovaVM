@@ -1,0 +1,22 @@
+{
+  "health": { "ok": true, "bootPhase": "ready", "sdMounted": true, "fpgaBridgeAvailable": true },
+  "sdStatus": { "cardType": "SDHC", "mounted": true },
+  "wifi": { "configured": true, "connected": true, "ssid": "novanet", "rssi": -55, "localIp": "192.168.1.65" },
+  "audio": { "ok": true, "status": "idle" },
+  "drives": [
+    { "slot": "fd0", "mounted": true,  "currentPath": "/disks/floppy/zork.ndi", "configuredPath": "/disks/floppy/zork.ndi" },
+    { "slot": "fd1", "mounted": false, "currentPath": "", "configuredPath": "" },
+    { "slot": "fd2", "mounted": false, "currentPath": "", "configuredPath": "" },
+    { "slot": "fd3", "mounted": false, "currentPath": "", "configuredPath": "" },
+    { "slot": "hd0", "mounted": false, "currentPath": "", "configuredPath": "" },
+    { "slot": "hd1", "mounted": false, "currentPath": "", "configuredPath": "" }
+  ],
+  "bootConfig": {
+    "vm": { "defaultRuntime": "novabasic" },
+    "languages": {
+      "novabasic": { "rom": "/roms/novabasic.bin", "extensionRom": "/roms/extension.bin", "autoboot": true },
+      "novaforth": { "rom": "/roms/novaforth.bin", "extensionRom": "", "autoboot": false }
+    }
+  },
+  "management": { "protocol": "tcp+cbor", "host": "192.168.1.65", "port": 6504, "connected": true }
+}
