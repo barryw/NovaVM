@@ -51,4 +51,23 @@ public class PanelTests
         p.Update(Sample());
         Assert.True(true); // smoke: constructed + updated without throwing
     }
+
+    [AvaloniaFact]
+    public void DrivesPanel_shows_six_slots()
+    {
+        var p = new DrivesPanel();
+        var w = new Window { Content = p };
+        w.Show();
+        p.Update(Sample()); // Sample() has empty drives array
+        Assert.Equal(6, p.DriveRowCount);
+    }
+
+    [AvaloniaFact]
+    public void DiskImagesPanel_constructs_empty()
+    {
+        var p = new DiskImagesPanel();
+        var w = new Window { Content = p };
+        w.Show();
+        Assert.Equal(0, p.DiskRowCount);
+    }
 }

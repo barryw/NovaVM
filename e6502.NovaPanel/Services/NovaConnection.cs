@@ -154,6 +154,19 @@ public sealed class NovaConnection : IAsyncDisposable
         catch { return new JsonArray(); }
     }
 
+    public async Task<(bool ok, string? error)> UploadFileAsync(string localPath, string destSdPath, IProgress<long>? progress = null, CancellationToken ct = default)
+    {
+        if (_mgmt is null) return (false, "not connected");
+        try
+        {
+            var fi = new System.IO.FileInfo(localPath);
+            await using var fs = fi.OpenRead();
+            await _mgmt.WriteFileAsync(destSdPath, fs, fi.Length, progress, ct);
+            return (true, null);
+        }
+        catch (Exception ex) { LastError = ex.Message; return (false, ex.Message); }
+    }
+
     private async Task<(bool ok, string? error)> Guard(Func<NovaHostManagementClient, Task> call, CancellationToken ct)
     {
         if (_mgmt is null) return (false, "not connected");

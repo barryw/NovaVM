@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="e6502.NovaPanel.Views.Panels.DrivesPanel"
+             Background="#11111b">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.slot">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="Width" Value="40"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.path">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Width" Value="200"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="TextBlock.cfgpath">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#6c7086"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Width" Value="180"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="Border.badge">
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Padding" Value="4,1"/>
+      <Setter Property="Margin" Value="4,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.badge">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.action">
+      <Setter Property="Background" Value="#1e1e2e"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#3b1a1a"/>
+      <Setter Property="Foreground" Value="#f38ba8"/>
+      <Setter Property="BorderBrush" Value="#f38ba8"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+  </UserControl.Styles>
+
+  <StackPanel x:Name="DriveStack" Spacing="4" Margin="12,8"/>
+
+</UserControl>
