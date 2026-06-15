@@ -21,6 +21,9 @@ public partial class ConnBar : UserControl
     /// <summary>Current text of the host input box. Never null — returns empty string.</summary>
     public string HostText => HostBox.Text ?? "";
 
+    /// <summary>Sets the host input box text. Used to restore saved settings on startup.</summary>
+    public void SetHost(string host) => HostBox.Text = host;
+
     // ── Construction ──────────────────────────────────────────────────────
 
     public ConnBar()

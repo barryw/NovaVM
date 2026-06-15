@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private KeySender? _keySender;
     private DebugKeySink? _keySink;
     private bool _minSizeSet;
+    private PanelSettings _settings = new();
 
     // ── Responsive state (test-visible) ──────────────────────────────────
 
@@ -28,6 +29,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        LoadSettings();
         WireEvents();
     }
 
@@ -45,7 +47,46 @@ public partial class MainWindow : Window
 
         // Min-size + initial layout after first layout pass
         LayoutUpdated += OnFirstLayout;
+
+        // Persist on close
+        Closing += (_, _) => SaveSettings();
     }
+
+    // ── Settings persistence ──────────────────────────────────────────────
+
+    private void LoadSettings()
+    {
+        _settings = PanelSettings.Load();
+
+        // Restore host (skip if empty — leave ConnBar default intact)
+        if (!string.IsNullOrWhiteSpace(_settings.Host))
+            Conn.SetHost(_settings.Host);
+
+        // Restore window bounds; clamping to minimums happens after first layout
+        // (MinWidth/MinHeight are set by SetMinimumSize which runs on LayoutUpdated).
+        // Store the desired size so OnFirstLayout can apply them after minimums are known.
+        _pendingWidth = _settings.Width > 0 ? _settings.Width : null;
+        _pendingHeight = _settings.Height > 0 ? _settings.Height : null;
+        _pendingX = _settings.X;
+        _pendingY = _settings.Y;
+    }
+
+    private void SaveSettings()
+    {
+        _settings.Host = Conn.HostText;
+        _settings.Width = Bounds.Width;
+        _settings.Height = Bounds.Height;
+        var pos = Position;
+        _settings.X = pos.X;
+        _settings.Y = pos.Y;
+        _settings.Save();
+    }
+
+    // Deferred bounds from settings (applied after min-size is known)
+    private double? _pendingWidth;
+    private double? _pendingHeight;
+    private double? _pendingX;
+    private double? _pendingY;
 
     // ── Responsive layout ─────────────────────────────────────────────────
 
@@ -85,8 +126,27 @@ public partial class MainWindow : Window
 
         SetMinimumSize();
 
+        // Apply saved bounds now that minimums are established
+        ApplySavedBounds();
+
         // Apply initial layout at current window size
         ApplyLayout(Bounds.Width, Bounds.Height);
+    }
+
+    private void ApplySavedBounds()
+    {
+        if (_pendingWidth.HasValue && _pendingHeight.HasValue)
+        {
+            double w = Math.Max(_pendingWidth.Value, MinWidth);
+            double h = Math.Max(_pendingHeight.Value, MinHeight);
+            Width = w;
+            Height = h;
+        }
+
+        if (_pendingX.HasValue && _pendingY.HasValue)
+        {
+            Position = new Avalonia.PixelPoint((int)_pendingX.Value, (int)_pendingY.Value);
+        }
     }
 
     private void SetMinimumSize()
