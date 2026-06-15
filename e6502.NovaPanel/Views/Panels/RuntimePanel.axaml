@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="e6502.NovaPanel.Views.Panels.RuntimePanel"
+             Background="#11111b">
+
+  <UserControl.Styles>
+    <Style Selector="TextBlock.rtname">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="Width" Value="120"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.rtpath">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="Width" Value="180"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.rtmeta">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Foreground" Value="#6c7086"/>
+      <Setter Property="Width" Value="140"/>
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Foreground" Value="#6c7086"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Margin" Value="0,0,4,0"/>
+    </Style>
+    <Style Selector="Button.action">
+      <Setter Property="Background" Value="#1e1e2e"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+    <Style Selector="Button.danger">
+      <Setter Property="Background" Value="#3b1a1a"/>
+      <Setter Property="Foreground" Value="#f38ba8"/>
+      <Setter Property="BorderBrush" Value="#f38ba8"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="6,2"/>
+      <Setter Property="Margin" Value="2,0"/>
+    </Style>
+    <Style Selector="TextBox.add">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontFamily" Value="Monospace"/>
+      <Setter Property="Background" Value="#1e1e2e"/>
+      <Setter Property="Foreground" Value="#cdd6f4"/>
+      <Setter Property="BorderBrush" Value="#45475a"/>
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Add runtime section at bottom -->
+    <Border DockPanel.Dock="Bottom" Background="#181825" Padding="12,8" Margin="0,4,0,0">
+      <StackPanel Spacing="4">
+        <TextBlock Classes="label" Text="Add runtime" FontSize="11" Foreground="#7f849c"/>
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <TextBlock Classes="label" Text="Name"/>
+          <TextBox x:Name="AddNameBox" Classes="add" Width="100" PlaceholderText="name"/>
+          <TextBlock Classes="label" Text="ROM"/>
+          <TextBox x:Name="AddRomBox" Classes="add" Width="160" PlaceholderText="/roms/..."/>
+          <TextBlock Classes="label" Text="Ext ROM"/>
+          <TextBox x:Name="AddExtRomBox" Classes="add" Width="130" PlaceholderText="(optional)"/>
+          <CheckBox x:Name="MakeActiveCheck" Content="Make active" FontSize="11" Foreground="#cdd6f4"/>
+          <Button x:Name="AddBtn" Classes="action" Content="Add"/>
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <!-- Runtime list -->
+    <ScrollViewer>
+      <StackPanel x:Name="RuntimeStack" Spacing="4" Margin="12,8"/>
+    </ScrollViewer>
+  </DockPanel>
+
+</UserControl>

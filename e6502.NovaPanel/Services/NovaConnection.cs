@@ -154,6 +154,13 @@ public sealed class NovaConnection : IAsyncDisposable
         catch { return new JsonArray(); }
     }
 
+    public async Task<byte[]?> ReadFileAsync(string path, CancellationToken ct = default)
+    {
+        if (_mgmt is null) return null;
+        try { return await _mgmt.ReadFileAsync(path, ct); }
+        catch { return null; }
+    }
+
     public async Task<(bool ok, string? error)> UploadFileAsync(string localPath, string destSdPath, IProgress<long>? progress = null, CancellationToken ct = default)
     {
         if (_mgmt is null) return (false, "not connected");

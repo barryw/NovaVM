@@ -70,4 +70,45 @@ public class PanelTests
         w.Show();
         Assert.Equal(0, p.DiskRowCount);
     }
+
+    [AvaloniaFact]
+    public void RuntimePanel_lists_runtimes()
+    {
+        var p = new RuntimePanel();
+        var w = new Window { Content = p };
+        w.Show();
+        var status = NovaStatusParser.Parse(new System.Text.Json.Nodes.JsonObject
+        {
+            ["drives"] = new System.Text.Json.Nodes.JsonArray(),
+            ["bootConfig"] = new System.Text.Json.Nodes.JsonObject
+            {
+                ["vm"] = new System.Text.Json.Nodes.JsonObject { ["defaultRuntime"] = "novabasic" },
+                ["languages"] = new System.Text.Json.Nodes.JsonObject
+                {
+                    ["novabasic"] = new System.Text.Json.Nodes.JsonObject { ["rom"] = "/roms/nb.bin", ["extensionRom"] = "", ["autoboot"] = true },
+                    ["novaforth"] = new System.Text.Json.Nodes.JsonObject { ["rom"] = "/roms/nf.bin", ["extensionRom"] = "", ["autoboot"] = false }
+                }
+            }
+        });
+        p.Update(status);
+        Assert.Equal(2, p.RuntimeRowCount);
+    }
+
+    [AvaloniaFact]
+    public void LibraryPanel_constructs_empty()
+    {
+        var p = new LibraryPanel();
+        var w = new Window { Content = p };
+        w.Show();
+        Assert.Equal(0, p.LibraryRowCount);
+    }
+
+    [AvaloniaFact]
+    public void ModulesPanel_constructs_empty()
+    {
+        var p = new ModulesPanel();
+        var w = new Window { Content = p };
+        w.Show();
+        Assert.Equal(0, p.ModuleRowCount);
+    }
 }
