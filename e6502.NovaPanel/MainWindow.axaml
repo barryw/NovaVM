@@ -1,8 +1,60 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:panels="clr-namespace:e6502.NovaPanel.Views.Panels"
+        xmlns:views="clr-namespace:e6502.NovaPanel.Views"
         x:Class="e6502.NovaPanel.MainWindow"
-        Title="NovaPanel" Width="900" Height="360"
-        Background="#101014">
-  <TextBlock Text="NovaPanel" Foreground="White"
-             HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        Title="NovaPanel"
+        Background="#101014"
+        MinWidth="600" MinHeight="240">
+
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+    </Grid.RowDefinitions>
+
+    <!-- Row 0: connection bar -->
+    <panels:ConnBar x:Name="Conn" Grid.Row="0"/>
+
+    <!-- Row 1: body -->
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- Rail: col 0, rows 0-1 -->
+      <ScrollViewer x:Name="Rail"
+                    Grid.Column="0" Grid.Row="0" Grid.RowSpan="2"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled"
+                    Width="260">
+        <StackPanel Spacing="0">
+          <panels:StatusPanel x:Name="StatusPanelCtrl"/>
+          <panels:DrivesPanel x:Name="DrivesPanelCtrl"/>
+          <panels:RuntimePanel x:Name="RuntimePanelCtrl"/>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- Center: keyboard, col 1 row 0 -->
+      <views:KeyboardView x:Name="Keyboard" Grid.Column="1" Grid.Row="0"/>
+
+      <!-- Bottom: disk images / library / modules, col 1 row 1 -->
+      <ScrollViewer x:Name="Bottom"
+                    Grid.Column="1" Grid.Row="1"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Disabled"
+                    Height="220">
+        <StackPanel Orientation="Horizontal" Spacing="0">
+          <panels:DiskImagesPanel x:Name="DiskImagesPanelCtrl" Width="320"/>
+          <panels:LibraryPanel x:Name="LibraryPanelCtrl" Width="320"/>
+          <panels:ModulesPanel x:Name="ModulesPanelCtrl" Width="320"/>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
 </Window>
