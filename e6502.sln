@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.NovaHost", "e6502.Nov
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.NovaPanel.Tests", "e6502.NovaPanel.Tests\e6502.NovaPanel.Tests.csproj", "{0C0D3C88-432D-49B9-860D-47F52C6441C5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "e6502.NovaPanel", "e6502.NovaPanel\e6502.NovaPanel.csproj", "{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -193,6 +195,18 @@ Global
 		{0C0D3C88-432D-49B9-860D-47F52C6441C5}.Release|x64.Build.0 = Release|Any CPU
 		{0C0D3C88-432D-49B9-860D-47F52C6441C5}.Release|x86.ActiveCfg = Release|Any CPU
 		{0C0D3C88-432D-49B9-860D-47F52C6441C5}.Release|x86.Build.0 = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|x64.Build.0 = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Debug|x86.Build.0 = Debug|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|x64.ActiveCfg = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|x64.Build.0 = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|x86.ActiveCfg = Release|Any CPU
+		{D36B4CFE-9FEA-44C4-9FE2-544C20C14E71}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

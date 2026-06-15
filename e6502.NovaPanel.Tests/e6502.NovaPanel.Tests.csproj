@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\e6502.NovaHost\e6502.NovaHost.csproj" />
+    <ProjectReference Include="..\e6502.NovaPanel\e6502.NovaPanel.csproj" />
   </ItemGroup>
 
 </Project>
