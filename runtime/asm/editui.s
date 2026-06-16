@@ -219,10 +219,9 @@ editui_print_ptr:
       STA   VTEXT_CURX
       LDA   EDITUI_PRINTY
       STA   VTEXT_CURY
-      JSR   vtext_set_cursor
       LDA   EDITUI_PRINTL
       LDY   EDITUI_PRINTH
-      JMP   vtext_puts
+      JMP   vtext_print_at
 
 editui_print_marked:
       LDA   EDITUI_PRINTL

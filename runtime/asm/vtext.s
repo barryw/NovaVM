@@ -25,6 +25,8 @@ VTEXT_FLAGS:      .res 1
 VTEXT_TOPROW:     .res 1       ; visible-row -> physical-row base
 VTEXT_SCROLL_TOP: .res 1       ; first visible row affected by VTEXT_TOPROW
 VTEXT_SCROLL_ROWS:.res 1       ; 0 means full-screen ring
+VTEXT_SCROLL_HOOKL:.res 1      ; optional automatic-scroll replacement
+VTEXT_SCROLL_HOOKH:.res 1
 VTEXT_TABLEL:     .res 1
 VTEXT_TABLEH:     .res 1
 VTEXT_REGION_ID:  .res 1
@@ -50,9 +52,12 @@ VTEXT_RUNLEN:     .res 1
       .export vtext_put_char
       .export vtext_put_run
       .export vtext_puts
+      .export vtext_print_at
       .export vtext_put_hex_nibble
       .export vtext_put_hex_byte
       .export vtext_newline
+      .export vtext_set_scroll_hook
+      .export vtext_clear_scroll_hook
       .export vtext_clear_region
       .export vtext_fill_style_region
       .export vtext_expose_gfx_spaces_region
@@ -499,6 +504,28 @@ vtext_puts:
 @done:
       RTS
 
+; @label VTEXT.PRINT_AT
+; @kind routine
+; @symbol vtext_print_at
+; @summary Position the cursor at VTEXT_CURX,VTEXT_CURY in the current region,
+;          then print a NUL-terminated string there (region-aware via vtext_puts).
+;          The reusable "print string at (x,y)" primitive for the editor UI,
+;          dialogs, and applications.
+; @in A: string pointer low byte.
+; @in Y: string pointer high byte.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR
+; @out A: 0 on success, 1 if the cursor was outside the region (nothing printed).
+vtext_print_at:
+      STA   VTEXT_STRL            ; hold the pointer across set_cursor (clobbers A)
+      STY   VTEXT_STRH
+      JSR   vtext_set_cursor
+      BNE   @pa_done
+      LDA   VTEXT_STRL
+      LDY   VTEXT_STRH
+      JMP   vtext_puts
+@pa_done:
+      RTS
+
 ; @label VTEXT.PUT_RUN
 ; @kind routine
 ; @symbol vtext_put_run
@@ -641,7 +668,7 @@ vtext_advance_line:
       LDA   VTEXT_FLAGS
       AND   #VTEXT_FLAG_SCROLL
       BEQ   @clamp
-      JSR   vtext_scroll_up
+      JSR   vtext_scroll_region
       BNE   @done
 @clamp:
       LDA   VTEXT_HEIGHT
@@ -652,6 +679,40 @@ vtext_advance_line:
       JMP   vtext_set_cursor
 @done:
       RTS
+
+; @label VTEXT.CLEAR_SCROLL_HOOK
+; @kind routine
+; @symbol vtext_clear_scroll_hook
+; @summary Restore default text-only automatic scrolling.
+; @out A: 0.
+vtext_clear_scroll_hook:
+      LDA   #$00
+      TAY
+
+; @label VTEXT.SET_SCROLL_HOOK
+; @kind routine
+; @symbol vtext_set_scroll_hook
+; @summary Install an automatic-scroll hook for the current process.
+; @in A: Low byte of hook address.
+; @in Y: High byte of hook address.
+; @out A: 0.
+; @details The hook is called instead of vtext_scroll_up when VTEXT newline
+;          handling scrolls a region. Hooks must scroll the current text
+;          planes themselves and return VTEXT_OK/VTEXT_ERR in A. This is for
+;          mixed text/graphics apps that need to batch all visible planes from
+;          one VTEXT-owned scroll event.
+vtext_set_scroll_hook:
+      STA   VTEXT_SCROLL_HOOKL
+      STY   VTEXT_SCROLL_HOOKH
+      JMP   vtext_ok
+
+vtext_scroll_region:
+      LDA   VTEXT_SCROLL_HOOKL
+      ORA   VTEXT_SCROLL_HOOKH
+      BEQ   @default
+      JMP   (VTEXT_SCROLL_HOOKL)
+@default:
+      JMP   vtext_scroll_up
 
 ; ---------------------------------------------------------------------
 ; Clears and scrolling

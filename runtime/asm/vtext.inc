@@ -12,6 +12,11 @@
 ;   Cell attrs:  VTEXT_COLOR (packed bg/fg), VTEXT_ATTR (style bits)
 ;   Character:   VTEXT_CHAR input byte
 ;   Flags:       VTEXT_FLAGS state byte (wrap/scroll)
+;   Scroll hook: optional subroutine pointer installed with
+;                vtext_set_scroll_hook. When nonzero, VTEXT calls it instead
+;                of vtext_scroll_up for automatic region scrolls. The hook is
+;                responsible for scrolling the current text planes too; this
+;                lets mixed text/graphics apps batch all visible planes.
 ;
 ; Routines return A=0 on success and A=1 on error. X/Y are scratch unless a
 ; routine explicitly documents otherwise.
@@ -55,6 +60,8 @@ VTEXT_ERR = $01
 .global VTEXT_TOPROW
 .global VTEXT_SCROLL_TOP
 .global VTEXT_SCROLL_ROWS
+.global VTEXT_SCROLL_HOOKL
+.global VTEXT_SCROLL_HOOKH
 
 ; Optional region-table ABI. Callers own the table storage and set these state
 ; bytes before define/select/store.
@@ -85,9 +92,12 @@ VTEXT_REGION_SIZE = 10
 .global vtext_put_char
 .global vtext_put_run
 .global vtext_puts
+.global vtext_print_at
 .global vtext_put_hex_nibble
 .global vtext_put_hex_byte
 .global vtext_newline
+.global vtext_set_scroll_hook
+.global vtext_clear_scroll_hook
 .global vtext_clear_region
 .global vtext_fill_style_region
 .global vtext_expose_gfx_spaces_region
