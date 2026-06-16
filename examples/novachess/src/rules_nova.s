@@ -5,7 +5,7 @@
 ; the runtime can call the shared rules surface without caring which image is
 ; resident.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .export nova_chess_engine_start
 .export nova_chess_init_piece_lists

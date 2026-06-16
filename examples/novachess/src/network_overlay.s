@@ -1,6 +1,6 @@
 ; Nova Chess network-mode overlay.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "nchess_net.inc"
 .include "engine_labels.inc"

@@ -105,4 +105,11 @@ VTEXT_REGION_SIZE = 10
 .global vtext_scroll_up
 .global vtext_wait_blitter
 
+; Internal region-addressing helper and its zero-page output, exposed so
+; separately-linked consumers (nui save/restore-under) can compute and read a
+; region's VRAM address. Not part of the stable text-output ABI.
+.global vtext_calc_region_addr
+.globalzp VTEXT_ADDRL
+.globalzp VTEXT_ADDRH
+
 .endif

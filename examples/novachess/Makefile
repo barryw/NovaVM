@@ -1,5 +1,6 @@
 CA65 ?= ca65
 LD65 ?= ld65
+AR65 ?= ar65
 DOTNET ?= dotnet
 PYTHON ?= python3
 CA65FLAGS ?=
@@ -40,6 +41,9 @@ ENGINE_CA65FLAGS ?=
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/novachess.bin
 RUNTIME_SYM := $(BUILD_DIR)/runtime.sym
+NOVA_LIB_FILE := $(BUILD_DIR)/nova.lib
+NUI_LIB_OBJS := $(BUILD_DIR)/nui_state.o $(BUILD_DIR)/nui_dialog.o $(BUILD_DIR)/nui_input.o $(BUILD_DIR)/nui_list.o $(BUILD_DIR)/nui_uisave.o
+NUI_LIB_DEPS := $(NOVA_LIB)/nui.inc $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/nova.inc
 ENGINE := $(BUILD_DIR)/CHESSENG.BIN
 RULES_ENGINE := $(BUILD_DIR)/CHESSRUL.BIN
 SPLASH_NVG := $(BUILD_DIR)/SPLASH.NVG
@@ -71,29 +75,39 @@ RULES_ENGINE_SOURCES := src/rules_nova.s src/engine_nova.cfg $(ENGINE_VENDOR_SOU
 all: $(AUTOBOOT) $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) check-engine-abi $(RUNTIME) $(ENGINE) $(RULES_ENGINE) $(SPLASH_NVG) $(NETWORK_OVERLAY)
 
 $(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR)
-	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
+	$(CA65) $(CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
 	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o
 
-$(RUNTIME): src/runtime.s src/runtime.cfg Pieces.inc $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/overlay.inc $(NOVA_LIB)/overlay.s $(NOVA_LIB)/nvg.inc $(NOVA_LIB)/nvg.s $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s $(NOVA_LIB)/nui.inc $(NOVA_LIB)/nui.s | $(BUILD_DIR)
-	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/runtime.o src/runtime.s
-	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(RUNTIME_SYM) -o $@ $(BUILD_DIR)/runtime.o
+# nova.lib: nui feature-group objects. ld65 links only the objects an app
+# references, so apps that use only the dialog core do not pay ROM for the list
+# picker or save-under objects.
+$(BUILD_DIR)/nui_%.o: $(NOVA_LIB)/nui_%.s $(NUI_LIB_DEPS) | $(BUILD_DIR)
+	$(CA65) $(CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -o $@ $<
+
+$(NOVA_LIB_FILE): $(NUI_LIB_OBJS)
+	rm -f $@
+	$(AR65) r $@ $(NUI_LIB_OBJS)
+
+$(RUNTIME): src/runtime.s src/runtime.cfg Pieces.inc $(ENGINE_LABELS) $(RULES_ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/overlay.inc $(NOVA_LIB)/overlay.s $(NOVA_LIB)/nvg.inc $(NOVA_LIB)/nvg.s $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/tween.inc $(NOVA_LIB)/tween.s $(NOVA_LIB)/nui.inc $(NOVA_LIB_FILE) | $(BUILD_DIR)
+	$(CA65) $(CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/runtime.o src/runtime.s
+	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(RUNTIME_SYM) -o $@ $(BUILD_DIR)/runtime.o $(NOVA_LIB_FILE)
 
 $(NETWORK_KERNEL_LABELS): $(RUNTIME) | $(BUILD_DIR)
 	awk 'BEGIN { map["start_game_screen"]="KERNEL_START_GAME_SCREEN"; map["update_clock"]="KERNEL_UPDATE_CLOCK"; map["set_status_network"]="KERNEL_SET_STATUS_NETWORK"; map["set_status_thinking"]="KERNEL_SET_STATUS_THINKING"; map["set_status_moving"]="KERNEL_SET_STATUS_MOVING"; map["set_status_invalid"]="KERNEL_SET_STATUS_INVALID"; map["wait_demo_frames"]="KERNEL_WAIT_DEMO_FRAMES"; map["prompt_human_move"]="KERNEL_PROMPT_HUMAN_MOVE"; map["commit_current_move"]="KERNEL_COMMIT_CURRENT_MOVE"; map["show_game_result"]="KERNEL_SHOW_GAME_RESULT"; map["input_set_idle_hook"]="KERNEL_INPUT_SET_IDLE_HOOK"; map["input_clear_idle_hook"]="KERNEL_INPUT_CLEAR_IDLE_HOOK"; map["self_from"]="KERNEL_SELF_FROM"; map["self_to"]="KERNEL_SELF_TO"; map["game_state"]="KERNEL_GAME_STATE"; } $$3 ~ /^\./ { sym = substr($$3, 2); if (sym in map) printf "%-36s = $$%s\n", map[sym], $$2; }' "$(RUNTIME_SYM)" > $@
 
 $(NETWORK_OVERLAY_PAYLOAD): src/network_overlay.s src/network_overlay.cfg src/nchess_net.inc src/nchess_net.s $(NETWORK_KERNEL_LABELS) $(ENGINE_LABELS) $(NOVA_LIB)/nova.inc $(NOVA_LIB)/nic.inc $(NOVA_LIB)/nic.s $(NOVA_LIB)/gameserver.inc $(NOVA_LIB)/gameserver.s | $(BUILD_DIR)
-	$(CA65) $(CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -I src -o $(BUILD_DIR)/network_overlay.o src/network_overlay.s
+	$(CA65) $(CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -I src -o $(BUILD_DIR)/network_overlay.o src/network_overlay.s
 	$(LD65) -C src/network_overlay.cfg -m $(BUILD_DIR)/netgame.map -Ln $(NETWORK_OVERLAY_SYM) -o $@ $(BUILD_DIR)/network_overlay.o
 
 $(NETWORK_OVERLAY): $(NETWORK_OVERLAY_PAYLOAD) $(OVERLAY_PACKER)
 	$(DOTNET) run --project $(OVERLAY_PACKER) -- pack-overlay --input "$(NETWORK_OVERLAY_PAYLOAD)" --output "$@" --load 0x6000 --max-size 0x3000 --sym "$(NETWORK_OVERLAY_SYM)" --main network_overlay_main --unload network_overlay_unload --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(NETWORK_OVERLAY_SYM)")" --module-id 2 --module-version 1
 
 $(ENGINE): $(ENGINE_SOURCES) | $(BUILD_DIR)
-	$(CA65) $(ENGINE_CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/engine_nova.o src/engine_nova.s
+	$(CA65) $(ENGINE_CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/engine_nova.o src/engine_nova.s
 	$(LD65) -C src/engine_nova.cfg -m $(BUILD_DIR)/engine_nova.map -Ln $(BUILD_DIR)/engine_nova.sym -o $@ $(BUILD_DIR)/engine_nova.o
 
 $(RULES_ENGINE): $(RULES_ENGINE_SOURCES) | $(BUILD_DIR)
-	$(CA65) $(ENGINE_CA65FLAGS) --cpu 65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/rules_nova.o src/rules_nova.s
+	$(CA65) $(ENGINE_CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/rules_nova.o src/rules_nova.s
 	$(LD65) -C src/engine_nova.cfg -m $(BUILD_DIR)/rules_nova.map -Ln $(BUILD_DIR)/rules_nova.sym -o $@ $(BUILD_DIR)/rules_nova.o
 
 $(SPLASH_NVG): $(SPLASH_SOURCE) $(SPLASH_SCRIPT) | $(BUILD_DIR)

@@ -3,7 +3,7 @@
 ; The UI runtime lives in the $C000 runtime ROM. This image is loaded from disk
 ; into CPU RAM at $4000 and exposes the engine's Chess* public API labels there.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .export nova_chess_engine_start
 .export nova_chess_init_piece_lists

@@ -4,7 +4,7 @@
 ; Nova Chess runtime ROM into the primary $C000 bank, then jumps through that
 ; runtime's reset vector.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "fio.inc"
 

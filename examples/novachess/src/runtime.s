@@ -4,7 +4,7 @@
 ; blitter-backed virtual sprites for chess pieces. The engine will be linked
 ; behind this runtime boundary once the shared chess engine API stabilizes.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "vsprite.inc"
 .include "vtext.inc"
@@ -1745,25 +1745,13 @@ expand_label_row:
 
 ; A/Y = pointer to null-terminated string. text_x/text_y choose the cursor.
 print_at:
-        STA msg_ptr
-        STY msg_ptr + 1
+        PHA                     ; hold string ptr low across text_x/text_y stores
         LDA text_x
         STA VTEXT_CURX
         LDA text_y
         STA VTEXT_CURY
-        JSR vtext_set_cursor
-@loop:
-        LDY #$00
-        LDA (msg_ptr),Y
-        BEQ @done
-        STA VTEXT_CHAR
-        JSR vtext_put_char
-        INC msg_ptr
-        BNE @loop
-        INC msg_ptr + 1
-        BRA @loop
-@done:
-        RTS
+        PLA                     ; A/Y = string ptr again
+        JMP vtext_print_at      ; sets cursor at CURX/CURY, prints region-aware
 
 load_engine_for_mode:
         JSR input_clear_idle_hook
@@ -3871,7 +3859,8 @@ glyph_8:
 .include "vtext.s"
 .include "tween.s"
 .include "overlay.s"
-.include "nui.s"
+; nui is linked from nova.lib (feature-group objects); only the dialog core and
+; key input are pulled in, the list picker and save-under objects strip out.
 
 .segment "VECTORS"
         .word reset
