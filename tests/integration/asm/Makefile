@@ -4,7 +4,23 @@ BUILD_DIR ?= /tmp/e6502-asm-fixtures
 FIXTURE_DIR := ../fixtures
 NOVA_LIB := ../../../runtime/asm
 
-all: $(FIXTURE_DIR)/xram_runtime.bin $(FIXTURE_DIR)/vtext_runtime.bin $(FIXTURE_DIR)/audio_runtime.bin $(FIXTURE_DIR)/nic_runtime.bin $(FIXTURE_DIR)/gameserver_runtime.bin $(FIXTURE_DIR)/gameserver_live_runtime.bin $(FIXTURE_DIR)/overlay_runtime.bin
+all: $(FIXTURE_DIR)/xram_runtime.bin $(FIXTURE_DIR)/vtext_runtime.bin $(FIXTURE_DIR)/audio_runtime.bin $(FIXTURE_DIR)/nic_runtime.bin $(FIXTURE_DIR)/gameserver_runtime.bin $(FIXTURE_DIR)/gameserver_live_runtime.bin $(FIXTURE_DIR)/overlay_runtime.bin $(FIXTURE_DIR)/editbuf_runtime.bin $(FIXTURE_DIR)/vsprite_runtime.bin $(FIXTURE_DIR)/audioload_runtime.bin $(FIXTURE_DIR)/nicdma_runtime.bin
+
+$(FIXTURE_DIR)/nicdma_runtime.bin: nicdma_runtime.s nicdma_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/nic.inc $(NOVA_LIB)/nic.s $(NOVA_LIB)/gameserver.inc $(NOVA_LIB)/gameserver.s | $(BUILD_DIR) $(FIXTURE_DIR)
+	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/nicdma_runtime.o nicdma_runtime.s
+	$(LD65) -C nicdma_runtime.cfg -m $(BUILD_DIR)/nicdma_runtime.map -Ln $(BUILD_DIR)/nicdma_runtime.sym -o $@ $(BUILD_DIR)/nicdma_runtime.o
+
+$(FIXTURE_DIR)/audioload_runtime.bin: audioload_runtime.s audioload_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/audio.inc $(NOVA_LIB)/audio.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR) $(FIXTURE_DIR)
+	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/audioload_runtime.o audioload_runtime.s
+	$(LD65) -C audioload_runtime.cfg -m $(BUILD_DIR)/audioload_runtime.map -Ln $(BUILD_DIR)/audioload_runtime.sym -o $@ $(BUILD_DIR)/audioload_runtime.o
+
+$(FIXTURE_DIR)/vsprite_runtime.bin: vsprite_runtime.s vsprite_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/vsprite.inc $(NOVA_LIB)/vsprite.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s | $(BUILD_DIR) $(FIXTURE_DIR)
+	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/vsprite_runtime.o vsprite_runtime.s
+	$(LD65) -C vsprite_runtime.cfg -m $(BUILD_DIR)/vsprite_runtime.map -Ln $(BUILD_DIR)/vsprite_runtime.sym -o $@ $(BUILD_DIR)/vsprite_runtime.o
+
+$(FIXTURE_DIR)/editbuf_runtime.bin: editbuf_runtime.s editbuf_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/editbuf.inc $(NOVA_LIB)/editbuf.s $(NOVA_LIB)/editui.inc $(NOVA_LIB)/editui.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s | $(BUILD_DIR) $(FIXTURE_DIR)
+	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/editbuf_runtime.o editbuf_runtime.s
+	$(LD65) -C editbuf_runtime.cfg -m $(BUILD_DIR)/editbuf_runtime.map -Ln $(BUILD_DIR)/editbuf_runtime.sym -o $@ $(BUILD_DIR)/editbuf_runtime.o
 
 $(FIXTURE_DIR)/xram_runtime.bin: xram_runtime.s xram_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/dma.inc $(NOVA_LIB)/dma.s $(NOVA_LIB)/xram.s $(NOVA_LIB)/xram.inc | $(BUILD_DIR) $(FIXTURE_DIR)
 	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/xram_runtime.o xram_runtime.s

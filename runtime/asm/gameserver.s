@@ -588,6 +588,12 @@ ngs_send_current:
       JSR   ngs_wait_command_clear
       LDA   NGS_RESULT
       BNE   @done
+      LDA   NIC_DMAERR            ; a range/busy DMA fault sent no bytes
+      BEQ   @sent
+      LDA   #NGS_ERR
+      STA   NGS_RESULT
+      BRA   @done
+@sent:
       JSR   ngs_keepalive_reset
 @done:
       LDA   NGS_RESULT
@@ -613,6 +619,12 @@ ngs_recv_current:
       JSR   ngs_wait_command_clear
       LDA   NGS_RESULT
       BNE   @done
+      LDA   NIC_DMAERR            ; a range/busy DMA fault received no bytes
+      BEQ   @received
+      LDA   #NGS_ERR
+      STA   NGS_RESULT
+      BRA   @done
+@received:
       JSR   nic_length
       STA   NGS_LAST_LEN
       JMP   ngs_parse_envelope

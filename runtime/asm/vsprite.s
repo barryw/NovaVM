@@ -872,6 +872,9 @@ vsprite_scene_calc_work_addr:
       LDA   VSPRITE_Y
       SEC
       SBC   VSPRITE_SCENE_Y
+      BCS   @row_have             ; no borrow: VSPRITE_Y >= VSPRITE_SCENE_Y
+      LDA   #$00                  ; sprite above dirty-rect top: clamp delta to 0
+@row_have:                        ; so it stays in the work buffer (no 256-row walk)
       TAX
       BEQ   @add_x
 @row_loop:

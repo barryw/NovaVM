@@ -1080,6 +1080,23 @@ editbuf_cut:
       LDA   EDITBUF_SELACT
       BEQ   @done
       JSR   editbuf_copy
+      ; Cut must remove exactly what reached the clipboard. editbuf_copy
+      ; normalized the selection (EB_SELSTART*) and clamped EDITBUF_CLIPLEN* to
+      ; the clipboard cap; re-anchor the selection to [start, start+cliplen) so a
+      ; selection larger than the cap is not deleted beyond what paste restores.
+      LDA   EB_SELSTARTL
+      STA   EB_SELL
+      LDA   EB_SELSTARTH
+      STA   EB_SELH
+      CLC
+      LDA   EB_SELSTARTL
+      ADC   EDITBUF_CLIPLENL
+      STA   EDITBUF_CURL
+      LDA   EB_SELSTARTH
+      ADC   EDITBUF_CLIPLENH
+      STA   EDITBUF_CURH
+      LDA   #1
+      STA   EDITBUF_SELACT
       JSR   editbuf_delete_selection
       JMP   editbuf_after_change
 @done:
@@ -2472,28 +2489,36 @@ editbuf_parse_goto_line:
       SEC
       SBC   #'0'
       STA   EB_STATUS_DIGIT
-      LDA   EB_SCRATCHH
-      BNE   @next
-      LDA   EB_SCRATCHL
-      CMP   #26
-      BCS   @saturate
-      CMP   #25
-      BNE   @mul
-      LDA   EB_STATUS_DIGIT
-      CMP   #6
-      BCS   @saturate
-
-@mul:
-      LDA   EB_SCRATCHL
-      ASL   A
+      ; EB_SCRATCH = EB_SCRATCH * 10 + digit, full 16-bit, saturating at $FFFF.
+      LDA   EB_SCRATCHL          ; EB_T0:EB_T1 = SCRATCH (the *1 term)
       STA   EB_T0
-      ASL   A
-      ASL   A
-      CLC
+      LDA   EB_SCRATCHH
+      STA   EB_T1
+      ASL   EB_SCRATCHL          ; SCRATCH *= 2
+      ROL   EB_SCRATCHH
+      BCS   @saturate
+      ASL   EB_SCRATCHL          ; SCRATCH *= 4
+      ROL   EB_SCRATCHH
+      BCS   @saturate
+      CLC                        ; SCRATCH = *4 + *1 = *5
+      LDA   EB_SCRATCHL
       ADC   EB_T0
-      CLC
+      STA   EB_SCRATCHL
+      LDA   EB_SCRATCHH
+      ADC   EB_T1
+      STA   EB_SCRATCHH
+      BCS   @saturate
+      ASL   EB_SCRATCHL          ; SCRATCH = *5 * 2 = *10
+      ROL   EB_SCRATCHH
+      BCS   @saturate
+      CLC                        ; SCRATCH += digit
+      LDA   EB_SCRATCHL
       ADC   EB_STATUS_DIGIT
       STA   EB_SCRATCHL
+      LDA   EB_SCRATCHH
+      ADC   #0
+      STA   EB_SCRATCHH
+      BCS   @saturate
       BRA   @next
 @saturate:
       LDA   #$FF
@@ -2503,10 +2528,13 @@ editbuf_parse_goto_line:
       INX
       BRA   @loop
 @done:
-      LDA   EB_SCRATCHH
-      BNE   @valid
+      LDA   EB_SCRATCHL          ; 1-based input -> 0-based index (16-bit decrement)
+      ORA   EB_SCRATCHH
+      BEQ   @valid               ; 0 stays 0
       LDA   EB_SCRATCHL
-      BEQ   @valid
+      BNE   @no_borrow
+      DEC   EB_SCRATCHH
+@no_borrow:
       DEC   EB_SCRATCHL
 @valid:
       SEC

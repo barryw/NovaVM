@@ -573,6 +573,7 @@ audio_sidplay:
       LDA   #FIO_CMD_SIDPLAY
       JSR   fio_exec
       BNE   @done
+      JSR   audio_wait_loading
       CLI                     ; playback needs timer IRQs active
 @done:
       RTS
@@ -600,7 +601,11 @@ audio_sidstop:
 .if AUDIO_EMIT_ALL .OR .referenced(audio_midplay)
 audio_midplay:
       LDA   #FIO_CMD_MIDPLAY
-      JMP   fio_exec
+      JSR   fio_exec
+      BNE   @done
+      JSR   audio_wait_loading
+@done:
+      RTS
 .endif
 
 ; @label AUDIO.MIDSTOP
@@ -625,7 +630,38 @@ audio_midstop:
 .if AUDIO_EMIT_ALL .OR .referenced(audio_sfload)
 audio_sfload:
       LDA   #FIO_CMD_SFLOAD
-      JMP   fio_exec
+      JSR   fio_exec
+      BNE   @done
+      JSR   audio_wait_loading
+@done:
+      RTS
+.endif
+
+; @label AUDIO.WAIT_LOADING
+; @kind routine
+; @symbol audio_wait_loading
+; @summary Block until a host SID/MIDI/soundfont asset finishes loading by
+;          polling MUSIC_STATUS AUDIO_STATUS_LOADING. Bounded (65536 polls) so a
+;          host that never clears the bit cannot wedge the CPU.
+; @out A: 0 once loading cleared (nonzero only on the safety timeout).
+.if AUDIO_EMIT_ALL .OR .referenced(audio_wait_loading)
+audio_wait_loading:
+      PHX
+      PHY
+      LDX   #$00
+      LDY   #$00
+@poll:
+      LDA   MUSIC_STATUS
+      AND   #AUDIO_STATUS_LOADING
+      BEQ   @done
+      INX
+      BNE   @poll
+      INY
+      BNE   @poll
+@done:
+      PLY
+      PLX
+      RTS
 .endif
 
 .if AUDIO_POINTER_FILE_HELPERS
