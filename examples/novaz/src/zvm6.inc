@@ -32,7 +32,9 @@ NZ6_OP_PRE_NEWLINE_SCROLL = $0B ; ROM-only id: a newline is about to scroll
                                 ; the live text window; scroll the matching
                                 ; gfx rect first so the split MCGA-style
                                 ; framebuffer moves as one surface.
-; Ids $0C-$1F are reserved for future VAR-op routing; EXT ids start at $20
+NZ6_OP_RESTORE_DISPLAY = $0C ; overlay-only id: rebuild the retained V6
+                             ; graphics plane after save restore.
+; Ids $0D-$1F are reserved for future VAR-op routing; EXT ids start at $20
 ; so the two ranges can never collide.
 NZ6_EXT_BASE        = $20    ; ext dispatch id = NZ6_EXT_BASE + ext opnum
 NZ6_EXT_COUNT       = 30     ; ext opnums 0-29; nz6_ext_table length asserted
@@ -40,6 +42,16 @@ NZ6_EXT_COUNT       = 30     ; ext opnums 0-29; nz6_ext_table length asserted
 NZ6_BASE            = $2000  ; segment load address (magic word lives here)
 NZ6_ENTRY           = $2002  ; ROM calls JMP/JSR here with A = dispatch id
 NZ6_SIZE            = $2000  ; fixed image size (novaz6.cfg fills to 8KB)
+NZ6_STATE_BASE      = $4000  ; RAM-resident V6 segment BSS base
+NZ6_STATE_SIZE      = $0800  ; full BSS reservation from novaz6.cfg
+NZ6_SAVE_DISPLAY_STATE_BASE = $4000 ; V6 window table/current colour. This is
+                                    ; semantic interpreter state: after restore,
+                                    ; the next text output must land in the same
+                                    ; live window that the story had selected.
+NZ6_SAVE_DISPLAY_STATE_SIZE = $0110
+NZ6_SAVE_GFX_STATE_BASE = $4136     ; retained native-picture replay state.
+NZ6_SAVE_GFX_STATE_SIZE = $0545
+NZ6_SAVE_STATE_SIZE = NZ6_SAVE_DISPLAY_STATE_SIZE + NZ6_SAVE_GFX_STATE_SIZE
 NZ6_MAGIC0          = 'N'
 NZ6_MAGIC1          = '6'
 

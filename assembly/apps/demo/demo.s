@@ -3,7 +3,7 @@
 ; Loads the keyboard visualizer overlay at $9000.
 ;
 ; Load address: $7200   Invoke: SYS $7200
-; Assembler:    ca65 --cpu 65c02
+; Assembler:    ca65 --cpu w65c02
 ; Linker:       ld65 -C demo.cfg
 
 .include "novavm.inc"

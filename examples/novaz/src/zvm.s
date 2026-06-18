@@ -11,6 +11,7 @@
 .include "zvm6.inc"
 .include "vtext.inc"
 .include "xram.inc"
+.include "overlay.inc"
 
 .ifndef NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED
 NOVA_NOVAZ_ZVM_IMPLEMENTATION_INCLUDED = 1
@@ -38,8 +39,8 @@ NZ_BLEEP_DURATION = 10         ; ~1/6 s at 60 Hz
 NZ_BLEEP_INSTR    = 0          ; default SID instrument slot
 
 ZVM_SAVE_HEADER_SIZE       = $40
-ZVM_SAVE_PREFIX_SIZE       = $08
-ZVM_SAVE_FORMAT_VERSION    = $02
+ZVM_SAVE_PREFIX_SIZE       = $06
+ZVM_SAVE_FORMAT_VERSION    = $03
 ZVM_SAVE_STATE_ADDRL       = ZVM_SAVE_HEADER_SIZE
 ZVM_SAVE_STATE_ADDRM       = $00
 ZVM_COLOR_NORMAL           = $0C
@@ -51,28 +52,42 @@ ZVM_SAVE_MAGIC0            = $00
 ZVM_SAVE_MAGIC1            = $01
 ZVM_SAVE_MAGIC2            = $02
 ZVM_SAVE_MAGIC3            = $03
-ZVM_SAVE_FORMAT            = $04
-ZVM_SAVE_HDR_SIZE          = $05
-ZVM_SAVE_STATE_SIZE_LO     = $06
-ZVM_SAVE_STATE_SIZE_HI     = $07
-ZVM_SAVE_DYNAMIC_SIZE_LO   = $08
-ZVM_SAVE_DYNAMIC_SIZE_HI   = $09
-ZVM_SAVE_STORY_VERSION     = $0A
-ZVM_SAVE_RELEASE_HI        = $0B
-ZVM_SAVE_RELEASE_LO        = $0C
-ZVM_SAVE_SERIAL            = $0D
-ZVM_SAVE_CHECKSUM_HI       = $13
-ZVM_SAVE_CHECKSUM_LO       = $14
-ZVM_SAVE_BRANCH_IF         = $15
-ZVM_SAVE_BRANCH_OFF_H      = $16
-ZVM_SAVE_BRANCH_OFF_L      = $17
-ZVM_SAVE_PC_B              = $18
-ZVM_SAVE_PC_H              = $19
-ZVM_SAVE_PC_L              = $1A
-ZVM_SAVE_RETURN_KIND       = $1B
-ZVM_SAVE_STORE_VAR         = $1C
+ZVM_SAVE_HDR_SIZE          = $04
+ZVM_SAVE_FORMAT            = $05
+ZVM_SAVE_FLAGS             = $06
+ZVM_SAVE_DESC_LEN          = $07
+ZVM_SAVE_DESC              = $08
+ZVM_SAVE_DESC_MAX          = $14
+ZVM_SAVE_TIMESTAMP         = $1C
+ZVM_SAVE_STORY_VERSION     = $22
+ZVM_SAVE_RELEASE_HI        = $23
+ZVM_SAVE_RELEASE_LO        = $24
+ZVM_SAVE_SERIAL            = $25
+ZVM_SAVE_CHECKSUM_HI       = $2B
+ZVM_SAVE_CHECKSUM_LO       = $2C
+ZVM_SAVE_DYNAMIC_SIZE_LO   = $2D
+ZVM_SAVE_DYNAMIC_SIZE_HI   = $2E
+ZVM_SAVE_STATE_SIZE_LO     = $2F
+ZVM_SAVE_STATE_SIZE_HI     = $30
+ZVM_SAVE_DYNAMIC_OFFSET_L  = $31
+ZVM_SAVE_DYNAMIC_OFFSET_M  = $32
+ZVM_SAVE_DYNAMIC_OFFSET_H  = $33
+ZVM_SAVE_STATE_OFFSET_L    = $34
+ZVM_SAVE_STATE_OFFSET_M    = $35
+ZVM_SAVE_STATE_OFFSET_H    = $36
+ZVM_SAVE_RETURN_KIND       = $37
+ZVM_SAVE_STORE_VAR         = $38
+ZVM_SAVE_BRANCH_IF         = $39
+ZVM_SAVE_BRANCH_OFF_H      = $3A
+ZVM_SAVE_BRANCH_OFF_L      = $3B
+ZVM_SAVE_PC_B              = $3C
+ZVM_SAVE_PC_H              = $3D
+ZVM_SAVE_PC_L              = $3E
 ZVM_SAVE_RETURN_BRANCH     = $00
 ZVM_SAVE_RETURN_STORE      = $01
+ZVM_SAVE_DESC_DEFAULT_LEN  = $0A
+ZVM_SAVE_OVERLAY_LOAD      = $4800
+ZVM_SAVE_OVERLAY_MAX       = $2800
 
 .segment "ZEROPAGE"
 
@@ -225,9 +240,9 @@ ZVM_SAVE_STATE_SIZE = zvm_state_end - zvm_state_start
 ZVM_SAVE_TOTAL_SIZE = ZVM_SAVE_HEADER_SIZE + ZVM_SAVE_STATE_SIZE
 
 zvm_save_header:      .res ZVM_SAVE_HEADER_SIZE
-zvm_save_scratch_base_l: .res 1
-zvm_save_scratch_base_m: .res 1
-zvm_save_scratch_base_h: .res 1
+zvm_save_slot:        .res 1
+zvm_save_overlay_mode:.res 1
+zvm_save_result:      .res 1
 
 .segment "CODE"
 
@@ -253,6 +268,7 @@ zvm_save_scratch_base_h: .res 1
 .export zvm_read_key_loop
 .export zvm_read_char_wait
 .export zvm_read_timed_poll
+.export zvm_save_slot
 
 zvm_run_until_read:
         STZ zvm_stop_reason
@@ -274,6 +290,7 @@ zvm_run_until_read:
         STZ zvm_sound_active
         STZ zvm_sound_routine_lo
         STZ zvm_sound_routine_hi
+        JSR vtext_clear_scroll_hook
         LDA #$4D
         STA zvm_rng_lo
         LDA #$21
@@ -1299,7 +1316,7 @@ zvm_save:
         BCS zvm_save_store
         JSR zvm_branch_decode
         STZ zvm_save_return_kind
-        JSR zvm_save_game
+        JSR zvm_save_overlay
         BEQ @ok
         LDA #$00
         JMP zvm_branch_apply
@@ -1312,7 +1329,7 @@ zvm_save_store:
         STA zvm_save_return_kind
         JSR zvm_fetch
         STA zvm_save_store_var
-        JSR zvm_save_game
+        JSR zvm_save_overlay
         BEQ @ok
         STZ zvm_value_lo
         BRA @store
@@ -1328,7 +1345,7 @@ zvm_restore:
         LDA zstory_version
         CMP #$04
         BCS zvm_restore_store
-        JSR zvm_restore_game
+        JSR zvm_restore_overlay
         BEQ @ok
         JMP zvm_branch_false
 @ok:
@@ -1338,7 +1355,7 @@ zvm_restore:
 zvm_restore_store:
         JSR zvm_fetch
         STA zvm_save_store_var
-        JSR zvm_restore_game
+        JSR zvm_restore_overlay
         BEQ zvm_apply_saved_store_return
         STZ zvm_value_lo
         STZ zvm_value_hi
@@ -1421,92 +1438,39 @@ zvm_verify_shift_end:
         ROL zvm_verify_end_h
         RTS
 
-zvm_save_game:
-        JSR zvm_save_dynamic
-        BNE @done
-        JSR zvm_alloc_save_scratch
-        BNE @done
-        JSR zvm_fill_save_header
-        JSR zvm_copy_save_header_to_xram
-        BNE @cleanup
-        JSR zvm_copy_vm_state_to_xram
-        BNE @cleanup
-        JSR zvm_save_state_file
-@cleanup:
-        PHA
-        JSR zvm_free_save_scratch
-        PLA
-@done:
-        RTS
+zvm_save_overlay:
+        STZ zvm_save_overlay_mode
+        BRA zvm_run_save_load_overlay
 
-zvm_restore_game:
-        JSR zvm_alloc_save_scratch
-        BNE @done
-        JSR zvm_load_state_file
-        BNE @cleanup
-
-        LDA XRAM_LENL
-        CMP #<ZVM_SAVE_TOTAL_SIZE
-        BNE @bad
-        LDA XRAM_LENH
-        CMP #>ZVM_SAVE_TOTAL_SIZE
-        BNE @bad
-
-        JSR zvm_copy_save_header_from_xram
-        BNE @cleanup
-        JSR zvm_validate_save_header
-        BNE @bad
-
-        JSR zvm_restore_dynamic
-        BNE @cleanup
-        LDA XRAM_LENL
-        CMP zstory_static_lo
-        BNE @bad
-        LDA XRAM_LENH
-        CMP zstory_static_hi
-        BNE @bad
-
-        JSR zvm_copy_vm_state_from_xram
-        BNE @cleanup
-        JSR zvm_restore_display_after_load
-        LDA zvm_save_header + ZVM_SAVE_BRANCH_IF
-        STA zvm_branch_if
-        LDA zvm_save_header + ZVM_SAVE_BRANCH_OFF_H
-        STA zvm_branch_off_h
-        LDA zvm_save_header + ZVM_SAVE_BRANCH_OFF_L
-        STA zvm_branch_off_l
-        LDA zvm_save_header + ZVM_SAVE_PC_B
-        STA zvm_pc_b
-        LDA zvm_save_header + ZVM_SAVE_PC_H
-        STA zvm_pc_h
-        LDA zvm_save_header + ZVM_SAVE_PC_L
-        STA zvm_pc_l
-        LDA #$00
-        BRA @cleanup
-@bad:
+zvm_restore_overlay:
         LDA #$01
-@cleanup:
-        PHA
-        JSR zvm_free_save_scratch
-        PLA
+        STA zvm_save_overlay_mode
+
+zvm_run_save_load_overlay:
+        LDA #$01
+        STA zvm_save_result
+
+        LDA #<zvm_save_load_overlay_name
+        STA OVL_NAMEPTR_L
+        LDA #>zvm_save_load_overlay_name
+        STA OVL_NAMEPTR_H
+        LDA #zvm_save_load_overlay_name_end - zvm_save_load_overlay_name
+        STA OVL_NAMELEN
+        LDA #<ZVM_SAVE_OVERLAY_LOAD
+        STA OVL_LOADL
+        LDA #>ZVM_SAVE_OVERLAY_LOAD
+        STA OVL_LOADH
+        LDA #<ZVM_SAVE_OVERLAY_MAX
+        STA OVL_MAXLENL
+        LDA #>ZVM_SAVE_OVERLAY_MAX
+        STA OVL_MAXLENH
+        JSR overlay_load_fixed
+        BNE @done
+        JSR overlay_call_main
+        BNE @done
+        LDA zvm_save_result
 @done:
         RTS
-
-zvm_save_dynamic:
-        JSR zvm_use_dynamic_save_name
-        JSR zstory_set_dynamic_xram_origin
-        LDA zstory_static_lo
-        STA XRAM_LENL
-        LDA zstory_static_hi
-        STA XRAM_LENH
-        JMP xram_xsave
-
-zvm_restore_dynamic:
-        JSR zvm_use_dynamic_save_name
-        JSR zstory_set_dynamic_xram_origin
-        STZ XRAM_LENL
-        STZ XRAM_LENH
-        JMP xram_xload
 
 zvm_restore_display_after_load:
         LDA zstory_version
@@ -1516,220 +1480,6 @@ zvm_restore_display_after_load:
 @v4_or_newer:
         JSR zvm_clamp_window_cursors
         JMP zvm_select_active_window
-
-zvm_save_state_file:
-        JSR zvm_use_state_save_name
-        JSR zvm_set_save_scratch_addr
-        LDA #<ZVM_SAVE_TOTAL_SIZE
-        STA XRAM_LENL
-        LDA #>ZVM_SAVE_TOTAL_SIZE
-        STA XRAM_LENH
-        JMP xram_xsave
-
-zvm_load_state_file:
-        JSR zvm_use_state_save_name
-        JSR zvm_set_save_scratch_addr
-        STZ XRAM_LENL
-        STZ XRAM_LENH
-        JMP xram_xload
-
-zvm_copy_save_header_to_xram:
-        JSR zvm_prepare_save_header_copy
-        JMP xram_copy_from_ram
-
-zvm_copy_save_header_from_xram:
-        JSR zvm_prepare_save_header_copy
-        JMP xram_copy_to_ram
-
-zvm_copy_vm_state_to_xram:
-        JSR zvm_prepare_save_state_copy
-        JMP xram_copy_from_ram
-
-zvm_copy_vm_state_from_xram:
-        JSR zvm_prepare_save_state_copy
-        JMP xram_copy_to_ram
-
-zvm_prepare_save_header_copy:
-        JSR zvm_set_save_scratch_addr
-        LDA #<zvm_save_header
-        STA XRAM_RAML
-        LDA #>zvm_save_header
-        STA XRAM_RAMH
-        LDA #<ZVM_SAVE_HEADER_SIZE
-        STA XRAM_LENL
-        LDA #>ZVM_SAVE_HEADER_SIZE
-        STA XRAM_LENH
-        RTS
-
-zvm_prepare_save_state_copy:
-        JSR zvm_set_save_state_addr
-        LDA #<zvm_state_start
-        STA XRAM_RAML
-        LDA #>zvm_state_start
-        STA XRAM_RAMH
-        LDA #<ZVM_SAVE_STATE_SIZE
-        STA XRAM_LENL
-        LDA #>ZVM_SAVE_STATE_SIZE
-        STA XRAM_LENH
-        RTS
-
-zvm_set_save_scratch_addr:
-        LDA zvm_save_scratch_base_l
-        STA XRAM_ADDRL
-        LDA zvm_save_scratch_base_m
-        STA XRAM_ADDRM
-        LDA zvm_save_scratch_base_h
-        STA XRAM_ADDRH
-        RTS
-
-zvm_set_save_state_addr:
-        LDA zvm_save_scratch_base_l
-        CLC
-        ADC #ZVM_SAVE_STATE_ADDRL
-        STA XRAM_ADDRL
-        LDA zvm_save_scratch_base_m
-        ADC #ZVM_SAVE_STATE_ADDRM
-        STA XRAM_ADDRM
-        LDA zvm_save_scratch_base_h
-        ADC #$00
-        STA XRAM_ADDRH
-        RTS
-
-zvm_alloc_save_scratch:
-        LDA #XRAM_NOVAZ_SAVE_L
-        STA zvm_save_scratch_base_l
-        LDA #XRAM_NOVAZ_SAVE_M
-        STA zvm_save_scratch_base_m
-        LDA #XRAM_NOVAZ_SAVE_H
-        STA zvm_save_scratch_base_h
-        LDA #$00
-        RTS
-
-zvm_free_save_scratch:
-        LDA #$00
-        RTS
-
-zvm_use_state_save_name:
-        LDA #<zvm_state_save_name
-        LDY #>zvm_state_save_name
-        JMP zvm_use_save_name
-
-zvm_use_dynamic_save_name:
-        LDA #<zvm_dynamic_save_name
-        LDY #>zvm_dynamic_save_name
-        JMP zvm_use_save_name
-
-zvm_use_story_name:
-        LDA #<zvm_story_name
-        LDY #>zvm_story_name
-        JMP zvm_use_save_name
-
-zvm_use_save_name:
-        STA XRAM_NAMEPTR_L
-        STY XRAM_NAMEPTR_H
-        LDA #$09
-        STA XRAM_NAMELEN
-        RTS
-
-zvm_fill_save_header:
-        LDX #$00
-@clear:
-        STZ zvm_save_header,X
-        INX
-        CPX #ZVM_SAVE_HEADER_SIZE
-        BCC @clear
-
-        LDX #$00
-@prefix:
-        LDA zvm_save_header_prefix,X
-        STA zvm_save_header,X
-        INX
-        CPX #ZVM_SAVE_PREFIX_SIZE
-        BCC @prefix
-
-        LDA zstory_static_lo
-        STA zvm_save_header + ZVM_SAVE_DYNAMIC_SIZE_LO
-        LDA zstory_static_hi
-        STA zvm_save_header + ZVM_SAVE_DYNAMIC_SIZE_HI
-        LDA zstory_version
-        STA zvm_save_header + ZVM_SAVE_STORY_VERSION
-        LDA zstory_release_hi
-        STA zvm_save_header + ZVM_SAVE_RELEASE_HI
-        LDA zstory_release_lo
-        STA zvm_save_header + ZVM_SAVE_RELEASE_LO
-        LDX #$00
-@serial:
-        LDA zstory_serial,X
-        STA zvm_save_header + ZVM_SAVE_SERIAL,X
-        INX
-        CPX #$06
-        BCC @serial
-        LDA zstory_checksum_hi
-        STA zvm_save_header + ZVM_SAVE_CHECKSUM_HI
-        LDA zstory_checksum_lo
-        STA zvm_save_header + ZVM_SAVE_CHECKSUM_LO
-        LDA zvm_branch_if
-        STA zvm_save_header + ZVM_SAVE_BRANCH_IF
-        LDA zvm_branch_off_h
-        STA zvm_save_header + ZVM_SAVE_BRANCH_OFF_H
-        LDA zvm_branch_off_l
-        STA zvm_save_header + ZVM_SAVE_BRANCH_OFF_L
-        LDA zvm_pc_b
-        STA zvm_save_header + ZVM_SAVE_PC_B
-        LDA zvm_pc_h
-        STA zvm_save_header + ZVM_SAVE_PC_H
-        LDA zvm_pc_l
-        STA zvm_save_header + ZVM_SAVE_PC_L
-        LDA zvm_save_return_kind
-        STA zvm_save_header + ZVM_SAVE_RETURN_KIND
-        LDA zvm_save_store_var
-        STA zvm_save_header + ZVM_SAVE_STORE_VAR
-        RTS
-
-zvm_validate_save_header:
-        LDX #$00
-@prefix:
-        LDA zvm_save_header,X
-        CMP zvm_save_header_prefix,X
-        BNE @bad
-        INX
-        CPX #ZVM_SAVE_PREFIX_SIZE
-        BCC @prefix
-
-        LDA zvm_save_header + ZVM_SAVE_DYNAMIC_SIZE_LO
-        CMP zstory_static_lo
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_DYNAMIC_SIZE_HI
-        CMP zstory_static_hi
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_STORY_VERSION
-        CMP zstory_version
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_RELEASE_HI
-        CMP zstory_release_hi
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_RELEASE_LO
-        CMP zstory_release_lo
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_CHECKSUM_HI
-        CMP zstory_checksum_hi
-        BNE @bad
-        LDA zvm_save_header + ZVM_SAVE_CHECKSUM_LO
-        CMP zstory_checksum_lo
-        BNE @bad
-        LDX #$00
-@serial:
-        LDA zvm_save_header + ZVM_SAVE_SERIAL,X
-        CMP zstory_serial,X
-        BNE @bad
-        INX
-        CPX #$06
-        BCC @serial
-        LDA #$00
-        RTS
-@bad:
-        LDA #$01
-        RTS
 
 zvm_jz:
         LDA zvm_operand_lo
@@ -5036,18 +4786,9 @@ msg_unsupported_opcode:
         .byte "UNSUPPORTED Z-OPCODE $", 0
 msg_bad_target:
         .byte "BAD Z-PC $", 0
-zvm_state_save_name:
-        .byte "NOVAZ.SAV"
-zvm_state_save_name_end:
-zvm_dynamic_save_name:
-        .byte "NOVAZ.DYN"
-zvm_dynamic_save_name_end:
-zvm_story_name:
-        .byte "story.bin"
-zvm_story_name_end:
-zvm_save_header_prefix:
-        .byte "NZSV", ZVM_SAVE_FORMAT_VERSION, ZVM_SAVE_HEADER_SIZE
-        .byte <ZVM_SAVE_STATE_SIZE, >ZVM_SAVE_STATE_SIZE
+zvm_save_load_overlay_name:
+        .byte "SAVLOAD.OVL"
+zvm_save_load_overlay_name_end:
 zvm_a2_punct_chars:
         .byte ".,!?_#'", $22, "/", $5C, "-:()"
 zvm_a2_punct_count = * - zvm_a2_punct_chars

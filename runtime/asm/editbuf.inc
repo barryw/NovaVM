@@ -107,7 +107,7 @@ EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
 .global EDITBUF_CURH
 
 ; --- HILITE hook scratch (zp pointer + buffers) -------------------------
-.global EDITBUF_HL_PTR        ; zp, 2 bytes
+.globalzp EDITBUF_HL_PTR      ; zp, 2 bytes
 .global EDITBUF_HL_LEN
 .global EDITBUF_HL_COLORS     ; 80-byte color buffer
 

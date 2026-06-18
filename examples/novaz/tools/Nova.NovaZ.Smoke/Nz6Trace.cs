@@ -25,7 +25,8 @@ static class Nz6Trace
     [
         "reset", "split_window", "set_window", "erase_window",
         "set_cursor", "get_cursor", "set_colour", "pull",
-        "select", "set_text_style", "cr_newline"
+        "select", "set_text_style", "cr_newline", "pre_newline_scroll",
+        "restore_display"
     ];
 
     // EXT opnum -> name; indices mirror nz6_ext_table in src/zvm6.s.
@@ -63,9 +64,26 @@ static class Nz6Trace
     static int _drawStartUnpackPc = -1;
     static int _drawRts2Pc = -1;
     static int _pagerLoadPc = -1;
+    static int _scrollCompositePc = -1;
+    static int _scrollRowsCompositePc = -1;
+    static int _vtextBltFillPlanePc = -1;
+    static int _vtextBltCopyUpPlanePc = -1;
+    static int _vtextPutCharPc = -1;
+    static int _vtextPutRunPc = -1;
+    static int _vtextClearRegionPc = -1;
+    static int _vtextExposeGfxSpacesRegionPc = -1;
+    static int _vtextClearLinePc = -1;
+    static int _vtextScrollUpPc = -1;
     static int _operandLo;
     static int _operandHi;
     static int _operandCount;
+    static int _vtextLeft = -1;
+    static int _vtextTop = -1;
+    static int _vtextWidth = -1;
+    static int _vtextHeight = -1;
+    static int _vtextCurX = -1;
+    static int _vtextCurY = -1;
+    static int _vtextChar = -1;
     static bool _tracePictures;
     static int _winCurrent = -1;
     static int _picW = -1;
@@ -120,12 +138,29 @@ static class Nz6Trace
         _drawStartUnpackPc = ReadSymbol("novaz6.sym", "@start_unpack") ?? -1;
         _drawRts2Pc = ReadSymbol("novaz6.sym", "@rts2") ?? -1;
         _pagerLoadPc = ReadSymbol("runtime.sym", "pager_load_file_page") ?? -1;
+        _scrollCompositePc = ReadSymbol("novaz6.sym", "nz6_scroll_live_composite") ?? -1;
+        _scrollRowsCompositePc = ReadSymbol("novaz6.sym", "nz6_scroll_live_rows_composite") ?? -1;
+        _vtextBltFillPlanePc = ReadSymbol("runtime.sym", "vtext_blt_fill_plane") ?? -1;
+        _vtextBltCopyUpPlanePc = ReadSymbol("runtime.sym", "vtext_blt_copy_up_plane") ?? -1;
+        _vtextPutCharPc = ReadSymbol("runtime.sym", "vtext_put_char") ?? -1;
+        _vtextPutRunPc = ReadSymbol("runtime.sym", "vtext_put_run") ?? -1;
+        _vtextClearRegionPc = ReadSymbol("runtime.sym", "vtext_clear_region") ?? -1;
+        _vtextExposeGfxSpacesRegionPc = ReadSymbol("runtime.sym", "vtext_expose_gfx_spaces_region") ?? -1;
+        _vtextClearLinePc = ReadSymbol("runtime.sym", "vtext_clear_line") ?? -1;
+        _vtextScrollUpPc = ReadSymbol("runtime.sym", "vtext_scroll_up") ?? -1;
         _operandLo = ReadSymbol("runtime.sym", "zvm_operand_lo")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_lo in build/runtime.sym.");
         _operandHi = ReadSymbol("runtime.sym", "zvm_operand_hi")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_hi in build/runtime.sym.");
         _operandCount = ReadSymbol("runtime.sym", "zvm_operand_count")
             ?? throw new InvalidOperationException("NOVAZ_SMOKE_TRACE_NZ6 requires zvm_operand_count in build/runtime.sym.");
+        _vtextLeft = ReadSymbol("runtime.sym", "VTEXT_LEFT") ?? -1;
+        _vtextTop = ReadSymbol("runtime.sym", "VTEXT_TOP") ?? -1;
+        _vtextWidth = ReadSymbol("runtime.sym", "VTEXT_WIDTH") ?? -1;
+        _vtextHeight = ReadSymbol("runtime.sym", "VTEXT_HEIGHT") ?? -1;
+        _vtextCurX = ReadSymbol("runtime.sym", "VTEXT_CURX") ?? -1;
+        _vtextCurY = ReadSymbol("runtime.sym", "VTEXT_CURY") ?? -1;
+        _vtextChar = ReadSymbol("runtime.sym", "VTEXT_CHAR") ?? -1;
         _tracePictures = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_NZ6_PICS") == "1";
         if (_tracePictures)
             InitPictureTraceSymbols();
@@ -160,6 +195,26 @@ static class Nz6Trace
             LogPictureTrace("draw-start-unpack", bus);
         else if (_tracePictures && pc == _drawRts2Pc)
             LogPictureTrace("draw-rts2", bus);
+        else if (pc == _scrollCompositePc)
+            LogScrollTrace("scroll-hook", bus);
+        else if (pc == _scrollRowsCompositePc)
+            LogScrollTrace("scroll-rows", bus);
+        else if (pc == _vtextBltFillPlanePc)
+            LogVtextBlitTrace("vtext-fill", cpu, bus);
+        else if (pc == _vtextBltCopyUpPlanePc)
+            LogVtextBlitTrace("vtext-copy-up", cpu, bus);
+        else if (pc == _vtextPutCharPc)
+            LogVtextPutCharTrace(cpu, bus);
+        else if (pc == _vtextPutRunPc)
+            LogVtextPutRunTrace(cpu, bus);
+        else if (pc == _vtextClearRegionPc)
+            LogVtextRegionTrace("vtext-clear", bus);
+        else if (pc == _vtextExposeGfxSpacesRegionPc)
+            LogVtextRegionTrace("vtext-expose-spaces", bus);
+        else if (pc == _vtextClearLinePc)
+            LogVtextRegionTrace("vtext-clear-line", bus);
+        else if (pc == _vtextScrollUpPc)
+            LogVtextRegionTrace("vtext-scroll-up", bus);
         else if (pc == _eraseLinePc)
             LogRomOp("erase_line", bus);
         else if (pc == _setTextStylePc)
@@ -214,6 +269,88 @@ static class Nz6Trace
 
     static int ReadOperand(IBusDevice bus, int index) =>
         (bus.Read((ushort)(_operandHi + index)) << 8) | bus.Read((ushort)(_operandLo + index));
+
+    static void LogScrollTrace(string stage, IBusDevice bus)
+    {
+        if (_vtextLeft < 0 || _vtextTop < 0 || _vtextWidth < 0 || _vtextHeight < 0 ||
+            _vtextCurX < 0 || _vtextCurY < 0)
+            return;
+
+        _writer!.WriteLine(
+            $"{_seq++} ** {stage} vtext={bus.Read((ushort)_vtextLeft)},{bus.Read((ushort)_vtextTop)}+" +
+            $"{bus.Read((ushort)_vtextCurX)},{bus.Read((ushort)_vtextCurY)} " +
+            $"size={bus.Read((ushort)_vtextWidth)}x{bus.Read((ushort)_vtextHeight)}");
+    }
+
+    static void LogVtextBlitTrace(string stage, Cpu cpu, IBusDevice bus)
+    {
+        if (_vtextLeft < 0 || _vtextTop < 0 || _vtextWidth < 0 || _vtextHeight < 0 ||
+            _vtextCurX < 0 || _vtextCurY < 0)
+            return;
+
+        CpuState state = cpu.GetState();
+        _writer!.WriteLine(
+            $"{_seq++} ** {stage} A={state.A:X2} X={state.X:X2} " +
+            $"vtext={bus.Read((ushort)_vtextLeft)},{bus.Read((ushort)_vtextTop)}+" +
+            $"{bus.Read((ushort)_vtextCurX)},{bus.Read((ushort)_vtextCurY)} " +
+            $"size={bus.Read((ushort)_vtextWidth)}x{bus.Read((ushort)_vtextHeight)}");
+    }
+
+    static void LogVtextRegionTrace(string stage, IBusDevice bus)
+    {
+        if (_vtextLeft < 0 || _vtextTop < 0 || _vtextWidth < 0 || _vtextHeight < 0 ||
+            _vtextCurX < 0 || _vtextCurY < 0)
+            return;
+
+        _writer!.WriteLine(
+            $"{_seq++} ** {stage} vtext={bus.Read((ushort)_vtextLeft)},{bus.Read((ushort)_vtextTop)}+" +
+            $"{bus.Read((ushort)_vtextCurX)},{bus.Read((ushort)_vtextCurY)} " +
+            $"size={bus.Read((ushort)_vtextWidth)}x{bus.Read((ushort)_vtextHeight)}");
+    }
+
+    static void LogVtextPutCharTrace(Cpu cpu, IBusDevice bus)
+    {
+        if (_vtextChar < 0)
+            return;
+        CpuState state = cpu.GetState();
+        int ch = bus.Read((ushort)_vtextChar);
+        _writer!.WriteLine(
+            $"{_seq++} ** vtext-put-char A={state.A:X2} char={FormatByte(ch)} " +
+            $"vtext={bus.Read((ushort)_vtextLeft)},{bus.Read((ushort)_vtextTop)}+" +
+            $"{bus.Read((ushort)_vtextCurX)},{bus.Read((ushort)_vtextCurY)} " +
+            $"size={bus.Read((ushort)_vtextWidth)}x{bus.Read((ushort)_vtextHeight)}");
+    }
+
+    static void LogVtextPutRunTrace(Cpu cpu, IBusDevice bus)
+    {
+        CpuState state = cpu.GetState();
+        int ptr = state.A | (state.Y << 8);
+        int length = state.X;
+        string sample = ReadAsciiSample(bus, ptr, length, 12);
+        _writer!.WriteLine(
+            $"{_seq++} ** vtext-put-run len={length} sample=\"{sample}\" " +
+            $"vtext={bus.Read((ushort)_vtextLeft)},{bus.Read((ushort)_vtextTop)}+" +
+            $"{bus.Read((ushort)_vtextCurX)},{bus.Read((ushort)_vtextCurY)} " +
+            $"size={bus.Read((ushort)_vtextWidth)}x{bus.Read((ushort)_vtextHeight)}");
+    }
+
+    static string ReadAsciiSample(IBusDevice bus, int address, int length, int maxLength)
+    {
+        int count = Math.Min(length, maxLength);
+        Span<char> chars = stackalloc char[count];
+        for (int i = 0; i < count; i++)
+        {
+            int value = bus.Read((ushort)(address + i));
+            chars[i] = value is >= 0x20 and <= 0x7e ? (char)value : '.';
+        }
+        return new string(chars).Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    static string FormatByte(int value)
+    {
+        char c = value is >= 0x20 and <= 0x7e ? (char)value : '.';
+        return $"${value:X2}('{c}')";
+    }
 
     static void InitPictureTraceSymbols()
     {

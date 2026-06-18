@@ -4,7 +4,7 @@
 ; BASIC SYS. The fixture includes the same runtime/asm/audio.inc/runtime/asm/audio.s library
 ; that standalone assembly programs are expected to reuse.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 FIO_NO_STREAMING = 1
 

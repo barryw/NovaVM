@@ -4,12 +4,12 @@
 ; Collisions are elastic: velocity reflects, but does not decay.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/sprite_balls_asm.o docs/programs/sprite_balls_asm.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/sprite_balls_asm.o docs/programs/sprite_balls_asm.s
 ;   ld65 -C docs/programs/diag9000_4k.cfg -o /tmp/sprite_balls_asm.bin /tmp/sprite_balls_asm.o
 ;
 ; Load at $9000 and run with: SYS $9000
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "nova.inc"
 .include "math_copro.inc"

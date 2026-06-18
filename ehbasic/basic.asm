@@ -9215,11 +9215,8 @@ basic_fio_copy_name:
       LDA   #FIO_RESULT_ERROR
       RTS
 
-; Emit only the shared FIO clear-error helper. The .refto makes the stripped
-; NDK fio.s include materialize fio_clear_error here without pulling in full
-; file I/O, while keeping BASIC a consumer of the shared implementation.
-      .refto fio_clear_error
-      .include "fio.s"
+; fio_clear_error is linked from the NDK archive as its own small object, so
+; BASIC can share the implementation without pulling in full file I/O.
 
 ; basic_lib_zargs — zero all 16 LIB_ARG bytes so unused arg cells read 0.
 ;   (CIRCLE relies on ARG3=0 => ry=rx.) Clobbers A/X.

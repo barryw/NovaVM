@@ -7,15 +7,15 @@ See also: `docs/plans/2026-06-03-paged-library-loader-3b-design.md` (the ABI),
 `docs/plans/2026-06-03-paged-library-loader-3b-impl.md` (the build), and
 `runtime/asm/libabi.inc` (the constants).
 
-## The shelf
+## The Shelf
 
 Library modules are 16 KB binaries (ORG `$C000`, `"NL"` header). At boot, NovaHost streams
 each module from SD into a **fixed XRAM band** — the *shelf* — and the 6502 loader pages the
 active module from there into the bank-1 `ext_rom` BRAM on demand (`$BA76` page-in).
 
-**Option A (current, no Phase-1 dependency):** the shelf is a fixed, 16 KB-slotted band in
-the *unmanaged* high 256 KB of XRAM (the XMC allocator only manages the low 256 KB, so it can
-never hand out or stomp these pages).
+The shelf is platform-owned. Applications and runtimes must not use it as
+scratch memory. If code needs XRAM, request it from the MEMORY module or XMC
+allocator; do not pick a free-looking `$06xxxx` address.
 
 ```
 SHELF_BASE = $060000          ; libabi.inc: SHELF_BASE_H=$06, _M=$00, _L=$00
@@ -27,34 +27,31 @@ slot i     = SHELF_BASE + i * $4000        ; 16 KB per slot, SHELF_SLOT_WORDS = 
   slot 3   $06C000 - $06FFFF
 ```
 
-This band (`$060000-$06FFFF`, 64 KB = 4 slots) is the only permanently-free XRAM region. It
-clears every fixed region (NovaZ `$040000`, NovaZ cache `$050000`, NovaZ-save/EDITUI `$054000`,
-NVG `$070000`, XMC metadata/dir `$07FA00+`). A 5th/6th slot requires reclaiming the `$054000`
-transient band — a later decision.
+This band (`$060000-$06FFFF`, 64 KB = 4 slots) is not app workspace. It is safe
+from the XMC allocator because the allocator owns the low 256 KB heap only, but
+that does not make it available to runtimes.
 
-> The page-in HW smoke (`tools/run-page-in-hardware-smoke.py`) historically staged a test
-> pattern at `$060000` (slot 0). It and the shelf are never live simultaneously, but retarget
-> the smoke if needed.
+## Directory and LRU
 
-## Module-id → slot map (the single source of truth)
+The runtime-owned directory lives in CPU RAM at `$0418-$041F`:
 
-The map lives in two places that **MUST agree**:
-1. `modtab_lookup` in `runtime/asm/libcall.s` (compile-time, what the 6502 loader uses).
-2. NovaHost's boot manifest (firmware, where each `.mod` file is staged in XRAM).
+```
+SHELF_TAG[0..3] = module id in each slot, or 0 for empty
+SHELF_LRU[0..3] = slot indices, most-recently-used first
+```
 
-| id   | module   | slot | base     | phase |
-|------|----------|------|----------|-------|
-| `$7F` | TEST     | 0    | `$060000` | 3b proof |
-| `$01` | GRAPHICS | 0    | `$060000` | Phase 4 (reclaims slot 0 from TEST) |
-| `$02` | SOUND    | 1    | `$064000` | Phase 5 |
-| `$03` | SYSTEM   | 2    | `$068000` | Phase 5 |
+At boot, NovaHost preloads as many modules from `/config/boot.json` as fit in
+the four slots, then writes this directory. On a `lib_call`, the resident loader
+checks `SHELF_TAG`. A hit pages that slot into bank 1 and moves the slot to the
+front of `SHELF_LRU`. A miss asks the host to stream the requested module into
+an empty slot or the least-recently-used slot, then updates the directory.
 
-Keep these in sync, or a page-in loads the wrong bytes — caught at runtime by the loader's
-`"NL"` magic / module-id header check (`LERR_BAD_MAGIC` / `LERR_BAD_MODULE`), not silently.
+The host does not update `SHELF_TAG` or `SHELF_LRU` during a miss. The 6502
+loader owns those bytes.
 
-## Migration to System B (Phase 1)
+## Failure Checks
 
-When the 512 KB XRAM directory allocator lands, the shelf becomes a normal `XALLOC` and the
-loader fills `modtab` by directory lookup (by module name) at boot; the fixed slots become
-visible reserved-at-address directory entries. `lib_call` does not change — `modtab` is the
-abstraction that hides constants-vs-directory.
+After paging, the loader validates the module header. Wrong bytes in a shelf
+slot produce `LERR_BAD_MAGIC`; the wrong module id produces `LERR_BAD_MODULE`.
+Those errors usually mean a runtime wrote into `$060000-$06FFFF` or the SD
+module image is stale.

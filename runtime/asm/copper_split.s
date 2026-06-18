@@ -1,8 +1,6 @@
 ; Shared Nova copper split helper routines.
 
 .include "copper_split.inc"
-.include "vgc.s"
-.include "copper.s"
 
 .ifndef COPPER_SPLIT_IMPLEMENTATION_INCLUDED
 COPPER_SPLIT_IMPLEMENTATION_INCLUDED = 1

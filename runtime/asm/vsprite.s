@@ -10,7 +10,7 @@
 ; then repeat at the new position.
 
 .include "vsprite.inc"
-.include "blitter.s"
+.include "blitter.inc"
 
 .ifndef VSPRITE_IMPLEMENTATION_INCLUDED
 VSPRITE_IMPLEMENTATION_INCLUDED = 1
@@ -101,6 +101,7 @@ VSPRITE_DESC_PTR:       .res 2
       .export vsprite_rotate
       .export vsprite_use_original
       .export vsprite_use_rotated
+      .export vsprite_wait_frame
       .export vsprite_scene_begin
       .export vsprite_scene_commit
       .export vsprite_scene_commit_atomic
@@ -475,6 +476,11 @@ vsprite_gfx_blit_rotated:
 vsprite_gfx_rotate_done:
       RTS
 
+; @label VSPRITE.WAIT_FRAME
+; @kind routine
+; @symbol vsprite_wait_frame
+; @summary Wait until the VGC frame counter advances.
+; @out A: Last observed frame counter value.
 vsprite_wait_frame:
       LDA   VGC_FRAME
 @wait:

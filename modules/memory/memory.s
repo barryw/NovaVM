@@ -688,8 +688,8 @@ mem_command_status:
 ; .ifndef guard) and, seeing the implementation present, emits its own body
 ; calling the already-resident xram_xmc_* routines.
 ; ===========================================================================
-      .include "xram.s"
-      .include "xmc.s"
+      .include "xram.inc"
+      .include "xmc.inc"
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000      ; NMI, RESET, IRQ (module runs under SEI)

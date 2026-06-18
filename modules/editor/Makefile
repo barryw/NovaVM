@@ -1,8 +1,12 @@
-CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
+CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
+NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
 
 all: editor.bin editor.nmod
+
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
 editor.o: editor.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libeditor.inc \
@@ -14,8 +18,8 @@ editor.o: editor.s \
             $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s
 	$(CA65) editor.s -o editor.o
 
-editor.bin: editor.o editor.cfg
-	$(LD65) -C editor.cfg -m editor.map -o editor.bin editor.o
+editor.bin: editor.o editor.cfg $(NOVA_LIB_FILE)
+	$(LD65) -C editor.cfg -m editor.map -o editor.bin editor.o $(NOVA_LIB_FILE)
 
 # Self-documenting module: image + NDOC doc (from editor.s ;@ comments, ids
 # resolved from libeditor.inc) -> editor.nmod.
@@ -32,4 +36,6 @@ install: editor.bin
 clean:
 	rm -f editor.o editor.bin editor.map editor.nmod
 
-.PHONY: all clean install
+FORCE:
+
+.PHONY: all clean install FORCE

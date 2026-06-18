@@ -1,8 +1,12 @@
-CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
+CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
+NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
 
 all: system.bin system.nmod
+
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
 system.o: system.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libsystem.inc \
@@ -19,8 +23,8 @@ system.o: system.s \
             $(NOVA_ASM)/runtime_labels.inc
 	$(CA65) system.s -o system.o
 
-system.bin: system.o system.cfg
-	$(LD65) -C system.cfg -m system.map -o system.bin system.o
+system.bin: system.o system.cfg $(NOVA_LIB_FILE)
+	$(LD65) -C system.cfg -m system.map -o system.bin system.o $(NOVA_LIB_FILE)
 
 # The ADDR("LABEL") table is generated from the EhBASIC build (basic.sym). Build it
 # there if missing so `make -C modules/system` works cold (the Avalonia/root build
@@ -45,4 +49,6 @@ install: system.bin
 clean:
 	rm -f system.o system.bin system.map system.nmod
 
-.PHONY: all clean install
+FORCE:
+
+.PHONY: all clean install FORCE

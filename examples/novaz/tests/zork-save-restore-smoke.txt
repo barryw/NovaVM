@@ -2,8 +2,11 @@
 # stack/frame state, and the saved save-branch resume path all came back.
 open mailbox=>reveals a leaflet
 take leaflet=>Taken.
-save=>Ok.
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter=>Ok.
 drop leaflet=>Dropped.
 .reboot
-restore=>Ok.
+!restore=>RESTORE GAME
+.key enter=>Ok.
 inventory=>A leaflet

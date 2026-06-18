@@ -22,6 +22,30 @@ NUI_FOOTERH:        .res 1
 NUI_RESULT:         .res 1
 NUI_PRINT_X:        .res 1
 NUI_TEXT_LEN:       .res 1
+NUI_SAVE_LEFT:      .res 1
+NUI_SAVE_TOP:       .res 1
+NUI_SAVE_WIDTH:     .res 1
+NUI_SAVE_HEIGHT:    .res 1
+NUI_SAVE_VALID:     .res 1
+NUI_SAVE_ADDRL:     .res 4       ; char, color, textattr, gfx XRAM low bytes
+NUI_SAVE_ADDRM:     .res 4       ; char, color, textattr, gfx XRAM mid bytes
+NUI_SAVE_ADDRH:     .res 4       ; char, color, textattr, gfx XRAM high bytes
+NUI_LIST_ITEMSL:    .res 1
+NUI_LIST_ITEMSH:    .res 1
+NUI_LIST_ROW_WIDTH: .res 1
+NUI_LIST_ROW_COUNT: .res 1
+NUI_LIST_SELECTED:  .res 1
+NUI_LIST_FIRST:     .res 1
+NUI_LIST_VISIBLE:   .res 1
+NUI_LIST_INDEX:     .res 1
+NUI_LIST_ROWL:      .res 1
+NUI_LIST_ROWH:      .res 1
+NUI_LIST_TMP:       .res 1
+NUI_STYLE_SHADOW:   .res 1
+NUI_STYLE_BORDER:   .res 1
+NUI_STYLE_PANEL:    .res 1
+NUI_STYLE_TEXT:     .res 1
+NUI_STYLE_VALID:    .res 1
 
       .segment "ZEROPAGE"
 
@@ -34,7 +58,13 @@ NUI_PRINTH:         .res 1
       .export nui_show_dialog
       .export nui_show_dialog_wait
       .export nui_show_error
+      .export nui_read_key
       .export nui_wait_key
+      .export nui_save_under
+      .export nui_restore_under
+      .export nui_save_under_full
+      .export nui_restore_under_full
+      .export nui_pick_list
 
 nui_ok:
       STZ   NUI_RESULT
@@ -63,7 +93,28 @@ nui_dialog_defaults:
       STA   NUI_FOOTERL
       LDA   #>nui_footer_any_key
       STA   NUI_FOOTERH
+      JSR   nui_style_defaults
       JMP   nui_ok
+
+nui_style_defaults:
+      LDA   #NUI_COLOR_SHADOW
+      STA   NUI_STYLE_SHADOW
+      LDA   #NUI_COLOR_BORDER
+      STA   NUI_STYLE_BORDER
+      LDA   #NUI_COLOR_PANEL
+      STA   NUI_STYLE_PANEL
+      LDA   #NUI_TEXT_NORMAL
+      STA   NUI_STYLE_TEXT
+      LDA   #$01
+      STA   NUI_STYLE_VALID
+      RTS
+
+nui_ensure_style:
+      LDA   NUI_STYLE_VALID
+      BNE   @done
+      JSR   nui_style_defaults
+@done:
+      RTS
 
 nui_validate_dialog:
       LDA   NUI_DIALOG_WIDTH
@@ -83,6 +134,502 @@ nui_validate_dialog:
       CMP   #VTEXT_SCREEN_ROWS + 1
       BCS   nui_error
       JMP   nui_ok
+
+nui_select_saved_region:
+      LDA   NUI_SAVE_LEFT
+      STA   VTEXT_LEFT
+      LDA   NUI_SAVE_TOP
+      STA   VTEXT_TOP
+      LDA   NUI_SAVE_WIDTH
+      STA   VTEXT_WIDTH
+      LDA   NUI_SAVE_HEIGHT
+      STA   VTEXT_HEIGHT
+      STZ   VTEXT_CURX
+      STZ   VTEXT_CURY
+      JMP   vtext_validate_region
+
+; nui_save_plane — A = VGC plane space, X = saved-plane index (0/1/2).
+; Copies the current VTEXT rectangle into caller-owned XRAM staging.
+nui_save_plane:
+      STA   BLT_SRCSPACE
+      LDA   #BLT_SPACE_XRAM
+      STA   BLT_DSTSPACE
+      LDA   VTEXT_ADDRL
+      STA   BLT_SRCL
+      LDA   VTEXT_ADDRH
+      STA   BLT_SRCM
+      STZ   BLT_SRCH
+      LDA   NUI_SAVE_ADDRL,X
+      STA   BLT_DSTL
+      LDA   NUI_SAVE_ADDRM,X
+      STA   BLT_DSTM
+      LDA   NUI_SAVE_ADDRH,X
+      STA   BLT_DSTH
+      LDA   VTEXT_WIDTH
+      STA   BLT_WIDTHL
+      STZ   BLT_WIDTHH
+      LDA   VTEXT_HEIGHT
+      STA   BLT_HEIGHTL
+      STZ   BLT_HEIGHTH
+      LDA   #<VTEXT_SCREEN_COLS
+      STA   BLT_SRCSTRL
+      LDA   #>VTEXT_SCREEN_COLS
+      STA   BLT_SRCSTRH
+      LDA   VTEXT_WIDTH
+      STA   BLT_DSTSTRL
+      STZ   BLT_DSTSTRH
+      JMP   blitter_start_copy
+
+; nui_restore_plane — A = VGC plane space, X = saved-plane index (0/1/2).
+; Copies caller-owned XRAM staging back over the current VTEXT rectangle.
+nui_restore_plane:
+      STA   BLT_DSTSPACE
+      LDA   #BLT_SPACE_XRAM
+      STA   BLT_SRCSPACE
+      LDA   NUI_SAVE_ADDRL,X
+      STA   BLT_SRCL
+      LDA   NUI_SAVE_ADDRM,X
+      STA   BLT_SRCM
+      LDA   NUI_SAVE_ADDRH,X
+      STA   BLT_SRCH
+      LDA   VTEXT_ADDRL
+      STA   BLT_DSTL
+      LDA   VTEXT_ADDRH
+      STA   BLT_DSTM
+      STZ   BLT_DSTH
+      LDA   VTEXT_WIDTH
+      STA   BLT_WIDTHL
+      STZ   BLT_WIDTHH
+      LDA   VTEXT_HEIGHT
+      STA   BLT_HEIGHTL
+      STZ   BLT_HEIGHTH
+      LDA   VTEXT_WIDTH
+      STA   BLT_SRCSTRL
+      STZ   BLT_SRCSTRH
+      LDA   #<VTEXT_SCREEN_COLS
+      STA   BLT_DSTSTRL
+      LDA   #>VTEXT_SCREEN_COLS
+      STA   BLT_DSTSTRH
+      JMP   blitter_start_copy
+
+; @label NUI.SAVE_UNDER
+; @kind routine
+; @symbol nui_save_under
+; @summary Save the text planes under NUI_SAVE_* into caller-provided XRAM buffers.
+; @requires NUI_SAVE_LEFT NUI_SAVE_TOP NUI_SAVE_WIDTH NUI_SAVE_HEIGHT NUI_SAVE_ADDRL NUI_SAVE_ADDRM NUI_SAVE_ADDRH
+; @out A: 0 on success, 1 on error.
+nui_save_under:
+      STZ   NUI_SAVE_VALID
+      JSR   nui_select_saved_region
+      BNE   @error
+      JSR   vtext_calc_region_addr
+
+      LDX   #0
+      LDA   #BLT_SPACE_VGC_CHAR
+      JSR   nui_save_plane
+      BNE   @error
+      LDX   #1
+      LDA   #BLT_SPACE_VGC_COLOR
+      JSR   nui_save_plane
+      BNE   @error
+      LDX   #2
+      LDA   #BLT_SPACE_VGC_TEXTATTR
+      JSR   nui_save_plane
+      BNE   @error
+
+      LDA   #1
+      STA   NUI_SAVE_VALID
+      JMP   nui_ok
+@error:
+      JMP   nui_error
+
+; @label NUI.RESTORE_UNDER
+; @kind routine
+; @symbol nui_restore_under
+; @summary Restore text planes previously saved by NUI.SAVE_UNDER.
+; @requires NUI_SAVE_LEFT NUI_SAVE_TOP NUI_SAVE_WIDTH NUI_SAVE_HEIGHT NUI_SAVE_ADDRL NUI_SAVE_ADDRM NUI_SAVE_ADDRH
+; @out A: 0 on success, 1 on error.
+nui_restore_under:
+      LDA   NUI_SAVE_VALID
+      BEQ   @error
+      JSR   nui_select_saved_region
+      BNE   @error_clear
+      JSR   vtext_calc_region_addr
+
+      LDX   #0
+      LDA   #BLT_SPACE_VGC_CHAR
+      JSR   nui_restore_plane
+      BNE   @error_clear
+      LDX   #1
+      LDA   #BLT_SPACE_VGC_COLOR
+      JSR   nui_restore_plane
+      BNE   @error_clear
+      LDX   #2
+      LDA   #BLT_SPACE_VGC_TEXTATTR
+      JSR   nui_restore_plane
+      BNE   @error_clear
+
+      STZ   NUI_SAVE_VALID
+      JMP   nui_ok
+@error_clear:
+      STZ   NUI_SAVE_VALID
+@error:
+      JMP   nui_error
+
+; @label NUI.SAVE_UNDER_FULL
+; @kind routine
+; @symbol nui_save_under_full
+; @summary Save the text and graphics planes under NUI_SAVE_* into caller-provided XRAM buffers.
+; @requires NUI_SAVE_LEFT NUI_SAVE_TOP NUI_SAVE_WIDTH NUI_SAVE_HEIGHT NUI_SAVE_ADDRL NUI_SAVE_ADDRM NUI_SAVE_ADDRH
+; @out A: 0 on success, 1 on error.
+nui_save_under_full:
+      JSR   nui_save_under
+      BNE   @error
+      JSR   nui_set_save_gfx_args
+      JSR   vsprite_gfx_save_bg
+      BNE   @error_clear
+      LDA   #1
+      STA   NUI_SAVE_VALID
+      JMP   nui_ok
+@error_clear:
+      STZ   NUI_SAVE_VALID
+@error:
+      JMP   nui_error
+
+; @label NUI.RESTORE_UNDER_FULL
+; @kind routine
+; @symbol nui_restore_under_full
+; @summary Restore text and graphics planes previously saved by NUI.SAVE_UNDER_FULL.
+; @requires NUI_SAVE_LEFT NUI_SAVE_TOP NUI_SAVE_WIDTH NUI_SAVE_HEIGHT NUI_SAVE_ADDRL NUI_SAVE_ADDRM NUI_SAVE_ADDRH
+; @out A: 0 on success, 1 on error.
+nui_restore_under_full:
+      LDA   NUI_SAVE_VALID
+      BEQ   @error
+      JSR   nui_set_save_gfx_args
+      JSR   vsprite_gfx_restore_bg
+      BNE   @error_clear
+      JMP   nui_restore_under
+@error_clear:
+      STZ   NUI_SAVE_VALID
+@error:
+      JMP   nui_error
+
+nui_list_visible_rows:
+      LDA   NUI_DIALOG_HEIGHT
+      CMP   #$07
+      BCC   @error
+      SEC
+      SBC   #$06
+      STA   NUI_LIST_VISIBLE
+      LDA   #NUI_OK
+      RTS
+@error:
+      LDA   #NUI_ERR
+      RTS
+
+nui_validate_list:
+      JSR   nui_validate_dialog
+      BNE   @done
+      LDA   NUI_LIST_ROW_COUNT
+      BEQ   @error
+      LDA   NUI_LIST_ROW_WIDTH
+      BEQ   @error
+      LDA   NUI_DIALOG_WIDTH
+      CMP   #$05
+      BCC   @error
+      SEC
+      SBC   #$04
+      CMP   NUI_LIST_ROW_WIDTH
+      BCC   @error
+      JSR   nui_list_visible_rows
+      BNE   @done
+      LDA   NUI_LIST_SELECTED
+      CMP   NUI_LIST_ROW_COUNT
+      BCC   @selected_ok
+      STZ   NUI_LIST_SELECTED
+@selected_ok:
+      STZ   NUI_LIST_FIRST
+      LDA   #NUI_OK
+      RTS
+@error:
+      LDA   #NUI_ERR
+@done:
+      RTS
+
+nui_list_ensure_visible:
+      JSR   nui_list_visible_rows
+      BNE   @done
+      LDA   NUI_LIST_SELECTED
+      CMP   NUI_LIST_FIRST
+      BCS   @check_bottom
+      STA   NUI_LIST_FIRST
+      LDA   #NUI_OK
+      RTS
+@check_bottom:
+      LDA   NUI_LIST_FIRST
+      CLC
+      ADC   NUI_LIST_VISIBLE
+      CMP   NUI_LIST_SELECTED
+      BEQ   @adjust
+      BCS   @ok
+@adjust:
+      LDA   NUI_LIST_SELECTED
+      SEC
+      SBC   NUI_LIST_VISIBLE
+      CLC
+      ADC   #$01
+      STA   NUI_LIST_FIRST
+@ok:
+      LDA   #NUI_OK
+@done:
+      RTS
+
+nui_list_row_ptr:
+      STA   NUI_LIST_TMP
+      LDA   NUI_LIST_ITEMSL
+      STA   NUI_LIST_ROWL
+      LDA   NUI_LIST_ITEMSH
+      STA   NUI_LIST_ROWH
+@loop:
+      LDA   NUI_LIST_TMP
+      BEQ   @done
+      LDA   NUI_LIST_ROWL
+      CLC
+      ADC   NUI_LIST_ROW_WIDTH
+      STA   NUI_LIST_ROWL
+      BCC   @next
+      INC   NUI_LIST_ROWH
+@next:
+      DEC   NUI_LIST_TMP
+      BRA   @loop
+@done:
+      RTS
+
+nui_list_clear_area:
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #$02
+      STA   VTEXT_LEFT
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      STA   VTEXT_TOP
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #$04
+      STA   VTEXT_WIDTH
+      LDA   NUI_LIST_VISIBLE
+      STA   VTEXT_HEIGHT
+      STZ   VTEXT_CURX
+      STZ   VTEXT_CURY
+      LDA   NUI_STYLE_TEXT
+      STA   VTEXT_COLOR
+      STZ   VTEXT_ATTR
+      STZ   VTEXT_FLAGS
+      JMP   vtext_clear_region
+
+nui_list_print_row:
+      JSR   nui_set_screen_text
+      LDA   NUI_STYLE_TEXT
+      STA   VTEXT_COLOR
+      STZ   VTEXT_ATTR
+      LDA   NUI_LIST_FIRST
+      CLC
+      ADC   NUI_LIST_INDEX
+      CMP   NUI_LIST_SELECTED
+      BNE   @normal
+      LDA   #VTEXT_ATTR_REVERSE
+      STA   VTEXT_ATTR
+@normal:
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #$02
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      CLC
+      ADC   NUI_LIST_INDEX
+      STA   VTEXT_CURY
+      LDA   NUI_LIST_ROWL
+      LDY   NUI_LIST_ROWH
+      LDX   NUI_LIST_ROW_WIDTH
+      JMP   vtext_put_run
+
+nui_list_render:
+      JSR   nui_list_visible_rows
+      BNE   @done
+      JSR   nui_list_clear_area
+      BNE   @done
+      JSR   nui_list_clear_spacer
+      BNE   @done
+      STZ   NUI_LIST_INDEX
+@loop:
+      LDA   NUI_LIST_INDEX
+      CMP   NUI_LIST_VISIBLE
+      BCS   @ok
+      LDA   NUI_LIST_FIRST
+      CLC
+      ADC   NUI_LIST_INDEX
+      CMP   NUI_LIST_ROW_COUNT
+      BCS   @ok
+      PHA
+      JSR   nui_list_row_ptr
+      PLA
+      JSR   nui_list_print_row
+      BNE   @done
+      INC   NUI_LIST_INDEX
+      BRA   @loop
+@ok:
+      LDA   #NUI_OK
+@done:
+      RTS
+
+nui_list_clear_spacer:
+      JSR   nui_set_screen_text
+      STZ   VTEXT_ATTR
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #$02
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      CLC
+      ADC   NUI_LIST_VISIBLE
+      STA   VTEXT_CURY
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #$04
+      TAX
+      LDA   #<nui_space_row
+      LDY   #>nui_space_row
+      JMP   vtext_put_run
+
+nui_read_key_wait_byte:
+      LDY   #$20
+@outer:
+      LDX   #$FF
+@inner:
+      LDA   VGC_CHARIN
+      BNE   @done
+      DEX
+      BNE   @inner
+      DEY
+      BNE   @outer
+      LDA   #$00
+@done:
+      RTS
+
+nui_read_key:
+@loop:
+      LDA   VGC_CHARIN
+      BEQ   @loop
+      CMP   #NUI_KEY_ESCAPE
+      BEQ   @escape
+      RTS
+@escape:
+      JSR   nui_read_key_wait_byte
+      BEQ   @plain_escape
+      CMP   #'['
+      BEQ   @csi
+      CMP   #'O'
+      BEQ   @csi
+@plain_escape:
+      LDA   #NUI_KEY_ESCAPE
+      RTS
+@csi:
+      JSR   nui_read_key_wait_byte
+      BEQ   @plain_escape
+      CMP   #'A'
+      BEQ   @ansi_up
+      CMP   #'a'
+      BEQ   @ansi_up
+      CMP   #'B'
+      BEQ   @ansi_down
+      CMP   #'b'
+      BEQ   @ansi_down
+      CMP   #'C'
+      BEQ   @ansi_right
+      CMP   #'c'
+      BEQ   @ansi_right
+      CMP   #'D'
+      BEQ   @ansi_left
+      CMP   #'d'
+      BEQ   @ansi_left
+      BRA   @plain_escape
+@ansi_up:
+      LDA   #NUI_KEY_UP
+      RTS
+@ansi_down:
+      LDA   #NUI_KEY_DOWN
+      RTS
+@ansi_right:
+      LDA   #NUI_KEY_RIGHT
+      RTS
+@ansi_left:
+      LDA   #NUI_KEY_LEFT
+      RTS
+
+; @label NUI.PICK_LIST
+; @kind routine
+; @symbol nui_pick_list
+; @summary Draw an interactive fixed-width list picker and return OK or Cancel.
+; @requires NUI_DIALOG_* NUI_TITLEL/H NUI_FOOTERL/H NUI_LIST_ITEMSL/H NUI_LIST_ROW_WIDTH NUI_LIST_ROW_COUNT NUI_LIST_SELECTED
+; @out A: 0 on success, 1 on error. NUI_RESULT = OK/CANCEL; NUI_LIST_SELECTED = selected row.
+nui_pick_list:
+      JSR   nui_validate_list
+      BNE   @error
+      JSR   nui_show_dialog
+      BNE   @error
+      JSR   nui_list_ensure_visible
+      BNE   @error
+      JSR   nui_list_render
+      BNE   @error
+@key:
+      JSR   nui_read_key
+      CMP   #NUI_KEY_ENTER
+      BEQ   @ok
+      CMP   #NUI_KEY_ESCAPE
+      BEQ   @cancel
+      CMP   #NUI_KEY_UP
+      BEQ   @up
+      CMP   #NUI_KEY_DOWN
+      BEQ   @down
+      BRA   @key
+@up:
+      LDA   NUI_LIST_SELECTED
+      BEQ   @key
+      DEC   NUI_LIST_SELECTED
+      JSR   nui_list_ensure_visible
+      BNE   @error
+      JSR   nui_list_render
+      BNE   @error
+      BRA   @key
+@down:
+      LDA   NUI_LIST_SELECTED
+      CLC
+      ADC   #$01
+      CMP   NUI_LIST_ROW_COUNT
+      BCS   @key
+      STA   NUI_LIST_SELECTED
+      JSR   nui_list_ensure_visible
+      BNE   @error
+      JSR   nui_list_render
+      BNE   @error
+      BRA   @key
+@ok:
+      LDA   #NUI_RESULT_OK
+      STA   NUI_RESULT
+      LDA   #NUI_OK
+      RTS
+@cancel:
+      LDA   #NUI_RESULT_CANCEL
+      STA   NUI_RESULT
+      LDA   #NUI_OK
+      RTS
+@error:
+      JMP   nui_error
 
 nui_set_x_pixels:
       STZ   VSPRITE_XH
@@ -125,19 +672,34 @@ nui_set_dialog_rect_pixels:
       LDA   NUI_DIALOG_HEIGHT
       JMP   nui_set_height_pixels
 
+nui_set_save_gfx_args:
+      LDA   NUI_SAVE_LEFT
+      JSR   nui_set_x_pixels
+      LDA   NUI_SAVE_TOP
+      JSR   nui_set_y_pixels
+      LDA   NUI_SAVE_WIDTH
+      JSR   nui_set_width_pixels
+      LDA   NUI_SAVE_HEIGHT
+      JSR   nui_set_height_pixels
+      LDA   #BLT_SPACE_XRAM
+      STA   VSPRITE_BGSPACE
+      LDA   NUI_SAVE_ADDRL+3
+      STA   VSPRITE_BGADDRL
+      LDA   NUI_SAVE_ADDRM+3
+      STA   VSPRITE_BGADDRM
+      LDA   NUI_SAVE_ADDRH+3
+      STA   VSPRITE_BGADDRH
+      LDA   VSPRITE_WIDTHL
+      STA   VSPRITE_BGSTRL
+      LDA   VSPRITE_WIDTHH
+      STA   VSPRITE_BGSTRH
+      RTS
+
 nui_inc_x_pixel:
       INC   VSPRITE_XL
       BNE   @done
       INC   VSPRITE_XH
 @done:
-      RTS
-
-nui_dec_width_pixel:
-      LDA   VSPRITE_WIDTHL
-      BNE   @dec_low
-      DEC   VSPRITE_WIDTHH
-@dec_low:
-      DEC   VSPRITE_WIDTHL
       RTS
 
 nui_fill_dialog_rect:
@@ -151,7 +713,7 @@ nui_fill_dialog_rect:
       JMP   vsprite_gfx_fill
 
 nui_draw_chrome:
-      LDA   #NUI_COLOR_SHADOW
+      LDA   NUI_STYLE_SHADOW
       STA   VSPRITE_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
       JSR   nui_inc_x_pixel
@@ -160,20 +722,25 @@ nui_draw_chrome:
       INC   VSPRITE_Y
       JSR   vsprite_gfx_fill
 
-      LDA   #NUI_COLOR_BORDER
+      LDA   NUI_STYLE_PANEL
       STA   VSPRITE_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
       JSR   vsprite_gfx_fill
 
-      LDA   #NUI_COLOR_PANEL
+      LDA   NUI_STYLE_BORDER
       STA   VSPRITE_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
-      JSR   nui_inc_x_pixel
-      INC   VSPRITE_Y
-      JSR   nui_dec_width_pixel
-      JSR   nui_dec_width_pixel
-      DEC   VSPRITE_HEIGHTL
-      DEC   VSPRITE_HEIGHTL
+      LDA   #$02
+      STA   VSPRITE_HEIGHTL
+      STZ   VSPRITE_HEIGHTH
+      JSR   vsprite_gfx_fill
+
+      LDA   NUI_STYLE_BORDER
+      STA   VSPRITE_FILLVALUE
+      JSR   nui_set_dialog_rect_pixels
+      LDA   #$02
+      STA   VSPRITE_WIDTHL
+      STZ   VSPRITE_WIDTHH
       JMP   vsprite_gfx_fill
 
 nui_clear_text_region:
@@ -185,9 +752,64 @@ nui_clear_text_region:
       STA   VTEXT_WIDTH
       LDA   NUI_DIALOG_HEIGHT
       STA   VTEXT_HEIGHT
+      JSR   nui_clear_text_style_region
+      BNE   @done
+
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      CMP   #VTEXT_SCREEN_COLS
+      BCS   @bottom
+      STA   VTEXT_LEFT
+      LDA   NUI_DIALOG_TOP
+      STA   VTEXT_TOP
+      LDA   #$01
+      STA   VTEXT_WIDTH
+      LDA   NUI_DIALOG_HEIGHT
+      STA   VTEXT_HEIGHT
+      JSR   nui_clear_transparent_text_region
+      BNE   @done
+
+@bottom:
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   NUI_DIALOG_HEIGHT
+      CMP   #VTEXT_SCREEN_ROWS
+      BCS   @ok
+      STA   VTEXT_TOP
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_LEFT
+      LDA   NUI_DIALOG_WIDTH
+      STA   VTEXT_WIDTH
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      CMP   #VTEXT_SCREEN_COLS
+      BCS   :+
+      INC   VTEXT_WIDTH
+:
+      LDA   #$01
+      STA   VTEXT_HEIGHT
+      JMP   nui_clear_transparent_text_region
+@ok:
+      LDA   #NUI_OK
+@done:
+      RTS
+
+nui_clear_text_style_region:
       STZ   VTEXT_CURX
       STZ   VTEXT_CURY
-      LDA   #NUI_TEXT_NORMAL
+      LDA   NUI_STYLE_TEXT
+      STA   VTEXT_COLOR
+      STZ   VTEXT_ATTR
+      STZ   VTEXT_FLAGS
+      JMP   vtext_clear_region
+
+nui_clear_transparent_text_region:
+      STZ   VTEXT_CURX
+      STZ   VTEXT_CURY
+      LDA   NUI_STYLE_TEXT
+      AND   #$0F
       STA   VTEXT_COLOR
       STZ   VTEXT_ATTR
       STZ   VTEXT_FLAGS
@@ -200,7 +822,7 @@ nui_set_screen_text:
       STA   VTEXT_WIDTH
       LDA   #VTEXT_SCREEN_ROWS
       STA   VTEXT_HEIGHT
-      LDA   #NUI_TEXT_NORMAL
+      LDA   NUI_STYLE_TEXT
       STA   VTEXT_COLOR
       STZ   VTEXT_ATTR
       STZ   VTEXT_FLAGS
@@ -339,6 +961,7 @@ nui_print_footer:
 nui_show_dialog:
       JSR   nui_validate_dialog
       BNE   @done
+      JSR   nui_ensure_style
       JSR   nui_draw_chrome
       JSR   nui_clear_text_region
       JSR   nui_print_title
@@ -377,14 +1000,9 @@ nui_show_error:
 ; @symbol nui_wait_key
 ; @summary Wait for one keyboard byte and return it in A.
 nui_wait_key:
-@drain:
-      LDA   VGC_CHARIN
-      BNE   @drain
       LDA   #$01
       STA   VGC_CURSEN
-@loop:
-      LDA   VGC_CHARIN
-      BEQ   @loop
+      JSR   nui_read_key
       PHA
       STZ   VGC_CURSEN
       PLA
@@ -392,5 +1010,8 @@ nui_wait_key:
 
 nui_footer_any_key:
       .byte "PRESS ANY KEY", 0
+
+nui_space_row:
+      .byte "                                                                                "
 
 .endif

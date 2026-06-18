@@ -1,4 +1,4 @@
-CA65=ca65 --cpu 65c02 -I ../../runtime/asm
+CA65=ca65 --cpu w65c02 -I ../../runtime/asm
 LD65=ld65
 all: testmod.bin testmod.nmod libcall.bin
 testmod.o: testmod.s ../../runtime/asm/libabi.inc ../../runtime/asm/libmod.inc

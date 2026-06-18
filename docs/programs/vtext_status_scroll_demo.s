@@ -3,10 +3,10 @@
 ; Demonstrates a fixed inverse status line with a scrolling text region below.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/vtext_demo.o docs/programs/vtext_status_scroll_demo.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/vtext_demo.o docs/programs/vtext_status_scroll_demo.s
 ;   ld65 -C docs/programs/diag9000.cfg -o /tmp/vtext_demo.bin /tmp/vtext_demo.o
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "vtext.inc"
 

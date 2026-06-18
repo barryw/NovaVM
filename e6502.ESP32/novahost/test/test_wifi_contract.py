@@ -538,6 +538,17 @@ def test_fio_sd_dispatch_contract() -> None:
         "ESP low-level FILE handles report 24-bit counts": "uint32_t result_size24() const" in header
         and "void FioDispatcher::write_size24" in dispatcher
         and "SetTransferSize24" in controller,
+        "low-level FILE target bits match across host implementations": "FioFileTargetMask  = 0x30" in constants
+        and "FioFileTargetXram  = 0x10" in constants
+        and "FIO_FILE_TARGET_MASK  = $30" in nova_inc
+        and "FIO_FILE_TARGET_XRAM  = $10" in nova_inc
+        and "FILE_TARGET_MASK = 0x30" in header
+        and "FILE_TARGET_XRAM = 0x10" in header,
+        "low-level FILE handles can stream directly to XRAM": "FioFileTargetXram" in controller
+        and "_xramWrite(dest + i" in controller
+        and "_xramRead!(src + i)" in controller
+        and "_bridge.pokeSdramStream(dest + off" in dispatcher
+        and "_bridge.readSdramBlock(src_addr + off" in dispatcher,
         "NDI and host dispatch tag Forth source files": "FT_FORTH = 6" in ndi_image
         and 'strcasecmp(ext, ".4th")' in dispatcher
         and "FioDirTypeForth  = 0x06" in constants,
@@ -672,12 +683,15 @@ def test_runtime_autoboot_contract() -> None:
     novaz_auto = read("examples/novaz/src/autoboot.s")
     novaz_runtime = read("examples/novaz/src/runtime.s")
     novaz_zstory = read("examples/novaz/src/zstory.s")
+    novaz_zstory_inc = read("examples/novaz/src/zstory.inc")
     novaz_zvm6_inc = read("examples/novaz/src/zvm6.inc")
     novaz_zvm6 = read("examples/novaz/src/zvm6.s")
+    novaz_save_load = read("examples/novaz/src/save_load_overlay.s")
     nvg_runtime = read("runtime/asm/nvg.s")
     nvg_inc = read("runtime/asm/nvg.inc")
     vgc_palette_inc = read("runtime/asm/vgc_palette.inc")
     vgc_palette = read("runtime/asm/vgc_palette.s")
+    libabi_inc = read("runtime/asm/libabi.inc")
     xram_inc = read("runtime/asm/xram.inc")
     type_text = debug.split("void DebugServer::cmdTypeText", 1)[1]
     type_text = type_text.split("void DebugServer::cmdReadScreen", 1)[0]
@@ -745,10 +759,11 @@ def test_runtime_autoboot_contract() -> None:
         and "JSR   vgc_set_palette_custom_xram" in nvg_runtime
         and "STA   VGC_PALDATA" not in nvg_runtime
         and "STA   VGC_PALETTE" not in nvg_runtime,
-        "shared XRAM layout reserves non-overlapping runtime workspaces": "XRAM_USER_HEAP_PAGES = 1024" in xram_inc
-        and "XRAM_NOVAZ_DYNAMIC_H = $04" in xram_inc
-        and "XRAM_NOVAZ_CACHE_H   = $05" in xram_inc
-        and "XRAM_NOVAZ_SAVE_M    = $40" in xram_inc
+        "shared XRAM layout keeps app allocations off the library shelf": "XRAM_USER_HEAP_PAGES = 1024" in xram_inc
+        and "xmc_alloc_block / MEM_ALLOC" in xram_inc
+        and "XRAM_NOVAZ_" not in xram_inc
+        and "SHELF_BASE_H     = $06" in libabi_inc
+        and "SHELF_N          = 4" in libabi_inc
         and "XRAM_NVG_STAGE_H     = $07" in xram_inc,
         "emulator command constants match": "FioCmdLoadRuntime = 0x28" in constants
         and "FioCmdRng        = 0x2A" in constants
@@ -845,12 +860,13 @@ def test_runtime_autoboot_contract() -> None:
         "debug text injection normalizes LF to BASIC Enter": "void DebugServer::cmdTypeText" in debug
         and "ch == '\\n'" in debug
         and "ch = '\\r'" in debug,
-        "debug text injection uses acked per-key commands": "void DebugServer::cmdTypeText" in debug
+        "debug text injection uses FIFO-backed bulk key streaming": "void DebugServer::cmdTypeText" in debug
         and "_bridge.sendKeys(chunk, chunkLen)" in type_text
         and "delay(50);" not in type_text
         and "CMD_SEND_KEY" in bridge
-        and "writeBytes(cmd, sizeof(cmd))" in bridge
-        and "CMD_WRITE_KEYS" not in bridge.split("bool FpgaBridge::sendKeys", 1)[1].split("bool FpgaBridge::readScreen", 1)[0],
+        and "CMD_WRITE_KEYS" in bridge.split("bool FpgaBridge::sendKeys", 1)[1].split("bool FpgaBridge::readScreen", 1)[0]
+        and "writeBytesBulk(header, sizeof(header), data + off, chunk)" in bridge
+        and "writeBytes(cmd, sizeof(cmd))" in bridge,
         "unit tests cover boot order": "FindAutoboot_PrefersInsertedFloppyOverHardDrive" in unit_dm
         and "SelectBootDevice_PrefersInsertedFloppyWhenNoAutobootExists" in unit_dm,
         "unit tests cover runtime load command": "LoadRuntime_LoadsExact16KImageIntoPrimaryRuntime" in unit_fio,
@@ -864,11 +880,35 @@ def test_runtime_autoboot_contract() -> None:
         "NovaZ launcher replaces BASIC runtime": "fio_load_runtime" in novaz_auto
         and "STA REG_ROMSWAP" in novaz_auto
         and "JMP ($FFFC)" in novaz_auto,
-        "NovaZ runtime loads story into fixed XRAM workspaces": "JSR zstory_load_default" in novaz_runtime
+        "NovaZ runtime requests XRAM workspaces through the MEMORY service": "JSR zstory_load_default" in novaz_runtime
         and "JMP xram_xload" in novaz_zstory
-        and "JSR zstory_init_fixed_xram_bases" in novaz_zstory
-        and "XRAM_NOVAZ_DYNAMIC_H" in novaz_zstory
-        and "XRAM_NOVAZ_CACHE_H" in novaz_zstory
+        and "JSR zstory_init_xram_workspaces" in novaz_zstory
+        and "MODULE_ID_MEMORY" in novaz_zstory
+        and "MEM_ALLOC" in novaz_zstory
+        and "MEM_RESET_USAGE" in novaz_zstory
+        and "ZSTORY_AUX_ALLOC_HI     = $FF" in novaz_zstory
+        and "XRAM_NOVAZ_" not in novaz_zstory
+        and "zstory_dynamic_base_l" in novaz_zstory
+        and "zstory_cache_base_l" in novaz_zstory
+        and "ZSTORY_AUX_PICS_INDEX_OFF_M" in novaz_zstory_inc
+        and "ZSTORY_AUX_PICS_BOUNCE_OFF_M" in novaz_zstory_inc
+        and "ZSTORY_AUX_PICS_INDEX_OFF_M   = $64" in novaz_zstory_inc
+        and "ZSTORY_AUX_PICS_BOUNCE_OFF_M  = $84" in novaz_zstory_inc
+        and "ZSTORY_AUX_SAVE_CHAR_OFF_M" in novaz_zstory_inc
+        and "ZSTORY_AUX_SAVE_GFX_OFF_M" in novaz_zstory_inc
+        and "SYS_NUI_SAVE_UNDER_FULL" in novaz_save_load
+        and "SYS_NUI_RESTORE_UNDER_FULL" in novaz_save_load
+        and "save_load_copy_header_desc_to_row" in novaz_save_load
+        and "save_load_title_save" in novaz_save_load
+        and "save_load_title_restore" in novaz_save_load
+        and "SAVE / RESTORE" not in novaz_save_load
+        and "SAVE00.NZS       " not in novaz_save_load
+        and "zstory_cache_base_l" in novaz_zvm6
+        and "ZSTORY_AUX_PICS_INDEX_OFF_M" in novaz_zvm6
+        and "ZSTORY_AUX_PICS_BOUNCE_OFF_M - ZSTORY_AUX_PICS_INDEX_OFF_M" in novaz_zvm6
+        and "NZ6_PICS_ALLOC" not in novaz_zvm6
+        and "MEM_ALLOC" not in novaz_zvm6
+        and "LIB_LOADER_BAND" not in novaz_zvm6
         and '.byte "story.bin"' in novaz_zstory,
     }
     for name, ok in checks.items():

@@ -1,6 +1,7 @@
 ; NovaZ Z-story/XRAM interface.
 
 .include "xram.inc"
+.include "libmemory.inc"
 .include "pager.inc"
 .include "zstory.inc"
 
@@ -10,6 +11,10 @@ NOVA_NOVAZ_ZSTORY_IMPLEMENTATION_INCLUDED = 1
 ZSTORY_HEADER_LOAD_LEN = $40
 ZSTORY_PAGE_SIZE_HI    = $04        ; 1024-byte pages.
 ZSTORY_CACHE_SLOTS     = 16
+ZSTORY_DYNAMIC_ALLOC_LO = $FF       ; $FFFF allocates 256 XMC pages = 64KB.
+ZSTORY_DYNAMIC_ALLOC_HI = $FF
+ZSTORY_AUX_ALLOC_LO     = $00
+ZSTORY_AUX_ALLOC_HI     = $FF       ; cache + save-under planes + V6 picture arena.
 
 .segment "ZEROPAGE"
 
@@ -83,10 +88,13 @@ zstory_string_off_h:   .res 1
 .export zstory_write16
 .export zstory_set_dynamic_xram_origin
 
-; Initialize fixed XRAM workspaces and load the default story header.
+; Request XRAM workspaces and load the default story header.
 ; Returns A=0 on success, A=1 on FIO/XRAM error.
 zstory_load_default:
-        JSR zstory_init_fixed_xram_bases
+        JSR zstory_init_xram_workspaces
+        BEQ :+
+        RTS
+:
         JSR zstory_clear_cache
         LDA #<zstory_default_name
         STA XRAM_NAMEPTR_L
@@ -751,19 +759,50 @@ zstory_set_dynamic_xram_addr:
         STA XRAM_ADDRH
         RTS
 
-zstory_init_fixed_xram_bases:
-        LDA #XRAM_NOVAZ_DYNAMIC_L
+zstory_init_xram_workspaces:
+        LDA #MODULE_ID_MEMORY
+        LDX #MEM_RESET_USAGE
+        JSR zstory_memory_call
+        BNE @fail
+        LDA #ZSTORY_DYNAMIC_ALLOC_LO
+        LDX #ZSTORY_DYNAMIC_ALLOC_HI
+        JSR zstory_alloc_xram
+        BNE @fail
+        LDA LIB_RESULT
         STA zstory_dynamic_base_l
-        LDA #XRAM_NOVAZ_DYNAMIC_M
+        LDA LIB_RESULT + 1
         STA zstory_dynamic_base_m
-        LDA #XRAM_NOVAZ_DYNAMIC_H
+        LDA LIB_RESULT + 2
         STA zstory_dynamic_base_h
-        LDA #XRAM_NOVAZ_CACHE_L
+
+        LDA #ZSTORY_AUX_ALLOC_LO
+        LDX #ZSTORY_AUX_ALLOC_HI
+        JSR zstory_alloc_xram
+        BNE @fail
+        LDA LIB_RESULT
         STA zstory_cache_base_l
-        LDA #XRAM_NOVAZ_CACHE_M
-        STA zstory_cache_base_m
-        LDA #XRAM_NOVAZ_CACHE_H
+        LDA LIB_RESULT + 2
         STA zstory_cache_base_h
+        LDA LIB_RESULT + 1
+        STA zstory_cache_base_m
+        LDA #ZSTORY_ERR_NONE
+        RTS
+@fail:
+        LDA #ZSTORY_ERR_IO
+        RTS
+
+zstory_alloc_xram:
+        STA LIB_ARG2
+        STX LIB_ARG2 + 1
+        LDA #MODULE_ID_MEMORY
+        LDX #MEM_ALLOC
+        JMP zstory_memory_call
+
+zstory_memory_call:
+        STA LIB_MOD_ID
+        STX LIB_FN_ID
+        JSR LIB_LOADER_BAND
+        LDA LIB_STATUS
         RTS
 
 zstory_store_release:

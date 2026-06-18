@@ -11,22 +11,17 @@
       .include "libmod.inc"
       .include "libgraphics.inc"
       .include "vgc.inc"               ; nova.inc -> NVR0L/NVR0H ZP scratch + VGC_* regs
-                                       ; (guarded; re-included by vgc.s below)
       .include "vsprite.inc"           ; VSPRITE_* BSS symbols + helper .globals
-                                       ; (guarded; vsprite.s body included below)
       .include "msprite.inc"           ; MSPRITE_* BSS symbols + helper .globals
-                                       ; (guarded; msprite.s body included below;
-                                       ; pulls sprite.inc, dedup'd)
+                                       ; pulls sprite.inc
       .include "nvg.inc"               ; NVG_ADDRL/H + NVG_NAMEPTR/NAMELEN; pulls
                                        ; fio.inc (FIO_GSPACE/GADDRL/H/GLENL/H,
                                        ; FIO_NAME/NAMELEN, FIO_RESULT_OK) + nova.inc
-                                       ; (all guarded; nvg.s + fio.s bodies below)
       .include "anim.inc"              ; ANIM_* BSS symbols + ANIM_RESULT_*/
                                        ; ANIM_INVALID_HANDLE + helper .globals;
-                                       ; pulls dma/msprite/pager/xram.inc (guarded;
-                                       ; anim.s body included below)
+                                       ; pulls dma/msprite/pager/xram.inc
       .include "tween.inc"             ; TWEEN_* BSS symbols + TWEEN_MODE_* consts
-                                       ; + helper .globals (guarded; tween.s below)
+                                       ; + helper .globals
 
 ; Highest implemented fn-id + 1. Grows per domain batch. The draw domain $00-$09
 ; is live; the text/mode domain $10-$1B is live (batch 4b.3); the hw-sprite domain
@@ -2776,44 +2771,18 @@ gfn_tween_step_ease_in_out:
 
       .segment "CODE"
 
-; Shared NDK driver bodies. vgc.s sets its own `.segment "CODE"` and pulls nova.inc
-; (VGC_CMD/VCMD_GCLS) via vgc.inc; co-assembles cleanly under its .ifndef guards.
-; sprite.s provides the hw-sprite command/register/collision driver entries.
-; copper.s adds the copper command/list/add/register-prep entries; copper_split.s
-; adds copper_split_mode (it pulls vgc.s + copper.s, all dedup'd by .ifndef guards).
-; blitter.s + dma.s provide the $BA-range move-engine entries (batch 4b.6); their
-; .inc helpers pull nova.inc for the BLT_*/DMA_* register addresses, dedup'd by
-; the same .ifndef guards.
-      .include "vgc.s"
-      .include "sprite.s"
-      .include "copper.s"
-      .include "copper_split.s"
-      .include "blitter.s"
-      .include "dma.s"
-; vsprite.s provides the virtual-sprite blit/fill/rotate/save-restore-bg/gfx_*
-; + scene-compositor driver entries (batch 4b.7). It .includes blitter.s (already
-; pulled above; dedup'd by the .ifndef guard) and declares the VSPRITE_* state
-; in the module-owned BSS/ZEROPAGE bands (see graphics.cfg).
-      .include "vsprite.s"
-; msprite.s provides the meta-sprite spawn/destroy/show/hide/pos/frame/anim/
-; priority/transcolor/tick/commit driver entries (batch 4b.8). It .includes
-; sprite.s (already pulled above; dedup'd by the .ifndef guard) and declares the
-; MSPRITE_* object table in the module-owned BSS + ZEROPAGE bands (see graphics.cfg).
-      .include "msprite.s"
-; nvg.s provides the NVG image-load driver entries (batch 4b.9); it pulls fio.s
-; (with FIO_EMIT_ALL_RUNTIME so fio_gsave/fio_gload are emitted for GSAVE/GLOAD).
-; fio.s pulls nova.inc for the FIO_*/VGC_* register addresses, all dedup'd by the
-; same .ifndef guards.
-      .include "nvg.s"
-; anim.s provides the track-based sprite-animation driver entries (batch 4b.11);
-; it pulls dma.s + fio.s + pager.s + msprite.s, all already co-assembled above and
-; dedup'd by the .ifndef guards (pager.s is the one new body — CODE only, ZP via
-; NVR* aliases). anim declares the ANIM_* track table + pseudo-registers in the
-; module-owned BSS band (see graphics.cfg).
-      .include "anim.s"
-; tween.s provides the pure-math 16-bit easing driver entries (batch 4b.11). No
-; hardware, no extra deps; it declares the TWEEN_* state cells in the module BSS.
-      .include "tween.s"
+; NDK ABI headers. Implementations link from runtime/asm/build/nova.lib.
+      .include "vgc.inc"
+      .include "sprite.inc"
+      .include "copper.inc"
+      .include "copper_split.inc"
+      .include "blitter.inc"
+      .include "dma.inc"
+      .include "vsprite.inc"
+      .include "msprite.inc"
+      .include "nvg.inc"
+      .include "anim.inc"
+      .include "tween.inc"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

@@ -58,4 +58,16 @@ NIC_ARG_NAMEPTR_L = NVR0H
 ; @summary High byte of hostname pointer for NIC.COPY_NAME.
 NIC_ARG_NAMEPTR_H = NVR1L
 
+.global nic_command
+.global nic_connect
+.global nic_disconnect
+.global nic_listen
+.global nic_accept
+.global nic_send
+.global nic_recv
+.global nic_status
+.global nic_ready
+.global nic_length
+.global nic_copy_name
+
 .endif

@@ -1,8 +1,12 @@
-CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
+CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
+NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
 
 all: turtle.bin turtle.nmod
+
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
 turtle.o: turtle.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libturtle.inc \
@@ -15,8 +19,8 @@ turtle.o: turtle.s \
             $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s
 	$(CA65) turtle.s -o turtle.o
 
-turtle.bin: turtle.o turtle.cfg
-	$(LD65) -C turtle.cfg -m turtle.map -o turtle.bin turtle.o
+turtle.bin: turtle.o turtle.cfg $(NOVA_LIB_FILE)
+	$(LD65) -C turtle.cfg -m turtle.map -o turtle.bin turtle.o $(NOVA_LIB_FILE)
 
 # Self-documenting module: image + NDOC doc -> turtle.nmod. --ndk-dir keeps the
 # drift guard available (the turtle has no ;@ndk mappings, so nothing to check —
@@ -33,4 +37,6 @@ install: turtle.bin
 clean:
 	rm -f turtle.o turtle.bin turtle.map turtle.nmod
 
-.PHONY: all clean install
+FORCE:
+
+.PHONY: all clean install FORCE

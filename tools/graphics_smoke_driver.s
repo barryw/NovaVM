@@ -20,7 +20,7 @@
 ; without the (deferred) cross-runtime band reservation.
 ;
 ; Assemble:
-;   ca65 --cpu 65c02 tools/graphics_smoke_driver.s -o /tmp/gfxdrv.o
+;   ca65 --cpu w65c02 tools/graphics_smoke_driver.s -o /tmp/gfxdrv.o
 ;   ld65 -C tools/libcall_driver_stub.cfg /tmp/gfxdrv.o -o tools/graphics_smoke_driver.bin
 
 .segment "CODE"

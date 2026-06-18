@@ -350,11 +350,12 @@ access, DMA-backed bulk copies, fills, and direct `XLOAD`/`XSAVE` streaming.
 If a runtime needs BASIC's named-block allocator and XMC register command
 contract, link `runtime/asm/xmc.s` as well.
 
-Standalone runtimes should use fixed XRAM workspaces rather than dynamic
-hardware allocation. `xram.inc` defines the shared high-XRAM bands used by
-NovaZ and the NVG loader, while the low 256 KB stays available to BASIC/XMC
-named blocks. A runtime that needs private scratch should claim a documented
-range and clear it at launch.
+Standalone runtimes should request private XRAM through the allocator instead
+of claiming fixed addresses. Use the MEMORY module (`MEM_ALLOC`, `MEM_RELEASE`,
+`MEM_RESET_USAGE`) when the runtime already uses `lib_call`, or link `xmc.s`
+and call `xmc_alloc_block` directly in smaller programs. The allocator owns the
+low 256 KB heap; the `$060000-$06FFFF` band is the paged-library shelf and must
+not be used as runtime scratch.
 
 Those symbols are aliases over the Nova pseudo-register ABI:
 

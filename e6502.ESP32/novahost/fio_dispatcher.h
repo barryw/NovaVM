@@ -195,6 +195,10 @@ private:
     static constexpr uint8_t PAGE_TARGET_RAM  = 0x01;
     static constexpr uint8_t PAGE_TARGET_VGC  = 0x02;
 
+    static constexpr uint8_t FILE_TARGET_MASK = 0x30;
+    static constexpr uint8_t FILE_TARGET_RAM  = 0x00;
+    static constexpr uint8_t FILE_TARGET_XRAM = 0x10;
+
     // Returns a null-terminated copy of the filename in `out` (size 64).
     void copy_filename(char* out);
 
@@ -321,9 +325,15 @@ private:
     bool load_file_to_vector(ndi::NdiImage* img, int idx, uint32_t size,
                              std::vector<uint8_t>& out);
     bool decode_file_access(uint8_t fam, bool& can_read, bool& can_write) const;
+    struct FileHandle;
     uint8_t alloc_file_handle();
     bool load_file_handle_data(ndi::NdiImage* img, int idx, uint32_t size,
                                std::vector<uint8_t>& out);
+    bool create_file_handle_temp(FileHandle& h);
+    void close_file_handle_temp(FileHandle& h);
+    bool stage_file_handle_data(ndi::NdiImage* img, int idx, uint32_t size,
+                                FileHandle& h);
+    bool ensure_file_handle_size(FileHandle& h, uint32_t size);
     bool flush_file_handle(uint8_t id);
     void write_size24(uint32_t size);
     bool load_wts_bank_by_name(const char* requested_name);
@@ -505,10 +515,13 @@ private:
         int slot = -1;
         uint16_t parent = ndi::ROOT_PARENT;
         uint32_t pos = 0;
+        uint32_t size = 0;
         char name[64] = {};
-        std::vector<uint8_t> data;
+        char temp_path[64] = {};
+        File temp;
     };
     FileHandle _file_handles[MAX_OPEN_FILES];
+    uint32_t _next_file_temp_id = 1;
 };
 
 #endif

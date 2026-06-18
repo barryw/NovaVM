@@ -5,7 +5,7 @@
 ; ROM into the primary $C000 bank, this reset entry owns the machine, and story
 ; data is loaded from the mounted image into XRAM.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "xram.inc"
 .include "pager.inc"
@@ -21,7 +21,24 @@
 .include "ztext.s"
 .include "zobject.s"
 .include "zvm.s"
-.include "vgc_palette.s"
+
+; NDK routines exported through runtime_abi.inc for RAM-resident overlays.
+.forceimport vtext_clear_region
+.forceimport vtext_set_cursor
+.forceimport vtext_scroll_up
+.forceimport vtext_set_scroll_hook
+.forceimport xram_read8
+.forceimport pager_load_file_page
+.forceimport blitter_wait
+.forceimport blitter_start_copy
+.forceimport blitter_start_gfx4_unpack
+.forceimport fio_copy_name
+.forceimport fio_fopen
+.forceimport fio_fcreate
+.forceimport fio_fclose
+.forceimport fio_fread
+.forceimport fio_fwrite
+.forceimport fio_exec
 
 .export nz_raw_input_mode
 
@@ -35,7 +52,7 @@ nz_raw_input_mode:     .res 1
 nz_more_enabled:       .res 1
 nz_more_line_count:    .res 1
 nz_auto_wrap:          .res 1
-nz_lf_scrolled:        .res 1  ; last linefeed scrolled the live region (V6 gfx follows)
+nz_lf_scrolled:        .res 1  ; legacy V6 pre-scroll flag; kept for segment ABI
 nz_saved_x:            .res 1
 nz_saved_y:            .res 1
 nz_saved_color:        .res 1
@@ -121,7 +138,7 @@ reset:
         BRA halt
 
 halt:
-        WAI
+        wai
         BRA halt
 
 ; Load the NOVAZ6.BIN segment image (fixed 8KB, see src/novaz6.cfg) from the
@@ -141,11 +158,11 @@ nz6_load_segment:
         LDA #(nz6_segment_name_end - nz6_segment_name)
         STA XRAM_NAMELEN
 
-        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_L
+        LDA zstory_cache_base_l
         STA XRAM_ADDRL
-        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_M
+        LDA zstory_cache_base_m
         STA XRAM_ADDRM
-        LDA #ZSTORY_XRAM_NOVAZ6_STAGE_H
+        LDA zstory_cache_base_h
         STA XRAM_ADDRH
         LDA #<NZ6_SIZE
         STA XRAM_LENL
@@ -406,7 +423,8 @@ nz_screen_put_raw:
         JSR nz_screen_linefeed
         LDA #$01
         STA nz_auto_wrap
-        JMP vtext_ok
+        LDA #VTEXT_OK
+        RTS
 
 @vtext_printable:
         STZ nz_auto_wrap
@@ -426,23 +444,6 @@ nz_screen_put_raw:
 nz_screen_linefeed:
         STZ nz_auto_wrap
         JSR nz_screen_maybe_more
-        ; record whether this linefeed will scroll the live region (mirrors
-        ; vtext_advance_line: bottom row + scroll attribute). V6 pre-scrolls
-        ; the matching gfx rect before VTEXT moves the text plane.
-        STZ nz_lf_scrolled
-        LDA VTEXT_FLAGS
-        AND #VTEXT_FLAG_SCROLL
-        BEQ :+
-        LDA VTEXT_HEIGHT
-        DEC A
-        CMP VTEXT_CURY
-        BNE :+
-        INC nz_lf_scrolled
-:
-        LDA nz_lf_scrolled
-        BEQ :+
-        JSR nz_screen_v6_pre_newline_scroll
-:
         LDA #$0A
         STA VTEXT_CHAR
         JSR vtext_put_char
@@ -650,22 +651,19 @@ nz_screen_align_prompt_cursor:
         STA nz_probe_y
 
         STZ VTEXT_CURX
-        JSR vtext_calc_addr
-        JSR nz_screen_read_char_cell
+        JSR vtext_read_char
         CMP #' '
         BNE @restore
 
         DEC VTEXT_CURY
         STZ VTEXT_CURX
-        JSR vtext_calc_addr
-        JSR nz_screen_read_char_cell
+        JSR vtext_read_char
         CMP #'>'
         BNE @restore
 
         LDA #$01
         STA VTEXT_CURX
-        JSR vtext_calc_addr
-        JSR nz_screen_read_char_cell
+        JSR vtext_read_char
         CMP #' '
         BNE @restore
 
@@ -677,13 +675,6 @@ nz_screen_align_prompt_cursor:
         LDA nz_probe_y
         STA VTEXT_CURY
 @done:
-        RTS
-
-nz_screen_read_char_cell:
-        LDA #VTEXT_PLANE_CHAR
-        JSR vtext_select_vram_addr
-        LDA VGC_VRAM_DATA
-        LDA VGC_VRAM_DATA
         RTS
 
 newline:
@@ -831,10 +822,7 @@ msg_more:
         .byte "[ MORE ]", 0
 
 
-.include "xram.s"
-.include "pager.s"
-.include "rng.s"
-.include "vtext.s"
+; NDK service implementations are linked from runtime/asm/build/nova.lib.
 
 .segment "VECTORS"
         .word reset

@@ -622,8 +622,8 @@ file_marshal_size_arg1:
 ; selective-emit guards see this module's fio_* references; pager.s then re-
 ; includes fio.s (its .ifndef guard makes that a no-op) and emits the pager body.
 ; ===========================================================================
-      .include "fio.s"
-      .include "pager.s"
+      .include "fio.inc"
+      .include "pager.inc"
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000      ; NMI, RESET, IRQ (module runs under SEI)

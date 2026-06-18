@@ -6,7 +6,7 @@
 ; dirty-rect top (VSPRITE_Y < VSPRITE_SCENE_Y): the row delta must not underflow
 ; into a ~256-row stride walk that runs the destination out of the work buffer.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "vsprite.inc"
 

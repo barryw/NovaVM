@@ -84,12 +84,13 @@ AUDIO_EMIT_ALL = 0
 .if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
       .export audio_volume
 .endif
-; audio_tone/audio_noise are reference-only (NOT in AUDIO_EMIT_ALL) so they never
-; bloat the at-capacity BASIC ROM; only the SOUND module references them.
-.if .referenced(audio_tone)
+; audio_tone/audio_noise are part of the public audio ABI.  Source-included
+; legacy consumers still get selective emission through .referenced(); archive
+; builds must export them when emitting the complete runtime object.
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone)
       .export audio_tone
 .endif
-.if .referenced(audio_noise)
+.if AUDIO_EMIT_ALL .OR .referenced(audio_noise)
       .export audio_noise
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_instrument)
@@ -321,7 +322,7 @@ audio_volume:
 ; @abi register
 ; @summary Play a sawtooth tone on SID voice 0 for a number of video frames.
 ; @in NVR0L/NVR0H: SID frequency word (lo/hi). A: duration in frames.
-.if .referenced(audio_tone)
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone)
 audio_tone:
       PHA                                ; save duration
       LDA   #$0F
@@ -349,7 +350,7 @@ audio_tone:
 ; @abi register
 ; @summary Play a noise burst on SID voice 0 for a number of video frames.
 ; @in A: duration in frames.
-.if .referenced(audio_noise)
+.if AUDIO_EMIT_ALL .OR .referenced(audio_noise)
 audio_noise:
       PHA                                ; save duration
       LDA   #$0F
@@ -854,10 +855,5 @@ audio_music_note:
       LDA   #$00
       RTS
 .endif
-
-.ifndef FIO_EMIT_ALL_RUNTIME
-FIO_EMIT_ALL_RUNTIME = 1
-.endif
-.include "fio.s"
 
 .endif

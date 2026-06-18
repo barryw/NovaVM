@@ -8,6 +8,12 @@
 .ifndef VGC_IMPLEMENTATION_INCLUDED
 VGC_IMPLEMENTATION_INCLUDED = 1
 
+.ifdef NOVA_EMIT_ALL_RUNTIME
+VGC_EMIT_ALL = 1
+.else
+VGC_EMIT_ALL = 0
+.endif
+
       .segment "CODE"
 
       .export vgc_cmd
@@ -16,9 +22,9 @@ VGC_IMPLEMENTATION_INCLUDED = 1
       .export vgc_exec
 .endif
       .export vgc_vsync
-; vgc_wait_frames is reference-only so it never bloats the at-capacity BASIC ROM
-; (which links vgc.s wholesale); only the SOUND/SYSTEM modules reference it.
-.if .referenced(vgc_wait_frames)
+; vgc_wait_frames is selective for source-included legacy consumers, but the
+; canonical NDK archive must provide every symbol declared in vgc.inc.
+.if VGC_EMIT_ALL .OR .referenced(vgc_wait_frames)
       .export vgc_wait_frames
 .endif
       .export vgc_cls
@@ -107,7 +113,7 @@ vgc_vsync:
 ; @symbol vgc_wait_frames
 ; @summary Wait A video frames by busy-waiting the frame counter A times.
 ; @in A: frame count (0 returns immediately)
-.if .referenced(vgc_wait_frames)
+.if VGC_EMIT_ALL .OR .referenced(vgc_wait_frames)
 vgc_wait_frames:
       TAX
       BEQ   @vwf_done

@@ -10,7 +10,7 @@ using KDS.e6502;
 if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|])");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .key, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|], .expect-gfx-color <x,y=>hex>)");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--auto-read-char-space] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
     return 1;
 }
@@ -195,6 +195,20 @@ try
             RequireAt(SnapshotScreen(bus.Vgc), ParseExpectedAtSpec(command.Text));
             continue;
         }
+        if (command.Mode == SmokeInputMode.ExpectGfxColor)
+        {
+            string liveScreen = SnapshotScreen(bus.Vgc);
+            Console.WriteLine($".expect-gfx-color {command.Text}");
+            RequireGfxColor(bus.Vgc, liveScreen, ParseExpectedGfxColorSpec(command.Text));
+            continue;
+        }
+        if (command.Mode == SmokeInputMode.ExpectTextColor)
+        {
+            string liveScreen = SnapshotScreen(bus.Vgc);
+            Console.WriteLine($".expect-text-color {command.Text}");
+            RequireTextColor(bus.Vgc, liveScreen, ParseExpectedTextColorSpec(command.Text));
+            continue;
+        }
         if (command.Mode == SmokeInputMode.ExpectStop)
         {
             if (!byte.TryParse(command.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out byte expectedStop))
@@ -207,10 +221,17 @@ try
             continue;
         }
 
-        string marker = command.Mode == SmokeInputMode.Raw ? ".raw " : "> ";
+        string marker = command.Mode switch
+        {
+            SmokeInputMode.Raw => ".raw ",
+            SmokeInputMode.Key => ".key ",
+            _ => "> "
+        };
         Console.WriteLine($"{marker}{command.Text}");
         if (command.Mode == SmokeInputMode.Raw)
             SendRaw(cpu, bus, editor, command.Text);
+        else if (command.Mode == SmokeInputMode.Key)
+            SendKey(cpu, bus, editor, ParseSmokeKey(command.Text));
         else
             SendLine(cpu, bus, editor, command.Text);
 
@@ -490,6 +511,24 @@ static SmokeCommand ParseCommandSpec(string spec)
         ParseExpectedAtSpec(atSpec); // validate eagerly so bad scripts fail before booting
         return new SmokeCommand(atSpec, [], SmokeInputMode.ExpectAt, WaitForPrompt: false);
     }
+    const string expectGfxPrefix = ".expect-gfx-color ";
+    if (spec.StartsWith(expectGfxPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string gfxSpec = spec[expectGfxPrefix.Length..].TrimStart();
+        if (gfxSpec.Length == 0)
+            throw new ArgumentException($".expect-gfx-color requires <x,y=>hex> in '{spec}'.");
+        ParseExpectedGfxColorSpec(gfxSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(gfxSpec, [], SmokeInputMode.ExpectGfxColor, WaitForPrompt: false);
+    }
+    const string expectTextColorPrefix = ".expect-text-color ";
+    if (spec.StartsWith(expectTextColorPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string colorSpec = spec[expectTextColorPrefix.Length..].TrimStart();
+        if (colorSpec.Length == 0)
+            throw new ArgumentException($".expect-text-color requires <text=>hex> in '{spec}'.");
+        ParseExpectedTextColorSpec(colorSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(colorSpec, [], SmokeInputMode.ExpectTextColor, WaitForPrompt: false);
+    }
 
     string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
     string command = parts[0];
@@ -511,6 +550,15 @@ static SmokeCommand ParseCommandSpec(string spec)
         command = command[rawPrefix.Length..];
         if (command.Length == 0)
             throw new ArgumentException($"Empty raw NovaZ smoke input in '{spec}'.");
+    }
+    const string keyPrefix = ".key ";
+    if (command.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        mode = SmokeInputMode.Key;
+        command = command[keyPrefix.Length..].Trim();
+        if (command.Length == 0)
+            throw new ArgumentException($".key requires a key name in '{spec}'.");
+        ParseSmokeKey(command);
     }
     const string waitPrefix = ".wait ";
     if (command.StartsWith(waitPrefix, StringComparison.OrdinalIgnoreCase))
@@ -707,21 +755,25 @@ static List<ExpectedTextColor> LoadExpectedTextColors(string[] args)
         if (i + 1 >= args.Length)
             throw new ArgumentException("--expect-text-color requires text=>hex.");
 
-        string spec = args[++i];
-        string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
-            throw new ArgumentException($"Expected text color must be '<text=>hex>': {spec}");
-
-        string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-            ? parts[1][2..]
-            : parts[1];
-        if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte color))
-            throw new ArgumentException($"Expected text color must use a one-byte hex value: {spec}");
-
-        expected.Add(new ExpectedTextColor(parts[0], color));
+        expected.Add(ParseExpectedTextColorSpec(args[++i]));
     }
 
     return expected;
+}
+
+static ExpectedTextColor ParseExpectedTextColorSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+    if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+        throw new ArgumentException($"Expected text color must be '<text=>hex>': {spec}");
+
+    string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+        ? parts[1][2..]
+        : parts[1];
+    if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte color))
+        throw new ArgumentException($"Expected text color must use a one-byte hex value: {spec}");
+
+    return new ExpectedTextColor(parts[0], color);
 }
 
 static List<ExpectedTextAttr> LoadExpectedTextAttrs(string[] args)
@@ -761,29 +813,33 @@ static List<ExpectedGfxColor> LoadExpectedGfxColors(string[] args)
         if (i + 1 >= args.Length)
             throw new ArgumentException("--expect-gfx-color requires x,y=>hex.");
 
-        string spec = args[++i];
-        string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
-            throw new ArgumentException($"Expected graphics color must be '<x,y=>hex>': {spec}");
-
-        string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
-        if (xy.Length != 2 ||
-            !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ||
-            !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y))
-            throw new ArgumentException($"Expected graphics color coordinate must be 'x,y': {spec}");
-        if ((uint)x >= VgcConstants.GfxWidth || (uint)y >= VgcConstants.GfxHeight)
-            throw new ArgumentOutOfRangeException(nameof(args), $"Graphics coordinate out of range in '{spec}'.");
-
-        string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-            ? parts[1][2..]
-            : parts[1];
-        if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte color))
-            throw new ArgumentException($"Expected graphics color must use a one-byte hex value: {spec}");
-
-        expected.Add(new ExpectedGfxColor(x, y, color));
+        expected.Add(ParseExpectedGfxColorSpec(args[++i]));
     }
 
     return expected;
+}
+
+static ExpectedGfxColor ParseExpectedGfxColorSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+    if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+        throw new ArgumentException($"Expected graphics color must be '<x,y=>hex>': {spec}");
+
+    string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+    if (xy.Length != 2 ||
+        !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ||
+        !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y))
+        throw new ArgumentException($"Expected graphics color coordinate must be 'x,y': {spec}");
+    if ((uint)x >= VgcConstants.GfxWidth || (uint)y >= VgcConstants.GfxHeight)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"Graphics coordinate out of range in '{spec}'.");
+
+    string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+        ? parts[1][2..]
+        : parts[1];
+    if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte color))
+        throw new ArgumentException($"Expected graphics color must use a one-byte hex value: {spec}");
+
+    return new ExpectedGfxColor(x, y, color);
 }
 
 static string RunUntilScreenMatches(
@@ -1081,6 +1137,10 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
     int? vtextCurYAddress = TryReadRuntimeSymbol("VTEXT_CURY");
     int? vtextTopAddress = TryReadRuntimeSymbol("VTEXT_TOP");
     int? vtextLeftAddress = TryReadRuntimeSymbol("VTEXT_LEFT");
+    int? saveResultAddress = TryReadRuntimeSymbol("zvm_save_result");
+    int? saveSlotAddress = TryReadRuntimeSymbol("zvm_save_slot");
+    int? overlayResultAddress = TryReadRuntimeSymbol("OVL_RESULT");
+    int? overlayLoadedAddress = TryReadRuntimeSymbol("OVL_LOADED");
     string verify = verifySumLoAddress is int sumLo && verifySumHiAddress is int sumHi
         ? $" verify=${bus.Read((ushort)sumHi):X2}{bus.Read((ushort)sumLo):X2}"
         : "";
@@ -1105,6 +1165,14 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         vtextTopAddress is int vt
             ? $" vtext={bus.Read((ushort)vl)},{bus.Read((ushort)vt)}+{bus.Read((ushort)vx)},{bus.Read((ushort)vy)}"
             : "";
+    string nz6Windows = FormatNz6Windows(bus);
+    string saveState =
+        saveResultAddress is int sr &&
+        saveSlotAddress is int ss &&
+        overlayResultAddress is int or &&
+        overlayLoadedAddress is int ol
+            ? $" save=${bus.Read((ushort)sr):X2}/slot=${bus.Read((ushort)ss):X2} ovl=${bus.Read((ushort)or):X2}/loaded=${bus.Read((ushort)ol):X2}"
+            : "";
     var state = cpu.GetState();
     return
         $"cpu=PC${cpu.Pc:X4}/A${state.A:X2}/X${state.X:X2}/Y${state.Y:X2} " +
@@ -1116,10 +1184,30 @@ static string FormatZvmState(Cpu cpu, CompositeBusDevice bus)
         $"xaddr=${bus.Read(0x0022):X2}{bus.Read(0x0021):X2}{bus.Read(0x0020):X2} xdata=${bus.Read(0x0023):X2} " +
         $"fio=${bus.Read(VgcConstants.FioCmd):X2}/${bus.Read(VgcConstants.FioStatus):X2}/${bus.Read(VgcConstants.FioErrCode):X2} " +
         $"xmc=${bus.Read(VgcConstants.XmcStatus):X2}/${bus.Read(VgcConstants.XmcErrCode):X2} " +
-        $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}{vtext} " +
+        $"cursor={bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}{vtext}{nz6Windows}{saveState} " +
         $"zvm_opcode=${bus.Read((ushort)opcodeAddr):X2} stop=${bus.Read((ushort)stopAddress):X2} sp=${bus.Read((ushort)spAddress):X2} frames=${bus.Read((ushort)frameCountAddress):X2}{verify}{verifyEnd}{storyMeta} " +
         $"ops={ReadWord(bus, operandHiAddress, operandLoAddress):X4},{ReadWord(bus, operandHiAddress + 1, operandLoAddress + 1):X4},{ReadWord(bus, operandHiAddress + 2, operandLoAddress + 2):X4},{ReadWord(bus, operandHiAddress + 3, operandLoAddress + 3):X4} " +
         $"locals={ReadWord(bus, localsHiAddress, localsLoAddress):X4},{ReadWord(bus, localsHiAddress + 1, localsLoAddress + 1):X4},{ReadWord(bus, localsHiAddress + 2, localsLoAddress + 2):X4},{ReadWord(bus, localsHiAddress + 3, localsLoAddress + 3):X4}";
+}
+
+static string FormatNz6Windows(CompositeBusDevice bus)
+{
+    const int winProps = 0x4000;
+    const int winCurrent = 0x4100;
+
+    string FormatWindow(int window)
+    {
+        int baseAddr = winProps + (window * 32);
+        int y = ReadWord(bus, baseAddr + 1, baseAddr);
+        int x = ReadWord(bus, baseAddr + 3, baseAddr + 2);
+        int h = ReadWord(bus, baseAddr + 5, baseAddr + 4);
+        int w = ReadWord(bus, baseAddr + 7, baseAddr + 6);
+        int cy = ReadWord(bus, baseAddr + 9, baseAddr + 8);
+        int cx = ReadWord(bus, baseAddr + 11, baseAddr + 10);
+        return $"w{window}=pos{x},{y} size{w},{h} cur{cx},{cy}";
+    }
+
+    return $" nz6cur={bus.Read(winCurrent)} {FormatWindow(0)} {FormatWindow(1)}";
 }
 
 static string FormatParserState(CompositeBusDevice bus)
@@ -1149,7 +1237,7 @@ static string ReadRamBytes(CompositeBusDevice bus, int address, int count)
     return sb.ToString();
 }
 
-// Step until the CPU parks in the runtime's terminal halt loop (halt: WAI /
+// Step until the CPU parks in the runtime's terminal halt loop (halt: wai /
 // BRA halt — a 3-byte window the PC can never leave), then return. Sampling
 // between chunks is safe: once parked, every later sample sees the window.
 static void RunUntilCpuHalt(Cpu cpu, CompositeBusDevice bus, int maxSteps, int haltAddress)
@@ -1158,7 +1246,7 @@ static void RunUntilCpuHalt(Cpu cpu, CompositeBusDevice bus, int maxSteps, int h
     for (int executed = 0; executed < maxSteps; executed += chunk)
     {
         RunForSteps(cpu, bus, chunk);
-        // halt: is WAI + BRA (3 bytes); halt+3 is already the next routine.
+        // halt: is wai + BRA (3 bytes); halt+3 is already the next routine.
         if (cpu.Pc >= haltAddress && cpu.Pc < haltAddress + 3)
             return;
     }
@@ -1213,6 +1301,30 @@ static void SendRaw(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string
         if (traceInput)
             Console.Error.WriteLine($"raw '{ch}': {FormatZvmState(cpu, bus)} {FormatParserState(bus)}");
     }
+}
+
+static void SendKey(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, byte key)
+{
+    Nz6Trace.Marker($"--- key: ${key:X2}");
+    editor.QueueInput(key);
+    RunForSteps(cpu, bus, 50_000);
+}
+
+static byte ParseSmokeKey(string text)
+{
+    string key = text.Trim();
+    return key.ToLowerInvariant() switch
+    {
+        "enter" or "return" or "cr" => 0x0D,
+        "escape" or "esc" => 0x1B,
+        "up" => 0x1E,
+        "down" => 0x1F,
+        "space" => 0x20,
+        _ when key.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+               byte.TryParse(key[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte value) => value,
+        _ when key.Length == 1 => (byte)key[0],
+        _ => throw new ArgumentException($".key does not know '{text}'.")
+    };
 }
 
 static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, bool screenStable)
@@ -1533,10 +1645,12 @@ static void RequireZorkZeroBootGfxReplay(VirtualGraphicsController vgc, string i
     // background (Z-machine white -> EGA index 15), then these boot/title and
     // first-refresh picture draws land before "--- boot: first prompt".
     var expected = new byte[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
+    var expectedOwner = new int[VgcConstants.GfxWidth * VgcConstants.GfxHeight];
     Array.Fill(expected, (byte)0x0F);
+    Array.Fill(expectedOwner, -1);
 
     foreach (var draw in ZorkZeroBootDraws())
-        ReplayPictureDraw(pak, entries, expected, draw);
+        ReplayPictureDraw(pak, entries, expected, expectedOwner, draw);
 
     int mismatchCount = 0;
     (int X, int Y, byte Expected, byte Actual)? first = null;
@@ -1562,9 +1676,11 @@ static void RequireZorkZeroBootGfxReplay(VirtualGraphicsController vgc, string i
     }
 
     var f = first!.Value;
+    int owner = expectedOwner[f.Y * VgcConstants.GfxWidth + f.X];
     throw new InvalidOperationException(
         $"Zork Zero boot gfx replay mismatch: {mismatchCount} pixels differ; " +
-        $"first at {f.X},{f.Y}: expected ${f.Expected:X2}, got ${f.Actual:X2}.\n{screen}");
+        $"first at {f.X},{f.Y}: expected ${f.Expected:X2}, got ${f.Actual:X2}, " +
+        $"expected owner ${(owner < 0 ? "background" : "$" + owner.ToString("X4", CultureInfo.InvariantCulture))}.\n{screen}");
 }
 
 static Dictionary<int, PictureEntry> ReadPicturePackIndex(byte[] pak)
@@ -1600,6 +1716,7 @@ static void ReplayPictureDraw(
     byte[] pak,
     IReadOnlyDictionary<int, PictureEntry> entries,
     byte[] expected,
+    int[] expectedOwner,
     ZorkZeroDraw draw)
 {
     if (!entries.TryGetValue(draw.Number, out var entry) || entry.Length == 0)
@@ -1630,6 +1747,9 @@ static void ReplayPictureDraw(
     if ((entry.Flags & 0x04) != 0 && entry.Width <= 32 && entry.Height <= 32)
         dstY -= 2;
 
+    if ((entry.Flags & 0x0C) != 0)
+        FillFlowPictureCells(expected, expectedOwner, dstX, dstY, entry.Width, entry.Height, 0x0F);
+
     for (int y = 0; y < entry.Height; y++)
     {
         int gy = dstY + y;
@@ -1649,6 +1769,25 @@ static void ReplayPictureDraw(
             if (transparent && color == transparentIndex)
                 continue;
             expected[dst + x] = color;
+            expectedOwner[dst + x] = draw.Number;
+        }
+    }
+}
+
+static void FillFlowPictureCells(byte[] expected, int[] expectedOwner, int dstX, int dstY, int width, int height, byte color)
+{
+    int cellLeft = Math.Max(0, dstX / 4);
+    int cellTop = Math.Max(0, dstY / 4);
+    int cellRight = Math.Min(VgcConstants.GfxWidth / 4, (dstX + width + 3) / 4);
+    int cellBottom = Math.Min(VgcConstants.GfxHeight / 4, (dstY + height + 3) / 4);
+
+    for (int y = cellTop * 4; y < cellBottom * 4; y++)
+    {
+        int row = y * VgcConstants.GfxWidth;
+        for (int x = cellLeft * 4; x < cellRight * 4; x++)
+        {
+            expected[row + x] = color;
+            expectedOwner[row + x] = -1;
         }
     }
 }
@@ -1923,9 +2062,12 @@ enum SmokeInputMode
 {
     Line,
     Raw,
+    Key,
     Wait,
     ExpectStop,
-    ExpectAt
+    ExpectAt,
+    ExpectGfxColor,
+    ExpectTextColor
 }
 
 sealed record SmokeCommand(

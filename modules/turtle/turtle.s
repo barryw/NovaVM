@@ -1507,13 +1507,13 @@ woff_y_hi:            .res 1
 ; the virtual-sprite save/restore/rotate-blit entries the render path uses and
 ; declares the VSPRITE_* state in the module-owned BSS/ZEROPAGE bands.
 ; ===========================================================================
-      .include "vgc.s"
-      .include "sprite.s"
-      .include "copper.s"
-      .include "copper_split.s"
-      .include "blitter.s"
-      .include "dma.s"
-      .include "vsprite.s"
+      .include "vgc.inc"
+      .include "sprite.inc"
+      .include "copper.inc"
+      .include "copper_split.inc"
+      .include "blitter.inc"
+      .include "dma.inc"
+      .include "vsprite.inc"
 
       .segment "VECTORS"             ; $FFFA — don't-care under SEI; fills the 16KB image
       .word   MOD_ENTRY, MOD_ENTRY, MOD_ENTRY

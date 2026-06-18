@@ -205,8 +205,19 @@ cp /path/to/your/zork0.z6 examples/novaz/projects/zork-zero/STORY.BIN
 make -C examples/novaz test-project PROJECT=zork-zero
 ```
 
-See `projects/zork-zero/README.md` for the M1 text-only status and known
-layout limitations.
+The heavier Zork Zero V6 regression follows the prologue through the graphics
+area change, verifies the `answer time` redraw, saves, reboots, restores, and
+checks that the retained V6 graphics state is rebuilt:
+
+```sh
+make -C examples/novaz test-project-save-restore PROJECT=zork-zero \
+  STORY="/Volumes/Software/Emulation/Infocom/Zork Zero - The Revenge of Megaboz/Zork0.z6" \
+  PICTURES="/Volumes/Software/Emulation/Infocom/Zork Zero - The Revenge of Megaboz/Zork0.blb"
+```
+
+Run `make -C examples/novaz test-z6-spec` beside that when changing generic V6
+window, picture, scroll, or erase behavior. See `projects/zork-zero/README.md`
+for the exact hardware deploy and manual play-test route.
 
 The smoke runner boots the generated `fd0.ndi` in the Avalonia hardware model,
 lets BASIC run `AUTOBOOT.bin`, swaps in `novaz.bin` at `$C000`, and verifies the

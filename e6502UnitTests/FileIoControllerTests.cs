@@ -360,6 +360,170 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void LowLevelFileCommandsCanStreamDirectlyToAndFromXram()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+
+        try
+        {
+            var memory = new byte[65536];
+            var xram = new byte[2048];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                saveDir: dir,
+                xramRead: address => xram[address],
+                xramWrite: (address, value) =>
+                {
+                    if ((uint)address >= xram.Length)
+                        return false;
+
+                    xram[address] = value;
+                    return true;
+                },
+                xramCapacity: () => xram.Length,
+                xramRefreshStats: () => { });
+
+            byte[] payload = Encoding.ASCII.GetBytes("xram-stream-save");
+            Array.Copy(payload, 0, xram, 0x180, payload.Length);
+
+            SetFilename(fio, "xstream.nzs");
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileAccessRw);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFCreate);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            int fileId = fio.Read((ushort)VgcConstants.FioSrcL);
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0);
+            WriteWord(fio, VgcConstants.FioGAddrL, 0x180);
+            WriteWord(fio, VgcConstants.FioGLenL, payload.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFWrite);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(payload.Length, ReadSize24(fio));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            WriteSize24(fio, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFSeek);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0);
+            WriteWord(fio, VgcConstants.FioGAddrL, 0x240);
+            WriteWord(fio, VgcConstants.FioGLenL, payload.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFRead);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(payload.Length, ReadSize24(fio));
+            CollectionAssert.AreEqual(payload, xram.Skip(0x240).Take(payload.Length).ToArray());
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFClose);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            CollectionAssert.AreEqual(payload, File.ReadAllBytes(Path.Combine(dir, "xstream.nzs")));
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void LowLevelFileCommands_WriteBackCreatedFileToMountedNdi()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "TEST", 800);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            var memory = new byte[65536];
+            var xram = new byte[1024];
+            byte[] header = Encoding.ASCII.GetBytes("save-header");
+            byte[] payload = Encoding.ASCII.GetBytes("xram-payload");
+            Array.Copy(header, 0, memory, 0x2400, header.Length);
+            Array.Copy(payload, 0, xram, 0x80, payload.Length);
+
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                xramRead: address => xram[address],
+                xramWrite: (address, value) =>
+                {
+                    if ((uint)address >= xram.Length)
+                        return false;
+                    xram[address] = value;
+                    return true;
+                },
+                xramCapacity: () => xram.Length,
+                xramRefreshStats: () => { },
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "SAVE00.NZS");
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileAccessWrite);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFCreate);
+
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"create err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+            int fileId = fio.Read((ushort)VgcConstants.FioSrcL);
+            Assert.AreNotEqual(0, fileId);
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileTargetRam);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2400);
+            WriteWord(fio, VgcConstants.FioGLenL, header.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFWrite);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(header.Length, ReadSize24(fio));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioFileTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0);
+            WriteWord(fio, VgcConstants.FioGAddrL, 0x80);
+            WriteWord(fio, VgcConstants.FioGLenL, payload.Length);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFWrite);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(payload.Length, ReadSize24(fio));
+
+            fio.Write((ushort)VgcConstants.FioSrcL, (byte)fileId);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFClose);
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"close err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+
+            deviceManager.GetDevice("FD0").Unmount();
+            using var image = NdiImage.Open(imagePath);
+            CollectionAssert.AreEqual(
+                header.Concat(payload).ToArray(),
+                image.ReadFile("SAVE00.NZS", 0xFFFF));
+        }
+        finally
+        {
+            try { deviceManager?.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(root, true);
+        }
+    }
+
+    [TestMethod]
     public void Delete_RemovesExistingFile()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
@@ -1088,6 +1252,63 @@ public class FileIoControllerTests
         finally
         {
             Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_MountedNdi_LoadsExplicitExtensionIntoCpuRam()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        string hd0 = Path.Combine(root, "hd0");
+        string hd1 = Path.Combine(root, "hd1");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        DeviceManager? deviceManager = null;
+
+        try
+        {
+            byte[] overlay = Enumerable.Range(0, 32).Select(i => (byte)(0x80 + i)).ToArray();
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "TEST", 800);
+            using (var image = NdiImage.Open(imagePath))
+                image.WriteFile("SAVLOAD.OVL", NdiFileType.Bin, 0xFFFF, overlay);
+
+            deviceManager = new DeviceManager(hd0, hd1, disks);
+            deviceManager.AutoMount();
+            deviceManager.DefaultDevice = deviceManager.SelectBootDevice();
+
+            var memory = new byte[65536];
+            var fio = new FileIoController(
+                address => memory[address],
+                (address, data) => memory[address] = data,
+                hd0,
+                deviceManager: deviceManager);
+
+            SetFilename(fio, "SAVLOAD.OVL");
+            fio.Write((ushort)VgcConstants.FioSrcL, 3);
+            fio.Write((ushort)VgcConstants.FioSrcH, 0);
+            fio.Write((ushort)VgcConstants.FioEndL, 0);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetRam);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x40);
+            fio.Write((ushort)VgcConstants.FioGLenL, 12);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(
+                VgcConstants.FioStatusOk,
+                fio.Read((ushort)VgcConstants.FioStatus),
+                $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+            Assert.AreEqual(12, ReadSize(fio));
+            for (int i = 0; i < 12; i++)
+                Assert.AreEqual(overlay[3 + i], memory[0x4000 + i], $"byte {i}");
+        }
+        finally
+        {
+            try { deviceManager?.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(root, true);
         }
     }
 

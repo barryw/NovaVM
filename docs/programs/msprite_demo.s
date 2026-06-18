@@ -3,7 +3,7 @@
 ; Hardware meta-sprite smoke demo.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/msprite_demo.o docs/programs/msprite_demo.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/msprite_demo.o docs/programs/msprite_demo.s
 ;   ld65 -C docs/programs/diag7000.cfg -o /tmp/msprite_demo.bin /tmp/msprite_demo.o
 ;
 ; Load at $7000 and run with: SYS $7000
@@ -13,7 +13,7 @@
 ; - Objects include 16x32, 32x16, 32x32, and plain 16x16 visuals.
 ; - Shape slots are prebuilt once; animation changes only sprite shape indexes.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "anim.inc"
 .include "math_copro.inc"

@@ -5,7 +5,7 @@
 ; routine must surface a nonzero NGS_RESULT instead of reporting success.
 ; NicDmaAssemblyRuntimeTests supplies the faulting bus.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "gameserver.inc"
 

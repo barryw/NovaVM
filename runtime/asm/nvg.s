@@ -1,12 +1,7 @@
 ; Shared Nova NVG image loader routines.
 
 .include "nvg.inc"
-.ifndef FIO_EMIT_ALL_RUNTIME
-FIO_EMIT_ALL_RUNTIME = 1
-.endif
-.include "pager.s"
-.include "blitter.s"
-.include "vgc_palette.s"
+.include "blitter.inc"
 
 .ifndef NVG_IMPLEMENTATION_INCLUDED
 NVG_IMPLEMENTATION_INCLUDED = 1

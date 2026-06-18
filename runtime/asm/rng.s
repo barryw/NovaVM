@@ -11,11 +11,6 @@ RNG_IMPLEMENTATION_INCLUDED = 1
       .export rng_get16
       .export rng_get32
 
-.ifndef FIO_EMIT_ALL_RUNTIME
-FIO_EMIT_ALL_RUNTIME = 1
-.endif
-.include "fio.s"
-
 ; Fetch 32 host-backed random bits.
 ; @label RNG.GET32
 ; @kind routine

@@ -338,6 +338,44 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void VTextExposeGfxSpacesPrimesVramReadLatch()
+    {
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string routine = Slice(impl, "vtext_expose_gfx_spaces_region:", "; @label VTEXT.CLEAR_LINE");
+
+        // VGC VRAM reads are latched. This routine scans the char plane while
+        // temporarily switching to color/attr planes to style space cells, so
+        // every return to the char plane must do a dummy read before comparing
+        // the next cell. Otherwise a space can apply transparent style to the
+        // following non-space character.
+        int firstSelect = IndexOfOrFail(routine, "JSR   vtext_select_vram_addr_inc", "initial char select");
+        int firstRead = IndexOfOrFail(routine[firstSelect..], "LDA   VGC_VRAM_DATA              ; prime VRAM read latch", "initial latch prime");
+        int compareRead = IndexOfOrFail(routine[firstSelect..], "@cell_loop:\n      LDA   VGC_VRAM_DATA", "cell compare read");
+        Assert.IsTrue(firstRead < compareRead, "Initial char-plane stream must be primed before comparing cells.");
+
+        int textAttr = IndexOfOrFail(routine, "LDA   #VTEXT_PLANE_TEXTATTR", "text-attr plane switch");
+        int secondSelect = IndexOfOrFail(routine[textAttr..], "JSR   vtext_select_vram_addr_inc", "resumed char select");
+        int secondRead = IndexOfOrFail(routine[(textAttr + secondSelect)..], "LDA   VGC_VRAM_DATA              ; prime next-cell read after plane switch", "resumed latch prime");
+        Assert.IsTrue(secondRead >= 0, "Resumed char-plane stream must be primed after styling a space cell.");
+
+        static string Slice(string source, string startMarker, string endMarker)
+        {
+            int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0, $"Missing start marker {startMarker}.");
+            int end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+            Assert.IsTrue(end > start, $"Missing end marker {endMarker} after {startMarker}.");
+            return source[start..end];
+        }
+
+        static int IndexOfOrFail(string source, string value, string name)
+        {
+            int index = source.IndexOf(value, StringComparison.Ordinal);
+            Assert.IsTrue(index >= 0, $"{name} missing {value}.");
+            return index;
+        }
+    }
+
+    [TestMethod]
     public void VTextCommitsStylePlanesBeforeGlyphPlanes()
     {
         string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
@@ -394,6 +432,101 @@ public class RuntimeLibraryAbiTests
             int index = source.IndexOf(value, StringComparison.Ordinal);
             Assert.IsTrue(index >= 0, $"{name} missing {value}.");
             return index;
+        }
+    }
+
+    [TestMethod]
+    public void VTextAutomaticScrollHookIsOptIn()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+
+        StringAssert.Contains(inc, ".global VTEXT_SCROLL_HOOKL");
+        StringAssert.Contains(inc, ".global VTEXT_SCROLL_HOOKH");
+        StringAssert.Contains(inc, ".global vtext_set_scroll_hook");
+        StringAssert.Contains(inc, ".global vtext_clear_scroll_hook");
+
+        string advance = Slice(impl, "vtext_advance_line:", "; @label VTEXT.SET_SCROLL_HOOK");
+        StringAssert.Contains(advance, "JSR   vtext_scroll_region");
+
+        string dispatch = Slice(impl, "vtext_scroll_region:", "; ---------------------------------------------------------------------\n; Clears and scrolling");
+        StringAssert.Contains(dispatch, "JMP   (VTEXT_SCROLL_HOOKL)");
+        StringAssert.Contains(dispatch, "JMP   vtext_scroll_up");
+
+        static string Slice(string source, string startMarker, string endMarker)
+        {
+            int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0, $"Missing start marker {startMarker}.");
+            int end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+            Assert.IsTrue(end > start, $"Missing end marker {endMarker} after {startMarker}.");
+            return source[start..end];
+        }
+    }
+
+    [TestMethod]
+    public void VTextMixedExposesPixelPreciseGfxScroll()
+    {
+        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
+        string mixed = File.ReadAllText(RepoPath("runtime", "asm", "vtext_mixed.s"));
+
+        // Mixed text/gfx runtimes sometimes have a logical pixel window that
+        // is wider than the safe text-cell rectangle. The NDK must provide a
+        // reusable gfx-plane scroll primitive so apps do not grow one-off
+        // blitter code.
+        string[] stateSymbols =
+        [
+            "VTEXT_GFX_LEFTL",
+            "VTEXT_GFX_LEFTH",
+            "VTEXT_GFX_TOP",
+            "VTEXT_GFX_WIDTHL",
+            "VTEXT_GFX_WIDTHH",
+            "VTEXT_GFX_HEIGHT"
+        ];
+
+        StringAssert.Contains(inc, ".global vtext_scroll_gfx_pixels_up");
+        StringAssert.Contains(inc, ".global vtext_fill_gfx_region");
+        StringAssert.Contains(mixed, ".export vtext_scroll_gfx_pixels_up");
+        StringAssert.Contains(mixed, ".export vtext_fill_gfx_region");
+        StringAssert.Contains(mixed, "; @label VTEXT.SCROLL_GFX_PIXELS_UP");
+        StringAssert.Contains(mixed, "; @label VTEXT.FILL_GFX_REGION");
+
+        foreach (string symbol in stateSymbols)
+        {
+            StringAssert.Contains(inc, $".global {symbol}");
+            StringAssert.Contains(mixed, $"{symbol}:");
+        }
+
+        string routine = Slice(mixed, "vtext_scroll_gfx_pixels_up:", "vtext_mixed_validate_region:");
+        StringAssert.Contains(routine, "JSR   vtext_gfx_validate_region");
+        StringAssert.Contains(routine, "JSR   vtext_mixed_wait_frame");
+        StringAssert.Contains(routine, "JSR   vtext_gfx_pixels_up");
+
+        string fillRoutine = Slice(mixed, "vtext_fill_gfx_region:", "; @label VTEXT.SCROLL_GFX_PIXELS_UP");
+        StringAssert.Contains(fillRoutine, "JSR   vtext_mixed_validate_region");
+        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_LEFTL");
+        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_TOP");
+        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_WIDTHL");
+        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_HEIGHT");
+        StringAssert.Contains(fillRoutine, "JMP   vtext_gfx_fill");
+
+        string implementation = Slice(mixed, "vtext_gfx_pixels_up:", "vtext_mixed_gfx_up:");
+        StringAssert.Contains(implementation, "LDA   #BLT_SPACE_VGC_GFX");
+        StringAssert.Contains(implementation, "STA   BLT_SRCSPACE");
+        StringAssert.Contains(implementation, "STA   BLT_DSTSPACE");
+        StringAssert.Contains(implementation, "LDA   #<VTEXT_GFX_ROW_PIXELS");
+        StringAssert.Contains(implementation, "LDA   #>VTEXT_GFX_ROW_PIXELS");
+        StringAssert.Contains(implementation, "JSR   blitter_start_copy");
+        StringAssert.Contains(implementation, "STA   BLT_MODE_REG");
+        StringAssert.Contains(implementation, "STA   BLT_CMD_REG");
+        StringAssert.Contains(implementation, "JSR   blitter_wait");
+
+        static string Slice(string source, string startMarker, string endMarker)
+        {
+            int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0, $"Missing start marker {startMarker}.");
+            int end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+            Assert.IsTrue(end > start, $"Missing end marker {endMarker} after {startMarker}.");
+            return source[start..end];
         }
     }
 

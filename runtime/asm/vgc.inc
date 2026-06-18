@@ -13,4 +13,40 @@ VGC_INC_INCLUDED = 1
 VGC_RESULT_OK    = $00
 VGC_RESULT_ERROR = $01
 
+.global vgc_cmd
+.global vgc_wait_cmd
+.global vgc_exec
+.global vgc_vsync
+.global vgc_wait_frames
+.global vgc_cls
+.global vgc_set_fg
+.global vgc_set_bg
+.global vgc_set_border
+.global vgc_display_on
+.global vgc_display_off
+.global vgc_irq_install
+.global vgc_irq_enable
+.global vgc_irq_disable
+.global vgc_irq_ack
+.global vgc_locate
+.global vgc_set_mode
+.global vgc_set_font
+.global vgc_mem_read
+.global vgc_mem_write
+.global vgc_reverse_default
+.global vgc_reverse_explicit
+.global vgc_reverse_off
+.global vgc_flash_on
+.global vgc_flash_off
+.global vgc_gcls
+.global vgc_gcolor
+.global vgc_plot
+.global vgc_unplot
+.global vgc_line
+.global vgc_circle
+.global vgc_gtext
+.global vgc_rect
+.global vgc_fill
+.global vgc_paint
+
 .endif

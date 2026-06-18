@@ -1,11 +1,6 @@
 ; Nova fixed-address overlay manager implementation.
 
 .include "overlay.inc"
-.ifndef FIO_EMIT_ALL_RUNTIME
-FIO_EMIT_ALL_RUNTIME = 1
-.endif
-.include "fio.s"
-.include "pager.s"
 
 .ifndef OVERLAY_IMPLEMENTATION_INCLUDED
 OVERLAY_IMPLEMENTATION_INCLUDED = 1

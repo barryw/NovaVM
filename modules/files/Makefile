@@ -1,8 +1,12 @@
-CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
+CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
+NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
 
 all: files.bin files.nmod
+
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
 files.o: files.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libfiles.inc \
@@ -11,8 +15,8 @@ files.o: files.s \
             $(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s
 	$(CA65) files.s -o files.o
 
-files.bin: files.o files.cfg
-	$(LD65) -C files.cfg -m files.map -o files.bin files.o
+files.bin: files.o files.cfg $(NOVA_LIB_FILE)
+	$(LD65) -C files.cfg -m files.map -o files.bin files.o $(NOVA_LIB_FILE)
 
 # Self-documenting module: image + NDOC doc -> files.nmod. --ndk-dir single-sources
 # each ;@ndk fn's summary from the NDK routine and enforces the wrapper-calls-NDK
@@ -29,4 +33,6 @@ install: files.bin
 clean:
 	rm -f files.o files.bin files.map files.nmod
 
-.PHONY: all clean install
+FORCE:
+
+.PHONY: all clean install FORCE

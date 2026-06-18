@@ -8,6 +8,7 @@
       .include "libeditor.inc"     ; EDITOR_FN_* ids for lib_call(EDITOR) routing
       .include "libsound.inc"      ; SND_* ids for lib_call(SOUND) routing (tone/noise/volume)
       .include "libturtle.inc"     ; MODULE_ID_TURTLE ($07) + TUR_OP/TOP_* for the turtle adapter
+      .include "replline.inc"      ; shared REPL line reader ABI
       .include "ext_iface.inc"
       .include "heap.s"
       .include "tokens.s"
@@ -18,8 +19,7 @@
       .include "vars.s"
       .include "procedures.s"
       .include "gc.s"
-      .include "replline.s"        ; shared REPL line reader + up/down history ring
-                                   ; (defines input_buf/buf_idx, repl_init, repl_read_line)
+      .export repl_line_complete   ; completion hook consumed by replline.o
 
 ; =====================================================================
 ; CODE segment — cold start and main loop

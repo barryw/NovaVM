@@ -29,6 +29,8 @@ EHBASIC   := $(REPO_ROOT)/ehbasic
 NOVALOGO  := $(REPO_ROOT)/novalogo
 NOVAFORTH := $(REPO_ROOT)/novaforth
 MODGFX    := $(REPO_ROOT)/modules/graphics
+MODROOT   := $(REPO_ROOT)/modules
+MODULE_LIBS := graphics sound system editor files memory net turtle
 RTASM     := $(REPO_ROOT)/runtime/asm
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
 HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
@@ -36,7 +38,7 @@ SD_ASSETS := build/sd
 
 COMPACT_BUILD ?= build/compact
 
-.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo novaforth graphics libcall
+.PHONY: all compile compact rom sd-assets serial upload upload-cli ota-direct clean ehbasic novalogo novaforth graphics modules libcall
 
 all: upload
 
@@ -52,6 +54,11 @@ novaforth:
 graphics:
 	@$(MAKE) --no-print-directory -C $(MODGFX)
 
+modules:
+	@for mod in $(MODULE_LIBS); do \
+		$(MAKE) --no-print-directory -C $(MODROOT)/$$mod; \
+	done
+
 # Resident lib_call loader (157 B, ORG $0320). NovaHost pokes it into RAM $0320
 # at boot so module lib_calls work (see stageResidentLoader in novahost.ino).
 libcall:
@@ -63,7 +70,7 @@ build/f6581_curve.bin: $(FPGA_ROM)/f6581_curve.hex
 	@mkdir -p build
 	@$(HEX16TOBIN) $< $@
 
-sd-assets: ehbasic novalogo novaforth graphics libcall build/f6581_curve.bin
+sd-assets: ehbasic novalogo novaforth modules libcall build/f6581_curve.bin
 	@mkdir -p $(SD_ASSETS)/roms $(SD_ASSETS)/assets/sid $(SD_ASSETS)/assets/boot $(SD_ASSETS)/config $(SD_ASSETS)/lib
 	@cp $(EHBASIC)/basic.bin $(SD_ASSETS)/roms/novabasic.bin
 	@cp $(EHBASIC)/extension.bin $(SD_ASSETS)/roms/extension.bin
@@ -73,7 +80,9 @@ sd-assets: ehbasic novalogo novaforth graphics libcall build/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json
 	@cp $(REPO_ROOT)/tests/asm/testmod.bin $(SD_ASSETS)/lib/testmod.mod
-	@cp $(MODGFX)/graphics.nmod $(SD_ASSETS)/lib/graphics.nmod
+	@for mod in $(MODULE_LIBS); do \
+		cp $(MODROOT)/$$mod/$$mod.nmod $(SD_ASSETS)/lib/$$mod.nmod; \
+	done
 	@cp $(RTASM)/libcall.bin $(SD_ASSETS)/roms/libcall.bin
 	@rm -f $(SD_ASSETS)/soundfonts/GeneralUser_GS.nsfb
 	@echo "SD assets staged under $(CURDIR)/$(SD_ASSETS)"

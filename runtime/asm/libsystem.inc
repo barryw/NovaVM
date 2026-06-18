@@ -52,12 +52,42 @@ SYS_RNG32       = $06   ; ()  reporter     -> RESULT b0..3    = 32 random bits
 ; returns the pressed key byte in A (always LERR_OK).
 ;   ARG0 b0/b1 = title  ptr   ARG1 b0/b1 = message ptr   ARG2 b0/b1 = footer ptr
 ;   ARG3 b0=left b1=top b2=width b3=height (all-zero => keep current geometry)
+; Save-under calls use caller-owned XRAM buffers so UI code does not reserve or
+; overwrite any runtime-specific XRAM. Each buffer must hold width*height bytes:
+;   ARG0 b0=left b1=top b2=width b3=height
+;   ARG1 b0..2 = char-plane XRAM address
+;   ARG2 b0..2 = color-plane XRAM address
+;   ARG3 b0..2 = text-attr-plane XRAM address
+; Full save-under uses a config struct and also preserves graphics pixels. Use
+; this for dialogs drawn over graphics-plane content:
+;   ARG0 b0/b1 = config ptr
+;     +0 left +1 top +2 width +3 height
+;     +4 char u24 +7 color u24 +10 textattr u24 +13 gfx u24
+;   The text buffers are width*height bytes. The gfx buffer is
+;   (width*4)*(height*4) bytes because NUI geometry is in text cells.
+; List picker uses a caller-owned config struct so the four mailbox args stay
+; stable as the control grows:
+;   ARG0 b0/b1 = config ptr
+;     +0 u16 title ptr      +2 u16 fixed-width rows ptr
+;     +4 u8 row width       +5 u8 row count      +6 u8 selected
+;     +7 u8 left            +8 u8 top            +9 u8 width
+;    +10 u8 height         +11 u16 footer ptr
+;   Out: RESULT b0 = selected row, RESULT b1 = NUI_RESULT_OK/CANCEL
+; UI style is caller-controlled palette indexes:
+;   ARG0 b0=shadow, b1=top/left border, b2=panel,
+;        b3=packed text color (bg/fg).
 ; =====================================================================
 SYS_DIALOG_DEFAULTS = $07 ; ()                          -> set the centered default dialog geometry
 SYS_DIALOG          = $08 ; (title,msg,footer,geom)     -> draw the modal dialog, no wait
 SYS_DIALOG_WAIT     = $09 ; (title,msg,footer,geom)     -> draw the modal dialog, then wait one key
 SYS_DIALOG_ERROR    = $0A ; (title,msg,footer,geom)     -> draw a modal error dialog + wait one key
 SYS_WAIT_KEY        = $0B ; ()  reporter                -> RESULT b0 = the pressed key byte
+SYS_NUI_SAVE_UNDER    = $13 ; (geom,charbuf,colorbuf,attrbuf) -> save text planes into XRAM
+SYS_NUI_RESTORE_UNDER = $14 ; (geom,charbuf,colorbuf,attrbuf) -> restore saved text planes
+SYS_NUI_PICK_LIST     = $15 ; (configptr) reporter -> RESULT b0 selected, b1 OK/CANCEL
+SYS_NUI_SAVE_UNDER_FULL    = $16 ; (configptr) -> save text + graphics planes into XRAM
+SYS_NUI_RESTORE_UNDER_FULL = $17 ; (configptr) -> restore text + graphics planes from XRAM
+SYS_NUI_SET_STYLE          = $18 ; (shadow,border,panel,text) -> set NUI chrome/text colors
 
 ; =====================================================================
 ; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
@@ -102,6 +132,6 @@ SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer f
 
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $13
+SYS_FN_COUNT  = $19
 
 .endif

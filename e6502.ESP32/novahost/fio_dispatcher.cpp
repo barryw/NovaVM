@@ -1629,6 +1629,34 @@ uint8_t FioDispatcher::alloc_file_handle() {
     return 0;
 }
 
+bool FioDispatcher::create_file_handle_temp(FileHandle& h) {
+    if (!SD.exists("/tmp") && !SD.mkdir("/tmp"))
+        return false;
+
+    for (int attempt = 0; attempt < 16; attempt++) {
+        snprintf(h.temp_path, sizeof(h.temp_path), "/tmp/fio%08lX.tmp",
+                 (unsigned long)_next_file_temp_id++);
+        if (SD.exists(h.temp_path))
+            SD.remove(h.temp_path);
+
+        h.temp = SD.open(h.temp_path, "w+", true);
+        if (h.temp)
+            return true;
+    }
+
+    h.temp_path[0] = 0;
+    return false;
+}
+
+void FioDispatcher::close_file_handle_temp(FileHandle& h) {
+    if (h.temp)
+        h.temp.close();
+    if (h.temp_path[0]) {
+        SD.remove(h.temp_path);
+        h.temp_path[0] = 0;
+    }
+}
+
 bool FioDispatcher::load_file_handle_data(ndi::NdiImage* img, int idx,
                                           uint32_t size,
                                           std::vector<uint8_t>& out) {
@@ -1638,6 +1666,59 @@ bool FioDispatcher::load_file_handle_data(ndi::NdiImage* img, int idx,
     if (size == 0)
         return true;
     return load_file_to_vector(img, idx, size, out);
+}
+
+bool FioDispatcher::stage_file_handle_data(ndi::NdiImage* img, int idx,
+                                           uint32_t size, FileHandle& h) {
+    if (!img || !h.temp || size > 1024UL * 1024UL)
+        return false;
+
+    h.size = size;
+    if (size == 0) {
+        h.temp.flush();
+        return h.temp.seek(0);
+    }
+
+    uint32_t off = 0;
+    while (off < size) {
+        uint32_t remaining = size - off;
+        uint16_t chunk = remaining >= TRANSFER_BUF_BYTES
+            ? TRANSFER_BUF_BYTES
+            : (uint16_t)remaining;
+        int got = img->read_file_chunk_by_index(idx, off, _transfer_buf, chunk);
+        if (got != (int)chunk)
+            return false;
+        if (h.temp.write(_transfer_buf, chunk) != chunk)
+            return false;
+        off += chunk;
+    }
+
+    h.temp.flush();
+    return h.temp.seek(0);
+}
+
+bool FioDispatcher::ensure_file_handle_size(FileHandle& h, uint32_t size) {
+    if (!h.temp || size > 1024UL * 1024UL)
+        return false;
+    if (size <= h.size)
+        return true;
+
+    if (!h.temp.seek(h.size))
+        return false;
+
+    memset(_transfer_buf, 0, sizeof(_transfer_buf));
+    while (h.size < size) {
+        uint32_t remaining = size - h.size;
+        uint16_t chunk = remaining >= TRANSFER_BUF_BYTES
+            ? TRANSFER_BUF_BYTES
+            : (uint16_t)remaining;
+        if (h.temp.write(_transfer_buf, chunk) != chunk)
+            return false;
+        h.size += chunk;
+    }
+
+    h.temp.flush();
+    return true;
 }
 
 bool FioDispatcher::flush_file_handle(uint8_t id) {
@@ -1653,16 +1734,24 @@ bool FioDispatcher::flush_file_handle(uint8_t id) {
     auto* img = _dm.image(h.slot);
     if (!img)
         return false;
+    if (!h.temp)
+        return false;
 
     int existing = img->find_entry(h.name, h.parent);
     if (existing >= 0)
         img->delete_file(h.name, h.parent);
 
-    uint32_t total = (uint32_t)h.data.size();
+    uint32_t total = h.size;
     int new_idx = img->create_file(h.name, file_type_for_name(h.name),
                                    h.parent, total);
     if (new_idx < 0)
         return false;
+
+    h.temp.flush();
+    if (!h.temp.seek(0)) {
+        img->delete_file(h.name, h.parent);
+        return false;
+    }
 
     uint32_t off = 0;
     while (off < total) {
@@ -1670,8 +1759,13 @@ bool FioDispatcher::flush_file_handle(uint8_t id) {
         uint16_t chunk = remaining >= TRANSFER_BUF_BYTES
             ? TRANSFER_BUF_BYTES
             : (uint16_t)remaining;
+        int got = h.temp.read(_transfer_buf, chunk);
+        if (got != (int)chunk) {
+            img->delete_file(h.name, h.parent);
+            return false;
+        }
         if (!img->write_file_chunk_by_index(new_idx, off,
-                                            h.data.data() + off, chunk)) {
+                                            _transfer_buf, chunk)) {
             img->delete_file(h.name, h.parent);
             return false;
         }
@@ -1684,6 +1778,7 @@ bool FioDispatcher::flush_file_handle(uint8_t id) {
     }
 
     h.dirty = false;
+    h.temp.seek(h.pos < h.size ? h.pos : h.size);
     return true;
 }
 
@@ -4702,24 +4797,21 @@ void FioDispatcher::handle_fopen(bool create) {
     auto* img = _dm.image(slot);
     if (!img) { respond_err(ERR_NO_MOUNT); return; }
 
-    std::vector<uint8_t> data;
+    uint32_t file_size = 0;
+    int existing_idx = -1;
     if (!create) {
-        int idx = img->find_entry(scratch, parent);
-        if (idx < 0) {
+        existing_idx = img->find_entry(scratch, parent);
+        if (existing_idx < 0) {
             respond_err(ERR_NOT_FOUND);
             return;
         }
 
         ndi::DirEntry e;
-        if (!img->get_entry(idx, e) || e.is_directory()) {
+        if (!img->get_entry(existing_idx, e) || e.is_directory()) {
             respond_err(ERR_IO);
             return;
         }
-
-        if (!load_file_handle_data(img, idx, e.size_bytes, data)) {
-            respond_err(ERR_IO);
-            return;
-        }
+        file_size = e.size_bytes;
     }
 
     uint8_t id = alloc_file_handle();
@@ -4729,6 +4821,19 @@ void FioDispatcher::handle_fopen(bool create) {
     }
 
     FileHandle& h = _file_handles[id - 1];
+    h = FileHandle();
+    if (!create_file_handle_temp(h)) {
+        h = FileHandle();
+        respond_err(ERR_IO);
+        return;
+    }
+    if (!create && !stage_file_handle_data(img, existing_idx, file_size, h)) {
+        close_file_handle_temp(h);
+        h = FileHandle();
+        respond_err(ERR_IO);
+        return;
+    }
+
     h.active = true;
     h.can_read = can_read;
     h.can_write = can_write;
@@ -4736,13 +4841,13 @@ void FioDispatcher::handle_fopen(bool create) {
     h.slot = slot;
     h.parent = parent;
     h.pos = 0;
+    h.size = file_size;
     strncpy(h.name, scratch, sizeof(h.name) - 1);
     h.name[sizeof(h.name) - 1] = 0;
-    h.data = std::move(data);
 
     _bridge.poke(BANK_BASE + OFF_SRC_LO, id);
     _bridge.poke(BANK_BASE + OFF_SRC_HI, 0);
-    write_size24((uint32_t)h.data.size());
+    write_size24(h.size);
     respond_ok();
 }
 
@@ -4758,6 +4863,7 @@ void FioDispatcher::handle_fclose() {
         return;
     }
 
+    close_file_handle_temp(_file_handles[id - 1]);
     _file_handles[id - 1] = FileHandle();
     respond_ok();
 }
@@ -4768,26 +4874,74 @@ void FioDispatcher::handle_fread() {
     FileHandle& h = _file_handles[id - 1];
     if (!h.active || !h.can_read) { respond_err(ERR_IO); return; }
 
-    uint16_t dest = end();
+    uint8_t target = page_target() & FILE_TARGET_MASK;
     uint32_t requested = transfer_len();
-    uint32_t available = (h.pos < h.data.size())
-        ? (uint32_t)h.data.size() - h.pos
+    uint32_t available = (h.pos < h.size)
+        ? h.size - h.pos
         : 0;
     uint32_t total = requested < available ? requested : available;
-    if (dest > 0x10000UL || total > 0x10000UL || dest > 0x10000UL - total) {
+    if (!h.temp) {
         respond_err(ERR_IO);
         return;
     }
 
-    uint32_t off = 0;
-    while (off < total) {
-        uint32_t remaining = total - off;
-        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
-        if (!_bridge.loadRam((uint16_t)(dest + off), h.data.data() + h.pos + off, chunk)) {
+    if (target == FILE_TARGET_XRAM) {
+        uint32_t dest = xram_addr();
+        if (dest > XRAM_BYTES || total > XRAM_BYTES || dest > XRAM_BYTES - total) {
             respond_err(ERR_IO);
             return;
         }
-        off += chunk;
+
+        uint32_t off = 0;
+        while (off < total) {
+            uint32_t remaining = total - off;
+            uint16_t chunk = remaining >= TRANSFER_BUF_BYTES
+                ? TRANSFER_BUF_BYTES
+                : (uint16_t)remaining;
+            if (!h.temp.seek(h.pos + off)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            int got = h.temp.read(_transfer_buf, chunk);
+            if (got != (int)chunk) {
+                respond_err(ERR_IO);
+                return;
+            }
+            if (!_bridge.pokeSdramStream(dest + off, _transfer_buf, chunk)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            off += chunk;
+        }
+    } else if (target == FILE_TARGET_RAM) {
+        uint16_t dest = end();
+        if (dest > 0x10000UL || total > 0x10000UL || dest > 0x10000UL - total) {
+            respond_err(ERR_IO);
+            return;
+        }
+
+        uint32_t off = 0;
+        while (off < total) {
+            uint32_t remaining = total - off;
+            uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+            if (!h.temp.seek(h.pos + off)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            int got = h.temp.read(_transfer_buf, chunk);
+            if (got != (int)chunk) {
+                respond_err(ERR_IO);
+                return;
+            }
+            if (!_bridge.loadRam((uint16_t)(dest + off), _transfer_buf, chunk)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            off += chunk;
+        }
+    } else {
+        respond_err(ERR_IO);
+        return;
     }
 
     h.pos += total;
@@ -4801,34 +4955,84 @@ void FioDispatcher::handle_fwrite() {
     FileHandle& h = _file_handles[id - 1];
     if (!h.active || !h.can_write) { respond_err(ERR_IO); return; }
 
-    uint16_t src_addr = end();
+    uint8_t target = page_target() & FILE_TARGET_MASK;
+    uint32_t src_addr = (target == FILE_TARGET_XRAM) ? xram_addr() : end();
     uint32_t total = transfer_len();
-    if (src_addr > 0x10000UL || total > 0x10000UL ||
-        src_addr > 0x10000UL - total || h.pos > 1024UL * 1024UL ||
+    if (h.pos > 1024UL * 1024UL ||
         total > 1024UL * 1024UL || h.pos > 1024UL * 1024UL - total) {
+        respond_err(ERR_IO);
+        return;
+    }
+    if (!h.temp) {
+        respond_err(ERR_IO);
+        return;
+    }
+    if (target == FILE_TARGET_XRAM) {
+        if (src_addr > XRAM_BYTES || total > XRAM_BYTES || src_addr > XRAM_BYTES - total) {
+            respond_err(ERR_IO);
+            return;
+        }
+    } else if (target == FILE_TARGET_RAM) {
+        if (src_addr > 0x10000UL || total > 0x10000UL || src_addr > 0x10000UL - total) {
+            respond_err(ERR_IO);
+            return;
+        }
+    } else {
         respond_err(ERR_IO);
         return;
     }
 
     uint32_t new_size = h.pos + total;
-    if (new_size > h.data.size())
-        h.data.resize(new_size);
+    if (!ensure_file_handle_size(h, h.pos)) {
+        respond_err(ERR_IO);
+        return;
+    }
+    if (!h.temp.seek(h.pos)) {
+        respond_err(ERR_IO);
+        return;
+    }
 
-    uint32_t off = 0;
-    while (off < total) {
-        uint32_t remaining = total - off;
-        uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
-        uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
-        if (!_bridge.peekBlock((uint16_t)(src_addr + off), wire_count,
-                               h.data.data() + h.pos + off)) {
-            respond_err(ERR_IO);
-            return;
+    if (target == FILE_TARGET_XRAM) {
+        uint32_t off = 0;
+        while (off < total) {
+            uint32_t remaining = total - off;
+            uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+            uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+            if (!_bridge.readSdramBlock(src_addr + off, wire_count,
+                                        _transfer_buf)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            if (h.temp.write(_transfer_buf, chunk) != chunk) {
+                respond_err(ERR_IO);
+                return;
+            }
+            off += chunk;
         }
-        off += chunk;
+    } else {
+        uint32_t off = 0;
+        while (off < total) {
+            uint32_t remaining = total - off;
+            uint16_t chunk = remaining >= 256 ? 256 : (uint16_t)remaining;
+            uint8_t wire_count = (chunk == 256) ? 0 : (uint8_t)chunk;
+            if (!_bridge.peekBlock((uint16_t)(src_addr + off), wire_count,
+                                   _transfer_buf)) {
+                respond_err(ERR_IO);
+                return;
+            }
+            if (h.temp.write(_transfer_buf, chunk) != chunk) {
+                respond_err(ERR_IO);
+                return;
+            }
+            off += chunk;
+        }
     }
 
     h.pos = new_size;
+    if (h.size < new_size)
+        h.size = new_size;
     h.dirty = true;
+    h.temp.flush();
     write_size24(total);
     respond_ok();
 }
@@ -4862,7 +5066,7 @@ void FioDispatcher::handle_fsize() {
         return;
     }
 
-    write_size24((uint32_t)_file_handles[id - 1].data.size());
+    write_size24(_file_handles[id - 1].size);
     respond_ok();
 }
 
@@ -4878,7 +5082,11 @@ void FioDispatcher::handle_fresize() {
         return;
     }
 
-    h.data.resize(size);
+    if (size > h.size && !ensure_file_handle_size(h, size)) {
+        respond_err(ERR_IO);
+        return;
+    }
+    h.size = size;
     if (h.pos > size)
         h.pos = size;
     h.dirty = true;

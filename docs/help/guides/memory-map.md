@@ -691,16 +691,16 @@ Memory windows (BC00--BFFF) provide direct CPU-bus access to mapped XRAM pages.
 
 ### XRAM Workspace Conventions
 
-The 512 KB XRAM device is still fully addressable. To avoid a hardware heap,
-shared runtimes reserve fixed bands by convention:
+The 512 KB XRAM device is still fully addressable. The low 256 KB is managed by
+the shared XMC allocator; runtimes and applications should request transient
+blocks through the MEMORY module (`MEM_ALLOC`) or the XMC NDK (`xmc_alloc_block`)
+instead of claiming fixed addresses.
 
 | **XRAM range** | **Use** |
 | --- | --- |
-| $000000--$03FFFF | BASIC/XMC named-block heap and raw user data. |
-| $040000--$04FFFF | NovaZ dynamic story memory workspace. |
-| $050000--$053FFF | NovaZ 16 KB static-story page cache. |
-| $054000--$05FFFF | NovaZ save/restore scratch workspace. |
-| $060000--$06FFFF | Reserved app/runtime workspace. |
+| $000000--$03FFFF | XMC-managed 256-byte-page heap for runtime/application allocations. |
+| $040000--$05FFFF | Reserved for future platform-managed XRAM expansion. Do not use as app scratch. |
+| $060000--$06FFFF | Paged shared-library shelf: four 16 KB module-cache slots. Do not use as app scratch. |
 | $070000--$07F9FF | NVG decode staging buffer. |
 | $07FA00--$07FEFF | XMC allocator metadata (control page, page bitmap, and block directory). |
 | $07FF00--$07FFFF | Reserved. |

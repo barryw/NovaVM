@@ -1,43 +1,29 @@
 ; NovaZ Z-story/XRAM interface.
 ;
 ; This is the Nova-specific story memory layer the interpreter builds on.
-; Dynamic memory and static/high story cache pages live in fixed XRAM
-; workspaces. Static/high story bytes are demand-paged from story.bin.
+; Dynamic memory and static/high story cache pages live in XRAM blocks
+; requested from the shared MEMORY/XMC service. Static/high story bytes are
+; demand-paged from story.bin.
 
 .ifndef NOVA_NOVAZ_ZSTORY_INC_INCLUDED
 NOVA_NOVAZ_ZSTORY_INC_INCLUDED = 1
-
-; XRAM staging address for the NOVAZ6.BIN segment image (8KB), used by the
-; runtime boot loader before DMA-copying it to CPU $2000. Rationale: the
-; fixed XRAM layout (runtime/asm/xram.inc) claims $000000-$03FFFF (user
-; heap), $040000-$04FFFF (dynamic story), $050000-$053FFF (static page
-; cache), $054000+ (save/restore staging: save header + VM state,
-; ZVM_SAVE_TOTAL_SIZE — a few KB), and $070000-$07F9FF (NVG stage).
-; $060000-$061FFF sits in the documented hole between the save staging
-; region and the NVG stage, leaving 48KB of growth room for save staging
-; below and touching nothing above.
-ZSTORY_XRAM_NOVAZ6_STAGE_L = $00       ; 24-bit XRAM address $060000,
-ZSTORY_XRAM_NOVAZ6_STAGE_M = $00       ; decomposed low/mid/high.
-ZSTORY_XRAM_NOVAZ6_STAGE_H = $06
-
-; V6 picture regions, also inside the $060000-$06FFFF hole (above the 8KB
-; NOVAZ6 stage, below the NVG stage at $070000 — no lifetime handoff needed):
-;   $062000-$063FFF  PICS.PAK header + index (9 + count*15 bytes; the 8KB
-;                    region caps count at 545 — Zork Zero ships 503, Arthur
-;                    171, Journey 134, Shogun 48)
-;   $064000-$06BFFF  picture bounce buffer (worst case 320x200 4bpp = 32000
-;                    bytes) for draw_picture bitmap region loads
-ZSTORY_XRAM_PICS_INDEX_L  = $00        ; $062000
-ZSTORY_XRAM_PICS_INDEX_M  = $20
-ZSTORY_XRAM_PICS_INDEX_H  = $06
-ZSTORY_XRAM_PICS_BOUNCE_L = $00        ; $064000
-ZSTORY_XRAM_PICS_BOUNCE_M = $40
-ZSTORY_XRAM_PICS_BOUNCE_H = $06
 
 ZSTORY_ERR_NONE        = $00
 ZSTORY_ERR_IO          = $01
 ZSTORY_ERR_UNSUPPORTED = $02
 ZSTORY_ERR_READONLY    = $03
+
+; Offsets inside the allocator-owned zstory_cache_base auxiliary arena.
+; These are not absolute XRAM addresses: zstory_load_default requests the
+; entire arena from MEMORY/XMC before any of these offsets are used.
+ZSTORY_AUX_CACHE_SIZE_M       = $40   ; +$0000..+$3FFF: story page cache
+ZSTORY_AUX_SAVE_CHAR_OFF_M    = $40   ; +$4000: NUI save-under char plane
+ZSTORY_AUX_SAVE_COLOR_OFF_M   = $42   ; +$4200: NUI save-under color plane
+ZSTORY_AUX_SAVE_ATTR_OFF_M    = $44   ; +$4400: NUI save-under attr plane
+ZSTORY_AUX_SAVE_GFX_OFF_M     = $46   ; +$4600: NUI save-under graphics plane
+ZSTORY_AUX_SAVE_TEXT_OFF_M    = $50   ; +$5000: save/load full VTEXT plane scratch
+ZSTORY_AUX_PICS_INDEX_OFF_M   = $64   ; +$6400: V6 PICS.PAK index
+ZSTORY_AUX_PICS_BOUNCE_OFF_M  = $84   ; +$8400: V6 picture bitmap bounce
 
 ZHEADER_VERSION        = $00
 ZHEADER_FLAGS1         = $01
@@ -70,6 +56,12 @@ ZHEADER_STRINGS_OFF    = $2A
 .global zstory_filebytes_l
 .global zstory_checksum_hi
 .global zstory_checksum_lo
+.global zstory_dynamic_base_l
+.global zstory_dynamic_base_m
+.global zstory_dynamic_base_h
+.global zstory_cache_base_l
+.global zstory_cache_base_m
+.global zstory_cache_base_h
 .global zstory_routine_off_l
 .global zstory_routine_off_m
 .global zstory_routine_off_h

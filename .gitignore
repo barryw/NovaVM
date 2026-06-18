@@ -296,6 +296,7 @@ NovaDraw/*.app/
 # Example build outputs and local story files
 examples/novaz/build/
 examples/novaz/dist/
+runtime/asm/build/
 examples/novaz/projects/*/STORY.BIN
 examples/novaz/projects/*/PICS.BLB
 

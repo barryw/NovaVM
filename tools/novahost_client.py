@@ -54,9 +54,10 @@ def find_nova_cli() -> str:
         return override
     repo = Path(__file__).resolve().parents[1]
     patterns = (
+        "e6502.Nova/bin/Release/net*/*/nova",
+        "e6502.Nova/bin/*/net*/nova",
         "e6502.Nova/bin/Release/net*/*/native/nova",
         "e6502.Nova/bin/*/net*/*/native/nova",
-        "e6502.Nova/bin/*/net*/nova",
     )
     for pattern in patterns:
         for cand in sorted(repo.glob(pattern)):

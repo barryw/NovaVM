@@ -5,7 +5,7 @@
 ; line-by-line conversion of the book listing.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/nova_everest_asm.o docs/programs/nova_everest_asm.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/nova_everest_asm.o docs/programs/nova_everest_asm.s
 ;   ld65 -C docs/programs/diag7000.cfg -o /tmp/nova_everest_asm.bin /tmp/nova_everest_asm.o
 ;
 ; Load at $7000 and run with: SYS $7000
@@ -15,7 +15,7 @@
 ;   Space drops supplies, up to three times
 ;   Q resets the climb after a win or failure
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "nova.inc"
 .include "math_copro.inc"

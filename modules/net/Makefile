@@ -1,8 +1,12 @@
-CA65 = ca65 --cpu 65c02 -I ../../runtime/asm
+CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
+NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
 
 all: net.bin net.nmod
+
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
 net.o: net.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libnet.inc \
@@ -11,8 +15,8 @@ net.o: net.s \
             $(NOVA_ASM)/gameserver.inc $(NOVA_ASM)/gameserver.s
 	$(CA65) net.s -o net.o
 
-net.bin: net.o net.cfg
-	$(LD65) -C net.cfg -m net.map -o net.bin net.o
+net.bin: net.o net.cfg $(NOVA_LIB_FILE)
+	$(LD65) -C net.cfg -m net.map -o net.bin net.o $(NOVA_LIB_FILE)
 
 # Self-documenting module: image + NDOC doc -> net.nmod. --ndk-dir single-sources
 # each ;@ndk fn's summary from the NDK routine and enforces the wrapper-calls-NDK
@@ -29,4 +33,6 @@ install: net.bin
 clean:
 	rm -f net.o net.bin net.map net.nmod
 
-.PHONY: all clean install
+FORCE:
+
+.PHONY: all clean install FORCE

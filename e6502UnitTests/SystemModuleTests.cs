@@ -14,9 +14,10 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($13  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($19  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
-///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE)
+///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE +
+///                              NUI save-under/picker/full save-under/style)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging SYSTEM.
 /// </summary>
@@ -34,7 +35,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x13, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE)
+        Assert.AreEqual(0x19, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style)
     }
 
     // =====================================================================
@@ -47,15 +48,22 @@ public class SystemModuleTests
     // =====================================================================
 
     // Mailbox cells mirror runtime/asm/libabi.inc.
-    private const ushort FN_ID = 0x0301, STATUS = 0x0302, ARG0 = 0x0303, RESULT = 0x0313;
+    private const ushort FN_ID = 0x0301, STATUS = 0x0302, ARG0 = 0x0303, ARG1 = 0x0307,
+                         ARG2 = 0x030B, ARG3 = 0x030F, RESULT = 0x0313;
+    private const byte   SYS_DIALOG = 0x08;
+    private const byte   SYS_WAIT_KEY = 0x0B;
     private const byte   SYS_SCREEN_READLINE = 0x12;
+    private const byte   SYS_NUI_SAVE_UNDER = 0x13, SYS_NUI_RESTORE_UNDER = 0x14;
+    private const byte   SYS_NUI_PICK_LIST = 0x15;
+    private const byte   SYS_NUI_SAVE_UNDER_FULL = 0x16, SYS_NUI_RESTORE_UNDER_FULL = 0x17;
+    private const byte   SYS_NUI_SET_STYLE = 0x18;
     private const byte   LERR_OK = 0x00;
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
     private const ushort VGC_CURSX = 0xA003, VGC_CURSY = 0xA004, VGC_TEXT_TOPROW = 0xA0ED;
     private const ushort VGC_CURSEN = 0xA00A, VGC_CHAROUT = 0xA00E;
     private const ushort VGC_SCREENWIN = 0xA200, VGC_SCREENWIN_PLANE = 0xB1A0;
-    private const byte   VGC_SCREENWIN_CHAR = 0x00;
+    private const byte   VGC_SCREENWIN_CHAR = 0x00, VGC_SCREENWIN_COLOR = 0x01, VGC_SCREENWIN_ATTR = 0x02;
     private const int    ScreenCols = 80, ScreenRows = 50;
 
     private static CompositeBusDevice MakeSystemBus()
@@ -107,6 +115,7 @@ public class SystemModuleTests
     // Read `count` cells of the char-plane screen window starting at (col0,row).
     private static string ReadScreenWindowRow(CompositeBusDevice bus, int row, int col0, int count)
     {
+        bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
         int baseAddr = VGC_SCREENWIN + row * ScreenCols + col0;
         var sb = new System.Text.StringBuilder(count);
         for (int i = 0; i < count; i++)
@@ -122,6 +131,18 @@ public class SystemModuleTests
             bus.Write((ushort)(baseAddr + i), 0x20);
     }
 
+    private static void WriteScreenWindowCell(CompositeBusDevice bus, byte plane, int row, int col, byte value)
+    {
+        bus.Write(VGC_SCREENWIN_PLANE, plane);
+        bus.Write((ushort)(VGC_SCREENWIN + row * ScreenCols + col), value);
+    }
+
+    private static byte ReadScreenWindowCell(CompositeBusDevice bus, byte plane, int row, int col)
+    {
+        bus.Write(VGC_SCREENWIN_PLANE, plane);
+        return bus.Read((ushort)(VGC_SCREENWIN + row * ScreenCols + col));
+    }
+
     // Queue every byte of `keys` (raw bytes) to the editor input queue, in order.
     private static void QueueKeys(ScreenEditor editor, params byte[] keys)
     {
@@ -132,6 +153,343 @@ public class SystemModuleTests
     private static void QueueText(ScreenEditor editor, string text)
     {
         foreach (char c in text) editor.QueueInput((byte)c);
+    }
+
+    /// <summary>
+    /// NUI.WAIT_KEY must consume exactly one queued keyboard byte per call.
+    /// Modal controls use this for text entry; draining the queue drops pasted
+    /// or serial-injected descriptions before the UI can store them.
+    /// </summary>
+    [TestMethod]
+    public void NuiWaitKey_ReturnsQueuedBytesInOrder()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        QueueText(editor, "ab");
+
+        RunFn(bus, SYS_WAIT_KEY);
+        Assert.AreEqual((byte)'a', bus.ReadRam(RESULT), "first wait-key call must return the first queued byte");
+
+        RunFn(bus, SYS_WAIT_KEY);
+        Assert.AreEqual((byte)'b', bus.ReadRam(RESULT), "second wait-key call must return the next queued byte");
+    }
+
+    private static void WriteRamBytes(CompositeBusDevice bus, ushort address, ReadOnlySpan<byte> bytes)
+    {
+        for (int i = 0; i < bytes.Length; i++)
+            bus.WriteRam((ushort)(address + i), bytes[i]);
+    }
+
+    private static void WriteRamString(CompositeBusDevice bus, ushort address, string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+            bus.WriteRam((ushort)(address + i), (byte)text[i]);
+        bus.WriteRam((ushort)(address + text.Length), 0);
+    }
+
+    /// <summary>
+    /// NUI save-under is the reusable primitive for modal overlays in mixed
+    /// text/graphics runtimes: it must preserve char, color, and text-attribute
+    /// cells by copying the covered rectangle through caller-owned XRAM buffers.
+    /// </summary>
+    [TestMethod]
+    public void NuiSaveUnder_RoundTripsTextPlanesThroughCallerXram()
+    {
+        using var bus = MakeSystemBus();
+
+        const int left = 7, top = 9, width = 5, height = 2;
+        const int cellCount = width * height;
+        const int charBase = 0x010000;
+        const int colorBase = charBase + cellCount;
+        const int attrBase = colorBase + cellCount;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x, (byte)('A' + i));
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x, (byte)(0x20 + i));
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x, (byte)(0x80 + i));
+            }
+        }
+
+        SetArg(bus, ARG0, left | (top << 8) | (width << 16) | (height << 24));
+        SetArg(bus, ARG1, charBase);
+        SetArg(bus, ARG2, colorBase);
+        SetArg(bus, ARG3, attrBase);
+        RunFn(bus, SYS_NUI_SAVE_UNDER);
+
+        for (int i = 0; i < cellCount; i++)
+        {
+            Assert.AreEqual((byte)('A' + i), bus.ReadXram(charBase + i),
+                $"char plane byte {i} must be saved to caller XRAM");
+            Assert.AreEqual((byte)(0x20 + i), bus.ReadXram(colorBase + i),
+                $"color plane byte {i} must be saved to caller XRAM");
+            Assert.AreEqual((byte)(0x80 + i), bus.ReadXram(attrBase + i),
+                $"text-attr plane byte {i} must be saved to caller XRAM");
+        }
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x, (byte)'?');
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x, 0x00);
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x, 0x00);
+            }
+        }
+
+        SetArg(bus, ARG0, left | (top << 8) | (width << 16) | (height << 24));
+        SetArg(bus, ARG1, charBase);
+        SetArg(bus, ARG2, colorBase);
+        SetArg(bus, ARG3, attrBase);
+        RunFn(bus, SYS_NUI_RESTORE_UNDER);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                Assert.AreEqual((byte)('A' + i),
+                    ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x),
+                    $"char plane cell {i} must be restored");
+                Assert.AreEqual((byte)(0x20 + i),
+                    ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x),
+                    $"color plane cell {i} must be restored");
+                Assert.AreEqual((byte)(0x80 + i),
+                    ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x),
+                    $"text-attr plane cell {i} must be restored");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Mixed text/graphics runtimes draw modal controls with graphics-plane fills
+    /// and text-plane labels. Full save-under must preserve both layers, or closing
+    /// a dialog leaves colored graphics rectangles behind the restored text.
+    /// </summary>
+    [TestMethod]
+    public void NuiSaveUnderFull_RoundTripsTextAndGraphicsPlanesThroughCallerXram()
+    {
+        using var bus = MakeSystemBus();
+
+        const int left = 3, top = 4, width = 2, height = 2;
+        const int cellCount = width * height;
+        const int gfxX = left * 4, gfxY = top * 4, gfxWidth = width * 4, gfxHeight = height * 4;
+        const int gfxCount = gfxWidth * gfxHeight;
+        const int charBase = 0x010000;
+        const int colorBase = charBase + cellCount;
+        const int attrBase = colorBase + cellCount;
+        const int gfxBase = attrBase + cellCount;
+        const ushort config = 0x0680;
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x, (byte)('K' + i));
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x, (byte)(0x30 + i));
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x, (byte)(0x40 + i));
+            }
+        }
+
+        for (int y = 0; y < gfxHeight; y++)
+            for (int x = 0; x < gfxWidth; x++)
+                bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx,
+                    (gfxY + y) * VgcConstants.GfxWidth + gfxX + x,
+                    (byte)(0x50 + y * gfxWidth + x));
+
+        WriteRamBytes(bus, config, new byte[]
+        {
+            left, top, width, height,
+            (byte)(charBase & 0xFF), (byte)((charBase >> 8) & 0xFF), (byte)((charBase >> 16) & 0xFF),
+            (byte)(colorBase & 0xFF), (byte)((colorBase >> 8) & 0xFF), (byte)((colorBase >> 16) & 0xFF),
+            (byte)(attrBase & 0xFF), (byte)((attrBase >> 8) & 0xFF), (byte)((attrBase >> 16) & 0xFF),
+            (byte)(gfxBase & 0xFF), (byte)((gfxBase >> 8) & 0xFF), (byte)((gfxBase >> 16) & 0xFF),
+        });
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_SAVE_UNDER_FULL);
+
+        for (int i = 0; i < cellCount; i++)
+        {
+            Assert.AreEqual((byte)('K' + i), bus.ReadXram(charBase + i), $"char plane byte {i} must be saved");
+            Assert.AreEqual((byte)(0x30 + i), bus.ReadXram(colorBase + i), $"color plane byte {i} must be saved");
+            Assert.AreEqual((byte)(0x40 + i), bus.ReadXram(attrBase + i), $"text-attr plane byte {i} must be saved");
+        }
+
+        for (int i = 0; i < gfxCount; i++)
+            Assert.AreEqual((byte)(0x50 + i), bus.ReadXram(gfxBase + i),
+                $"graphics pixel {i} must be saved row-tightly to caller XRAM");
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x, (byte)'?');
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x, 0x00);
+                WriteScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x, 0x00);
+            }
+        }
+
+        for (int y = 0; y < gfxHeight; y++)
+            for (int x = 0; x < gfxWidth; x++)
+                bus.Vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx,
+                    (gfxY + y) * VgcConstants.GfxWidth + gfxX + x,
+                    0x00);
+
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_RESTORE_UNDER_FULL);
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int i = y * width + x;
+                Assert.AreEqual((byte)('K' + i), ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + y, left + x));
+                Assert.AreEqual((byte)(0x30 + i), ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + y, left + x));
+                Assert.AreEqual((byte)(0x40 + i), ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + y, left + x));
+            }
+        }
+
+        for (int y = 0; y < gfxHeight; y++)
+        {
+            for (int x = 0; x < gfxWidth; x++)
+            {
+                Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx,
+                    (gfxY + y) * VgcConstants.GfxWidth + gfxX + x,
+                    out byte actual));
+                Assert.AreEqual((byte)(0x50 + y * gfxWidth + x), actual,
+                    $"graphics pixel ({x},{y}) must be restored");
+            }
+        }
+    }
+
+    /// <summary>
+    /// NUI style belongs to the shared control layer: callers pass palette indexes
+    /// that make sense for their active palette, and the dialog applies them to
+    /// graphics chrome plus text cells without knowing what the colors mean.
+    /// It also clears the text cells under the graphics-only shadow so mixed
+    /// text/graphics overlays do not leak stale text around the right/bottom edge.
+    /// </summary>
+    [TestMethod]
+    public void NuiDialog_UsesCallerStyleAndClearsShadowTextCells()
+    {
+        using var bus = MakeSystemBus();
+
+        const ushort title = 0x0640;
+        const ushort message = 0x0660;
+        const ushort footer = 0x0680;
+        const byte left = 20, top = 10, width = 24, height = 8;
+        const int gfxLeft = left * 4, gfxTop = top * 4;
+        const int gfxWidth = width * 4, gfxHeight = height * 4;
+
+        WriteRamString(bus, title, "SAVE GAME");
+        WriteRamString(bus, message, "Description:");
+        WriteRamString(bus, footer, "ENTER OK");
+
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + 3, left + width, (byte)'?');
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + height, left + 3, (byte)'?');
+
+        SetArg(bus, ARG0, unchecked((int)0xCD0C0F00)); // shadow=0, top/left border=$0F, panel=$0C, text=$CD.
+        RunFn(bus, SYS_NUI_SET_STYLE);
+
+        SetArg(bus, ARG0, title);
+        SetArg(bus, ARG1, message);
+        SetArg(bus, ARG2, footer);
+        SetArg(bus, ARG3, left | (top << 8) | (width << 16) | (height << 24));
+        RunFn(bus, SYS_DIALOG);
+
+        Assert.AreEqual("Description:", ReadScreenWindowRow(bus, top + 3, left + 2, 12),
+            "dialog message must still render through the shared text path");
+        Assert.AreEqual(0xCD, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + 3, left + 2),
+            "dialog text color must use caller-supplied packed bg/fg indexes");
+        Assert.AreEqual((byte)' ', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + 3, left + width),
+            "right shadow text cell must be cleared so stale underlying text cannot leak through");
+        Assert.AreEqual(0x0D, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + 3, left + width),
+            "right shadow text cell must expose the graphics-plane shadow instead of covering it with panel background");
+        Assert.AreEqual((byte)' ', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + height, left + 3),
+            "bottom shadow text cell must be cleared so stale underlying text cannot leak through");
+        Assert.AreEqual(0x0D, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, top + height, left + 3),
+            "bottom shadow text cell must expose the graphics-plane shadow instead of covering it with panel background");
+
+        byte Gfx(int x, int y)
+        {
+            Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx,
+                y * VgcConstants.GfxWidth + x, out byte value),
+                $"graphics pixel ({x},{y}) must be readable");
+            return value;
+        }
+
+        Assert.AreEqual(0x0F, Gfx(gfxLeft + 2, gfxTop),
+            "dialog top highlight must use caller-supplied border color index");
+        Assert.AreEqual(0x0F, Gfx(gfxLeft, gfxTop + 2),
+            "dialog left highlight must use caller-supplied border color index");
+        Assert.AreEqual(0x0C, Gfx(gfxLeft + 2, gfxTop + 2),
+            "dialog panel fill must use caller-supplied panel color index");
+        Assert.AreEqual(0x0C, Gfx(gfxLeft + gfxWidth - 1, gfxTop + 2),
+            "dialog right edge must remain panel-colored, not border-colored");
+        Assert.AreEqual(0x0C, Gfx(gfxLeft + 2, gfxTop + gfxHeight - 1),
+            "dialog bottom edge must remain panel-colored, not border-colored");
+        Assert.AreEqual(0x00, Gfx(gfxLeft + gfxWidth + 1, gfxTop + 2),
+            "dialog right shadow must use caller-supplied shadow color index");
+        Assert.AreEqual(0x00, Gfx(gfxLeft + 2, gfxTop + gfxHeight + 1),
+            "dialog bottom shadow must use caller-supplied shadow color index");
+    }
+
+    /// <summary>
+    /// The shared NUI picker is the control NovaZ save/load overlays will use:
+    /// callers provide fixed-width rows and the control owns navigation,
+    /// reverse-video selection, and OK/Cancel result reporting.
+    /// </summary>
+    [TestMethod]
+    public void NuiPickList_ReturnsSelectionAndHighlightsActiveRow()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x0600;
+        const ushort title = 0x0640;
+        const ushort footer = 0x0660;
+        const ushort rows = 0x0700;
+        const byte rowWidth = 12;
+        const byte left = 10, top = 8, width = 20, height = 8;
+
+        WriteRamString(bus, title, "SAVES");
+        WriteRamString(bus, footer, "ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, rows, System.Text.Encoding.ASCII.GetBytes(
+            "SAVE 0      " +
+            "SAVE 1      " +
+            "SAVE 2      "));
+        for (int i = 0; i < 6; i++)
+            WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, top + height - 3, left + 2 + i, (byte)'?');
+
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(rows & 0xFF), (byte)(rows >> 8),
+            rowWidth, 3, 0,
+            left, top, width, height,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        SetArg(bus, ARG0, config);
+        QueueKeys(editor, 0x1B, (byte)'[', (byte)'B', 0x0D); // ANSI Down, Enter.
+
+        RunFn(bus, SYS_NUI_PICK_LIST);
+
+        Assert.AreEqual(1, bus.ReadRam(RESULT), "picker must return the selected row");
+        Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
+        Assert.AreEqual("SAVE 1", ReadScreenWindowRow(bus, top + 4, left + 2, 6),
+            "the second row must be rendered after moving down once");
+        Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + 4, left + 2),
+            "the active row must use reverse-video text attributes");
+        Assert.AreEqual("      ", ReadScreenWindowRow(bus, top + height - 3, left + 2, 6),
+            "picker must reserve a blank spacer row between list items and footer instructions");
     }
 
     /// <summary>

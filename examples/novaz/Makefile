@@ -6,6 +6,7 @@ BUILD_DIR := build
 DIST_DIR := dist
 NOVA_LIB := ../../runtime/asm
 PACKER := tools/Nova.NovaZ.Packer/Nova.NovaZ.Packer.csproj
+OVERLAY_PACKER := ../../e6502.Tools/e6502.Tools.csproj
 SMOKE := tools/Nova.NovaZ.Smoke/Nova.NovaZ.Smoke.csproj
 Z3_SPEC := tools/Nova.NovaZ.Z3SpecStory/Nova.NovaZ.Z3SpecStory.csproj
 Z4_STYLE := tools/Nova.NovaZ.Z4StyleStory/Nova.NovaZ.Z4StyleStory.csproj
@@ -29,13 +30,20 @@ PROJECT_SMOKE_ARGS ?= --generic-boot
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/novaz.bin
 NOVAZ6_BIN := $(BUILD_DIR)/novaz6.bin
+SAVE_LOAD_OVERLAY_PAYLOAD := $(BUILD_DIR)/savload.bin
+SAVE_LOAD_OVERLAY := $(BUILD_DIR)/SAVLOAD.OVL
+SAVE_LOAD_OVERLAY_SYM := $(BUILD_DIR)/savload.sym
 RUNTIME_ABI := $(BUILD_DIR)/runtime_abi.inc
+NOVA_LIB_FILE := $(NOVA_LIB)/build/nova.lib
 # Explicit ROM ABI surface exported to the RAM-resident segment. Task 6+ grows
 # this list; the awk rule fails the build if a symbol vanishes from the ROM.
 RUNTIME_ABI_SYMS := zvm_operand_lo zvm_operand_hi zvm_operand_count zvm_fetch zvm_set_var zvm_value_lo zvm_value_hi zvm_branch_decode zvm_branch_apply zvm_branch_true zvm_branch_false zvm_unsupported zstory_version \
 	nz_screen_flush_word zvm_window_current zvm_clear_whole_screen \
-	vtext_clear_region vtext_set_cursor vtext_scroll_up VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
-	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style pager_load_file_page xram_read8 zstory_read8 zstory_write8 blitter_wait blitter_start_gfx4_unpack fio_copy_name fio_exec nz_call_z_routine nz_word_len nz_lf_scrolled
+	vtext_clear_region vtext_expose_gfx_spaces_region vtext_set_cursor vtext_scroll_up vtext_set_scroll_hook VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY VTEXT_COLOR VTEXT_ATTR VTEXT_FLAGS \
+	zstory_addr_l zstory_addr_m zstory_addr_h zstory_word_lo zstory_word_hi zstory_write16 zstory_read16 zvm_stack_pop zvm_text_style pager_load_file_page xram_read8 zstory_read8 zstory_write8 blitter_wait blitter_start_copy blitter_start_gfx4_unpack fio_copy_name fio_fopen fio_fcreate fio_fclose fio_fread fio_fwrite fio_exec nz_call_z_routine nz_word_len nz_word_buf nz_lf_scrolled \
+	zvm_save_slot zvm_save_overlay_mode zvm_save_result zvm_save_header zvm_state_start zvm_state_end zvm_save_return_kind zvm_save_store_var zvm_branch_if zvm_branch_off_h zvm_branch_off_l zvm_pc_b zvm_pc_h zvm_pc_l zvm_restore_display_after_load \
+	zstory_static_lo zstory_static_hi zstory_release_hi zstory_release_lo zstory_serial zstory_checksum_hi zstory_checksum_lo \
+	zstory_dynamic_base_l zstory_dynamic_base_m zstory_dynamic_base_h zstory_cache_base_l zstory_cache_base_m zstory_cache_base_h
 Z3_SPEC_STORY := $(BUILD_DIR)/z3-spec.z3
 Z3_SPEC_IMAGE := $(DIST_DIR)/z3-spec/fd0.ndi
 Z4_STYLE_STORY := $(BUILD_DIR)/z4-styles.z4
@@ -95,6 +103,7 @@ STORY ?= $(PROJECT_STORY)
 SOUNDS ?= $(PROJECT_SOUNDS)
 PICTURES ?= $(PROJECT_PICTURES)
 PROJECT_SMOKE ?= $(PROJECT_DIR)/smoke.txt
+PROJECT_SAVE_RESTORE ?= $(PROJECT_DIR)/save-restore.txt
 PROJECT_LONGPLAY ?= $(PROJECT_DIR)/longplay.txt
 else
 IMAGE ?= $(DIST_DIR)/fd0.ndi
@@ -102,7 +111,7 @@ LABEL ?= NOVAZ
 SIZE_KB ?= 1440
 endif
 
-PACK_ARGS := --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)" --story-name "$(STORY_NAME)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
+PACK_ARGS := --output "$(IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "$(LABEL)" --size-kb "$(SIZE_KB)" --story-name "$(STORY_NAME)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN" --asset "$(SAVE_LOAD_OVERLAY):SAVLOAD.OVL"
 ifneq ($(strip $(STORY)),)
 PACK_ARGS += --story "$(STORY)"
 endif
@@ -113,15 +122,18 @@ ifneq ($(strip $(PICTURES)),)
 PACK_ARGS += --pictures "$(PICTURES)"
 endif
 
-all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN)
+all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(SAVE_LOAD_OVERLAY)
 
-$(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR)
-	$(CA65) --cpu 65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
-	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o
+$(NOVA_LIB_FILE): FORCE
+	$(MAKE) -C $(NOVA_LIB) clean-nova-lib build/nova.lib
 
-$(RUNTIME): src/runtime.s src/runtime.cfg src/zstory.inc src/zstory.s src/ztext.inc src/ztext.s src/zobject.inc src/zobject.s src/zvm.inc src/zvm.s src/zvm6.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/dma.inc $(NOVA_LIB)/dma.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s $(NOVA_LIB)/pager.inc $(NOVA_LIB)/pager.s $(NOVA_LIB)/rng.inc $(NOVA_LIB)/rng.s $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s | $(BUILD_DIR)
-	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -o $(BUILD_DIR)/runtime.o src/runtime.s
-	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(BUILD_DIR)/runtime.sym -o $@ $(BUILD_DIR)/runtime.o
+$(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/libabi.inc $(NOVA_LIB_FILE) | $(BUILD_DIR)
+	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
+	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o $(NOVA_LIB_FILE)
+
+$(RUNTIME): src/runtime.s src/runtime.cfg src/zstory.inc src/zstory.s src/ztext.inc src/ztext.s src/zobject.inc src/zobject.s src/zvm.inc src/zvm.s src/zvm6.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/dma.inc $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/libabi.inc $(NOVA_LIB)/libmemory.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/pager.inc $(NOVA_LIB)/rng.inc $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/overlay.inc $(NOVA_LIB_FILE) | $(BUILD_DIR)
+	$(CA65) --cpu w65c02 -g -I $(NOVA_LIB) -o $(BUILD_DIR)/runtime.o src/runtime.s
+	$(LD65) -C src/runtime.cfg -m $(BUILD_DIR)/runtime.map -Ln $(BUILD_DIR)/runtime.sym -o $@ $(BUILD_DIR)/runtime.o $(NOVA_LIB_FILE)
 
 # ROM ABI for the RAM-resident segment: pin each needed runtime label to its
 # linked address. Requires ca65 -g on the runtime so unexported labels appear
@@ -132,9 +144,16 @@ $(RUNTIME_ABI): $(RUNTIME) Makefile
 	    END { for (i = 1; i <= n; i++) if (!(want[i] in done)) { printf "runtime_abi: symbol %s missing from runtime.sym\n", want[i] > "/dev/stderr"; exit 1 } }' \
 	    $(BUILD_DIR)/runtime.sym > $@ || { rm -f $@; exit 1; }
 
-$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg src/zstory.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/vgc_palette.s $(NOVA_LIB)/pager.inc $(RUNTIME_ABI) | $(BUILD_DIR)
-	$(CA65) --cpu 65c02 -g -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/zvm6.o src/zvm6.s
-	$(LD65) -C src/novaz6.cfg -m $(BUILD_DIR)/novaz6.map -Ln $(BUILD_DIR)/novaz6.sym -o $@ $(BUILD_DIR)/zvm6.o
+$(NOVAZ6_BIN): src/zvm6.s src/zvm6.inc src/novaz6.cfg src/zstory.inc $(NOVA_LIB)/nova.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/vgc_palette.inc $(NOVA_LIB)/pager.inc $(NOVA_LIB)/vtext_mixed.s $(NOVA_LIB_FILE) $(RUNTIME_ABI) | $(BUILD_DIR)
+	$(CA65) --cpu w65c02 -g -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/zvm6.o src/zvm6.s
+	$(LD65) -C src/novaz6.cfg -m $(BUILD_DIR)/novaz6.map -Ln $(BUILD_DIR)/novaz6.sym -o $@ $(BUILD_DIR)/zvm6.o $(NOVA_LIB_FILE)
+
+$(SAVE_LOAD_OVERLAY_PAYLOAD): src/save_load_overlay.s src/save_load_overlay.cfg src/zstory.inc src/zvm6.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/xram.inc $(NOVA_LIB)/libsystem.inc $(NOVA_LIB)/nui.inc $(NOVA_LIB)/libabi.inc $(RUNTIME_ABI) | $(BUILD_DIR)
+	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -I $(BUILD_DIR) -o $(BUILD_DIR)/save_load_overlay.o src/save_load_overlay.s
+	$(LD65) -C src/save_load_overlay.cfg -m $(BUILD_DIR)/savload.map -Ln $(SAVE_LOAD_OVERLAY_SYM) -o $@ $(BUILD_DIR)/save_load_overlay.o
+
+$(SAVE_LOAD_OVERLAY): $(SAVE_LOAD_OVERLAY_PAYLOAD) $(OVERLAY_PACKER)
+	$(DOTNET) run --project $(OVERLAY_PACKER) -- pack-overlay --input "$(SAVE_LOAD_OVERLAY_PAYLOAD)" --output "$@" --load 0x4800 --max-size 0x2800 --sym "$(SAVE_LOAD_OVERLAY_SYM)" --main novaz_save_load_overlay_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(SAVE_LOAD_OVERLAY_SYM)")" --module-id 0x5A53 --module-version 1
 
 ndi: $(IMAGE)
 
@@ -198,7 +217,7 @@ test-z5-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z5_SPEC_STORY
 
 test-z6-spec: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_SPEC_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6SPEC" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_SPEC_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN" --asset "$(Z6_SPEC_PICS):PICS.PAK"
-	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-at "0,0=>BANNER" --expect-at "4,4=>SENT" --expect-at "5,5=>F06" --expect-at "5,43=>LONGTAILXYZ" --expect-at "5,44=>Z2 " --expect-at "5,45=>ZLAST ok" --expect-at "5,46=>    " --expect-at "5,47=>    " --expect-at "5,48=>    " --expect-at "5,49=>>" --expect-at "75,9=>BB" --expect-at "75,12=>EE" --expect-at "75,13=>  " --expect-gfx-color "40,80=>0E" --expect-gfx-color "41,80=>05" --expect-gfx-color "42,80=>05" --expect-gfx-color "43,80=>0E" --expect-gfx-color "44,80=>05" --expect-gfx-color "47,87=>05" --expect-gfx-color "39,80=>00" --expect-gfx-color "48,80=>00" --expect-gfx-color "40,88=>00" --expect-gfx-color "160,120=>00" --expect-gfx-color "165,129=>00" --expect-gfx-color "316,20=>05" --expect-gfx-color "319,23=>05" --expect-at "1,30=>  " --expect-at "1,35=>QQ" --expect-gfx-color "4,120=>05" --expect-gfx-color "11,123=>05" --expect-gfx-color "4,124=>00" --expect-gfx-color "11,127=>00" "look=>z6 input ok"
+	$(DOTNET) $(SMOKE_DLL) "$(Z6_SPEC_IMAGE)" --generic-boot --no-status-line --skip-manifest-check --expect-at "0,0=>BANNER" --expect-at "78,1=>RX" --expect-at "4,4=>SENT" --expect-at "5,5=>F06" --expect-at "5,43=>LONGTAILXYZ" --expect-at "5,44=>Z2 " --expect-at "5,45=>ZLAST ok" --expect-at "5,46=>    " --expect-at "5,47=>    " --expect-at "5,48=>    " --expect-at "5,49=>>" --expect-at "75,9=>BB" --expect-at "75,12=>EE" --expect-at "75,13=>  " --expect-gfx-color "40,80=>0E" --expect-gfx-color "41,80=>05" --expect-gfx-color "42,80=>05" --expect-gfx-color "43,80=>0E" --expect-gfx-color "44,80=>05" --expect-gfx-color "47,87=>05" --expect-gfx-color "39,80=>00" --expect-gfx-color "48,80=>00" --expect-gfx-color "40,88=>00" --expect-gfx-color "160,120=>00" --expect-gfx-color "165,129=>00" --expect-gfx-color "316,20=>05" --expect-gfx-color "319,23=>05" --expect-at "1,30=>  " --expect-at "1,35=>QQ" --expect-gfx-color "4,120=>05" --expect-gfx-color "11,123=>05" --expect-gfx-color "4,124=>00" --expect-gfx-color "11,127=>00" "look=>z6 input ok"
 
 test-z6-colours: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_COLOURS_STORY) $(SMOKE_DLL)
 	$(DOTNET) run --project $(PACKER) -- --output "$(Z6_COLOURS_IMAGE)" --autoboot "$(AUTOBOOT)" --runtime "$(RUNTIME)" --runtime-name "$(RUNTIME_NAME)" --label "Z6COLOUR" --size-kb "1440" --story-name "$(STORY_NAME)" --story "$(Z6_COLOURS_STORY)" --asset "$(NOVAZ6_BIN):NOVAZ6.BIN"
@@ -265,6 +284,11 @@ test-project: $(IMAGE) $(SMOKE_DLL)
 	@if [ ! -f "$(PROJECT_SMOKE)" ]; then echo "project smoke script not found: $(PROJECT_SMOKE)" >&2; exit 2; fi
 	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" $(PROJECT_SMOKE_ARGS) --script "$(PROJECT_SMOKE)" $(SMOKE_ARGS)
 
+test-project-save-restore: $(IMAGE) $(SMOKE_DLL)
+	@if [ -z "$(PROJECT)" ]; then echo "PROJECT is required, e.g. PROJECT=zork-zero" >&2; exit 2; fi
+	@if [ ! -f "$(PROJECT_SAVE_RESTORE)" ]; then echo "project save/restore script not found: $(PROJECT_SAVE_RESTORE)" >&2; exit 2; fi
+	$(DOTNET) $(SMOKE_DLL) "$(IMAGE)" $(PROJECT_SMOKE_ARGS) --script "$(PROJECT_SAVE_RESTORE)" $(SMOKE_ARGS)
+
 # One-off NZ6 dispatch capture (M2 window-model research): runs the project's
 # capture.txt with the dispatch trace enabled. Per-instruction sampling makes
 # this slower than test-project; it is not a test target. Output log:
@@ -321,7 +345,7 @@ test-infocom-z5-longplays:
 	$(MAKE) test-project-longplay PROJECT=sherlock STORY="$(SHERLOCK_STORY)"
 	$(MAKE) test-project-longplay PROJECT=ztuu STORY="$(ZTUU_STORY)"
 
-$(IMAGE): FORCE $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) | $(DIST_DIR)
+$(IMAGE): FORCE $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(SAVE_LOAD_OVERLAY) $(PACKER_SRC) | $(DIST_DIR)
 	mkdir -p "$(dir $(IMAGE))"
 	$(DOTNET) run --project $(PACKER) -- $(PACK_ARGS)
 
@@ -336,4 +360,4 @@ $(DIST_DIR):
 clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
-.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-v6-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+.PHONY: all ndi smoke collection test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-save-restore test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-v6-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE

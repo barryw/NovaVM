@@ -1,7 +1,7 @@
 ; Nova Chess game-server adapter implementation.
 
 .include "nchess_net.inc"
-.include "gameserver.s"
+.include "gameserver.inc"
 
 .ifndef NCHESS_NET_IMPLEMENTATION_INCLUDED
 NCHESS_NET_IMPLEMENTATION_INCLUDED = 1

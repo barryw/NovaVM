@@ -48,6 +48,9 @@ jsr vtext_clear_region
 jsr vtext_fill_style_region
 jsr vtext_clear_line
 jsr vtext_scroll_up
+jsr vtext_scroll_mixed_up ; A = rows, X = gfx fill colour
+jsr vtext_fill_gfx_region ; X = gfx fill colour under current text region
+jsr vtext_scroll_gfx_pixels_up ; A = pixel rows, X = gfx fill colour
 ```
 
 Optional region tables are caller-owned. Set `VTEXT_TABLEL/H` to the table
@@ -110,3 +113,73 @@ plane:
 Use the transparent key for cells reserved for pictures. Use an opaque
 background for ordinary solid text boxes; that lets the VGC paint the text
 background without a software graphics fill behind every character.
+
+If a cell rectangle changes from picture/transparent ownership back to normal
+background ownership, clear the graphics pixels under it before restyling the
+text cells:
+
+```asm
+        ldx #9      ; gfx colour index for the normal background
+        jsr vtext_fill_gfx_region
+```
+
+`vtext_fill_gfx_region` uses the current `VTEXT_LEFT/TOP/WIDTH/HEIGHT` and
+fills the matching 4-pixel-per-cell graphics rectangle. This prevents stale
+picture pixels from showing through text cells whose glyph pixels are blank or
+transparent.
+
+## Mixed Text And Graphics Scroll
+
+`vtext_scroll_up` scrolls only the VGC text planes: characters, colors, and text
+attributes. Applications that draw text over the graphics plane sometimes need
+framebuffer-style scrolling instead. A Z-machine V6 `scroll_window` is the
+classic case: SDL Frotz scrolls one pixel rectangle, so already-rendered text
+and pictures move together.
+
+Use `vtext_scroll_mixed_up` for that case:
+
+```asm
+        lda #6      ; text rows to scroll upward
+        ldx #9      ; gfx colour index for the exposed bottom strip
+        jsr vtext_scroll_mixed_up
+```
+
+The routine uses the current `VTEXT_LEFT/TOP/WIDTH/HEIGHT` rectangle. It waits
+for a frame boundary, scrolls the matching 4-pixel-per-cell graphics rectangle,
+then scrolls the text planes by the same row count. `VTEXT_COLOR` and
+`VTEXT_ATTR` fill the exposed text rows; `X` fills the exposed graphics strip.
+
+If your graphics rectangle is not exactly the same as the text-cell rectangle,
+scroll the two surfaces separately. This matters for runtimes with pixel-based
+windows, such as Z-machine V6: the graphics window may start at any pixel, but
+the text plane can only safely own whole 4x4 cells.
+
+Set the pixel rectangle, then call `vtext_scroll_gfx_pixels_up`:
+
+```asm
+        lda #<38
+        sta VTEXT_GFX_LEFTL
+        stz VTEXT_GFX_LEFTH
+        lda #56
+        sta VTEXT_GFX_TOP
+        lda #<244
+        sta VTEXT_GFX_WIDTHL
+        lda #>244
+        sta VTEXT_GFX_WIDTHH
+        lda #140
+        sta VTEXT_GFX_HEIGHT
+
+        lda #4      ; pixel rows to scroll upward
+        ldx #9      ; gfx colour index for the exposed bottom strip
+        jsr vtext_scroll_gfx_pixels_up
+```
+
+`VTEXT_GFX_LEFTL/H`, `VTEXT_GFX_TOP`, `VTEXT_GFX_WIDTHL/H`, and
+`VTEXT_GFX_HEIGHT` are graphics pixels, not text cells. The rectangle must fit
+inside the 320x200 graphics plane. After this call, scroll or clear the text
+planes using the normal VTEXT region routines for whatever text-cell rectangle
+your application owns.
+
+Keep `move_window`-style metadata changes separate from scrolling. Moving or
+resizing a logical window should not move old contents by itself. If contents
+must move, issue an explicit scroll or blit.

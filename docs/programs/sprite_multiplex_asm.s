@@ -10,7 +10,7 @@
 ; - Copper rewrites SPRY(n) to multiplex those 16 sprites over 8 rows.
 ; - The 16 sprite columns bounce horizontally at different speeds.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "nova.inc"
 

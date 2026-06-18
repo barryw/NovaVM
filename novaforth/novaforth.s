@@ -1,11 +1,12 @@
 ; Nova Forth v0.1 - Nova-native threaded Forth runtime.
 
-      .setcpu "65c02"
+      .setcpu "w65c02"
 
       .include "nova.inc"
       .include "libabi.inc"
       .include "libsystem.inc"
       .include "libeditor.inc"
+      .include "replline.inc"
 
 .ifndef ROMSWAP_FORTH
 ROMSWAP_FORTH = $06
@@ -76,7 +77,7 @@ parse_digits:  .res 1
 sign_flag:     .res 1
 char_tmp:      .res 1
 
-      .include "replline.s"
+      .export repl_line_complete
 
 ; =====================================================================
 ; BSS

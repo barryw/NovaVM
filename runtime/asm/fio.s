@@ -59,9 +59,6 @@ FIO_EMIT_ALL = 0
 .if FIO_EMIT_ALL .OR .referenced(fio_copy_name)
       .export fio_copy_name
 .endif
-.if FIO_EMIT_ALL .OR .referenced(fio_clear_error)
-      .export fio_clear_error
-.endif
 .if FIO_EMIT_ALL .OR .referenced(fio_set_io_error)
       .export fio_set_io_error
 .endif
@@ -200,24 +197,6 @@ fio_exec:
       LDA   FIO_STATUS
       BEQ   @wait
       JMP   fio_check
-.endif
-
-; Clear the host-visible FIO error/status latch.
-; @label FIO.CLEAR_ERROR
-; @kind routine
-; @symbol fio_clear_error
-; @summary Clear the host-visible FIO status and error latch.
-; @out A: 0 on success.
-.if FIO_EMIT_ALL .OR .referenced(fio_clear_error)
-fio_clear_error:
-      LDA   #FIO_ERR_NONE
-      STA   FIO_ERRCODE
-      LDA   #FIO_STATUS_OK
-      STA   FIO_STATUS
-      LDA   #FIO_CMD_CLEARERR
-      STA   FIO_CMD
-      LDA   #FIO_RESULT_OK
-      RTS
 .endif
 
 ; Mark an argument/host I/O error in the hardware status registers.
@@ -412,7 +391,7 @@ fio_rng:
 ; @label FIO.FOPEN
 ; @kind routine
 ; @symbol fio_fopen
-; @summary Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+; @summary Open FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H.
 .if FIO_EMIT_ALL .OR .referenced(fio_fopen)
 fio_fopen:
       LDA   #FIO_CMD_FOPEN
@@ -422,7 +401,7 @@ fio_fopen:
 ; @label FIO.FCREATE
 ; @kind routine
 ; @symbol fio_fcreate
-; @summary Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+; @summary Create/truncate FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H.
 .if FIO_EMIT_ALL .OR .referenced(fio_fcreate)
 fio_fcreate:
       LDA   #FIO_CMD_FCREATE
@@ -442,7 +421,7 @@ fio_fclose:
 ; @label FIO.FREAD
 ; @kind routine
 ; @symbol fio_fread
-; @summary Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes.
+; @summary Read fileid FIO_SRCL/H for FIO_GLENL/H bytes into CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE.
 .if FIO_EMIT_ALL .OR .referenced(fio_fread)
 fio_fread:
       LDA   #FIO_CMD_FREAD
@@ -452,7 +431,7 @@ fio_fread:
 ; @label FIO.FWRITE
 ; @kind routine
 ; @symbol fio_fwrite
-; @summary Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H.
+; @summary Write FIO_GLENL/H bytes from CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE to fileid FIO_SRCL/H.
 .if FIO_EMIT_ALL .OR .referenced(fio_fwrite)
 fio_fwrite:
       LDA   #FIO_CMD_FWRITE

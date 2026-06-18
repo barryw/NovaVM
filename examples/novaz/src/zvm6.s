@@ -44,7 +44,7 @@
 ;     transcript bit, line counts, colour data (prop 11), font props,
 ;     window_style rendering beyond wrap/scroll attributes.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "zvm6.inc"
 .include "nova.inc"             ; VGC register equates (VGC_PALETTE)
@@ -77,6 +77,10 @@ NZ6_SPACE_XRAM = $05
 ; bitmaps stay row-packed in storage and are unpacked by the blitter.
 NZ6_GFX_ROW_PIXELS = 320
 NZ6_GFX_ROWS       = 200
+NZ6_GFX_LIST_MAX   = 192
+NZ6_GFX_OP_DRAW    = $01
+NZ6_GFX_OP_ERASE   = $02
+NZ6_WORD_SAVE_MAX  = 80
 
 .segment "BSS"
 
@@ -101,6 +105,9 @@ nz6_colour:      .res 1         ; live set_colour state: bg high nibble, fg low
 nz6_clr_tmp:     .res 1         ; scratch for style/nibble math
 nz6_pics_avail:  .res 1         ; 1 = PICS.PAK index resident in XRAM
 nz6_pics_version: .res 1        ; PICS.PAK format version (1 or 2)
+nz6_pics_base_l:  .res 1        ; allocated XRAM arena: index +0, bounce +$2000
+nz6_pics_base_m:  .res 1
+nz6_pics_base_h:  .res 1
 nz6_pics_index_l: .res 1        ; XRAM low byte of the first index entry
 nz6_pics_count_lo: .res 1       ; picture count from the pak header (LE)
 nz6_pics_count_hi: .res 1
@@ -133,13 +140,33 @@ nz6_blt_wbytes:  .res 1         ; full bitmap row bytes (src stride)
 nz6_blt_wclip:   .res 1         ; erase: clipped rect width in PIXELS (16-bit)
 nz6_blt_wclip_hi: .res 1
 nz6_blt_hclip:   .res 1         ; erase: clipped rect height in rows
+nz6_gfx_base_color: .res 1      ; full-plane fill colour before retained ops
+nz6_gfx_list_count: .res 1      ; retained gfx ops since last full-plane clear
+nz6_gfx_replay_active: .res 1   ; nonzero while replaying retained ops
+nz6_gfx_replay_index: .res 1
+nz6_gfx_replay_fill: .res 1
+nz6_gfx_list_op: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_pic_lo: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_pic_hi: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_x_lo: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_x_hi: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_y: .res NZ6_GFX_LIST_MAX
+nz6_gfx_list_fill: .res NZ6_GFX_LIST_MAX
+
+.assert nz6_win_props = NZ6_SAVE_DISPLAY_STATE_BASE, error, "NZ6_SAVE_DISPLAY_STATE_BASE must point at V6 window state"
+.assert nz6_colour + 1 - nz6_win_props = NZ6_SAVE_DISPLAY_STATE_SIZE, error, "NZ6_SAVE_DISPLAY_STATE_SIZE must cover V6 display state"
+.assert nz6_gfx_base_color = NZ6_SAVE_GFX_STATE_BASE, error, "NZ6_SAVE_GFX_STATE_BASE must point at retained graphics state"
+.assert nz6_gfx_list_fill + NZ6_GFX_LIST_MAX - nz6_gfx_base_color = NZ6_SAVE_GFX_STATE_SIZE, error, "NZ6_SAVE_GFX_STATE_SIZE must cover retained graphics state"
+
+nz6_saved_word_len: .res 1
+nz6_saved_word_buf: .res NZ6_WORD_SAVE_MAX
 
 .segment "CODE"
 
         .byte NZ6_MAGIC0, NZ6_MAGIC1   ; $2000: magic word
 
 ; A = dispatch id (see zvm6.inc):
-;   $00-$0B           VAR/ROM screen ops -> nz6_var_table
+;   $00-$0C           VAR/ROM screen ops -> nz6_var_table
 ;   $20 + ext opnum   EXT ops -> nz6_ext_table (opnums 0-29)
 ; Dispatch via 65C02 JMP (abs,X): each handler RTSes straight back to the
 ; interpreter step loop, exactly like a ROM table handler would.
@@ -151,7 +178,7 @@ nz6_entry:                              ; $2002: dispatch entry, A = id
 nz6_dispatch:
         CMP #NZ6_EXT_BASE
         BCS @ext
-        CMP #NZ6_OP_PRE_NEWLINE_SCROLL + 1
+        CMP #NZ6_OP_RESTORE_DISPLAY + 1
         BCS nz6_bug             ; reserved VAR ids $0C-$1F are never routed
         ASL
         TAX
@@ -192,6 +219,12 @@ nz6_store_zero:
 ; would be consumed twice.
 nz6_branch_false:
         JMP zvm_branch_false
+
+; Optional NDK mixed-plane scroll helper. Including this source here lets the
+; RAM-resident V6 segment use the shared implementation while resolving VTEXT
+; and blitter calls through runtime_abi.inc instead of linking private copies
+; of the resident runtime objects.
+.include "vtext_mixed.s"
 
 ; --- Window table helpers ----------------------------------------------------
 
@@ -301,6 +334,51 @@ nz6_unit_to_cell:
         LDA #0
         RTS
 
+; cell = ceil(unit / 4) for a 0-based pixel edge in nz6_unit_lo/hi -> A.
+; Used when snapping a pixel window's leading edge inward to full text cells.
+nz6_unit_edge_start_cell:
+        CLC
+        LDA nz6_unit_lo
+        ADC #3
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        ADC #0
+        STA nz6_unit_hi
+        BRA nz6_unit_edge_end_cell
+
+; cell = floor(unit / 4) for a 0-based exclusive pixel edge in
+; nz6_unit_lo/hi -> A.
+nz6_unit_edge_end_cell:
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LDA nz6_unit_hi
+        BEQ :+
+        LDA #$FF
+        RTS
+:
+        LDA nz6_unit_lo
+        RTS
+
+; Prop X (a 1-based origin) -> nz6_unit = 0-based pixel origin.
+nz6_prop_origin_zero:
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_lo
+        BNE :+
+        LDA nz6_unit_hi
+        BEQ @done
+:
+        SEC
+        LDA nz6_unit_lo
+        SBC #1
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        SBC #0
+        STA nz6_unit_hi
+@done:
+        RTS
+
 ; cells = ceil(unit / 4) for the 16-bit size in nz6_unit_lo/hi -> A.
 ; Size 0 maps to 0. Results past 255 clamp to $FF. Clobbers nz6_unit.
 nz6_unit_size_to_cells:
@@ -362,6 +440,48 @@ nz6_prop_cell:
         JSR nz6_read_prop_unit
         JMP nz6_unit_to_cell
 
+; Prop X (a 1-based vertical origin) -> A = first owned text row. Normal
+; windows use the floor cell. Near the top edge, a partial-cell origin would
+; otherwise let a tiny status/header window and the following main window both
+; render into row 1, so snap only that case down to the next row.
+nz6_prop_top_cell:
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_lo
+        BNE :+
+        LDA nz6_unit_hi
+        BEQ @zero
+:
+        SEC
+        LDA nz6_unit_lo
+        SBC #1
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        SBC #0
+        STA nz6_unit_hi
+        LDA nz6_unit_lo
+        AND #$03
+        STA nz6_tmp_mod
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LDA nz6_unit_hi
+        BEQ :+
+        LDA #$FF
+        RTS
+:
+        LDA nz6_unit_lo
+        CMP #2
+        BCS @done
+        LDX nz6_tmp_mod
+        BEQ @done
+        INC A
+@done:
+        RTS
+@zero:
+        LDA #0
+        RTS
+
 ; Prop X (a unit size/count) of window nz6_tmp_win -> A = cell count,
 ; saturated to $FF. Preserves X.
 nz6_prop_size_cells:
@@ -375,7 +495,7 @@ nz6_prop_size_cells:
 ; logic for V6: zvm_select_active_window routes here (NZ6_OP_SELECT), and
 ; every segment op that changes the current window's geometry or cursor
 ; tail-calls it. Mapping:
-;   VTEXT_TOP    = (prop0 - 1) / 4                    clamped onto the screen
+;   VTEXT_TOP    = snapped text row for prop0          clamped onto the screen
 ;   VTEXT_LEFT   = (prop1 - 1) / 4 + left margin      clamped onto the screen
 ;   VTEXT_HEIGHT = ceil(prop2 / 4)          clamped to the rows below TOP
 ;   VTEXT_WIDTH  = ceil(prop3 / 4) - margins clamped to the cols right of LEFT
@@ -387,6 +507,7 @@ nz6_prop_size_cells:
 ; area. A zero-sized window leaves an invalid region: vtext drops output
 ; until the game sizes it (games size windows before drawing into them).
 nz6_apply_current_window:
+        JSR nz6_apply_colour_style
         LDA nz6_win_current
         STA nz6_tmp_win
         JSR nz6_build_region_tmp_win
@@ -419,18 +540,25 @@ nz6_apply_current_window:
 ; writable rect + flags -> the live VTEXT_LEFT/TOP/WIDTH/HEIGHT/FLAGS. Does
 ; NOT touch the cursor — callers borrowing a non-current window's rect
 ; (scroll_window) use it directly and restore via nz6_apply_current_window.
+;
+; Frotz renders V6 text into a pixel window. Nova's text plane is coarser
+; (4x4 pixels per cell), so a non-cell-aligned left edge must not let opaque
+; text-background cells overwrite adjacent chrome. Include the origin's
+; intra-cell offset in the left margin calculation even when the story's
+; explicit left margin is zero; shrink width by that same cell count so the
+; right edge stays stable.
 nz6_build_region_tmp_win:
         ; TOP
         LDX #0
-        JSR nz6_prop_cell
+        JSR nz6_prop_top_cell
         CMP #NZ6_SCREEN_ROWS
         BCC :+
         LDA #NZ6_SCREEN_ROWS-1
 :
         STA VTEXT_TOP
-        ; margins. A nonzero left margin starts at window-origin+margin
-        ; pixels; include the origin's intra-cell offset before snapping to
-        ; the 4px text grid so inline pictures keep their breathing room.
+        ; margins. Left margin starts at window-origin+margin pixels; include
+        ; the origin's intra-cell offset before snapping to the 4px text grid
+        ; so a zero-margin unaligned window still starts inside its pixel edge.
         LDX #1
         JSR nz6_read_prop_unit
         SEC
@@ -440,9 +568,6 @@ nz6_build_region_tmp_win:
         STA nz6_tmp_mod
         LDX #6
         JSR nz6_read_prop_unit
-        LDA nz6_unit_lo
-        ORA nz6_unit_hi
-        BEQ @left_margin_zero
         CLC
         LDA nz6_unit_lo
         ADC nz6_tmp_mod
@@ -451,15 +576,11 @@ nz6_build_region_tmp_win:
         ADC #0
         STA nz6_unit_hi
         JSR nz6_unit_size_to_cells
-        BRA @left_margin_done
-@left_margin_zero:
-        LDA #0
-@left_margin_done:
         STA nz6_marg_l
         LDX #7
         JSR nz6_prop_size_cells
         STA nz6_marg_r
-        ; LEFT = origin cell + left margin
+        ; LEFT = origin cell + snapped left margin
         LDX #1
         JSR nz6_prop_cell
         CLC
@@ -482,7 +603,8 @@ nz6_build_region_tmp_win:
         BCS :+
         STA VTEXT_HEIGHT
 :
-        ; WIDTH = prop3 - margins (floor 0), clamped to the cols right of LEFT
+        ; WIDTH = prop3 - snapped margins (floor 0), clamped to the cols
+        ; right of LEFT.
         LDX #3
         JSR nz6_prop_size_cells
         SEC
@@ -506,6 +628,216 @@ nz6_build_region_tmp_win:
         JSR nz6_prop_byte
         AND #$03
         STA VTEXT_FLAGS
+        RTS
+
+; Geometry-only rect for destructive full-window erases. Own only complete text
+; cells inside the pixel window; adjacent non-cell-aligned V6 windows can touch
+; the same 4px text cell, and erase_window must not wipe a neighbour's column.
+nz6_build_inner_region_tmp_win:
+        ; TOP
+        LDX #0
+        JSR nz6_prop_origin_zero
+        JSR nz6_unit_edge_start_cell
+        CMP #NZ6_SCREEN_ROWS
+        BCC :+
+        LDA #NZ6_SCREEN_ROWS-1
+:
+        STA VTEXT_TOP
+        ; LEFT
+        LDX #1
+        JSR nz6_prop_origin_zero
+        JSR nz6_unit_edge_start_cell
+        CMP #NZ6_SCREEN_COLS
+        BCC :+
+        LDA #NZ6_SCREEN_COLS-1
+:
+        STA VTEXT_LEFT
+        ; HEIGHT = floor((origin_y - 1 + prop2) / 4) - TOP, clamped
+        ; to the rows below TOP. Full-window operations own only complete
+        ; text cells inside the pixel window; otherwise adjacent windows that
+        ; meet on a non-4px edge both touch the same text cell.
+        LDX #0
+        JSR nz6_prop_origin_zero
+        LDA nz6_unit_lo
+        STA nz6_stk_lo
+        LDA nz6_unit_hi
+        STA nz6_stk_hi
+        LDX #2
+        JSR nz6_read_prop_unit
+        CLC
+        LDA nz6_unit_lo
+        ADC nz6_stk_lo
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        ADC nz6_stk_hi
+        STA nz6_unit_hi
+        JSR nz6_unit_edge_end_cell
+        SEC
+        SBC VTEXT_TOP
+        BCS :+
+        LDA #0
+:
+        STA VTEXT_HEIGHT
+        LDA #NZ6_SCREEN_ROWS
+        SEC
+        SBC VTEXT_TOP
+        CMP VTEXT_HEIGHT
+        BCS :+
+        STA VTEXT_HEIGHT
+:
+        ; WIDTH = floor((origin_x - 1 + prop3) / 4) - LEFT, clamped
+        ; to the cols right of LEFT.
+        LDX #1
+        JSR nz6_prop_origin_zero
+        LDA nz6_unit_lo
+        STA nz6_stk_lo
+        LDA nz6_unit_hi
+        STA nz6_stk_hi
+        LDX #3
+        JSR nz6_read_prop_unit
+        CLC
+        LDA nz6_unit_lo
+        ADC nz6_stk_lo
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        ADC nz6_stk_hi
+        STA nz6_unit_hi
+        JSR nz6_unit_edge_end_cell
+        SEC
+        SBC VTEXT_LEFT
+        BCS :+
+        LDA #0
+:
+        STA VTEXT_WIDTH
+        LDA #NZ6_SCREEN_COLS
+        SEC
+        SBC VTEXT_LEFT
+        CMP VTEXT_WIDTH
+        BCS :+
+        STA VTEXT_WIDTH
+:
+        ; FLAGS from the window attributes
+        LDX #14
+        JSR nz6_prop_byte
+        AND #$03
+        STA VTEXT_FLAGS
+        RTS
+
+nz6_build_full_region_tmp_win:
+        ; TOP = first complete text row inside the pixel window. Composite
+        ; scrolling moves existing text, so it must not borrow the chrome row
+        ; above a non-cell-aligned V6 window.
+        LDX #0
+        JSR nz6_prop_origin_zero
+        JSR nz6_unit_edge_start_cell
+        CMP #NZ6_SCREEN_ROWS
+        BCC :+
+        LDA #NZ6_SCREEN_ROWS-1
+:
+        STA VTEXT_TOP
+        ; LEFT = origin cell + one-cell inward snap for unaligned windows.
+        ; Keep scroll/clear ownership aligned with normal text output.
+        LDX #1
+        JSR nz6_read_prop_unit
+        SEC
+        LDA nz6_unit_lo
+        SBC #1
+        AND #$03
+        BEQ @full_left_aligned
+        LDA #1
+        BRA @full_left_have_extra
+@full_left_aligned:
+        LDA #0
+@full_left_have_extra:
+        STA nz6_marg_l
+        LDX #1
+        JSR nz6_prop_cell
+        CLC
+        ADC nz6_marg_l
+        BCS @full_left_clamp
+        CMP #NZ6_SCREEN_COLS
+        BCC :+
+@full_left_clamp:
+        LDA #NZ6_SCREEN_COLS-1
+:
+        STA VTEXT_LEFT
+        ; HEIGHT = prop2, clamped to the rows below TOP
+        LDX #2
+        JSR nz6_prop_size_cells
+        STA VTEXT_HEIGHT
+        LDA #NZ6_SCREEN_ROWS
+        SEC
+        SBC VTEXT_TOP
+        CMP VTEXT_HEIGHT
+        BCS :+
+        STA VTEXT_HEIGHT
+:
+        ; WIDTH = prop3 - inward left snap, clamped to the cols right of LEFT.
+        LDX #3
+        JSR nz6_prop_size_cells
+        SEC
+        SBC nz6_marg_l
+        BCS :+
+        LDA #0
+:
+        STA VTEXT_WIDTH
+        LDA #NZ6_SCREEN_COLS
+        SEC
+        SBC VTEXT_LEFT
+        CMP VTEXT_WIDTH
+        BCS :+
+        STA VTEXT_WIDTH
+:
+        ; FLAGS from the window attributes
+        LDX #14
+        JSR nz6_prop_byte
+        AND #$03
+        STA VTEXT_FLAGS
+        RTS
+
+; Pixel-precise graphics rectangle for the target window. This intentionally
+; does not snap to text cells: the gfx plane is a 320x200 pixel surface, and
+; Z6 scroll_window/newline scrolling must move every pixel in the logical
+; window even when the text plane can only own whole 4x4 cells inside it.
+nz6_build_gfx_region_tmp_win:
+        ; LEFT = prop1 - 1 (0-based pixels)
+        LDX #1
+        JSR nz6_prop_origin_zero
+        LDA nz6_unit_lo
+        STA VTEXT_GFX_LEFTL
+        LDA nz6_unit_hi
+        STA VTEXT_GFX_LEFTH
+        ; TOP = prop0 - 1 (0-based pixels). The NDK helper validates against
+        ; the 200px screen height, so an out-of-range high byte becomes $FF.
+        LDX #0
+        JSR nz6_prop_origin_zero
+        LDA nz6_unit_hi
+        BEQ :+
+        LDA #$FF
+        BRA :++
+:
+        LDA nz6_unit_lo
+:
+        STA VTEXT_GFX_TOP
+        ; WIDTH = prop3 pixels (16-bit; 320 is valid)
+        LDX #3
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_lo
+        STA VTEXT_GFX_WIDTHL
+        LDA nz6_unit_hi
+        STA VTEXT_GFX_WIDTHH
+        ; HEIGHT = prop2 pixels. The screen is 200px tall, so any high byte is
+        ; invalid and is forced out of range for the NDK validator.
+        LDX #2
+        JSR nz6_read_prop_unit
+        LDA nz6_unit_hi
+        BEQ :+
+        LDA #$FF
+        BRA :++
+:
+        LDA nz6_unit_lo
+:
+        STA VTEXT_GFX_HEIGHT
         RTS
 
 ; Freshen the CURRENT window's cursor props 4/5 from the live vtext cursor
@@ -604,6 +936,9 @@ nz6_reset_windows:
 ; RESET restores the power-on Nova palette before any non-V6 code runs.
 nz6_op_reset:
         JSR nz6_reset_windows
+        LDA #<nz6_scroll_live_composite
+        LDY #>nz6_scroll_live_composite
+        JSR vtext_set_scroll_hook
         JSR vgc_set_palette_ega         ; fallback for v1/no-palette packs
         LDA #VGC_MODE_TEXT_OVER_GFX     ; mode 2: text over gfx — pictures
         STA VGC_MODE                    ; show wherever cells keep the global
@@ -627,13 +962,14 @@ nz6_op_reset:
 
 ; --- PICS.PAK index -------------------------------------------------------------
 
-; Load the PICS.PAK header + index into XRAM at ZSTORY_XRAM_PICS_INDEX via
+; Load the PICS.PAK header + index into the allocated picture-index XRAM block via
 ; the FIO XPAGE region loader (one 8KB slice from offset 0; the host clamps
 ; at EOF). A missing or malformed pak is NOT an error: nz6_pics_avail stays
 ; 0 and the picture ops keep their honest no-pictures answers (the M2
 ; text-only path). Runs on every (re)start — idempotent.
 nz6_pics_preload:
         STZ nz6_pics_avail
+        JSR nz6_pics_set_base
         LDA #<nz6_pics_name
         STA PAGER_NAMEPTR_L
         LDA #>nz6_pics_name
@@ -643,11 +979,11 @@ nz6_pics_preload:
         STZ PAGER_FILEL
         STZ PAGER_FILEM
         STZ PAGER_FILEH
-        LDA #ZSTORY_XRAM_PICS_INDEX_L
+        LDA nz6_pics_base_l
         STA PAGER_ADDRL
-        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        LDA nz6_pics_base_m
         STA PAGER_ADDRM
-        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        LDA nz6_pics_base_h
         STA PAGER_ADDRH
         STZ PAGER_LENL
         LDA #$20                        ; $2000: the whole 8KB index region
@@ -659,9 +995,9 @@ nz6_pics_preload:
 :
         ; header v1: "NZPK" version 1, count(2 LE), release(2 LE)
         ; header v2: "NZPK" version 2, count/release, then 16 RGB triples
-        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        LDA nz6_pics_base_m
         STA XRAM_ADDRM
-        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        LDA nz6_pics_base_h
         STA XRAM_ADDRH
         LDX #0
 @magic:
@@ -724,11 +1060,15 @@ nz6_pics_preload:
         LDA nz6_pics_version
         CMP #$02
         BNE :+
-        LDA #(ZSTORY_XRAM_PICS_INDEX_L + 9)
+        LDA nz6_pics_base_l
+        CLC
+        ADC #9
         STA XRAM_ADDRL
-        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        LDA nz6_pics_base_m
+        ADC #0
         STA XRAM_ADDRM
-        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        LDA nz6_pics_base_h
+        ADC #0
         STA XRAM_ADDRH
         JSR vgc_set_palette_custom_xram
         BNE @done
@@ -766,6 +1106,18 @@ nz6_pics_preload:
         PLA                             ; abandon the header mid-read:
         PLA                             ; drop @next's return, finish @done
         BRA @done
+
+nz6_pics_set_base:
+        LDA zstory_cache_base_l
+        STA nz6_pics_base_l
+        LDA zstory_cache_base_m
+        CLC
+        ADC #ZSTORY_AUX_PICS_INDEX_OFF_M
+        STA nz6_pics_base_m
+        LDA zstory_cache_base_h
+        ADC #$00
+        STA nz6_pics_base_h
+        RTS
 
 nz6_pics_magic:
         .byte 'N', 'Z', 'P', 'K'
@@ -905,45 +1257,21 @@ nz6_op_erase:
         JSR nz6_write_prop_unit
         LDX #5
         JSR nz6_write_prop_unit
-        ; cell rect from props 0-3; skip the fill if it lies off-grid or is
-        ; empty
-        LDX #1
-        JSR nz6_prop_cell
-        CMP #NZ6_SCREEN_COLS
-        BCC :+
-        JMP @apply
-:
+        ; erase-owned cell rect from props 0-3; skip the fill if it lies
+        ; off-grid or is empty. This intentionally differs from scroll_window:
+        ; destructive erases cannot own partial edge cells shared with another
+        ; pixel window.
+        JSR nz6_build_inner_region_tmp_win
+        LDA VTEXT_LEFT
         STA nz6_rect_left
-        LDX #0
-        JSR nz6_prop_cell
-        CMP #NZ6_SCREEN_ROWS
-        BCC :+
-        JMP @apply
-:
+        LDA VTEXT_TOP
         STA nz6_rect_top
-        LDX #3
-        JSR nz6_prop_size_cells
+        LDA VTEXT_WIDTH
         STA nz6_rect_w
-        LDA #NZ6_SCREEN_COLS
-        SEC
-        SBC nz6_rect_left
-        CMP nz6_rect_w
-        BCS :+
-        STA nz6_rect_w
-:
-        LDA nz6_rect_w
+        LDA VTEXT_HEIGHT
         BEQ @apply
-        LDX #2
-        JSR nz6_prop_size_cells
         STA nz6_rect_h
-        LDA #NZ6_SCREEN_ROWS
-        SEC
-        SBC nz6_rect_top
-        CMP nz6_rect_h
-        BCS :+
-        STA nz6_rect_h
-:
-        LDA nz6_rect_h
+        LDA nz6_rect_w
         BEQ @apply
         ; fill the rect with spaces in the background colour, preserving the
         ; caller-visible text colour/attr (the closing apply restores the
@@ -974,15 +1302,22 @@ nz6_op_erase:
         ; straight from the freshly homed table props.
         JMP nz6_apply_current_window
 
-; set_cursor y x [window] (VAR:15). Units (= cells), relative to the window
+; set_cursor y x [window] (VAR:15). Units (= pixels), relative to the window
 ; origin. Row/col 0 clamps to 1: Zork Zero sends set_cursor 0,1 in its
-; pre-read banner block (units are 1-based, 0 is off-grid). Only the table
-; changes for a non-current window; the live cursor moves only when the
-; target IS the current window.
+; pre-read banner block (units are 1-based, 0 is off-grid). Some Infocom V6
+; layout code also passes signed negative coordinates to address backward from
+; the target window's far edge; normalize those instead of leaving the previous
+; cursor live. Only a one-operand negative call is cursor visibility control.
+; Only the table changes for a non-current window; the live cursor moves only
+; when the target IS the current window.
 nz6_op_set_cursor:
+        LDA zvm_operand_count
+        CMP #2
+        BCS @position
         LDA zvm_operand_hi
-        ORA zvm_operand_hi+1
-        BMI @rts                        ; negative y/x: V6 cursor on/off — out of M1 scope
+        BMI @rts                        ; one-operand -1/-2: V6 cursor off/on
+        RTS
+@position:
         JSR nz_screen_flush_word
         LDA zvm_operand_count
         CMP #3
@@ -995,30 +1330,82 @@ nz6_op_set_cursor:
         LDA nz6_win_current
 @have:
         STA nz6_tmp_win
-        LDA zvm_operand_lo
-        STA nz6_unit_lo
-        LDA zvm_operand_hi
-        STA nz6_unit_hi
-        ORA zvm_operand_lo
-        BNE :+
-        INC nz6_unit_lo                 ; row 0 -> 1
-:
+        JSR nz6_cursor_y_from_operand
         LDX #4
         JSR nz6_write_prop_unit
-        LDA zvm_operand_lo+1
-        STA nz6_unit_lo
-        LDA zvm_operand_hi+1
-        STA nz6_unit_hi
-        ORA zvm_operand_lo+1
-        BNE :+
-        INC nz6_unit_lo                 ; col 0 -> 1
-:
+        JSR nz6_cursor_x_from_operand
         LDX #5
         JSR nz6_write_prop_unit
         LDA nz6_tmp_win
         CMP nz6_win_current
         BNE @rts
         JMP nz6_apply_current_window
+@rts:
+        RTS
+
+nz6_cursor_y_from_operand:
+        LDA zvm_operand_hi
+        BMI @negative
+        LDA zvm_operand_lo
+        STA nz6_unit_lo
+        LDA zvm_operand_hi
+        STA nz6_unit_hi
+        ORA zvm_operand_lo
+        BNE @rts
+        INC nz6_unit_lo                 ; row 0 -> 1
+@rts:
+        RTS
+@negative:
+        LDX #2                          ; y-size + signed y + 1
+        JSR nz6_read_prop_unit
+        CLC
+        LDA nz6_unit_lo
+        ADC zvm_operand_lo
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        ADC zvm_operand_hi
+        STA nz6_unit_hi
+        INC nz6_unit_lo
+        BNE :+
+        INC nz6_unit_hi
+:
+        JMP nz6_cursor_clamp_positive
+
+nz6_cursor_x_from_operand:
+        LDA zvm_operand_hi+1
+        BMI @negative
+        LDA zvm_operand_lo+1
+        STA nz6_unit_lo
+        LDA zvm_operand_hi+1
+        STA nz6_unit_hi
+        ORA zvm_operand_lo+1
+        BNE @rts
+        INC nz6_unit_lo                 ; col 0 -> 1
+@rts:
+        RTS
+@negative:
+        LDX #3                          ; x-size + signed x + 1
+        JSR nz6_read_prop_unit
+        CLC
+        LDA nz6_unit_lo
+        ADC zvm_operand_lo+1
+        STA nz6_unit_lo
+        LDA nz6_unit_hi
+        ADC zvm_operand_hi+1
+        STA nz6_unit_hi
+        INC nz6_unit_lo
+        BNE :+
+        INC nz6_unit_hi
+:
+        ; fall through
+nz6_cursor_clamp_positive:
+        LDA nz6_unit_hi
+        BMI @one                        ; still before the window
+        LDA nz6_unit_lo
+        ORA nz6_unit_hi
+        BNE @rts
+@one:
+        JMP nz6_unit_one
 @rts:
         RTS
 
@@ -1157,10 +1544,11 @@ nz6_map_colour_operand:
         RTS
 
 ; set_text_style n (VAR:17), V6 path (dispatch id NZ6_OP_TEXT_STYLE). Styles
-; accumulate like the ROM handler (0 resets), but the colour cell derives
-; from the live colour pair: bold brightens the foreground (+8), reverse
-; is recorded as a text-plane attribute so the VGC keeps reverse backgrounds
-; opaque in text-over-gfx mode.
+; accumulate like the ROM handler (0 resets). Reverse is recorded as a
+; text-plane attribute so the VGC keeps reverse backgrounds opaque in
+; text-over-gfx mode. Bold is intentionally not implemented by changing the
+; palette index: V6 asset packs can load custom palettes, where fg|8 is not
+; guaranteed to be a brighter readable version of the same colour.
 nz6_op_text_style:
         JSR nz_screen_flush_word
         LDA zvm_operand_lo
@@ -1172,19 +1560,11 @@ nz6_op_text_style:
         STA zvm_text_style
         ; FALL THROUGH to nz6_apply_colour_style
 
-; VTEXT_COLOR := nz6_colour with the active style bits applied (bit 1 bold
-; -> fg | 8). VTEXT_ATTR gets VTXT_ATTR_REV for bit 0 reverse. Italic/fixed
-; accumulate in zvm_text_style but render as roman, same as the ROM path.
+; VTEXT_COLOR := nz6_colour. VTEXT_ATTR gets VTXT_ATTR_REV for bit 0 reverse.
+; Bold/italic/fixed accumulate in zvm_text_style but render as roman until the
+; platform has real font/style support for them.
 nz6_apply_colour_style:
-        LDA zvm_text_style
-        AND #$02
-        BEQ @no_bold
         LDA nz6_colour
-        ORA #$08
-        BRA @styled
-@no_bold:
-        LDA nz6_colour
-@styled:
         STA nz6_clr_tmp
         LDA zvm_text_style
         AND #$01
@@ -1214,17 +1594,86 @@ nz6_sync_border_to_bg:
         STA VGC_BORDER
         RTS
 
-; ROM pre-newline-scroll hook (NZ6_OP_PRE_NEWLINE_SCROLL): if the next LF will
-; scroll the live text region, scroll the matching gfx rect before VTEXT moves
-; text. The V6 MCGA framebuffer is one surface; on Nova it is split into gfx
-; and text planes, so text-first scrolling can expose the wrong bottom strip.
+; Legacy ROM pre-newline-scroll hook (NZ6_OP_PRE_NEWLINE_SCROLL). Mixed
+; scrolling now belongs to the VTEXT automatic-scroll hook installed by
+; nz6_op_reset, so the old ahead-of-newline dispatch is intentionally inert.
 nz6_op_pre_newline_scroll:
-        LDA nz_lf_scrolled
-        BEQ @rts
         STZ nz_lf_scrolled
+        RTS
+
+; VTEXT automatic-scroll hook for V6. VGC text and gfx live in separate
+; planes, but V6's MCGA model treats them as one surface. VTEXT reaches this
+; hook with the current text-output rect, which may be margin-shrunk. Scroll the
+; full current window instead, then restore the margin rect before vtext_newline
+; clamps the live cursor. NovaZ supplies two rectangles to the NDK: the exact
+; pixel window for gfx, and the snapped text-cell window for text. That keeps
+; non-cell-aligned Z6 chrome from being overwritten without leaving stale gfx
+; pixels under transparent text cells.
+nz6_scroll_live_composite:
         LDA #1
-        JMP nz6_gfx_scroll_live
-@rts:
+        STA nz6_tmp_lines
+        LDA VTEXT_LEFT
+        STA nz6_rect_left
+        LDA VTEXT_TOP
+        STA nz6_rect_top
+        LDA VTEXT_WIDTH
+        STA nz6_rect_w
+        LDA VTEXT_HEIGHT
+        STA nz6_rect_h
+        LDA VTEXT_FLAGS
+        STA nz6_stk_lo
+        LDA nz6_win_current
+        STA nz6_tmp_win
+        JSR nz6_build_full_region_tmp_win
+        LDA nz6_tmp_lines
+        JSR nz6_scroll_live_rows_composite
+        PHA
+        LDA nz6_rect_left
+        STA VTEXT_LEFT
+        LDA nz6_rect_top
+        STA VTEXT_TOP
+        LDA nz6_rect_w
+        STA VTEXT_WIDTH
+        LDA nz6_rect_h
+        STA VTEXT_HEIGHT
+        LDA nz6_stk_lo
+        STA VTEXT_FLAGS
+        PLA
+        RTS
+
+nz6_scroll_live_rows_composite:
+        STA nz6_tmp_lines
+        JSR nz6_build_gfx_region_tmp_win
+        LDA nz6_colour
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        TAX
+        LDA nz6_tmp_lines
+        ASL A
+        ASL A
+        JSR vtext_scroll_gfx_pixels_up
+        BNE @done
+        LDA nz6_tmp_lines
+        BEQ @ok
+        CMP VTEXT_HEIGHT
+        BCC @scroll_text
+        JMP vtext_clear_region
+@scroll_text:
+        LDX nz6_tmp_lines
+@loop:
+        PHX
+        JSR vtext_scroll_up
+        TAY
+        PLX
+        TYA
+        BNE @done
+        DEX
+        BNE @loop
+@ok:
+        LDA #0
+@done:
         RTS
 
 ; ROM newline hook (NZ6_OP_NEWLINE): the V6 carriage-return interrupt
@@ -1262,19 +1711,38 @@ nz6_op_cr_newline:
         ORA nz6_unit_hi
         BEQ @rts                        ; no routine armed
         ; The fire happens MID-FLUSH: the word that triggered the wrap is
-        ; still in the ROM's word buffer, and the routine's geometry ops
-        ; flush it themselves (geom_prologue) — emitting it at the OLD
-        ; cursor, where the region rebuild then overwrites it. Shield the
-        ; buffer: the routine sees it empty, the outer flush emits the word
-        ; at the rebuilt cursor. (A CR routine that PRINTS would interleave
-        ; with the shielded word — Zork Zero's RESET-MARGIN does not.)
+        ; still in the ROM's word buffer. The callback must see an empty
+        ; buffer so its geometry ops cannot flush the outer word at the old
+        ; cursor, but nested printing still reuses nz_word_buf. Preserve the
+        ; pending bytes as well as the length before running arbitrary Z-code.
         LDA nz_word_len
-        PHA
+        STA nz6_saved_word_len
+        BEQ @word_saved
+        LDX #0
+@save_word:
+        CPX nz6_saved_word_len
+        BCS @word_saved
+        LDA nz_word_buf,X
+        STA nz6_saved_word_buf,X
+        INX
+        BRA @save_word
+@word_saved:
         STZ nz_word_len
         LDA nz6_unit_lo
         LDX nz6_unit_hi
         JSR nz_call_z_routine           ; packed routine, no args
-        PLA
+        LDA nz6_saved_word_len
+        BEQ @word_restored
+        LDX #0
+@restore_word:
+        CPX nz6_saved_word_len
+        BCS @word_restored
+        LDA nz6_saved_word_buf,X
+        STA nz_word_buf,X
+        INX
+        BRA @restore_word
+@word_restored:
+        LDA nz6_saved_word_len
         STA nz_word_len
 @rts:
         RTS
@@ -1341,6 +1809,21 @@ nz6_ext_set_margins:
         STA nz6_tmp_win
 :
         JSR nz6_geom_prologue
+        LDA nz6_tmp_win
+        CMP nz6_win_current
+        BNE @write_props
+        LDA VTEXT_LEFT
+        STA nz6_rect_left               ; old writable left edge
+        CLC
+        ADC VTEXT_WIDTH
+        STA nz6_rect_w                  ; old writable right edge
+        LDA VTEXT_TOP
+        CLC
+        ADC VTEXT_CURY
+        CLC
+        ADC #1
+        STA nz6_rect_top                ; release starts below current row
+@write_props:
         LDA zvm_operand_lo
         STA nz6_unit_lo
         LDA zvm_operand_hi
@@ -1353,8 +1836,107 @@ nz6_ext_set_margins:
         STA nz6_unit_hi
         LDX #7
         JSR nz6_write_prop_unit
+        JSR nz6_restore_released_margin_spaces
         JMP nz6_geom_epilogue
 @rts:
+        RTS
+
+; When a V6 flow picture releases a temporary text margin, cells in the newly
+; writable columns are ordinary background again. They must not keep the
+; transparent picture style or stale icon pixels will show through later blank
+; text. Restyle only space cells below the current output row; rows at/above
+; the cursor may still belong to the inline picture/text already printed.
+nz6_restore_released_margin_spaces:
+        LDA nz6_tmp_win
+        CMP nz6_win_current
+        BEQ :+
+        RTS
+:
+        JSR nz6_build_region_tmp_win    ; new writable rect
+        LDA VTEXT_LEFT
+        STA nz6_marg_l                  ; new left
+        CLC
+        ADC VTEXT_WIDTH
+        STA nz6_marg_r                  ; new right edge
+        LDA VTEXT_TOP
+        STA nz6_stk_lo                  ; new top
+        CLC
+        ADC VTEXT_HEIGHT
+        STA nz6_stk_hi                  ; new bottom edge
+
+        ; Clamp release top into the new window.
+        LDA nz6_rect_top
+        CMP nz6_stk_lo
+        BCS :+
+        LDA nz6_stk_lo
+:
+        STA nz6_rect_top
+        CMP nz6_stk_hi
+        BCC :+
+        RTS
+:
+        LDA nz6_stk_hi
+        SEC
+        SBC nz6_rect_top
+        STA nz6_rect_h
+        BEQ @done
+
+        ; Left margin shrank: [new_left, old_left).
+        LDA nz6_marg_l
+        CMP nz6_rect_left
+        BCS @right
+        STA nz6_clr_tmp
+        LDA nz6_rect_left
+        SEC
+        SBC nz6_clr_tmp
+        BEQ @right
+        STA nz6_tmp_lines
+        LDA nz6_clr_tmp
+        JSR nz6_restore_space_rect
+
+@right:
+        ; Right margin shrank: [old_right, new_right).
+        LDA nz6_rect_w
+        CMP nz6_marg_r
+        BCS @done
+        LDA nz6_marg_r
+        SEC
+        SBC nz6_rect_w
+        BEQ @done
+        STA nz6_tmp_lines
+        LDA nz6_rect_w
+        JSR nz6_restore_space_rect
+@done:
+        RTS
+
+; A = left, nz6_tmp_lines = width, nz6_rect_top/h = absolute row/height.
+nz6_restore_space_rect:
+        STA VTEXT_LEFT
+        LDA nz6_rect_top
+        STA VTEXT_TOP
+        LDA nz6_tmp_lines
+        STA VTEXT_WIDTH
+        LDA nz6_rect_h
+        STA VTEXT_HEIGHT
+        LDA nz6_colour                  ; clear stale gfx pixels under cells
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        TAX
+        JSR vtext_fill_gfx_region
+        LDA VTEXT_COLOR
+        PHA
+        LDA VTEXT_ATTR
+        PHA
+        LDA nz6_colour                  ; opaque current background
+        STA VTEXT_COLOR
+        STZ VTEXT_ATTR
+        JSR vtext_expose_gfx_spaces_region
+        PLA
+        STA VTEXT_ATTR
+        PLA
+        STA VTEXT_COLOR
         RTS
 
 ; Shared tail for move_window/window_size: operand1 -> prop X, operand2 ->
@@ -1406,13 +1988,13 @@ nz6_ext_window_size:
 ; cells, so the V6 unit amount is rounded up at the VTEXT boundary. The
 ; vacated bottom rows come back blank in the live text colour (M2's
 ; single-colour model — per-window colour rendering, prop 11, is out of M2
-; scope). Works on ANY window: the target's margin-shrunk writable rect —
-; the same rect implicit scrolling uses — is borrowed into the live vtext
-; state, scrolled, and the current window's region rebuilt afterwards. The
-; target's cursor props do NOT move. Amounts >= the window height degenerate
-; to a whole-rect clear. Negative amounts (scroll down/backward): vtext has
-; no descending row blit, so fail loudly through the ROM's unsupported-opcode
-; path rather than silently mis-rendering.
+; scope). Works on ANY window: the target's full rect, not its current text
+; margins, is borrowed into the live vtext state, scrolled, and the current
+; window's region rebuilt afterwards. The target's cursor props do NOT move.
+; Amounts >= the window height degenerate to a whole-rect clear. Negative
+; amounts (scroll down/backward): vtext has no descending row blit, so fail
+; loudly through the ROM's unsupported-opcode path rather than silently
+; mis-rendering.
 nz6_ext_scroll_window:
         LDX #0
         JSR nz6_window_from_operand
@@ -1428,7 +2010,7 @@ nz6_ext_scroll_window:
         BMI @negative
         ORA zvm_operand_lo+1
         BEQ @restore                    ; amount 0: nothing to scroll
-        JSR nz6_build_region_tmp_win    ; target rect -> live vtext state
+        JSR nz6_build_full_region_tmp_win ; target rect -> live vtext state
         LDA zvm_operand_lo+1
         STA nz6_unit_lo
         LDA zvm_operand_hi+1
@@ -1437,24 +2019,15 @@ nz6_ext_scroll_window:
         STA nz6_tmp_lines
         CMP VTEXT_HEIGHT
         BCS @clear                      ; >= height: ditto (height 0 too)
-        PHA
-        JSR nz6_gfx_scroll_live         ; art scrolls with the text
-        PLA
-        TAX
-@loop:
-        PHX
-        JSR vtext_scroll_up
-        PLX
-        DEX
-        BNE @loop
+        JSR nz6_scroll_live_rows_composite
+        BNE @restore
 @restore:
         JMP nz6_apply_current_window
 @clear:
         LDA VTEXT_HEIGHT
         BEQ :+
-        JSR nz6_gfx_scroll_live         ; rows >= height: clears the gfx rect
+        JSR nz6_scroll_live_rows_composite ; rows >= height clears the rect
 :
-        JSR vtext_clear_region
         BRA @restore
 @negative:
         JMP zvm_unsupported
@@ -1826,11 +2399,15 @@ nz6_pics_find:
         CLC
         RTS
 :
-        LDA nz6_pics_index_l            ; cursor := first entry
+        LDA nz6_pics_base_l             ; cursor := first entry
+        CLC
+        ADC nz6_pics_index_l
         STA nz6_pics_cur_l
-        LDA #ZSTORY_XRAM_PICS_INDEX_M
+        LDA nz6_pics_base_m
+        ADC #$00
         STA nz6_pics_cur_m
-        LDA #ZSTORY_XRAM_PICS_INDEX_H
+        LDA nz6_pics_base_h
+        ADC #$00
         STA nz6_pics_cur_h
         LDA nz6_pics_count_lo
         STA nz6_pics_rem_lo
@@ -1994,9 +2571,16 @@ nz6_ext_draw_picture:
         SBC #>((NZ6_GFX_ROW_PIXELS * 2) & $FFFF)
         STA nz6_blt_dst_hi
 @after_flow_icon:
+        JMP nz6_pic_draw_current_abs
+
+; Draw the picture already resolved in nz6_pic_* at absolute pixel rect
+; nz6_blt_px/nz6_blt_py. Live draws record the operation and may clear text
+; cells under opaque art; restore replay only redraws the gfx pixels because
+; the saved text planes already contain their final char/colour/attr state.
+nz6_pic_draw_current_abs:
         JSR nz6_pic_clip_rect
         BCS :+
-        JMP @rts2
+        JMP @rts
 :
         ; Load the packed bitmap slice into the reusable XRAM bounce buffer.
         LDA #<nz6_pics_name
@@ -2011,11 +2595,14 @@ nz6_ext_draw_picture:
         STA PAGER_FILEM
         LDA nz6_pic_off_h
         STA PAGER_FILEH
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_L
+        LDA nz6_pics_base_l
         STA PAGER_ADDRL
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_M
+        LDA nz6_pics_base_m
+        CLC
+        ADC #(ZSTORY_AUX_PICS_BOUNCE_OFF_M - ZSTORY_AUX_PICS_INDEX_OFF_M)
         STA PAGER_ADDRM
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_H
+        LDA nz6_pics_base_h
+        ADC #$00
         STA PAGER_ADDRH
         LDA nz6_pic_len_lo
         STA PAGER_LENL
@@ -2025,18 +2612,22 @@ nz6_ext_draw_picture:
         STA PAGER_TARGET
         JSR pager_load_file_page
         BEQ :+
-@rts2a:
+@rts:
         RTS
 :
+        JSR nz6_pic_prefill_flow_cell_rect
         ; Unpack the row-packed 4bpp source into one gfx pixel per VGC
         ; address. BLT_CKEY > 15 disables transparency for opaque pictures.
         LDA #NZ6_SPACE_XRAM
         STA BLT_SRCSPACE
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_L
+        LDA nz6_pics_base_l
         STA BLT_SRCL
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_M
+        LDA nz6_pics_base_m
+        CLC
+        ADC #(ZSTORY_AUX_PICS_BOUNCE_OFF_M - ZSTORY_AUX_PICS_INDEX_OFF_M)
         STA BLT_SRCM
-        LDA #ZSTORY_XRAM_PICS_BOUNCE_H
+        LDA nz6_pics_base_h
+        ADC #$00
         STA BLT_SRCH
         LDA nz6_blt_wbytes
         STA BLT_SRCSTRL
@@ -2077,26 +2668,67 @@ nz6_ext_draw_picture:
         BEQ :+
         RTS
 :
+        JSR nz6_gfx_record_draw_current
+        LDA nz6_gfx_replay_active
+        BEQ :+
+        JMP @rts
+:
         ; MCGA-faithful compositing approximation for the split text/gfx
         ; planes: an opaque picture owns the whole touched cell rectangle, so
         ; blank those cells (bg 0 = display-transparent) and let the gfx plane
-        ; show through. Keyed transparent overlay art does NOT own its full
-        ; rect; transparent pixels skip, so clearing the whole text-cell
-        ; rectangle would erase text that MCGA would leave intact. Inline flow
-        ; pictures are different: the story reserved text rows for them, so
-        ; their cells must become display-transparent.
-        LDA nz6_pic_flags
-        AND #NZ6_PIC_FLAG_TRANSPARENT
-        BEQ @clear_picture_cells
+        ; show through. Flow pictures also own their reserved text-cell box
+        ; even when the source bitmap is keyed transparent. Other transparent
+        ; pictures are overlays: expose only space cells so visible text is not
+        ; deleted.
+@mark_picture_cells:
+        JSR nz6_pic_compute_cell_rect
+        BCS :+
+        JMP @rts
+:
+        ; borrow the live vtext region for the picture-owned cell rect, then
+        ; rebuild the current window's region. Transparent pictures expose only
+        ; spaces to the gfx plane. Destructively clearing non-space text creates
+        ; holes that later scroll through the transcript.
+        LDA nz6_rect_left
+        STA VTEXT_LEFT
+        LDA nz6_rect_top
+        STA VTEXT_TOP
+        LDA nz6_rect_w
+        STA VTEXT_WIDTH
+        LDA nz6_rect_h
+        STA VTEXT_HEIGHT
+        LDA VTEXT_COLOR
+        PHA
+        LDA #NZ6_COLOR_DEFAULT          ; bg 0: cells go display-transparent
+        STA VTEXT_COLOR
         LDA nz6_pic_flags
         AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)
         BNE @clear_picture_cells
-        JMP @rts2
+        LDA nz6_pic_flags
+        AND #NZ6_PIC_FLAG_TRANSPARENT
+        BNE @expose_picture_spaces
 @clear_picture_cells:
-        LDA nz6_blt_px_lo               ; cols = ceil((x & 3) + w_px) / 4:
-        AND #$03                        ; partial edge cells belong to the
-        CLC                             ; picture too — on MCGA its pixels
-        ADC nz6_pic_w_lo                ; own that area.
+        JSR vtext_clear_region
+        BRA @restore_vtext_color
+@expose_picture_spaces:
+        JSR vtext_expose_gfx_spaces_region
+@restore_vtext_color:
+        PLA
+        STA VTEXT_COLOR
+        JMP nz6_apply_current_window
+
+; Compute the 4x4 text-cell rectangle touched by the current picture rect.
+; Partial edge cells belong to the picture because MCGA pixels own that area.
+; Out: nz6_rect_left/top/w/h, C=1 if any cells remain after screen clipping.
+nz6_pic_compute_cell_rect:
+        LDA nz6_blt_cellx
+        STA nz6_rect_left
+        LDA nz6_blt_celly
+        STA nz6_rect_top
+        LDA nz6_blt_px_lo               ; cols = ceil((x & 3) + w_px) / 4
+        AND #$03
+        CLC
+        ADC nz6_pic_w_lo
         TAX
         LDA nz6_pic_w_hi
         ADC #0
@@ -2113,24 +2745,18 @@ nz6_ext_draw_picture:
         ROR A
         LSR nz6_pic_tmp
         ROR A
-        BNE :+
-        JMP @rts2
-:
-        ; clip to the screen's right edge
-        STA nz6_blt_wclip
+        BEQ @empty
+        STA nz6_rect_w
         LDA #NZ6_SCREEN_COLS
         SEC
-        SBC nz6_blt_cellx
-        CMP nz6_blt_wclip
+        SBC nz6_rect_left
+        CMP nz6_rect_w
         BCS :+
-        STA nz6_blt_wclip
+        STA nz6_rect_w
 :
-        LDA nz6_blt_wclip
-        BNE :+
-        JMP @rts2
-:
-        ; rows = ceil((y & 3) + h_px) / 4, clipped to the bottom edge
-        LDA nz6_blt_py
+        LDA nz6_rect_w
+        BEQ @empty
+        LDA nz6_blt_py                  ; rows = ceil((y & 3) + h_px) / 4
         AND #$03
         CLC
         ADC nz6_pic_h_lo
@@ -2150,41 +2776,65 @@ nz6_ext_draw_picture:
         ROR A
         LSR nz6_pic_tmp
         ROR A
-        BNE :+
-        JMP @rts2
-:
-        STA nz6_blt_hclip
+        BEQ @empty
+        STA nz6_rect_h
         LDA #NZ6_SCREEN_ROWS
         SEC
-        SBC nz6_blt_celly
-        CMP nz6_blt_hclip
+        SBC nz6_rect_top
+        CMP nz6_rect_h
         BCS :+
-        STA nz6_blt_hclip
+        STA nz6_rect_h
 :
-        LDA nz6_blt_hclip
-        BNE :+
-        JMP @rts2
-:
-        ; borrow the live vtext region for the rect clear (the same idiom
-        ; as erase_window n), then rebuild the current window's region
-        LDA nz6_blt_cellx
-        STA VTEXT_LEFT
-        LDA nz6_blt_celly
-        STA VTEXT_TOP
-        LDA nz6_blt_wclip
-        STA VTEXT_WIDTH
-        LDA nz6_blt_hclip
-        STA VTEXT_HEIGHT
-        LDA VTEXT_COLOR
-        PHA
-        LDA #NZ6_COLOR_DEFAULT          ; bg 0: cells go display-transparent
-        STA VTEXT_COLOR
-        JSR vtext_clear_region
-        PLA
-        STA VTEXT_COLOR
-        JMP nz6_apply_current_window
-@rts2:
+        LDA nz6_rect_h
+        BEQ @empty
+        SEC
         RTS
+@empty:
+        CLC
+        RTS
+
+; Flow pictures reserve full 4x4 text cells, but their transparent bitmap
+; often leaves 1-3 pixels of padding inside the reserved cells. Clear that
+; reserved gfx area before the keyed blit so text-transparent padding cannot
+; reveal pixels scrolled in from an older inline picture.
+nz6_pic_prefill_flow_cell_rect:
+        LDA nz6_pic_flags
+        AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)
+        BNE :+
+        RTS
+:
+        JSR nz6_pic_compute_cell_rect
+        BCS :+
+        RTS
+:
+        LDA nz6_gfx_replay_active
+        BEQ @live_fill
+        LDA nz6_gfx_replay_fill
+        BRA @fill_ready
+@live_fill:
+        LDA nz6_colour                  ; window background colour, 1px/byte
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        STA nz6_gfx_replay_fill
+@fill_ready:
+        STA nz6_gfx_replay_fill
+        JMP nz6_fill_gfx_cell_rect
+
+; Fill the gfx pixels under nz6_rect_* cell coordinates with colour A.
+nz6_fill_gfx_cell_rect:
+        STA nz6_clr_tmp
+        LDA nz6_rect_left
+        STA VTEXT_LEFT
+        LDA nz6_rect_top
+        STA VTEXT_TOP
+        LDA nz6_rect_w
+        STA VTEXT_WIDTH
+        LDA nz6_rect_h
+        STA VTEXT_HEIGHT
+        LDX nz6_clr_tmp
+        JMP vtext_fill_gfx_region
 
 ; erase_picture N [y x] (EXT:7): fill the picture's (clipped) rect with the
 ; current window background colour on the gfx layer.
@@ -2196,8 +2846,17 @@ nz6_ext_erase_picture:
 :
         JSR nz6_pic_rect_setup
         BCC @rts
+        JMP nz6_pic_erase_current_abs
+
+; Erase the picture rect already resolved in nz6_pic_* at absolute pixel rect
+; nz6_blt_px/nz6_blt_py. Live erase uses the current background colour and
+; records the op; restore replay uses the saved fill colour.
+nz6_pic_erase_current_abs:
         JSR nz6_pic_clip_rect
-        BCC @rts
+        BCS :+
+@rts:
+        RTS
+:
         STZ BLT_SRCSPACE
         STZ BLT_SRCL
         STZ BLT_SRCM
@@ -2225,15 +2884,23 @@ nz6_ext_erase_picture:
         LDA #BLT_MODE_FILL
         STA BLT_MODE_REG
         STZ BLT_CKEY
+        LDA nz6_gfx_replay_active
+        BEQ @live_fill
+        LDA nz6_gfx_replay_fill
+        BRA @fill_ready
+@live_fill:
         LDA nz6_colour                  ; window background colour, 1px/byte
         LSR A
         LSR A
         LSR A
         LSR A
+        STA nz6_gfx_replay_fill
+@fill_ready:
         STA BLT_FILLVALUE
         LDA #BLT_CMD_START
         STA BLT_CMD_REG
-        JMP blitter_wait
+        JSR blitter_wait
+        JMP nz6_gfx_record_erase_current
 
 ; Resolve the op's window-relative pixel coords + the found picture's dims
 ; into a gfx rect: C=1 with nz6_blt_* filled in, C=0 fully off-screen (or
@@ -2395,6 +3062,87 @@ nz6_pic_rect_setup:
         CLC
         RTS
 
+; Resolve an already-final absolute pixel rect into cell/destination scratch.
+; Used only by restore replay; live draw/erase still goes through the
+; window-relative V6 coordinate path above.
+nz6_pic_abs_rect_setup:
+        LDA nz6_blt_py
+        CMP #NZ6_SCREEN_UNIT_ROWS
+        BCC :+
+        JMP @off
+:
+        LDA nz6_blt_px_hi
+        CMP #>NZ6_SCREEN_UNIT_COLS
+        BCC @x_on_screen
+        BEQ :+
+        JMP @off
+:
+        LDA nz6_blt_px_lo
+        CMP #<NZ6_SCREEN_UNIT_COLS
+        BCC @x_on_screen
+        JMP @off
+@x_on_screen:
+        LDA nz6_blt_py
+        LSR A
+        LSR A
+        STA nz6_blt_celly
+        LDA nz6_blt_px_lo
+        STA nz6_unit_lo
+        LDA nz6_blt_px_hi
+        STA nz6_unit_hi
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LSR nz6_unit_hi
+        ROR nz6_unit_lo
+        LDA nz6_unit_lo
+        STA nz6_blt_cellx
+        ; start pixel address = y*320 + x = y*256 + y*64 + x.
+        LDA nz6_blt_py
+        STA nz6_blt_dst_hi
+        STZ nz6_blt_dst_lo
+        LDA nz6_blt_py
+        ASL A
+        ASL A
+        ASL A
+        ASL A
+        ASL A
+        ASL A
+        STA nz6_pic_tmp
+        LDA nz6_blt_py
+        LSR A
+        LSR A
+        CLC
+        ADC nz6_blt_dst_hi
+        STA nz6_blt_dst_hi
+        CLC
+        LDA nz6_blt_dst_lo
+        ADC nz6_pic_tmp
+        STA nz6_blt_dst_lo
+        LDA nz6_blt_dst_hi
+        ADC #0
+        STA nz6_blt_dst_hi
+        CLC
+        LDA nz6_blt_dst_lo
+        ADC nz6_blt_px_lo
+        STA nz6_blt_dst_lo
+        LDA nz6_blt_dst_hi
+        ADC nz6_blt_px_hi
+        STA nz6_blt_dst_hi
+        ; source bytes per row = (w_px + 1) / 2 (max 160)
+        LDA nz6_pic_w_lo
+        CLC
+        ADC #1
+        STA nz6_blt_wbytes
+        LDA nz6_pic_w_hi
+        ADC #0
+        LSR A
+        ROR nz6_blt_wbytes
+        SEC
+        RTS
+@off:
+        CLC
+        RTS
+
 ; Clip the found picture's PIXEL rect against the plane (erase_picture's
 ; fill needs explicit bounds; draw clips host-side). C=0 = nothing visible.
 nz6_pic_clip_rect:
@@ -2449,143 +3197,167 @@ nz6_pic_clip_rect:
         CLC
         RTS
 
-; Scroll the LIVE vtext region's gfx rect up by A cell rows (art follows
-; the text — on MCGA they share one framebuffer). A >= height clears the
-; whole rect. Clobbers the nz6_blt_* scratch (no draw is ever in flight
-; when text scrolls).
-nz6_gfx_scroll_live:
-        STA nz6_pic_tmp                 ; rows to scroll (cells)
-        LDA VTEXT_HEIGHT
-        BEQ @rts
-        LDA VTEXT_WIDTH
-        BNE @go
+; --- Retained graphics display state -----------------------------------------
+;
+; Save/restore stores the V6 BSS block. Keep a compact operation list inside
+; that block so restore can rebuild the gfx plane from native PICS.PAK assets
+; instead of serializing the raw 320x200 framebuffer.
+
+nz6_gfx_note_clear:
+        LDA nz6_gfx_replay_active
+        BNE @rts
+        LDA nz6_clr_tmp
+        STA nz6_gfx_base_color
+        STZ nz6_gfx_list_count
 @rts:
         RTS
-@go:
-        ; dst px addr = top*1280 + left*4 (top*5 in the high byte)
-        LDA VTEXT_LEFT
-        STA nz6_blt_dst_lo
-        STZ nz6_blt_dst_hi
-        ASL nz6_blt_dst_lo
-        ROL nz6_blt_dst_hi
-        ASL nz6_blt_dst_lo
-        ROL nz6_blt_dst_hi
-        LDA VTEXT_TOP
-        ASL A
-        ASL A
-        CLC
-        ADC VTEXT_TOP                   ; top*5
-        CLC
-        ADC nz6_blt_dst_hi
-        STA nz6_blt_dst_hi
-        ; width px = W*4 (16-bit)
-        LDA VTEXT_WIDTH
-        STA nz6_blt_wclip
-        STZ nz6_blt_wclip_hi
-        ASL nz6_blt_wclip
-        ROL nz6_blt_wclip_hi
-        ASL nz6_blt_wclip
-        ROL nz6_blt_wclip_hi
-        ; copy rows = (H - rows) cells; <= 0 means clear the whole rect
-        LDA VTEXT_HEIGHT
+
+nz6_gfx_record_alloc:
+        LDA nz6_gfx_replay_active
+        BNE @full
+        LDX nz6_gfx_list_count
+        CPX #NZ6_GFX_LIST_MAX
+        BCS @full
+        INC nz6_gfx_list_count
         SEC
-        SBC nz6_pic_tmp
-        BCC @fill_all
-        BEQ @fill_all
-        STA nz6_blt_hclip               ; cells to copy
-        ; blitter copy: src = dst + rows*1280 (rows*5 in the high byte)
-        LDA #NZ6_SPACE_GFX
-        STA BLT_SRCSPACE
-        STA BLT_DSTSPACE
-        LDA nz6_blt_dst_lo
-        STA BLT_SRCL
-        STA BLT_DSTL
-        LDA nz6_pic_tmp
-        ASL A
-        ASL A
+        RTS
+@full:
         CLC
-        ADC nz6_pic_tmp                 ; rows*5
-        CLC
-        ADC nz6_blt_dst_hi
-        STA BLT_SRCM
-        LDA nz6_blt_dst_hi
-        STA BLT_DSTM
-        STZ BLT_SRCH
-        STZ BLT_DSTH
-        LDA #<NZ6_GFX_ROW_PIXELS
-        STA BLT_SRCSTRL
-        STA BLT_DSTSTRL
-        LDA #>NZ6_GFX_ROW_PIXELS
-        STA BLT_SRCSTRH
-        STA BLT_DSTSTRH
-        LDA nz6_blt_wclip
-        STA BLT_WIDTHL
-        LDA nz6_blt_wclip_hi
-        STA BLT_WIDTHH
-        LDA nz6_blt_hclip               ; (H-rows) cells -> *4 px rows
-        ASL A
-        ASL A
-        STA BLT_HEIGHTL
-        STZ BLT_HEIGHTH
-        STZ BLT_MODE_REG
-        STZ BLT_CKEY
-        STZ BLT_FILLVALUE
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JSR blitter_wait
-        ; fill the vacated strip: dst += (H-rows)*1280, height rows*4
-        LDA nz6_blt_hclip
-        ASL A
-        ASL A
-        CLC
-        ADC nz6_blt_hclip               ; (H-rows)*5
-        CLC
-        ADC nz6_blt_dst_hi
-        STA nz6_blt_dst_hi
-        LDA nz6_pic_tmp
-        BRA @fill
-@fill_all:
-        LDA VTEXT_HEIGHT
-@fill:
-        ASL A
-        ASL A
-        STA nz6_blt_hclip               ; strip height in px rows
-        STZ BLT_SRCSPACE
-        STZ BLT_SRCL
-        STZ BLT_SRCM
-        STZ BLT_SRCH
-        STZ BLT_SRCSTRL
-        STZ BLT_SRCSTRH
-        LDA #NZ6_SPACE_GFX
-        STA BLT_DSTSPACE
-        LDA nz6_blt_dst_lo
-        STA BLT_DSTL
-        LDA nz6_blt_dst_hi
-        STA BLT_DSTM
-        STZ BLT_DSTH
-        LDA #<NZ6_GFX_ROW_PIXELS
-        STA BLT_DSTSTRL
-        LDA #>NZ6_GFX_ROW_PIXELS
-        STA BLT_DSTSTRH
-        LDA nz6_blt_wclip
-        STA BLT_WIDTHL
-        LDA nz6_blt_wclip_hi
-        STA BLT_WIDTHH
-        LDA nz6_blt_hclip
-        STA BLT_HEIGHTL
-        STZ BLT_HEIGHTH
-        LDA #BLT_MODE_FILL
-        STA BLT_MODE_REG
-        STZ BLT_CKEY
-        LDA nz6_colour                  ; revealed rows take the window bg —
-        LSR A                           ; the parchment field lives in gfx
-        LSR A
-        LSR A
-        LSR A
-        STA BLT_FILLVALUE
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JMP blitter_wait
+        RTS
+
+nz6_gfx_record_draw_current:
+        JSR nz6_gfx_record_alloc
+        BCC @rts
+        LDA #NZ6_GFX_OP_DRAW
+        STA nz6_gfx_list_op,X
+        LDA zvm_operand_lo
+        STA nz6_gfx_list_pic_lo,X
+        LDA zvm_operand_hi
+        STA nz6_gfx_list_pic_hi,X
+        LDA nz6_blt_px_lo
+        STA nz6_gfx_list_x_lo,X
+        LDA nz6_blt_px_hi
+        STA nz6_gfx_list_x_hi,X
+        LDA nz6_blt_py
+        STA nz6_gfx_list_y,X
+        LDA nz6_pic_flags
+        AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)
+        BEQ @no_fill
+        LDA nz6_gfx_replay_fill
+        BRA @store_fill
+@no_fill:
+        LDA #$00
+@store_fill:
+        STA nz6_gfx_list_fill,X
+@rts:
+        RTS
+
+nz6_gfx_record_erase_current:
+        JSR nz6_gfx_record_alloc
+        BCC @rts
+        LDA #NZ6_GFX_OP_ERASE
+        STA nz6_gfx_list_op,X
+        LDA zvm_operand_lo
+        STA nz6_gfx_list_pic_lo,X
+        LDA zvm_operand_hi
+        STA nz6_gfx_list_pic_hi,X
+        LDA nz6_blt_px_lo
+        STA nz6_gfx_list_x_lo,X
+        LDA nz6_blt_px_hi
+        STA nz6_gfx_list_x_hi,X
+        LDA nz6_blt_py
+        STA nz6_gfx_list_y,X
+        LDA nz6_gfx_replay_fill
+        STA nz6_gfx_list_fill,X
+@rts:
+        RTS
+
+nz6_gfx_clamp_list:
+        LDA nz6_gfx_list_count
+        CMP #(NZ6_GFX_LIST_MAX + 1)
+        BCC @rts
+        LDA #NZ6_GFX_LIST_MAX
+        STA nz6_gfx_list_count
+@rts:
+        RTS
+
+nz6_op_restore_display:
+        ; Saves keep the logical retained picture list, not the native picture
+        ; index/cache. Rebuild PICS.PAK state before replaying so restore works
+        ; after reboot and after save/load UI scratch activity.
+        JSR nz6_pics_preload
+        JSR nz6_gfx_clamp_list
+        LDA #$01
+        STA nz6_gfx_replay_active
+        LDA nz6_gfx_base_color
+        STA VGC_BORDER
+        LDA nz6_gfx_base_color
+        JSR nz6_gfx_clear
+        STZ nz6_gfx_replay_index
+@loop:
+        LDX nz6_gfx_replay_index
+        CPX nz6_gfx_list_count
+        BCC :+
+        BRA @done
+:
+        LDA nz6_gfx_list_op,X
+        CMP #NZ6_GFX_OP_DRAW
+        BEQ @draw
+        CMP #NZ6_GFX_OP_ERASE
+        BEQ @erase
+        BRA @next
+@draw:
+        JSR nz6_gfx_replay_load_entry
+        JSR nz6_gfx_replay_draw
+        BRA @next
+@erase:
+        JSR nz6_gfx_replay_load_entry
+        JSR nz6_gfx_replay_erase
+@next:
+        INC nz6_gfx_replay_index
+        BRA @loop
+@done:
+        STZ nz6_gfx_replay_active
+        JMP zvm_clear_whole_screen
+
+nz6_gfx_replay_load_entry:
+        LDX nz6_gfx_replay_index
+        LDA nz6_gfx_list_pic_lo,X
+        STA zvm_operand_lo
+        LDA nz6_gfx_list_pic_hi,X
+        STA zvm_operand_hi
+        LDA nz6_gfx_list_x_lo,X
+        STA nz6_blt_px_lo
+        LDA nz6_gfx_list_x_hi,X
+        STA nz6_blt_px_hi
+        LDA nz6_gfx_list_y,X
+        STA nz6_blt_py
+        LDA nz6_gfx_list_fill,X
+        STA nz6_gfx_replay_fill
+        RTS
+
+nz6_gfx_replay_draw:
+        JSR nz6_pics_find
+        BCS :+
+@rts:
+        RTS
+:
+        LDA nz6_pic_len_lo
+        ORA nz6_pic_len_hi
+        BEQ @rts
+        JSR nz6_pic_abs_rect_setup
+        BCC @rts
+        JMP nz6_pic_draw_current_abs
+
+nz6_gfx_replay_erase:
+        JSR nz6_pics_find
+        BCS :+
+@rts:
+        RTS
+:
+        JSR nz6_pic_abs_rect_setup
+        BCC @rts
+        JMP nz6_pic_erase_current_abs
 
 ; Fill the whole 320x200 gfx plane with colour A. The V6 erase paths pass
 ; the window background — the gfx plane IS the MCGA framebuffer, so the
@@ -2600,6 +3372,7 @@ nz6_gfx_fill_bg:
         LSR A
 nz6_gfx_clear:
         STA nz6_clr_tmp
+        JSR nz6_gfx_note_clear
         STZ BLT_SRCSPACE
         STZ BLT_SRCL
         STZ BLT_SRCM
@@ -2664,7 +3437,7 @@ nz6_ext_read_mouse:
         BNE @loop
         RTS
 
-.include "vgc_palette.s"
+; Palette helpers are linked from runtime/asm/build/nova.lib.
 
 ; --- Dispatch tables ---------------------------------------------------------
 
@@ -2681,7 +3454,8 @@ nz6_var_table:                  ; ids $00-$0B
         .word nz6_op_text_style ; $09 set_text_style (colour-relative styles)
         .word nz6_op_cr_newline ; $0A newline hook (CR-interrupt countdown)
         .word nz6_op_pre_newline_scroll ; $0B pre-scroll gfx before newline
-.assert (* - nz6_var_table) / 2 = NZ6_OP_PRE_NEWLINE_SCROLL + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_PRE_NEWLINE_SCROLL"
+        .word nz6_op_restore_display ; $0C replay retained V6 graphics
+.assert (* - nz6_var_table) / 2 = NZ6_OP_RESTORE_DISPLAY + 1, error, "nz6_var_table must cover ids 0..NZ6_OP_RESTORE_DISPLAY"
 
 nz6_ext_table:                  ; ext opnums 0-29; only 5-8 and 16-29 arrive
         .word nz6_bug           ;  0 save (ROM handles)

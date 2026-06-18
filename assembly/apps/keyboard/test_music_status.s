@@ -3,7 +3,7 @@
 ; Run MIDPLAY or SIDPLAY from BASIC first, then SYS $9000 to observe.
 ;
 ; Load address: $9000   Invoke: SYS $9000
-; Build: ca65 --cpu 65c02 -I ../../../runtime/asm test_music_status.s -o test_music_status.o
+; Build: ca65 --cpu w65c02 -I ../../../runtime/asm test_music_status.s -o test_music_status.o
 ;        ld65 -C keyboard.cfg -o test_music_status.bin test_music_status.o vgc_wait.o
 
 .include "novavm.inc"

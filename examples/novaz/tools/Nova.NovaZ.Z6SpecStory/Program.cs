@@ -592,6 +592,11 @@ static void EmitSpecProgram(ZCode z)
     z.ExtOpStore(19, 0x12, Operand.Small(1), Operand.Small(5));
     z.AssertVarEquals(0x12, 1, "setcursor-x0-clamp");
     z.Print("BANNER");                                      // -> abs cell (0,0)
+    // Infocom V6 layout code uses signed negative X values to address backward
+    // from the window's right edge. This must move the cursor instead of
+    // leaving stale state from the previous position.
+    z.VarOp(15, CellUnitOperand(2), Operand.Large(-7));     // x = 320-7+1 -> abs col 78
+    z.Print("RX");
 
     // Back to window 0: printing continues at the inset cursor (right after
     // INSET, same row), NOT at the banner cursor -> "INSETW0" at (5,5).

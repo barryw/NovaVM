@@ -4,7 +4,7 @@
 ; available to other runtimes that want the named-block allocator on top of
 ; the core flat XRAM routines.
 
-.include "xram.inc"
+.include "xmc.inc"
 
 .ifndef XRAM_IMPLEMENTATION_INCLUDED
       .import xram_xmc_read8

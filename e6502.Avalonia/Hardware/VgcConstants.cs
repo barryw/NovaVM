@@ -134,6 +134,12 @@ public static class VgcConstants
     public const byte FioPageTargetRam  = 0x01;    // XPAGE target: CPU RAM
     public const byte FioPageTargetVgc  = 0x02;    // XPAGE target: VGC memory
     public const byte FioPageTargetGfx4 = 0x03;    // Avalonia-only XPAGE target: 4bpp row-packed -> gfx pixels
+    public const byte FioFileAccessRead  = 0x01;   // FOPEN/FCREATE low bits: read
+    public const byte FioFileAccessWrite = 0x02;   // FOPEN/FCREATE low bits: write
+    public const byte FioFileAccessRw    = 0x03;   // FOPEN/FCREATE low bits: read/write
+    public const byte FioFileTargetMask  = 0x30;   // FREAD/FWRITE high bits: transfer target
+    public const byte FioFileTargetRam   = 0x00;   // FREAD/FWRITE target: CPU RAM at FIO_ENDL/H
+    public const byte FioFileTargetXram  = 0x10;   // FREAD/FWRITE target: flat XRAM at FIO_GSPACE/GADDR
 
     public const byte FioDirTypeBas    = 0x00;
     public const byte FioDirTypeSid    = 0x01;

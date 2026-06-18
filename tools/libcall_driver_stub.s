@@ -20,7 +20,7 @@
 ; mid-call; the stub's own fetch + return address must stay below $A000.
 ;
 ; Assemble (mirrors tools/page_in_checksum_stub.{s,cfg}):
-;   ca65 --cpu 65c02 tools/libcall_driver_stub.s -o /tmp/libdrv.o
+;   ca65 --cpu w65c02 tools/libcall_driver_stub.s -o /tmp/libdrv.o
 ;   ld65 -C tools/libcall_driver_stub.cfg /tmp/libdrv.o -o tools/libcall_driver_stub.bin
 ;
 ; The 6502-side flow is unit-proven (MSTest) and Verilator-proven (23/23 on the

@@ -34,7 +34,11 @@ public sealed class NovaConnection : IAsyncDisposable
     // One poll iteration — directly callable (this is what tests drive).
     public async Task PollOnceAsync(CancellationToken ct = default)
     {
-        SetState(ConnectionState.Connecting);
+        // Only show "Connecting" on an initial connect or a reconnect after an
+        // error/disconnect — NOT on every steady-state poll, which would make the
+        // status chip flicker Connected -> Connecting -> Connected each interval.
+        if (State != ConnectionState.Connected)
+            SetState(ConnectionState.Connecting);
         try
         {
             JsonObject raw = await _statusSource(ct);

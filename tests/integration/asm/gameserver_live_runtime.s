@@ -3,7 +3,7 @@
 ; Loaded at $7000 by GameServer6502RuntimeIntegrationTests. This exercises the
 ; real 6502 gameserver.s runtime over the emulated NIC against TcpGameServer.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "gameserver.inc"
 

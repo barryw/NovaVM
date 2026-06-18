@@ -5,7 +5,7 @@
 ; a VgcVramBus that models the VGC VRAM plane interface, so the test can read the
 ; character plane back and confirm the string landed at the right cells.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "vtext.inc"
 

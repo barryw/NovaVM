@@ -3,7 +3,7 @@
 ; Loaded at $7000 by integration tests and entered through BASIC SYS. The
 ; fixture exercises frame builders and parsers without requiring a live socket.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "gameserver.inc"
 

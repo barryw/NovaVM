@@ -107,6 +107,54 @@ sys_ptr2H:         .res 1
 ;@ret u8 pressed key byte (RESULT byte0)
 ;@status LERR_OK
 ;
+;@fn SYS_NUI_SAVE_UNDER
+;@ndk nui_save_under
+;@brief Save a text-plane rectangle to caller-owned XRAM buffers.
+;@arg geom u32 left/top/width/height -> NUI_SAVE_LEFT/TOP/WIDTH/HEIGHT (ARG0 byte0,1,2,3)
+;@arg charbuf u32 24-bit XRAM address for saved char plane (ARG1 byte0,1,2)
+;@arg colorbuf u32 24-bit XRAM address for saved color plane (ARG2 byte0,1,2)
+;@arg attrbuf u32 24-bit XRAM address for saved text-attribute plane (ARG3 byte0,1,2)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_RESTORE_UNDER
+;@ndk nui_restore_under
+;@brief Restore a text-plane rectangle from caller-owned XRAM buffers.
+;@arg geom u32 left/top/width/height -> NUI_SAVE_LEFT/TOP/WIDTH/HEIGHT (ARG0 byte0,1,2,3)
+;@arg charbuf u32 24-bit XRAM address for saved char plane (ARG1 byte0,1,2)
+;@arg colorbuf u32 24-bit XRAM address for saved color plane (ARG2 byte0,1,2)
+;@arg attrbuf u32 24-bit XRAM address for saved text-attribute plane (ARG3 byte0,1,2)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_SAVE_UNDER_FULL
+;@ndk nui_save_under_full
+;@brief Save text-plane cells and graphics-plane pixels under a modal control.
+;@arg config u16 caller-owned config struct pointer (ARG0 byte0,1)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_RESTORE_UNDER_FULL
+;@ndk nui_restore_under_full
+;@brief Restore text-plane cells and graphics-plane pixels saved by SYS_NUI_SAVE_UNDER_FULL.
+;@arg config u16 caller-owned config struct pointer (ARG0 byte0,1)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_PICK_LIST
+;@ndk nui_pick_list
+;@brief Draw an interactive fixed-width text list picker.
+;@arg config u16 caller-owned config struct pointer (ARG0 byte0,1)
+;@ret u8 selected row (RESULT byte0)
+;@ret u8 command: 0 OK, 1 Cancel (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_SET_STYLE
+;@brief Set modal NUI chrome/text colors from caller-provided palette indexes.
+;@arg style u32 b0 shadow color index, b1 border color index, b2 panel color index, b3 packed text color bg/fg
+;@ret void
+;@status LERR_OK
+;
 ; --- fixed-address overlay manager (overlay.s) ---
 ;@fn SYS_OVL_LOAD
 ;@ndk overlay_load_fixed
@@ -162,7 +210,7 @@ sys_ptr2H:         .res 1
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (19) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (25) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -200,6 +248,12 @@ sys_jtable:
       .word   sys_ovl_tick-1           ; $10 SYS_OVL_TICK
       .word   sys_addr_lookup-1        ; $11 SYS_ADDR_LOOKUP
       .word   sys_screen_readline-1    ; $12 SYS_SCREEN_READLINE
+      .word   sys_nui_save_under-1     ; $13 SYS_NUI_SAVE_UNDER
+      .word   sys_nui_restore_under-1  ; $14 SYS_NUI_RESTORE_UNDER
+      .word   sys_nui_pick_list-1      ; $15 SYS_NUI_PICK_LIST
+      .word   sys_nui_save_under_full-1 ; $16 SYS_NUI_SAVE_UNDER_FULL
+      .word   sys_nui_restore_under_full-1 ; $17 SYS_NUI_RESTORE_UNDER_FULL
+      .word   sys_nui_set_style-1      ; $18 SYS_NUI_SET_STYLE
 
 sys_no_fn:
       lda     #LERR_NO_FN
@@ -396,6 +450,212 @@ sys_wait_key:
       STZ   LIB_RESULT+2
       STZ   LIB_RESULT+3
       LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+sys_marshal_nui_save:
+      LDA   LIB_ARG0+0
+      STA   NUI_SAVE_LEFT
+      LDA   LIB_ARG0+1
+      STA   NUI_SAVE_TOP
+      LDA   LIB_ARG0+2
+      STA   NUI_SAVE_WIDTH
+      LDA   LIB_ARG0+3
+      STA   NUI_SAVE_HEIGHT
+
+      LDA   LIB_ARG1+0
+      STA   NUI_SAVE_ADDRL+0
+      LDA   LIB_ARG1+1
+      STA   NUI_SAVE_ADDRM+0
+      LDA   LIB_ARG1+2
+      STA   NUI_SAVE_ADDRH+0
+
+      LDA   LIB_ARG2+0
+      STA   NUI_SAVE_ADDRL+1
+      LDA   LIB_ARG2+1
+      STA   NUI_SAVE_ADDRM+1
+      LDA   LIB_ARG2+2
+      STA   NUI_SAVE_ADDRH+1
+
+      LDA   LIB_ARG3+0
+      STA   NUI_SAVE_ADDRL+2
+      LDA   LIB_ARG3+1
+      STA   NUI_SAVE_ADDRM+2
+      LDA   LIB_ARG3+2
+      STA   NUI_SAVE_ADDRH+2
+      RTS
+
+; --- $13 SYS_NUI_SAVE_UNDER: save text rectangle to caller-owned XRAM buffers ---
+sys_nui_save_under:
+      JSR   sys_marshal_nui_save
+      JSR   nui_save_under
+      JMP   sys_finish_status
+
+; --- $14 SYS_NUI_RESTORE_UNDER: restore text rectangle from caller-owned XRAM buffers ---
+sys_nui_restore_under:
+      JSR   sys_marshal_nui_save
+      JSR   nui_restore_under
+      JMP   sys_finish_status
+
+; Config layout consumed by SYS_NUI_SAVE_UNDER_FULL / RESTORE_UNDER_FULL:
+; +0 left, +1 top, +2 width, +3 height,
+; +4 char u24, +7 color u24, +10 textattr u24, +13 gfx u24.
+; Text buffers hold width*height bytes. The graphics buffer holds
+; (width*4)*(height*4) bytes because NUI geometry is text-cell based.
+sys_marshal_nui_save_full:
+      LDA   LIB_ARG0+0
+      STA   sys_ptr0L
+      LDA   LIB_ARG0+1
+      STA   sys_ptr0H
+      LDY   #$00
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_LEFT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_TOP
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_WIDTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_HEIGHT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRL+0
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRM+0
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRH+0
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRL+1
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRM+1
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRH+1
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRL+2
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRM+2
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRH+2
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRL+3
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRM+3
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_SAVE_ADDRH+3
+      RTS
+
+; --- $16 SYS_NUI_SAVE_UNDER_FULL: save text+graphics rectangle to XRAM buffers ---
+sys_nui_save_under_full:
+      JSR   sys_marshal_nui_save_full
+      JSR   nui_save_under_full
+      JMP   sys_finish_status
+
+; --- $17 SYS_NUI_RESTORE_UNDER_FULL: restore text+graphics rectangle from XRAM buffers ---
+sys_nui_restore_under_full:
+      JSR   sys_marshal_nui_save_full
+      JSR   nui_restore_under_full
+      JMP   sys_finish_status
+
+; --- $18 SYS_NUI_SET_STYLE: ARG0 b0=shadow b1=top/left border b2=panel b3=text bg/fg ---
+sys_nui_set_style:
+      LDA   LIB_ARG0+0
+      STA   NUI_STYLE_SHADOW
+      LDA   LIB_ARG0+1
+      STA   NUI_STYLE_BORDER
+      LDA   LIB_ARG0+2
+      STA   NUI_STYLE_PANEL
+      LDA   LIB_ARG0+3
+      STA   NUI_STYLE_TEXT
+      LDA   #$01
+      STA   NUI_STYLE_VALID
+      LDA   #$00
+      JMP   sys_finish_status
+
+; Config layout consumed by SYS_NUI_PICK_LIST:
+; +0 title ptr, +2 rows ptr, +4 row width, +5 row count, +6 selected,
+; +7 left, +8 top, +9 width, +10 height, +11 footer ptr.
+sys_marshal_nui_pick_list:
+      LDA   LIB_ARG0+0
+      STA   sys_ptr0L
+      LDA   LIB_ARG0+1
+      STA   sys_ptr0H
+      LDY   #$00
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_ITEMSL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_ITEMSH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_ROW_WIDTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_ROW_COUNT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_SELECTED
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_LEFT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_TOP
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_WIDTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_HEIGHT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERH
+      STZ   NUI_MSGL
+      STZ   NUI_MSGH
+      RTS
+
+; --- $15 SYS_NUI_PICK_LIST: fixed-width row picker from caller config ---
+sys_nui_pick_list:
+      JSR   sys_marshal_nui_pick_list
+      JSR   nui_pick_list
+      CMP   #$00
+      BNE   @fail
+      LDA   NUI_LIST_SELECTED
+      STA   LIB_RESULT+0
+      LDA   NUI_RESULT
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      STZ   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_SYS_FAIL
       STA   LIB_STATUS
       RTS
 
@@ -986,12 +1246,12 @@ sal_hash:         .res 1               ; running x33 hash accumulator
 ; ===========================================================================
 ; Shared system-service bodies (all include-guarded).
 ; ===========================================================================
-      .include "vgc.s"                 ; NDK frame-timing: vgc_vsync / vgc_wait_frames
+      .include "vgc.inc"                 ; NDK frame-timing: vgc_vsync / vgc_wait_frames
       ; rng.s/overlay.s define FIO_EMIT_ALL_RUNTIME then pull fio.s (+pager.s for
       ; overlay); nui.s pulls vtext.s + vsprite.s.
-      .include "rng.s"                 ; rng_get8/16/32 (-> fio_rng / fio_exec)
-      .include "nui.s"                 ; nui_dialog_defaults/show_dialog[_wait]/show_error/wait_key
-      .include "overlay.s"             ; overlay_load_fixed/unload/call_init/main/tick (-> pager + fio)
+      .include "rng.inc"                 ; rng_get8/16/32 (-> fio_rng / fio_exec)
+      .include "nui.inc"                 ; nui_dialog_defaults/show_dialog[_wait]/show_error/wait_key
+      .include "overlay.inc"             ; overlay_load_fixed/unload/call_init/main/tick (-> pager + fio)
 
 ; Generated runtime label hash table (RuntimeLabelBuckets + RUNTIME_LABEL_BUCKET_COUNT)
 ; backing SYS_ADDR_LOOKUP. Placed in RODATA so it lands in the 16K ROM image.

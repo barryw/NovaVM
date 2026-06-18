@@ -40,7 +40,7 @@ CPU_STATE_NAMES = {
     47: "ZP0",
     48: "ZPX0",
     49: "ZPX1",
-    62: "WAI",
+    62: "wai",
     63: "STP",
 }
 

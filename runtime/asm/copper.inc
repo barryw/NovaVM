@@ -13,4 +13,15 @@ COPPER_REG_BGCOL    = $01
 COPPER_REG_SCROLLX  = $05
 COPPER_REG_SCROLLY  = $06
 
+.global copper_command
+.global copper_clear
+.global copper_on
+.global copper_off
+.global copper_list
+.global copper_list_end
+.global copper_use
+.global copper_add
+.global copper_set_reg_index
+.global copper_set_sprite_reg
+
 .endif

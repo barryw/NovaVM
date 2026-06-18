@@ -4,7 +4,7 @@
 ; BASIC SYS. The fixture includes the same runtime/asm/xram.inc/runtime/asm/xram.s library that
 ; standalone assembly programs are expected to reuse.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "xram.inc"
 

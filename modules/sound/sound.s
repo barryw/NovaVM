@@ -524,8 +524,8 @@ snd_music_note:
 ; (selective emit) and audio_tone's JSR vgc_wait_frames resolves against vgc.s.
 ; audio.s pulls fio.s (fio_exec / fio_copy_name) for the file + music commands.
 ; ===========================================================================
-      .include "audio.s"
-      .include "vgc.s"
+      .include "audio.inc"
+      .include "vgc.inc"
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000      ; NMI, RESET, IRQ (module runs under SEI)

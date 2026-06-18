@@ -11,7 +11,7 @@
 ; - The shared audio runtime plays event sounds.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/nova_roadhog_asm.o docs/programs/nova_roadhog_asm.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/nova_roadhog_asm.o docs/programs/nova_roadhog_asm.s
 ;   ld65 -C docs/programs/diag7000.cfg -o /tmp/nova_roadhog_asm.bin /tmp/nova_roadhog_asm.o
 ;
 ; Load at $7000 and run with: SYS $7000
@@ -21,7 +21,7 @@
 ;   W/S or 8/2 speed up / slow down
 ;   Q resets the run
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "msprite.inc"
 .include "audio.inc"

@@ -2,7 +2,7 @@
 ; Runtime label hash table for ADDR("LABEL") in the SYSTEM module.
 
 RUNTIME_LABEL_BUCKET_COUNT = 64
-RUNTIME_LABEL_COUNT = 113
+RUNTIME_LABEL_COUNT = 119
 
 RuntimeLabelBuckets:
       .word @bucket_00
@@ -170,6 +170,9 @@ RuntimeLabelBuckets:
       .byte 13
       .word $B9A8
       .byte "AUDIO.SUSTAIN"
+      .byte 21
+      .word $0002
+      .byte "FIO.FILE_ACCESS_WRITE"
       .byte 0
 
 @bucket_08:
@@ -182,6 +185,9 @@ RuntimeLabelBuckets:
       .byte 0
 
 @bucket_09:
+      .byte 20
+      .word $0010
+      .byte "FIO.FILE_TARGET_XRAM"
       .byte 11
       .word $002B
       .byte "PAGER.FILEL"
@@ -242,6 +248,9 @@ RuntimeLabelBuckets:
       .byte 0
 
 @bucket_11:
+      .byte 19
+      .word $0000
+      .byte "FIO.FILE_TARGET_RAM"
       .byte 0
 
 @bucket_12:
@@ -300,11 +309,14 @@ RuntimeLabelBuckets:
 
 @bucket_1C:
       .byte 15
-      .word $EA83
+      .word $FFB7
       .byte "FIO.CLEAR_ERROR"
       .byte 0
 
 @bucket_1D:
+      .byte 20
+      .word $0030
+      .byte "FIO.FILE_TARGET_MASK"
       .byte 0
 
 @bucket_1E:
@@ -389,6 +401,9 @@ RuntimeLabelBuckets:
       .byte 15
       .word $0028
       .byte "FIO.ARG_NAMELEN"
+      .byte 18
+      .word $0003
+      .byte "FIO.FILE_ACCESS_RW"
       .byte 8
       .word $B9A6
       .byte "FIO.RNG2"
@@ -545,6 +560,9 @@ RuntimeLabelBuckets:
       .byte 12
       .word $B9A3
       .byte "AUDIO.STRLEN"
+      .byte 20
+      .word $0001
+      .byte "FIO.FILE_ACCESS_READ"
       .byte 0
 
 @bucket_39:

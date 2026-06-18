@@ -403,7 +403,9 @@ VSPRITE_DESC_SIZE        = $18
 .global vsprite_gfx_blit_start
 .global vsprite_gfx_rotate_blit
 .global vsprite_gfx_rotate_blit_keyed
+.global vsprite_gfx_rotate_blit_keyed_nowf
 .global vsprite_gfx_rotate_blit_nowait
+.global vsprite_wait_frame
 .global vsprite_gfx_fill
 .global vsprite_gfx_save_bg
 .global vsprite_gfx_restore_bg

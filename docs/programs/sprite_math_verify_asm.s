@@ -3,7 +3,7 @@
 ; Sprite-based math coprocessor verifier.
 ;
 ; Build:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/sprite_math_verify_asm.o docs/programs/sprite_math_verify_asm.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/sprite_math_verify_asm.o docs/programs/sprite_math_verify_asm.s
 ;   ld65 -C docs/programs/diag9000_4k.cfg -o /tmp/sprite_math_verify_asm.bin /tmp/sprite_math_verify_asm.o
 ;
 ; Load at $9000 and run with: SYS $9000
@@ -13,7 +13,7 @@
 ; - Green/top row means a math test passed.
 ; - Red/lower row means that test failed.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "nova.inc"
 

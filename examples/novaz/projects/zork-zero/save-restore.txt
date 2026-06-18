@@ -1,0 +1,36 @@
+# Zork Zero V6 graphical save/restore regression.
+#
+# Save after a real V6 graphics-area change, reboot back to the Banquet Hall
+# castle frame, restore the save, and then enter another command. The transcript
+# does not need to be restored exactly; the contract is that the VM resumes at
+# the saved point and the V6 graphics plane is rebuilt from retained picture
+# state instead of a raw framebuffer dump.
+#
+# This route follows the prologue, answers the portcullis riddle, and lets the
+# jester's deterministic bat event land on Roof. Roof is OUTSIDEBIT, so Zork
+# Zero redraws the frame with outside border art. Pixel 43,43 is castle color
+# $0C at first prompt and outside color $0F after that redraw.
+wait
+ne
+s
+w
+examine gaunt man
+dive under table
+get out from under table
+!get parchment
+.key enter
+n
+!push doorbell
+answer time=>Roof
+.expect-at 11,12=>Entrance Hall
+.expect-gfx-color 43,43=>0F
+.expect-gfx-color 10,10=>0E
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter=>SAVE completed.
+.reboot
+!restore=>RESTORE GAME
+.key enter=>Roof
+look=>main building
+.expect-gfx-color 43,43=>0F
+.expect-gfx-color 10,10=>0E

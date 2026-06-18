@@ -1168,18 +1168,16 @@ ext_vgc_wait_cmd:
 ; EXT_DMASTATUS.. reporters, now live in basic.asm (LAB_DMACOPY.. and the
 ; @xtk_dma*/@xtk_blit* reporters) and drive the DMA_*/BLT_* MMIO registers
 ; directly. Their ExtTable slots (cmds $09/$0A/$0F/$10 and $30-$35) are
-; neutralized to EXT_UNSUPPORTED. blitter.s is no longer .include'd here (no
-; blitter_* function reference remains — ext_cls_fill_plane inlines its own BLT
-; MMIO sequence, and xram.s/xmc.s use only BLT_* registers, not the functions).
-; dma.s stays: it is pulled in transitively by xram.s (xram.s -> dma.s).
+; neutralized to EXT_UNSUPPORTED. The shared NDK implementations are linked from
+; runtime/asm/build/nova.lib; this file includes only ABI headers.
 ; =====================================================================
 
 AUDIO_POINTER_FILE_HELPERS = 0
 NOVA_EMIT_ALL_RUNTIME = 1
-      .include "audio.s"
-      .include "rng.s"
-      .include "xram.s"
-      .include "xmc.s"
+      .include "audio.inc"
+      .include "rng.inc"
+      .include "xram.inc"
+      .include "xmc.inc"
 
 ; =====================================================================
 ; XLOAD/XSAVE handlers — bridge BASIC's FIO-style arguments into the

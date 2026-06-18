@@ -1,7 +1,8 @@
 ; Shared Nova editor-shell UI helpers.
 
 .include "editui.inc"
-.include "vtext.s"
+.include "vtext.inc"
+.include "blitter.inc"
 
 .ifndef EDITUI_IMPLEMENTATION_INCLUDED
 EDITUI_IMPLEMENTATION_INCLUDED = 1

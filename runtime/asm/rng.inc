@@ -30,4 +30,8 @@ RNG_VALUE2 = FIO_RNG2
 ; @summary High byte of the most recent RNG.GET32 result.
 RNG_VALUE3 = FIO_RNG3
 
+.global rng_get8
+.global rng_get16
+.global rng_get32
+
 .endif

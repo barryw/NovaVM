@@ -31,6 +31,43 @@ public class NovaConnectionTests
     }
 
     [Fact]
+    public async Task Steady_state_polls_do_not_reemit_connecting()
+    {
+        var states = new List<ConnectionState>();
+        var conn = new NovaConnection(_ => Task.FromResult(SampleStatus()));
+        conn.StateChanged += states.Add;
+
+        await conn.PollOnceAsync(); // Disconnected -> Connecting -> Connected
+        await conn.PollOnceAsync(); // already Connected: must emit nothing
+        await conn.PollOnceAsync();
+
+        Assert.Equal(new[] { ConnectionState.Connecting, ConnectionState.Connected }, states);
+        Assert.Equal(ConnectionState.Connected, conn.State);
+    }
+
+    [Fact]
+    public async Task Reconnect_after_error_re_emits_connecting()
+    {
+        var states = new List<ConnectionState>();
+        bool fail = true;
+        // throws on first poll, succeeds afterwards
+        var conn = new NovaConnection(_ => fail
+            ? throw new InvalidOperationException("boom")
+            : Task.FromResult(SampleStatus()));
+        conn.StateChanged += states.Add;
+
+        await conn.PollOnceAsync();          // Connecting -> Error
+        fail = false;
+        await conn.PollOnceAsync();          // Error -> Connecting -> Connected
+
+        Assert.Equal(new[]
+        {
+            ConnectionState.Connecting, ConnectionState.Error,
+            ConnectionState.Connecting, ConnectionState.Connected
+        }, states);
+    }
+
+    [Fact]
     public async Task Failing_poll_transitions_to_error()
     {
         var states = new List<ConnectionState>();

@@ -852,6 +852,48 @@ FIO_NAME          = $B9B0
 .ifndef FIO_NAMEEND
 FIO_NAMEEND       = $B9EF
 .endif
+; @label FIO.FILE_ACCESS_READ
+; @kind const
+; @symbol FIO_FILE_ACCESS_READ
+; @summary FOPEN/FCREATE access bit pattern for read-only file handles.
+.ifndef FIO_FILE_ACCESS_READ
+FIO_FILE_ACCESS_READ  = $01
+.endif
+; @label FIO.FILE_ACCESS_WRITE
+; @kind const
+; @symbol FIO_FILE_ACCESS_WRITE
+; @summary FOPEN/FCREATE access bit pattern for write-only file handles.
+.ifndef FIO_FILE_ACCESS_WRITE
+FIO_FILE_ACCESS_WRITE = $02
+.endif
+; @label FIO.FILE_ACCESS_RW
+; @kind const
+; @symbol FIO_FILE_ACCESS_RW
+; @summary FOPEN/FCREATE access bit pattern for read/write file handles.
+.ifndef FIO_FILE_ACCESS_RW
+FIO_FILE_ACCESS_RW    = $03
+.endif
+; @label FIO.FILE_TARGET_MASK
+; @kind const
+; @symbol FIO_FILE_TARGET_MASK
+; @summary FREAD/FWRITE mask for the transfer target bits in FIO_DIRTYPE.
+.ifndef FIO_FILE_TARGET_MASK
+FIO_FILE_TARGET_MASK  = $30
+.endif
+; @label FIO.FILE_TARGET_RAM
+; @kind const
+; @symbol FIO_FILE_TARGET_RAM
+; @summary FREAD/FWRITE target value for CPU RAM at FIO_ENDL/H.
+.ifndef FIO_FILE_TARGET_RAM
+FIO_FILE_TARGET_RAM   = $00
+.endif
+; @label FIO.FILE_TARGET_XRAM
+; @kind const
+; @symbol FIO_FILE_TARGET_XRAM
+; @summary FREAD/FWRITE target value for flat XRAM at FIO_GSPACE/GADDRL/H.
+.ifndef FIO_FILE_TARGET_XRAM
+FIO_FILE_TARGET_XRAM  = $10
+.endif
 .ifndef META_BASE
 META_BASE         = $BAB0
 .endif

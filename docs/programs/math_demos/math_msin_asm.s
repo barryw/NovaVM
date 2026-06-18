@@ -1,8 +1,8 @@
 ; MSIN assembly sprite demo. Build with:
-; ca65 --cpu 65c02 -I docs/programs/math_demos -I runtime/asm -o /tmp/math_msin_asm.o docs/programs/math_demos/math_msin_asm.s
+; ca65 --cpu w65c02 -I docs/programs/math_demos -I runtime/asm -o /tmp/math_msin_asm.o docs/programs/math_demos/math_msin_asm.s
 ; ld65 -C docs/programs/diag9000_4k.cfg -o /tmp/math_msin_asm.bin /tmp/math_msin_asm.o
 
-.setcpu "65c02"
+.setcpu "w65c02"
 .include "math_demo_common.inc"
 
 update_demo:

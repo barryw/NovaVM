@@ -8,6 +8,11 @@
 ;   FIO_ARG_ADDRL/M/H    flat 24-bit XRAM address
 ;   FIO_ARG_LENL/H       transfer length; zero means full file for XLOAD
 ;
+; File-handle target convention:
+;   FOPEN/FCREATE read FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*.
+;   FREAD/FWRITE read FIO_DIRTYPE high bits as FIO_FILE_TARGET_*.
+;   RAM transfers use FIO_ENDL/H. XRAM transfers use FIO_GSPACE/GADDRL/H.
+;
 ; Routines return A=0 on success and A=1 on error. Detailed status remains
 ; in the FIO_STATUS/FIO_ERRCODE hardware registers.
 

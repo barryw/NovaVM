@@ -5,7 +5,7 @@
 ; only clips, clears, writes, and scrolls rectangular text areas.
 
 .include "vtext.inc"
-.include "blitter.s"
+.include "blitter.inc"
 
 .ifndef VTEXT_IMPLEMENTATION_INCLUDED
 VTEXT_IMPLEMENTATION_INCLUDED = 1
@@ -55,6 +55,7 @@ VTEXT_RUNLEN:     .res 1
       .export vtext_print_at
       .export vtext_put_hex_nibble
       .export vtext_put_hex_byte
+      .export vtext_read_char
       .export vtext_newline
       .export vtext_set_scroll_hook
       .export vtext_clear_scroll_hook
@@ -645,6 +646,20 @@ vtext_put_hex_byte:
       LDA   #VTEXT_ERR
       RTS
 
+; @label VTEXT.READ_CHAR
+; @kind routine
+; @symbol vtext_read_char
+; @summary Read the character byte at VTEXT.CURX/CURY in the current region.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_CURX VTEXT_CURY
+; @out A: Character byte from the VGC character plane.
+vtext_read_char:
+      JSR   vtext_calc_addr
+      LDA   #VTEXT_PLANE_CHAR
+      JSR   vtext_select_vram_addr
+      LDA   VGC_VRAM_DATA
+      LDA   VGC_VRAM_DATA
+      RTS
+
 ; @label VTEXT.NEWLINE
 ; @kind routine
 ; @symbol vtext_newline
@@ -809,6 +824,7 @@ vtext_expose_gfx_spaces_region:
 
       LDA   #VTEXT_PLANE_CHAR
       JSR   vtext_select_vram_addr_inc
+      LDA   VGC_VRAM_DATA              ; prime VRAM read latch
       LDY   #$00
 @cell_loop:
       LDA   VGC_VRAM_DATA
@@ -850,6 +866,7 @@ vtext_expose_gfx_spaces_region:
       STA   VTEXT_ADDRH
       LDA   #VTEXT_PLANE_CHAR
       JSR   vtext_select_vram_addr_inc
+      LDA   VGC_VRAM_DATA              ; prime next-cell read after plane switch
 
 @next_cell:
       INY

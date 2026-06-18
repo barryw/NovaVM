@@ -4,9 +4,10 @@
 ; NovaZ runtime ROM into the primary $C000 bank, then jumps through that
 ; runtime's reset vector. BASIC-only autoboot images do not use this path.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "fio.inc"
+.include "libabi.inc"
 
 .segment "ZEROPAGE"
 msg_ptr: .res 2
@@ -26,7 +27,7 @@ start:
         LDY #>msg_failed
         JSR print_line
 halt:
-        WAI
+        wai
         BRA halt
 
 load_runtime:
@@ -47,6 +48,8 @@ boot_runtime:
         TXS
         LDA #ROMSWAP_PRIMARY
         STA REG_ROMSWAP
+        STA LIB_HOME_BANK
+        STZ LIB_RESIDENT
         JMP ($FFFC)
 
 ; A/Y = pointer to null-terminated string.
@@ -78,4 +81,4 @@ runtime_name_end:
 msg_failed:
         .byte "NOVAZ RUNTIME LOAD FAILED", 0
 
-.include "fio.s"
+; FIO implementation is linked from runtime/asm/build/nova.lib.

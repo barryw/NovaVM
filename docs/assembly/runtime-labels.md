@@ -647,6 +647,16 @@ Volume level for AUDIO.VOLUME.
 - Symbol: `AUDIO_VOLUME`
 - Address: `$B9A4`
 
+## AUDIO.WAIT_LOADING
+
+Block until a host SID/MIDI/soundfont asset finishes loading by
+
+- Kind: `routine`
+- Symbol: `audio_wait_loading`
+
+Outputs:
+- `A`: 0 once loading cleared (nonzero only on the safety timeout).
+
 ## AUDIO.WAVEFORM
 
 SID waveform/control byte for AUDIO.INSTRUMENT_SET.
@@ -1033,7 +1043,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$EA83`
+- Address: `$FFB7`
 
 Outputs:
 - `A`: 0 on success.
@@ -1132,7 +1142,7 @@ Close the fileid in FIO_SRCL/H, flushing dirty data first.
 
 ## FIO.FCREATE
 
-Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+Create/truncate FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_fcreate`
@@ -1151,16 +1161,64 @@ Flush dirty data for fileid FIO_SRCL/H.
 - Kind: `routine`
 - Symbol: `fio_fflush`
 
+## FIO.FILE_ACCESS_READ
+
+FOPEN/FCREATE access bit pattern for read-only file handles.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_ACCESS_READ`
+- Address: `$01`
+
+## FIO.FILE_ACCESS_RW
+
+FOPEN/FCREATE access bit pattern for read/write file handles.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_ACCESS_RW`
+- Address: `$03`
+
+## FIO.FILE_ACCESS_WRITE
+
+FOPEN/FCREATE access bit pattern for write-only file handles.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_ACCESS_WRITE`
+- Address: `$02`
+
+## FIO.FILE_TARGET_MASK
+
+FREAD/FWRITE mask for the transfer target bits in FIO_DIRTYPE.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_TARGET_MASK`
+- Address: `$30`
+
+## FIO.FILE_TARGET_RAM
+
+FREAD/FWRITE target value for CPU RAM at FIO_ENDL/H.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_TARGET_RAM`
+- Address: `$00`
+
+## FIO.FILE_TARGET_XRAM
+
+FREAD/FWRITE target value for flat XRAM at FIO_GSPACE/GADDRL/H.
+
+- Kind: `const`
+- Symbol: `FIO_FILE_TARGET_XRAM`
+- Address: `$10`
+
 ## FIO.FOPEN
 
-Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H.
+Open FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_fopen`
 
 ## FIO.FREAD
 
-Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes.
+Read fileid FIO_SRCL/H for FIO_GLENL/H bytes into CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE.
 
 - Kind: `routine`
 - Symbol: `fio_fread`
@@ -1209,7 +1267,7 @@ Return fileid FIO_SRCL/H position in FIO_SIZEL/H/SIZE2.
 
 ## FIO.FWRITE
 
-Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H.
+Write FIO_GLENL/H bytes from CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE to fileid FIO_SRCL/H.
 
 - Kind: `routine`
 - Symbol: `fio_fwrite`
@@ -1871,6 +1929,136 @@ Inputs:
 
 Outputs:
 - `A`: Slot status byte.
+
+## NUI.DIALOG_DEFAULTS
+
+Set the standard centered modal-dialog geometry.
+
+- Kind: `routine`
+- Symbol: `nui_dialog_defaults`
+
+## NUI.PICK_LIST
+
+Draw an interactive fixed-width list picker and return OK or Cancel.
+
+- Kind: `routine`
+- Symbol: `nui_pick_list`
+
+Outputs:
+- `A`: 0 on success, 1 on error. NUI_RESULT = OK/CANCEL; NUI_LIST_SELECTED = selected row.
+
+Requires:
+- `NUI_DIALOG_*`
+- `NUI_TITLEL/H`
+- `NUI_FOOTERL/H`
+- `NUI_LIST_ITEMSL/H`
+- `NUI_LIST_ROW_WIDTH`
+- `NUI_LIST_ROW_COUNT`
+- `NUI_LIST_SELECTED`
+
+## NUI.RESTORE_UNDER
+
+Restore text planes previously saved by NUI.SAVE_UNDER.
+
+- Kind: `routine`
+- Symbol: `nui_restore_under`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NUI_SAVE_LEFT`
+- `NUI_SAVE_TOP`
+- `NUI_SAVE_WIDTH`
+- `NUI_SAVE_HEIGHT`
+- `NUI_SAVE_ADDRL`
+- `NUI_SAVE_ADDRM`
+- `NUI_SAVE_ADDRH`
+
+## NUI.RESTORE_UNDER_FULL
+
+Restore text and graphics planes previously saved by NUI.SAVE_UNDER_FULL.
+
+- Kind: `routine`
+- Symbol: `nui_restore_under_full`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NUI_SAVE_LEFT`
+- `NUI_SAVE_TOP`
+- `NUI_SAVE_WIDTH`
+- `NUI_SAVE_HEIGHT`
+- `NUI_SAVE_ADDRL`
+- `NUI_SAVE_ADDRM`
+- `NUI_SAVE_ADDRH`
+
+## NUI.SAVE_UNDER
+
+Save the text planes under NUI_SAVE_* into caller-provided XRAM buffers.
+
+- Kind: `routine`
+- Symbol: `nui_save_under`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NUI_SAVE_LEFT`
+- `NUI_SAVE_TOP`
+- `NUI_SAVE_WIDTH`
+- `NUI_SAVE_HEIGHT`
+- `NUI_SAVE_ADDRL`
+- `NUI_SAVE_ADDRM`
+- `NUI_SAVE_ADDRH`
+
+## NUI.SAVE_UNDER_FULL
+
+Save the text and graphics planes under NUI_SAVE_* into caller-provided XRAM buffers.
+
+- Kind: `routine`
+- Symbol: `nui_save_under_full`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `NUI_SAVE_LEFT`
+- `NUI_SAVE_TOP`
+- `NUI_SAVE_WIDTH`
+- `NUI_SAVE_HEIGHT`
+- `NUI_SAVE_ADDRL`
+- `NUI_SAVE_ADDRM`
+- `NUI_SAVE_ADDRH`
+
+## NUI.SHOW_DIALOG
+
+Draw the configured modal dialog without waiting for input.
+
+- Kind: `routine`
+- Symbol: `nui_show_dialog`
+
+## NUI.SHOW_DIALOG_WAIT
+
+Draw the configured modal dialog and wait for one key.
+
+- Kind: `routine`
+- Symbol: `nui_show_dialog_wait`
+
+## NUI.SHOW_ERROR
+
+Draw a modal error dialog and wait for one key.
+
+- Kind: `routine`
+- Symbol: `nui_show_error`
+
+## NUI.WAIT_KEY
+
+Wait for one keyboard byte and return it in A.
+
+- Kind: `routine`
+- Symbol: `nui_wait_key`
 
 ## NVG.ADDRH
 
@@ -4235,6 +4423,16 @@ Requires:
 - `VSPRITE_ROTADDR*`
 - `VSPRITE_ROTSTR*`
 
+## VSPRITE.WAIT_FRAME
+
+Wait until the VGC frame counter advances.
+
+- Kind: `routine`
+- Symbol: `vsprite_wait_frame`
+
+Outputs:
+- `A`: Last observed frame counter value.
+
 ## VSPRITE.WIDTHH
 
 High byte of the rectangle width in pixels/bytes.
@@ -4308,6 +4506,16 @@ Requires:
 - `VTEXT_COLOR`
 - `VTEXT_ATTR`
 
+## VTEXT.CLEAR_SCROLL_HOOK
+
+Restore default text-only automatic scrolling.
+
+- Kind: `routine`
+- Symbol: `vtext_clear_scroll_hook`
+
+Outputs:
+- `A`: 0.
+
 ## VTEXT.DEFINE_REGION
 
 Store the current VTEXT region state into the caller-owned region table slot.
@@ -4349,6 +4557,25 @@ Requires:
 - `VTEXT_HEIGHT`
 - `VTEXT_COLOR`
 - `VTEXT_ATTR`
+
+## VTEXT.FILL_GFX_REGION
+
+Fill the graphics pixels under the current VTEXT cell rectangle.
+
+- Kind: `routine`
+- Symbol: `vtext_fill_gfx_region`
+
+Inputs:
+- `X`: Gfx-plane fill colour.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
 
 ## VTEXT.FILL_STYLE_REGION
 
@@ -4404,6 +4631,30 @@ Requires:
 - `VTEXT_COLOR`
 - `VTEXT_ATTR`
 - `VTEXT_FLAGS`
+
+## VTEXT.PRINT_AT
+
+Position the cursor at VTEXT_CURX,VTEXT_CURY in the current region,
+
+- Kind: `routine`
+- Symbol: `vtext_print_at`
+
+Inputs:
+- `A`: string pointer low byte.
+- `Y`: string pointer high byte.
+
+Outputs:
+- `A`: 0 on success, 1 if the cursor was outside the region (nothing printed).
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
 
 ## VTEXT.PUTS
 
@@ -4522,6 +4773,66 @@ Requires:
 - `VTEXT_COLOR`
 - `VTEXT_ATTR`
 
+## VTEXT.READ_CHAR
+
+Read the character byte at VTEXT.CURX/CURY in the current region.
+
+- Kind: `routine`
+- Symbol: `vtext_read_char`
+
+Outputs:
+- `A`: Character byte from the VGC character plane.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_CURX`
+- `VTEXT_CURY`
+
+## VTEXT.SCROLL_GFX_PIXELS_UP
+
+Scroll an arbitrary VGC gfx pixel rectangle up by A pixel rows.
+
+- Kind: `routine`
+- Symbol: `vtext_scroll_gfx_pixels_up`
+
+Inputs:
+- `A`: Number of graphics pixel rows to scroll upward.
+- `X`: Gfx-plane fill colour for the newly exposed bottom strip.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_GFX_LEFTL/H`
+- `VTEXT_GFX_TOP`
+- `VTEXT_GFX_WIDTHL/H`
+- `VTEXT_GFX_HEIGHT`
+
+## VTEXT.SCROLL_MIXED_UP
+
+Scroll the current VTEXT rectangle and matching gfx rectangle up by A text rows.
+
+- Kind: `routine`
+- Symbol: `vtext_scroll_mixed_up`
+
+Inputs:
+- `A`: Number of text rows to scroll upward.
+- `X`: Gfx-plane fill colour for the newly exposed bottom strip.
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+
 ## VTEXT.SCROLL_UP
 
 Scroll the current VTEXT rectangle up by one text row and clear the bottom row.
@@ -4572,6 +4883,20 @@ Requires:
 - `VTEXT_HEIGHT`
 - `VTEXT_CURX`
 - `VTEXT_CURY`
+
+## VTEXT.SET_SCROLL_HOOK
+
+Install an automatic-scroll hook for the current process.
+
+- Kind: `routine`
+- Symbol: `vtext_set_scroll_hook`
+
+Inputs:
+- `A`: Low byte of hook address.
+- `Y`: High byte of hook address.
+
+Outputs:
+- `A`: 0.
 
 ## VTEXT.STORE_REGION
 

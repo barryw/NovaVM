@@ -3,7 +3,7 @@
 ; This fixture does not exercise FIO loading. It verifies the resident overlay
 ; metadata and entry-call ABI that loaded fixed-address overlays use.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "overlay.inc"
 

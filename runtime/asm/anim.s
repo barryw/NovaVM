@@ -1,13 +1,6 @@
 ; Shared Nova sprite animation routines.
 
 .include "anim.inc"
-.include "dma.s"
-.ifndef FIO_EMIT_ALL_RUNTIME
-FIO_EMIT_ALL_RUNTIME = 1
-.endif
-.include "fio.s"
-.include "pager.s"
-.include "msprite.s"
 
 .ifndef ANIM_IMPLEMENTATION_INCLUDED
 ANIM_IMPLEMENTATION_INCLUDED = 1

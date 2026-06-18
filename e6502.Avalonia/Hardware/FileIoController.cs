@@ -1125,19 +1125,56 @@ public sealed partial class FileIoController
             return;
         }
 
-        int dest = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
-                 | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+        byte target = (byte)(_regs[VgcConstants.FioDirType - VgcConstants.FioBase]
+            & VgcConstants.FioFileTargetMask);
         int requested = GetFioTransferLength();
         int available = Math.Max(0, handle.Data.Length - handle.Position);
         int count = Math.Min(requested, available);
-        if (!CpuRangeOk(dest, count))
+
+        if (target == VgcConstants.FioFileTargetXram)
+        {
+            if (_xramWrite is null || _xramCapacity is null)
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            int dest = GetFioXramAddress();
+            if (!XramRangeOk(dest, count))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                if (!_xramWrite(dest + i, handle.Data[handle.Position + i]))
+                {
+                    SetError(VgcConstants.FioErrIo);
+                    return;
+                }
+            }
+
+            _xramRefreshStats?.Invoke();
+        }
+        else if (target == VgcConstants.FioFileTargetRam)
+        {
+            int dest = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+                     | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+            if (!CpuRangeOk(dest, count))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+
+            for (int i = 0; i < count; i++)
+                _busWrite((ushort)(dest + i), handle.Data[handle.Position + i]);
+        }
+        else
         {
             SetError(VgcConstants.FioErrIo);
             return;
         }
-
-        for (int i = 0; i < count; i++)
-            _busWrite((ushort)(dest + i), handle.Data[handle.Position + i]);
 
         handle.Position += count;
         SetTransferSize24(count);
@@ -1154,10 +1191,32 @@ public sealed partial class FileIoController
             return;
         }
 
-        int src = _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
-                | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+        byte target = (byte)(_regs[VgcConstants.FioDirType - VgcConstants.FioBase]
+            & VgcConstants.FioFileTargetMask);
         int count = GetFioTransferLength();
-        if (!CpuRangeOk(src, count))
+
+        int src = target == VgcConstants.FioFileTargetXram
+            ? GetFioXramAddress()
+            : _regs[VgcConstants.FioEndL - VgcConstants.FioBase]
+              | (_regs[VgcConstants.FioEndH - VgcConstants.FioBase] << 8);
+
+        if (target == VgcConstants.FioFileTargetXram)
+        {
+            if (_xramRead is null || _xramCapacity is null || !XramRangeOk(src, count))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+        }
+        else if (target == VgcConstants.FioFileTargetRam)
+        {
+            if (!CpuRangeOk(src, count))
+            {
+                SetError(VgcConstants.FioErrIo);
+                return;
+            }
+        }
+        else
         {
             SetError(VgcConstants.FioErrIo);
             return;
@@ -1176,8 +1235,16 @@ public sealed partial class FileIoController
             handle.Data = resized;
         }
 
-        for (int i = 0; i < count; i++)
-            handle.Data[handle.Position + i] = _busRead((ushort)(src + i));
+        if (target == VgcConstants.FioFileTargetXram)
+        {
+            for (int i = 0; i < count; i++)
+                handle.Data[handle.Position + i] = _xramRead!(src + i);
+        }
+        else
+        {
+            for (int i = 0; i < count; i++)
+                handle.Data[handle.Position + i] = _busRead((ushort)(src + i));
+        }
 
         handle.Position = end;
         handle.Dirty = true;

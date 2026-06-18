@@ -1,9 +1,8 @@
 ; =====================================================================
 ; replline.s — shared REPL line reader with shell-style up/down history
 ;
-; Co-assembled (.include) into a Nova-native runtime, the same way nui.s pulls in
-; vsprite.s. Provides a generic prompt-line reader: key poll, backspace, printable
-; echo, a 6-deep history ring with Up/Down recall, and single-row line repaint.
+; Provides a generic prompt-line reader: key poll, backspace, printable echo, a
+; 6-deep history ring with Up/Down recall, and single-row line repaint.
 ; Forth, Pascal, and the assembler dev env all inherit this reader. BASIC is
 ; excluded — it uses EhBASIC's own ROM input routine.
 ;
@@ -17,19 +16,28 @@
 ;
 ; Host-runtime contract (must be in scope before this include):
 ;   - nova.inc symbols: VGC_CHARIN, VGC_CHAROUT, VGC_CURSX, VGC_CURSY, VGC_CURSEN
-;   - a ZP scratch pointer pair  ptr_lo / ptr_hi  (e.g. NovaLogo's heap.s provides it)
 ;   - call  repl_init  once at cold start, then  repl_read_line  per input line.
 ;
 ; Shared contract symbols exported here: input_buf (128) + buf_idx (ZP) hold the
 ; line the reader fills. A single resident runtime owns them at a time.
 ; =====================================================================
 
+.include "replline.inc"
+.include "nova.inc"
+
+.ifndef REPLLINE_IMPLEMENTATION_INCLUDED
+REPLLINE_IMPLEMENTATION_INCLUDED = 1
+
+      .import repl_line_complete
+
 ; =====================================================================
-; ZEROPAGE segment — reader cursor into input_buf
+; ZEROPAGE segment — reader cursor and private history scratch pointer
 ; =====================================================================
       .segment "ZEROPAGE"
 
 buf_idx:      .res 1          ; current position in input_buf
+REPL_PTRL     = buf_idx       ; private history pointer low during copy helpers
+REPL_PTRH:    .res 1
 
 ; =====================================================================
 ; BSS segment — the shared line buffer
@@ -69,6 +77,11 @@ KEY_RIGHT     = $1D
 ; CODE segment — the reader and history ring
 ; =====================================================================
       .segment "CODE"
+
+      .export repl_init
+      .export repl_read_line
+      .export input_buf
+      .exportzp buf_idx
 
 ; ---------------------------------------------------------------------
 ; repl_init — clear the history-ring header. Call once at cold start.
@@ -182,27 +195,28 @@ repl_read_line:
 ;   hist_save        — append input_buf to the ring (called on CR; skips blanks).
 ;   hist_up/hist_down— recall older/newer (or back to the live in-progress line).
 ;   hist_show        — repaint the prompt line with input_buf from the saved origin.
-;   hist_slot_ptr    — ptr_lo/hi = address of the k-th-newest slot (k in HIST_K).
-;   hist_copy_in     — copy a NUL-terminated line at ptr -> input_buf, set buf_idx.
+;   hist_slot_ptr    — REPL_PTR = address of the k-th-newest slot (k in HIST_K).
+;   hist_copy_in     — copy a NUL-terminated line at REPL_PTR -> input_buf, set buf_idx.
 ; ---------------------------------------------------------------------
 ; hist_save: store input_buf (buf_idx bytes) into slot[HEAD], advance the ring.
 hist_save:
       LDA   buf_idx
-      BEQ   @hs_done           ; don't record empty lines
+      BEQ   @hs_empty          ; don't record empty lines
+      STA   HIST_OLDLEN        ; buf_idx aliases REPL_PTRL during pointer copies
       LDA   HIST_HEAD          ; ptr = HIST_SLOTS + HEAD*128
       STA   HIST_IDX
       JSR   hist_slot_addr
       LDY   #0
 @hs_copy:
-      CPY   buf_idx
+      CPY   HIST_OLDLEN
       BCS   @hs_term
       LDA   input_buf,Y
-      STA   (ptr_lo),Y
+      STA   (REPL_PTRL),Y
       INY
       BRA   @hs_copy
 @hs_term:
       LDA   #0
-      STA   (ptr_lo),Y         ; NUL-terminate the stored line
+      STA   (REPL_PTRL),Y      ; NUL-terminate the stored line
       ; advance HEAD (mod HIST_MAX) and bump COUNT (saturating at HIST_MAX)
       LDA   HIST_HEAD
       CLC
@@ -217,6 +231,9 @@ hist_save:
       BCS   @hs_done           ; already full — COUNT stays at HIST_MAX
       INC   HIST_COUNT
 @hs_done:
+      LDA   HIST_OLDLEN
+      STA   buf_idx
+@hs_empty:
       RTS
 
 ; hist_up: recall an older entry (toward the oldest). At the live line, stash it
@@ -236,9 +253,9 @@ hist_up:
       BNE   @hu_step           ; leaving the live line? save it once
       ; save the in-progress line into HIST_LIVE
       LDA   #<HIST_LIVE
-      STA   ptr_lo
+      STA   REPL_PTRL
       LDA   #>HIST_LIVE
-      STA   ptr_hi
+      STA   REPL_PTRH
       JSR   hist_copy_out
 @hu_step:
       INC   HIST_NAV
@@ -264,9 +281,9 @@ hist_down:
       JMP   hist_show
 @hd_live:
       LDA   #<HIST_LIVE
-      STA   ptr_lo
+      STA   REPL_PTRL
       LDA   #>HIST_LIVE
-      STA   ptr_hi
+      STA   REPL_PTRH
       JSR   hist_copy_in
 @hd_repaint:
       JMP   hist_show
@@ -303,11 +320,11 @@ hist_show:
 @show_done:
       RTS
 
-; hist_copy_in: copy the NUL-terminated line at (ptr_lo) into input_buf; buf_idx=len.
+; hist_copy_in: copy the NUL-terminated line at REPL_PTR into input_buf; buf_idx=len.
 hist_copy_in:
       LDY   #0
 @ci_loop:
-      LDA   (ptr_lo),Y
+      LDA   (REPL_PTRL),Y
       BEQ   @ci_done
       STA   input_buf,Y
       INY
@@ -319,22 +336,26 @@ hist_copy_in:
       STA   input_buf,Y        ; keep input_buf NUL-terminated
       RTS
 
-; hist_copy_out: copy input_buf (buf_idx bytes + NUL) to the line at (ptr_lo).
+; hist_copy_out: copy input_buf (buf_idx bytes + NUL) to the line at REPL_PTR.
 hist_copy_out:
+      LDA   buf_idx
+      STA   HIST_OLDLEN        ; buf_idx aliases REPL_PTRL during the copy
       LDY   #0
 @co_loop:
-      CPY   buf_idx
+      CPY   HIST_OLDLEN
       BCS   @co_term
       LDA   input_buf,Y
-      STA   (ptr_lo),Y
+      STA   (REPL_PTRL),Y
       INY
       BRA   @co_loop
 @co_term:
       LDA   #0
-      STA   (ptr_lo),Y
+      STA   (REPL_PTRL),Y
+      LDA   HIST_OLDLEN
+      STA   buf_idx
       RTS
 
-; hist_slot_ptr: ptr_lo/hi = address of the HIST_K-th newest entry (K in 1..COUNT).
+; hist_slot_ptr: REPL_PTR = address of the HIST_K-th newest entry (K in 1..COUNT).
 ;   idx = (HEAD - K) mod HIST_MAX.
 hist_slot_ptr:
       SEC
@@ -346,7 +367,7 @@ hist_slot_ptr:
 @sp_ok:
       STA   HIST_IDX
       ; fall through to compute the address from HIST_IDX
-; hist_slot_addr: ptr_lo/hi = HIST_SLOTS + HIST_IDX*128.
+; hist_slot_addr: REPL_PTR = HIST_SLOTS + HIST_IDX*128.
 hist_slot_addr:
       LDA   HIST_IDX
       LSR   A                  ; A = idx>>1, carry = idx&1
@@ -355,8 +376,10 @@ hist_slot_addr:
       ROR   A                  ; carry -> bit7: (idx&1)?$80:0
       CLC
       ADC   #<HIST_SLOTS
-      STA   ptr_lo
+      STA   REPL_PTRL
       LDA   HIST_K
       ADC   #>HIST_SLOTS
-      STA   ptr_hi
+      STA   REPL_PTRH
       RTS
+
+.endif

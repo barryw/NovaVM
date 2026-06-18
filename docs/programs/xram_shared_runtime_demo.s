@@ -4,10 +4,10 @@
 ; and run from BASIC with SYS 36864.
 ;
 ; Assemble from the repository root:
-;   ca65 --cpu 65c02 -I runtime/asm -o /tmp/xram_demo.o docs/programs/xram_shared_runtime_demo.s
+;   ca65 --cpu w65c02 -I runtime/asm -o /tmp/xram_demo.o docs/programs/xram_shared_runtime_demo.s
 ;   ld65 -C docs/programs/diag9000.cfg -o /tmp/xram_demo.bin /tmp/xram_demo.o
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "xram.inc"
 

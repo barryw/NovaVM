@@ -2,7 +2,7 @@
 ; Proves: LOAD works, SYS enters, main loop holds, ESC exits to BASIC.
 ;
 ; Load address: $9000   Invoke: SYS $9000
-; Build: ca65 --cpu 65c02 -I ../../../runtime/asm test_loop.s -o test_loop.o
+; Build: ca65 --cpu w65c02 -I ../../../runtime/asm test_loop.s -o test_loop.o
 ;        ld65 -C keyboard.cfg -o test_loop.bin test_loop.o vgc_wait.o
 
 .include "novavm.inc"

@@ -6,7 +6,7 @@
 ; before returning, instead of returning the instant the command is dispatched.
 ; AudioLoadingAssemblyRuntimeTests supplies the bus.
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "audio.inc"
 

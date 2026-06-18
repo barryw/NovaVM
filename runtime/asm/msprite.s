@@ -5,7 +5,6 @@
 ; already be loaded into VGC sprite shape RAM.
 
 .include "msprite.inc"
-.include "sprite.s"
 
 .ifndef MSPRITE_IMPLEMENTATION_INCLUDED
 MSPRITE_IMPLEMENTATION_INCLUDED = 1

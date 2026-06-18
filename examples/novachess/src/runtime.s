@@ -52,12 +52,6 @@ CHESS_CASTLE_TEST    = 0
 .ifndef CHESS_SELFPLAY_DEMO
 CHESS_SELFPLAY_DEMO  = 1
 .endif
-.ifndef CHESS_AUTOSTART_DEMO
-CHESS_AUTOSTART_DEMO = 0
-.endif
-.ifndef CHESS_SPLASH_FRAMES
-CHESS_SPLASH_FRAMES  = 30000
-.endif
 .ifndef SELFPLAY_MOVE_PAUSE
 SELFPLAY_MOVE_PAUSE  = 24
 .endif
@@ -147,7 +141,6 @@ INPUT_BLINK_SHIFT         = 4
 INPUT_BLINK_FRAMES        = 10
 
 .segment "ZEROPAGE"
-msg_ptr:             .res 2
 mask_ptr:            .res 2
 buf_ptr:             .res 2
 
@@ -168,17 +161,12 @@ text_y:              .res 1
 move_index:          .res 1
 anim_x:              .res 1
 anim_y:              .res 1
-anim_dx:             .res 1
-anim_dy:             .res 1
 anim_path_count:     .res 1
 anim_start_x:        .res 1
 anim_start_y:        .res 1
 anim_piece_code:     .res 1
-anim_bg_x:           .res 1
-anim_bg_y:           .res 1
 castle_rook_x:       .res 1
 castle_rook_y:       .res 1
-castle_rook_dx:      .res 1
 castle_rook_steps:   .res 1
 castle_king_steps:   .res 1
 castle_tween_duration:.res 1
@@ -242,8 +230,6 @@ input_error_l:       .res 1
 input_error_h:       .res 1
 input_idle_hook_l:   .res 1
 input_idle_hook_h:   .res 1
-title_wait_l:        .res 1
-title_wait_h:        .res 1
 piece_buffer:        .res PIECE_SIZE * PIECE_SIZE
 anim_bg_buffer:      .res PIECE_SIZE * PIECE_SIZE
 castle_king_buffer:  .res PIECE_SIZE * PIECE_SIZE
@@ -256,11 +242,6 @@ board_state:         .res 64
 panel_line:          .res PANEL_LINE_LEN
 move_history:        .res PANEL_MOVE_ROWS * PANEL_LINE_LEN
 input_buffer:        .res INPUT_BUFFER_LEN + 1
-; Keep the menu splash latch in high runtime BSS. BASIC cold-start clears
-; $0900+, while NovaHost deliberately preserves the resident loader band
-; at $0320-$041F across resets.
-splash_loaded:       .res 1
-
 .include "../Pieces.inc"
 
 .segment "CODE"
@@ -287,11 +268,6 @@ reset:
         LDX #$FF
         TXS
 
-        ; 6502 RAM is not zeroed on reset/cold-start, so latch state must be
-        ; cleared explicitly. splash_loaded gates the one-shot title-splash load;
-        ; if it survives a reboot the menu skips the splash forever.
-        STZ splash_loaded
-
         JSR init_video
         JSR clear_text
 .if CHESS_CASTLE_TEST
@@ -314,7 +290,7 @@ reset:
 .endif
 
 halt:
-        WAI
+        wai
         BRA halt
 
 init_video:
@@ -354,7 +330,6 @@ clear_text:
         JMP vtext_clear_region
 
 clear_gfx:
-        STZ splash_loaded
         STZ VSPRITE_XL
         STZ VSPRITE_XH
         STZ VSPRITE_Y
@@ -979,53 +954,6 @@ set_anim_scene_dirty:
         STZ VSPRITE_SCENE_HEIGHTH
         RTS
 
-draw_anim_piece:
-        LDA anim_piece_code
-        STA piece_code
-        LDA anim_x
-        STA VSPRITE_XL
-        STZ VSPRITE_XH
-        LDA anim_y
-        STA VSPRITE_Y
-        JMP draw_piece_at_vsprite
-
-setup_anim_background:
-        LDA #PIECE_SIZE
-        STA VSPRITE_WIDTHL
-        STZ VSPRITE_WIDTHH
-        STA VSPRITE_HEIGHTL
-        STZ VSPRITE_HEIGHTH
-        STA VSPRITE_BGSTRL
-        STZ VSPRITE_BGSTRH
-        LDA #BLT_SPACE_CPU
-        STA VSPRITE_BGSPACE
-        LDA #<anim_bg_buffer
-        STA VSPRITE_BGADDRL
-        LDA #>anim_bg_buffer
-        STA VSPRITE_BGADDRM
-        STZ VSPRITE_BGADDRH
-        RTS
-
-save_anim_background:
-        JSR setup_anim_background
-        LDA anim_x
-        STA anim_bg_x
-        STA VSPRITE_XL
-        STZ VSPRITE_XH
-        LDA anim_y
-        STA anim_bg_y
-        STA VSPRITE_Y
-        JMP vsprite_gfx_save_bg
-
-restore_anim_background:
-        JSR setup_anim_background
-        LDA anim_bg_x
-        STA VSPRITE_XL
-        STZ VSPRITE_XH
-        LDA anim_bg_y
-        STA VSPRITE_Y
-        JMP vsprite_gfx_restore_bg
-
 step_delta:
         BEQ @zero
         BMI @neg
@@ -1366,14 +1294,16 @@ set_status_network_error:
         JMP print_status
 
 print_status:
-        STA msg_ptr
-        STY msg_ptr + 1
+        PHA
+        TYA
+        PHA
         LDA #PANEL_TEXT_X
         STA text_x
         LDA #11
         STA text_y
-        LDA msg_ptr
-        LDY msg_ptr + 1
+        PLA
+        TAY
+        PLA
         JMP print_at
 
 update_material_scores:
@@ -1822,8 +1752,6 @@ load_title_splash:
         STA NVG_NAMELEN
         JSR nvg_load_named
         BNE @done
-        LDA #$01
-        STA splash_loaded
         LDA #$00
 @done:
         RTS
@@ -1842,42 +1770,9 @@ init_game_defaults:
 title_flow:
         JMP setup_new_game
 
-show_title_menu:
-        JSR show_menu_backdrop
-        JSR nui_dialog_defaults
-        LDA #24
-        STA NUI_DIALOG_LEFT
-        LDA #5
-        STA NUI_DIALOG_TOP
-        LDA #32
-        STA NUI_DIALOG_WIDTH
-        LDA #10
-        STA NUI_DIALOG_HEIGHT
-        LDA #<msg_select_mode
-        STA NUI_TITLEL
-        LDA #>msg_select_mode
-        STA NUI_TITLEH
-        LDA #<msg_setup_modes
-        STA NUI_MSGL
-        LDA #>msg_setup_modes
-        STA NUI_MSGH
-        LDA #<msg_select_footer
-        STA NUI_FOOTERL
-        LDA #>msg_select_footer
-        STA NUI_FOOTERH
-        JSR nui_show_dialog
-        STZ VGC_CURSEN
-        RTS
-
 show_menu_backdrop:
-        ; Always reload the title splash on menu entry. The old splash_loaded
-        ; one-shot gate is never cleared on cold-start (cmdColdStart does not
-        ; re-run reset:/STZ splash_loaded), so the splash was loaded once per
-        ; firmware boot and only survived via gfx-plane persistence — which
-        ; intermittently (~12% of cold-starts) failed, blanking the splash with
-        ; no reload to recover. Reloading unconditionally is deterministic and
-        ; immune to cold-start reset reliability. (HW-confirmed via fioDiag
-        ; nvgEnter discriminator, 2026-06-09: all misses were 6502-side skips.)
+        ; Menu entry always reloads the splash so a cleared graphics plane
+        ; cannot leave the menu blank.
         JSR clear_text
         STZ VGC_DIMMER
         JSR load_title_splash
@@ -1887,44 +1782,6 @@ show_menu_backdrop:
 @show:
         LDA #$0F
         STA VGC_DIMMER
-        RTS
-
-wait_splash_or_key:
-@drain:
-        LDA VGC_CHARIN
-        BNE @drain
-        LDA #<CHESS_SPLASH_FRAMES
-        STA title_wait_l
-        LDA #>CHESS_SPLASH_FRAMES
-        STA title_wait_h
-@loop:
-        LDA VGC_CHARIN
-        BNE @key
-        LDA title_wait_l
-        ORA title_wait_h
-        BEQ @timeout
-        JSR wait_frame
-        LDA title_wait_l
-        BNE @dec_low
-        DEC title_wait_h
-@dec_low:
-        DEC title_wait_l
-        BRA @loop
-@timeout:
-        LDA #$00
-        RTS
-@key:
-        JSR to_upper
-        CMP #'D'
-        BEQ @done
-        CMP #'N'
-        BEQ @done
-        CMP #'S'
-        BEQ @done
-        CMP #$0D
-        BEQ @done
-        BRA @loop
-@done:
         RTS
 
 wait_key:
@@ -3033,9 +2890,9 @@ show_network_module_error_dialog:
         STA NUI_DIALOG_WIDTH
         LDA #10
         STA NUI_DIALOG_HEIGHT
-        LDA #<msg_net_module_title
+        LDA #<msg_net_error_title
         STA NUI_TITLEL
-        LDA #>msg_net_module_title
+        LDA #>msg_net_error_title
         STA NUI_TITLEH
         LDA #<msg_net_module_body
         STA NUI_MSGL
@@ -3234,13 +3091,6 @@ step_castle_tween:
         RTS
 
 prepare_castle_rook_visual:
-        LDA to_file
-        SEC
-        SBC from_file
-        JSR step_delta
-        STA anim_dx
-        STZ anim_dy
-
         LDA from_row
         ASL
         ASL
@@ -3255,8 +3105,6 @@ prepare_castle_rook_visual:
         CLC
         ADC #3
         STA castle_rook_to
-        LDA #DEMO_PIXEL_STEP
-        STA castle_rook_dx
         LDX #3
         BRA @rook_ready
 
@@ -3269,8 +3117,6 @@ prepare_castle_rook_visual:
         CLC
         ADC #5
         STA castle_rook_to
-        LDA #($100 - DEMO_PIXEL_STEP)
-        STA castle_rook_dx
         LDX #2
 
 @rook_ready:
@@ -3544,16 +3390,6 @@ setup_normal_move_animation:
         LDX to_row
         LDA square_piece_y,X
         STA to_y
-        LDA to_file
-        SEC
-        SBC from_file
-        JSR step_delta
-        STA anim_dx
-        LDA to_row
-        SEC
-        SBC from_row
-        JSR step_delta
-        STA anim_dy
         LDA abs_file_delta
         BNE @use_file
         LDA abs_row_delta
@@ -3585,12 +3421,6 @@ setup_horizontal_knight_segment:
         STA to_x
         LDA anim_y
         STA to_y
-        LDA to_file
-        SEC
-        SBC from_file
-        JSR step_delta
-        STA anim_dx
-        STZ anim_dy
         LDX abs_file_delta
         LDA step_count_by_squares,X
         STA anim_path_count
@@ -3602,12 +3432,6 @@ setup_vertical_knight_segment:
         LDX to_row
         LDA square_piece_y,X
         STA to_y
-        STZ anim_dx
-        LDA to_row
-        SEC
-        SBC from_row
-        JSR step_delta
-        STA anim_dy
         LDX abs_row_delta
         LDA step_count_by_squares,X
         STA anim_path_count
@@ -3641,7 +3465,6 @@ abs_signed_small:
         RTS
 .endif
 
-.include "nvg.s"
 
 .segment "RODATA"
 
@@ -3723,8 +3546,6 @@ msg_title:
         .byte "NOVA CHESS", 0
 msg_select_mode:
         .byte "SELECT A MODE", 0
-msg_setup_game:
-        .byte "NEW GAME", 0
 msg_setup_modes:
         .byte "1  COMPUTER VS COMPUTER", $0D
         .byte "2  HUMAN VS COMPUTER", $0D
@@ -3776,11 +3597,9 @@ msg_net_error_title:
 msg_net_error_body:
         .byte "network error: game server unavailable.", $0D
         .byte "check novahost network settings", 0
-msg_net_module_title:
-        .byte "NETWORK MODULE", 0
 msg_net_module_body:
-        .byte "network module unavailable.", $0D
-        .byte "check nova chess disk image", 0
+        .byte "network overlay missing.", $0D
+        .byte "check disk image", 0
 msg_prompt_move:
         .byte "MOVE:       ", 0
 msg_input_blank:
@@ -3855,12 +3674,7 @@ glyph_7:
 glyph_8:
         .byte %01110000, %10001000, %10001000, %01110000, %10001000, %10001000, %01110000
 
-.include "vsprite.s"
-.include "vtext.s"
-.include "tween.s"
-.include "overlay.s"
-; nui is linked from nova.lib (feature-group objects); only the dialog core and
-; key input are pulled in, the list picker and save-under objects strip out.
+; NDK service implementations are linked from runtime/asm/build/nova.lib.
 
 .segment "VECTORS"
         .word reset

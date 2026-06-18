@@ -26,7 +26,7 @@ start:
         LDY #>msg_failed
         JSR print_line
 halt:
-        WAI
+        wai
         BRA halt
 
 load_runtime:
@@ -78,4 +78,4 @@ runtime_name_end:
 msg_failed:
         .byte "NOVA CHESS RUNTIME LOAD FAILED", 0
 
-.include "fio.s"
+; FIO implementation is linked from runtime/asm/build/nova.lib.

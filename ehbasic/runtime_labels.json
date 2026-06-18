@@ -4,7 +4,7 @@
     {
       "label": "AUDIO.ATTACK",
       "source": "../runtime/asm/audio.inc",
-      "line": 226,
+      "line": 227,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -16,7 +16,7 @@
     {
       "label": "AUDIO.DECAY",
       "source": "../runtime/asm/audio.inc",
-      "line": 231,
+      "line": 232,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -28,7 +28,7 @@
     {
       "label": "AUDIO.DURATION",
       "source": "../runtime/asm/audio.inc",
-      "line": 194,
+      "line": 195,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -40,7 +40,7 @@
     {
       "label": "AUDIO.INIT",
       "source": "../runtime/asm/audio.s",
-      "line": 420,
+      "line": 421,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -52,7 +52,7 @@
     {
       "label": "AUDIO.INSTRUMENT",
       "source": "../runtime/asm/audio.inc",
-      "line": 199,
+      "line": 200,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -64,7 +64,7 @@
     {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../runtime/asm/audio.s",
-      "line": 374,
+      "line": 375,
       "inputs": [],
       "outputs": [
         {
@@ -88,7 +88,7 @@
     {
       "label": "AUDIO.INST_ID",
       "source": "../runtime/asm/audio.inc",
-      "line": 216,
+      "line": 217,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -100,7 +100,7 @@
     {
       "label": "AUDIO.META_AUTHOR",
       "source": "../runtime/asm/audio.inc",
-      "line": 108,
+      "line": 109,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -112,7 +112,7 @@
     {
       "label": "AUDIO.META_COPYRIGHT",
       "source": "../runtime/asm/audio.inc",
-      "line": 113,
+      "line": 114,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -124,7 +124,7 @@
     {
       "label": "AUDIO.META_DURATION_H",
       "source": "../runtime/asm/audio.inc",
-      "line": 158,
+      "line": 159,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -136,7 +136,7 @@
     {
       "label": "AUDIO.META_DURATION_L",
       "source": "../runtime/asm/audio.inc",
-      "line": 153,
+      "line": 154,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -148,7 +148,7 @@
     {
       "label": "AUDIO.META_FLAGS",
       "source": "../runtime/asm/audio.inc",
-      "line": 163,
+      "line": 164,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -160,7 +160,7 @@
     {
       "label": "AUDIO.META_INIT_H",
       "source": "../runtime/asm/audio.inc",
-      "line": 133,
+      "line": 134,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -172,7 +172,7 @@
     {
       "label": "AUDIO.META_INIT_L",
       "source": "../runtime/asm/audio.inc",
-      "line": 128,
+      "line": 129,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -184,7 +184,7 @@
     {
       "label": "AUDIO.META_LOAD_H",
       "source": "../runtime/asm/audio.inc",
-      "line": 123,
+      "line": 124,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -196,7 +196,7 @@
     {
       "label": "AUDIO.META_LOAD_L",
       "source": "../runtime/asm/audio.inc",
-      "line": 118,
+      "line": 119,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -208,7 +208,7 @@
     {
       "label": "AUDIO.META_PLAY_H",
       "source": "../runtime/asm/audio.inc",
-      "line": 143,
+      "line": 144,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -220,7 +220,7 @@
     {
       "label": "AUDIO.META_PLAY_L",
       "source": "../runtime/asm/audio.inc",
-      "line": 138,
+      "line": 139,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -232,7 +232,7 @@
     {
       "label": "AUDIO.META_SIZE_H",
       "source": "../runtime/asm/audio.inc",
-      "line": 98,
+      "line": 99,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -244,7 +244,7 @@
     {
       "label": "AUDIO.META_SIZE_L",
       "source": "../runtime/asm/audio.inc",
-      "line": 93,
+      "line": 94,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -256,7 +256,7 @@
     {
       "label": "AUDIO.META_SONGS",
       "source": "../runtime/asm/audio.inc",
-      "line": 148,
+      "line": 149,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -268,7 +268,7 @@
     {
       "label": "AUDIO.META_SOUNDFONT",
       "source": "../runtime/asm/audio.inc",
-      "line": 168,
+      "line": 169,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -280,7 +280,7 @@
     {
       "label": "AUDIO.META_TITLE",
       "source": "../runtime/asm/audio.inc",
-      "line": 103,
+      "line": 104,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -292,7 +292,7 @@
     {
       "label": "AUDIO.META_TYPE",
       "source": "../runtime/asm/audio.inc",
-      "line": 88,
+      "line": 89,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -304,7 +304,7 @@
     {
       "label": "AUDIO.MIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 593,
+      "line": 595,
       "inputs": [],
       "outputs": [
         {
@@ -324,7 +324,7 @@
     {
       "label": "AUDIO.MIDPLAY_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 648,
+      "line": 685,
       "inputs": [],
       "outputs": [
         {
@@ -345,7 +345,7 @@
     {
       "label": "AUDIO.MIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 606,
+      "line": 612,
       "inputs": [],
       "outputs": [
         {
@@ -362,7 +362,7 @@
     {
       "label": "AUDIO.MUSIC_LOOP",
       "source": "../runtime/asm/audio.s",
-      "line": 736,
+      "line": 773,
       "inputs": [],
       "outputs": [
         {
@@ -381,7 +381,7 @@
     {
       "label": "AUDIO.MUSIC_NOTE",
       "source": "../runtime/asm/audio.s",
-      "line": 803,
+      "line": 840,
       "inputs": [
         {
           "name": "X",
@@ -403,7 +403,7 @@
     {
       "label": "AUDIO.MUSIC_PLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 695,
+      "line": 732,
       "inputs": [],
       "outputs": [
         {
@@ -420,7 +420,7 @@
     {
       "label": "AUDIO.MUSIC_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 787,
+      "line": 824,
       "inputs": [],
       "outputs": [
         {
@@ -437,7 +437,7 @@
     {
       "label": "AUDIO.MUSIC_PRIORITY",
       "source": "../runtime/asm/audio.s",
-      "line": 749,
+      "line": 786,
       "inputs": [],
       "outputs": [
         {
@@ -456,7 +456,7 @@
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
       "source": "../runtime/asm/audio.s",
-      "line": 682,
+      "line": 719,
       "inputs": [],
       "outputs": [
         {
@@ -478,7 +478,7 @@
     {
       "label": "AUDIO.MUSIC_STOP",
       "source": "../runtime/asm/audio.s",
-      "line": 711,
+      "line": 748,
       "inputs": [],
       "outputs": [
         {
@@ -495,7 +495,7 @@
     {
       "label": "AUDIO.MUSIC_TEMPO",
       "source": "../runtime/asm/audio.s",
-      "line": 723,
+      "line": 760,
       "inputs": [],
       "outputs": [
         {
@@ -515,7 +515,7 @@
     {
       "label": "AUDIO.NOISE",
       "source": "../runtime/asm/audio.s",
-      "line": 346,
+      "line": 347,
       "inputs": [
         {
           "name": "A",
@@ -532,7 +532,7 @@
     {
       "label": "AUDIO.NOTE",
       "source": "../runtime/asm/audio.inc",
-      "line": 189,
+      "line": 190,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -544,7 +544,7 @@
     {
       "label": "AUDIO.PLAY_SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 184,
+      "line": 185,
       "inputs": [
         {
           "name": "A",
@@ -574,7 +574,7 @@
     {
       "label": "AUDIO.RELEASE",
       "source": "../runtime/asm/audio.inc",
-      "line": 241,
+      "line": 242,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -586,7 +586,7 @@
     {
       "label": "AUDIO.SET_VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 201,
+      "line": 202,
       "inputs": [
         {
           "name": "A",
@@ -612,7 +612,7 @@
     {
       "label": "AUDIO.SFLOAD",
       "source": "../runtime/asm/audio.s",
-      "line": 618,
+      "line": 624,
       "inputs": [],
       "outputs": [
         {
@@ -632,7 +632,7 @@
     {
       "label": "AUDIO.SFLOAD_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 664,
+      "line": 701,
       "inputs": [],
       "outputs": [
         {
@@ -653,7 +653,7 @@
     {
       "label": "AUDIO.SFX_PLAYING",
       "source": "../runtime/asm/audio.s",
-      "line": 774,
+      "line": 811,
       "inputs": [],
       "outputs": [
         {
@@ -670,7 +670,7 @@
     {
       "label": "AUDIO.SIDPLAY",
       "source": "../runtime/asm/audio.s",
-      "line": 564,
+      "line": 565,
       "inputs": [],
       "outputs": [
         {
@@ -691,7 +691,7 @@
     {
       "label": "AUDIO.SIDPLAY_FILE",
       "source": "../runtime/asm/audio.s",
-      "line": 632,
+      "line": 669,
       "inputs": [],
       "outputs": [
         {
@@ -713,7 +713,7 @@
     {
       "label": "AUDIO.SIDSTOP",
       "source": "../runtime/asm/audio.s",
-      "line": 581,
+      "line": 583,
       "inputs": [],
       "outputs": [
         {
@@ -730,7 +730,7 @@
     {
       "label": "AUDIO.SOUND",
       "source": "../runtime/asm/audio.s",
-      "line": 216,
+      "line": 217,
       "inputs": [],
       "outputs": [
         {
@@ -751,7 +751,7 @@
     {
       "label": "AUDIO.STATUS",
       "source": "../runtime/asm/audio.s",
-      "line": 762,
+      "line": 799,
       "inputs": [],
       "outputs": [
         {
@@ -768,7 +768,7 @@
     {
       "label": "AUDIO.STATUS_LOADING",
       "source": "../runtime/asm/audio.inc",
-      "line": 78,
+      "line": 79,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -780,7 +780,7 @@
     {
       "label": "AUDIO.STATUS_MUSIC",
       "source": "../runtime/asm/audio.inc",
-      "line": 63,
+      "line": 64,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -792,7 +792,7 @@
     {
       "label": "AUDIO.STATUS_SFX",
       "source": "../runtime/asm/audio.inc",
-      "line": 58,
+      "line": 59,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -804,7 +804,7 @@
     {
       "label": "AUDIO.STATUS_SID",
       "source": "../runtime/asm/audio.inc",
-      "line": 68,
+      "line": 69,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -816,7 +816,7 @@
     {
       "label": "AUDIO.STATUS_WTS",
       "source": "../runtime/asm/audio.inc",
-      "line": 73,
+      "line": 74,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -828,7 +828,7 @@
     {
       "label": "AUDIO.STRH",
       "source": "../runtime/asm/audio.inc",
-      "line": 252,
+      "line": 253,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -840,7 +840,7 @@
     {
       "label": "AUDIO.STRL",
       "source": "../runtime/asm/audio.inc",
-      "line": 247,
+      "line": 248,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -852,7 +852,7 @@
     {
       "label": "AUDIO.STRLEN",
       "source": "../runtime/asm/audio.inc",
-      "line": 257,
+      "line": 258,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -864,7 +864,7 @@
     {
       "label": "AUDIO.SUSTAIN",
       "source": "../runtime/asm/audio.inc",
-      "line": 236,
+      "line": 237,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -876,7 +876,7 @@
     {
       "label": "AUDIO.TICK",
       "source": "../runtime/asm/audio.s",
-      "line": 457,
+      "line": 458,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -888,7 +888,7 @@
     {
       "label": "AUDIO.TONE",
       "source": "../runtime/asm/audio.s",
-      "line": 318,
+      "line": 319,
       "inputs": [
         {
           "name": "NVR0L/NVR0H",
@@ -905,7 +905,7 @@
     {
       "label": "AUDIO.VOICE",
       "source": "../runtime/asm/audio.inc",
-      "line": 210,
+      "line": 211,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -917,7 +917,7 @@
     {
       "label": "AUDIO.VOLUME",
       "source": "../runtime/asm/audio.s",
-      "line": 279,
+      "line": 280,
       "inputs": [],
       "outputs": [
         {
@@ -937,7 +937,7 @@
     {
       "label": "AUDIO.VOLUME_LEVEL",
       "source": "../runtime/asm/audio.inc",
-      "line": 205,
+      "line": 206,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -947,9 +947,25 @@
       "address": "$B9A4"
     },
     {
+      "label": "AUDIO.WAIT_LOADING",
+      "source": "../runtime/asm/audio.s",
+      "line": 641,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 once loading cleared (nonzero only on the safety timeout)."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_wait_loading",
+      "summary": "Block until a host SID/MIDI/soundfont asset finishes loading by"
+    },
+    {
       "label": "AUDIO.WAVEFORM",
       "source": "../runtime/asm/audio.inc",
-      "line": 221,
+      "line": 222,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1362,7 +1378,7 @@
     {
       "label": "FIO.ARG_ADDRH",
       "source": "../runtime/asm/fio.inc",
-      "line": 34,
+      "line": 39,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1374,7 +1390,7 @@
     {
       "label": "FIO.ARG_ADDRL",
       "source": "../runtime/asm/fio.inc",
-      "line": 24,
+      "line": 29,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1386,7 +1402,7 @@
     {
       "label": "FIO.ARG_ADDRM",
       "source": "../runtime/asm/fio.inc",
-      "line": 29,
+      "line": 34,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1398,7 +1414,7 @@
     {
       "label": "FIO.ARG_LENH",
       "source": "../runtime/asm/fio.inc",
-      "line": 44,
+      "line": 49,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1410,7 +1426,7 @@
     {
       "label": "FIO.ARG_LENL",
       "source": "../runtime/asm/fio.inc",
-      "line": 39,
+      "line": 44,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1422,7 +1438,7 @@
     {
       "label": "FIO.ARG_NAMELEN",
       "source": "../runtime/asm/fio.inc",
-      "line": 49,
+      "line": 54,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1434,7 +1450,7 @@
     {
       "label": "FIO.ARG_NAMEPTR_H",
       "source": "../runtime/asm/fio.inc",
-      "line": 59,
+      "line": 64,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1446,7 +1462,7 @@
     {
       "label": "FIO.ARG_NAMEPTR_L",
       "source": "../runtime/asm/fio.inc",
-      "line": 54,
+      "line": 59,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1458,7 +1474,7 @@
     {
       "label": "FIO.CD",
       "source": "../runtime/asm/fio.s",
-      "line": 342,
+      "line": 321,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1472,7 +1488,7 @@
     {
       "label": "FIO.CHECK",
       "source": "../runtime/asm/fio.s",
-      "line": 168,
+      "line": 165,
       "inputs": [],
       "outputs": [
         {
@@ -1487,8 +1503,8 @@
     },
     {
       "label": "FIO.CLEAR_ERROR",
-      "source": "../runtime/asm/fio.s",
-      "line": 206,
+      "source": "../runtime/asm/fio_clear_error.s",
+      "line": 16,
       "inputs": [],
       "outputs": [
         {
@@ -1500,12 +1516,12 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$EA83"
+      "address": "$FFB7"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1178,
+      "line": 1220,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1517,7 +1533,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1199,
+      "line": 1241,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1529,7 +1545,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1192,
+      "line": 1234,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1541,7 +1557,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1185,
+      "line": 1227,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1553,7 +1569,7 @@
     {
       "label": "FIO.COPY_NAME",
       "source": "../runtime/asm/fio.s",
-      "line": 240,
+      "line": 219,
       "inputs": [],
       "outputs": [
         {
@@ -1573,7 +1589,7 @@
     {
       "label": "FIO.DELETE",
       "source": "../runtime/asm/fio.s",
-      "line": 309,
+      "line": 288,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1587,7 +1603,7 @@
     {
       "label": "FIO.DIR_OPEN",
       "source": "../runtime/asm/fio.s",
-      "line": 289,
+      "line": 268,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1598,7 +1614,7 @@
     {
       "label": "FIO.DIR_READ",
       "source": "../runtime/asm/fio.s",
-      "line": 299,
+      "line": 278,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1609,7 +1625,7 @@
     {
       "label": "FIO.EXEC",
       "source": "../runtime/asm/fio.s",
-      "line": 186,
+      "line": 183,
       "inputs": [
         {
           "name": "A",
@@ -1630,7 +1646,7 @@
     {
       "label": "FIO.FCLOSE",
       "source": "../runtime/asm/fio.s",
-      "line": 432,
+      "line": 411,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1641,18 +1657,18 @@
     {
       "label": "FIO.FCREATE",
       "source": "../runtime/asm/fio.s",
-      "line": 422,
+      "line": 401,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_fcreate",
-      "summary": "Create/truncate FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H."
+      "summary": "Create/truncate FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H."
     },
     {
       "label": "FIO.FDELETE_EXACT",
       "source": "../runtime/asm/fio.s",
-      "line": 522,
+      "line": 501,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1663,7 +1679,7 @@
     {
       "label": "FIO.FFLUSH",
       "source": "../runtime/asm/fio.s",
-      "line": 502,
+      "line": 481,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1672,31 +1688,103 @@
       "summary": "Flush dirty data for fileid FIO_SRCL/H."
     },
     {
+      "label": "FIO.FILE_ACCESS_READ",
+      "source": "../runtime/asm/nova.inc",
+      "line": 855,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_ACCESS_READ",
+      "summary": "FOPEN/FCREATE access bit pattern for read-only file handles.",
+      "address": "$01"
+    },
+    {
+      "label": "FIO.FILE_ACCESS_RW",
+      "source": "../runtime/asm/nova.inc",
+      "line": 869,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_ACCESS_RW",
+      "summary": "FOPEN/FCREATE access bit pattern for read/write file handles.",
+      "address": "$03"
+    },
+    {
+      "label": "FIO.FILE_ACCESS_WRITE",
+      "source": "../runtime/asm/nova.inc",
+      "line": 862,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_ACCESS_WRITE",
+      "summary": "FOPEN/FCREATE access bit pattern for write-only file handles.",
+      "address": "$02"
+    },
+    {
+      "label": "FIO.FILE_TARGET_MASK",
+      "source": "../runtime/asm/nova.inc",
+      "line": 876,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_TARGET_MASK",
+      "summary": "FREAD/FWRITE mask for the transfer target bits in FIO_DIRTYPE.",
+      "address": "$30"
+    },
+    {
+      "label": "FIO.FILE_TARGET_RAM",
+      "source": "../runtime/asm/nova.inc",
+      "line": 883,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_TARGET_RAM",
+      "summary": "FREAD/FWRITE target value for CPU RAM at FIO_ENDL/H.",
+      "address": "$00"
+    },
+    {
+      "label": "FIO.FILE_TARGET_XRAM",
+      "source": "../runtime/asm/nova.inc",
+      "line": 890,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "const",
+      "symbol": "FIO_FILE_TARGET_XRAM",
+      "summary": "FREAD/FWRITE target value for flat XRAM at FIO_GSPACE/GADDRL/H.",
+      "address": "$10"
+    },
+    {
       "label": "FIO.FOPEN",
       "source": "../runtime/asm/fio.s",
-      "line": 412,
+      "line": 391,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_fopen",
-      "summary": "Open FIO.NAME using FIO_DIRTYPE as file access mode; returns fileid in FIO_SRCL/H."
+      "summary": "Open FIO.NAME using FIO_DIRTYPE low bits as FIO_FILE_ACCESS_*; returns fileid in FIO_SRCL/H."
     },
     {
       "label": "FIO.FREAD",
       "source": "../runtime/asm/fio.s",
-      "line": 442,
+      "line": 421,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_fread",
-      "summary": "Read from fileid FIO_SRCL/H into RAM at FIO_ENDL/H for FIO_GLENL/H bytes."
+      "summary": "Read fileid FIO_SRCL/H for FIO_GLENL/H bytes into CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE."
     },
     {
       "label": "FIO.FRENAME",
       "source": "../runtime/asm/fio.s",
-      "line": 532,
+      "line": 511,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1707,7 +1795,7 @@
     {
       "label": "FIO.FRESIZE",
       "source": "../runtime/asm/fio.s",
-      "line": 492,
+      "line": 471,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1718,7 +1806,7 @@
     {
       "label": "FIO.FSEEK",
       "source": "../runtime/asm/fio.s",
-      "line": 462,
+      "line": 441,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1729,7 +1817,7 @@
     {
       "label": "FIO.FSIZE",
       "source": "../runtime/asm/fio.s",
-      "line": 482,
+      "line": 461,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1740,7 +1828,7 @@
     {
       "label": "FIO.FSTATUS",
       "source": "../runtime/asm/fio.s",
-      "line": 512,
+      "line": 491,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1751,7 +1839,7 @@
     {
       "label": "FIO.FTELL",
       "source": "../runtime/asm/fio.s",
-      "line": 472,
+      "line": 451,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1762,18 +1850,18 @@
     {
       "label": "FIO.FWRITE",
       "source": "../runtime/asm/fio.s",
-      "line": 452,
+      "line": 431,
       "inputs": [],
       "outputs": [],
       "requires": [],
       "kind": "routine",
       "symbol": "fio_fwrite",
-      "summary": "Write FIO_GLENL/H bytes from RAM at FIO_ENDL/H to fileid FIO_SRCL/H."
+      "summary": "Write FIO_GLENL/H bytes from CPU RAM or XRAM selected by FIO_FILE_TARGET_* in FIO_DIRTYPE to fileid FIO_SRCL/H."
     },
     {
       "label": "FIO.GLOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 331,
+      "line": 310,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1792,7 +1880,7 @@
     {
       "label": "FIO.GSAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 320,
+      "line": 299,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1811,7 +1899,7 @@
     {
       "label": "FIO.ISSUE",
       "source": "../runtime/asm/fio.s",
-      "line": 156,
+      "line": 153,
       "inputs": [
         {
           "name": "A",
@@ -1827,7 +1915,7 @@
     {
       "label": "FIO.LOAD",
       "source": "../runtime/asm/fio.s",
-      "line": 278,
+      "line": 257,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1843,7 +1931,7 @@
     {
       "label": "FIO.LOAD_RUNTIME",
       "source": "../runtime/asm/fio.s",
-      "line": 388,
+      "line": 367,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1857,7 +1945,7 @@
     {
       "label": "FIO.MKDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 353,
+      "line": 332,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1895,7 +1983,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "../runtime/asm/fio.s",
-      "line": 554,
+      "line": 533,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1915,7 +2003,7 @@
     {
       "label": "FIO.PWD",
       "source": "../runtime/asm/fio.s",
-      "line": 375,
+      "line": 354,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1926,7 +2014,7 @@
     {
       "label": "FIO.RMDIR",
       "source": "../runtime/asm/fio.s",
-      "line": 364,
+      "line": 343,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1940,7 +2028,7 @@
     {
       "label": "FIO.RNG",
       "source": "../runtime/asm/fio.s",
-      "line": 400,
+      "line": 379,
       "inputs": [],
       "outputs": [
         {
@@ -1960,7 +2048,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1249,
+      "line": 1291,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1972,7 +2060,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1256,
+      "line": 1298,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1984,7 +2072,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1263,
+      "line": 1305,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1996,7 +2084,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1270,
+      "line": 1312,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2008,7 +2096,7 @@
     {
       "label": "FIO.RUN",
       "source": "../runtime/asm/fio.s",
-      "line": 544,
+      "line": 523,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2019,7 +2107,7 @@
     {
       "label": "FIO.SAVE",
       "source": "../runtime/asm/fio.s",
-      "line": 267,
+      "line": 246,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2037,7 +2125,7 @@
     {
       "label": "FIO.SET_IO_ERROR",
       "source": "../runtime/asm/fio.s",
-      "line": 224,
+      "line": 203,
       "inputs": [],
       "outputs": [
         {
@@ -2053,7 +2141,7 @@
     {
       "label": "NGS.BEGIN_MESSAGE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 430,
+      "line": 428,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2064,7 +2152,7 @@
     {
       "label": "NGS.BUILD_AI_ADD_TO_TABLE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1077,
+      "line": 1087,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2075,7 +2163,7 @@
     {
       "label": "NGS.BUILD_AI_LIST_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1060,
+      "line": 1070,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2086,7 +2174,7 @@
     {
       "label": "NGS.BUILD_GAME_LIST_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 938,
+      "line": 948,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2097,7 +2185,7 @@
     {
       "label": "NGS.BUILD_HELLO",
       "source": "../runtime/asm/gameserver.s",
-      "line": 864,
+      "line": 874,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2108,7 +2196,7 @@
     {
       "label": "NGS.BUILD_LOBBY_CHAT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 904,
+      "line": 914,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2119,7 +2207,7 @@
     {
       "label": "NGS.BUILD_OPPONENT_LIST_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1096,
+      "line": 1106,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2130,7 +2218,7 @@
     {
       "label": "NGS.BUILD_PING",
       "source": "../runtime/asm/gameserver.s",
-      "line": 896,
+      "line": 906,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2141,7 +2229,7 @@
     {
       "label": "NGS.BUILD_PLAYER_ACTION",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1028,
+      "line": 1038,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2152,7 +2240,7 @@
     {
       "label": "NGS.BUILD_STATE_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1049,
+      "line": 1059,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2163,7 +2251,7 @@
     {
       "label": "NGS.BUILD_TABLE_CHAT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 913,
+      "line": 923,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2174,7 +2262,7 @@
     {
       "label": "NGS.BUILD_TABLE_CREATE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 963,
+      "line": 973,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2185,7 +2273,7 @@
     {
       "label": "NGS.BUILD_TABLE_JOIN",
       "source": "../runtime/asm/gameserver.s",
-      "line": 988,
+      "line": 998,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2196,7 +2284,7 @@
     {
       "label": "NGS.BUILD_TABLE_LEAVE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1017,
+      "line": 1027,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2207,7 +2295,7 @@
     {
       "label": "NGS.BUILD_TABLE_LIST_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 946,
+      "line": 956,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2218,7 +2306,7 @@
     {
       "label": "NGS.BUILD_TABLE_OBSERVE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 1006,
+      "line": 1016,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2229,7 +2317,7 @@
     {
       "label": "NGS.BUILD_USER_LIST_REQUEST",
       "source": "../runtime/asm/gameserver.s",
-      "line": 930,
+      "line": 940,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2240,7 +2328,7 @@
     {
       "label": "NGS.CONNECT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 195,
+      "line": 193,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2251,7 +2339,7 @@
     {
       "label": "NGS.CONNECT_DEFAULT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 220,
+      "line": 218,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2262,7 +2350,7 @@
     {
       "label": "NGS.DISCONNECT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 235,
+      "line": 233,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2273,7 +2361,7 @@
     {
       "label": "NGS.INIT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 118,
+      "line": 116,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2284,7 +2372,7 @@
     {
       "label": "NGS.KEEPALIVE_RESET",
       "source": "../runtime/asm/gameserver.s",
-      "line": 281,
+      "line": 279,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2295,7 +2383,7 @@
     {
       "label": "NGS.KEEPALIVE_SET_INTERVAL",
       "source": "../runtime/asm/gameserver.s",
-      "line": 272,
+      "line": 270,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2306,7 +2394,7 @@
     {
       "label": "NGS.KEEPALIVE_TICK",
       "source": "../runtime/asm/gameserver.s",
-      "line": 294,
+      "line": 292,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2317,7 +2405,7 @@
     {
       "label": "NGS.PARSE_ENVELOPE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 726,
+      "line": 736,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2328,7 +2416,7 @@
     {
       "label": "NGS.PARSE_ERROR",
       "source": "../runtime/asm/gameserver.s",
-      "line": 622,
+      "line": 632,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2339,7 +2427,7 @@
     {
       "label": "NGS.PING_ROUNDTRIP",
       "source": "../runtime/asm/gameserver.s",
-      "line": 709,
+      "line": 719,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2350,7 +2438,7 @@
     {
       "label": "NGS.READY",
       "source": "../runtime/asm/gameserver.s",
-      "line": 253,
+      "line": 251,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2361,7 +2449,7 @@
     {
       "label": "NGS.READ_BYTE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 780,
+      "line": 790,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2372,7 +2460,7 @@
     {
       "label": "NGS.READ_STRING",
       "source": "../runtime/asm/gameserver.s",
-      "line": 825,
+      "line": 835,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2383,7 +2471,7 @@
     {
       "label": "NGS.READ_U16",
       "source": "../runtime/asm/gameserver.s",
-      "line": 805,
+      "line": 815,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2394,7 +2482,7 @@
     {
       "label": "NGS.RECV_CURRENT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 596,
+      "line": 600,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2405,7 +2493,7 @@
     {
       "label": "NGS.SEND_CURRENT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 567,
+      "line": 565,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2416,7 +2504,7 @@
     {
       "label": "NGS.SET_BUFFER",
       "source": "../runtime/asm/gameserver.s",
-      "line": 175,
+      "line": 173,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2427,7 +2515,7 @@
     {
       "label": "NGS.SET_STRING",
       "source": "../runtime/asm/gameserver.s",
-      "line": 185,
+      "line": 183,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2438,7 +2526,7 @@
     {
       "label": "NGS.SET_TIMEOUT",
       "source": "../runtime/asm/gameserver.s",
-      "line": 262,
+      "line": 260,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2449,7 +2537,7 @@
     {
       "label": "NGS.STATUS",
       "source": "../runtime/asm/gameserver.s",
-      "line": 245,
+      "line": 243,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2460,7 +2548,7 @@
     {
       "label": "NGS.WAIT_CONNECTED",
       "source": "../runtime/asm/gameserver.s",
-      "line": 389,
+      "line": 387,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2471,7 +2559,7 @@
     {
       "label": "NGS.WAIT_KIND",
       "source": "../runtime/asm/gameserver.s",
-      "line": 692,
+      "line": 702,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2482,7 +2570,7 @@
     {
       "label": "NGS.WAIT_MESSAGE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 652,
+      "line": 662,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2493,7 +2581,7 @@
     {
       "label": "NGS.WRITE_BYTE",
       "source": "../runtime/asm/gameserver.s",
-      "line": 459,
+      "line": 457,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2504,7 +2592,7 @@
     {
       "label": "NGS.WRITE_BYTES",
       "source": "../runtime/asm/gameserver.s",
-      "line": 536,
+      "line": 534,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2515,7 +2603,7 @@
     {
       "label": "NGS.WRITE_STRING",
       "source": "../runtime/asm/gameserver.s",
-      "line": 516,
+      "line": 514,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2526,7 +2614,7 @@
     {
       "label": "NGS.WRITE_U16",
       "source": "../runtime/asm/gameserver.s",
-      "line": 479,
+      "line": 477,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2747,6 +2835,181 @@
       "summary": "Read clamped NIC slot status."
     },
     {
+      "label": "NUI.DIALOG_DEFAULTS",
+      "source": "../runtime/asm/nui.s",
+      "line": 79,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_dialog_defaults",
+      "summary": "Set the standard centered modal-dialog geometry."
+    },
+    {
+      "label": "NUI.PICK_LIST",
+      "source": "../runtime/asm/nui.s",
+      "line": 574,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error. NUI_RESULT = OK/CANCEL; NUI_LIST_SELECTED = selected row."
+        }
+      ],
+      "requires": [
+        "NUI_DIALOG_*",
+        "NUI_TITLEL/H",
+        "NUI_FOOTERL/H",
+        "NUI_LIST_ITEMSL/H",
+        "NUI_LIST_ROW_WIDTH",
+        "NUI_LIST_ROW_COUNT",
+        "NUI_LIST_SELECTED"
+      ],
+      "kind": "routine",
+      "symbol": "nui_pick_list",
+      "summary": "Draw an interactive fixed-width list picker and return OK or Cancel."
+    },
+    {
+      "label": "NUI.RESTORE_UNDER",
+      "source": "../runtime/asm/nui.s",
+      "line": 246,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NUI_SAVE_LEFT",
+        "NUI_SAVE_TOP",
+        "NUI_SAVE_WIDTH",
+        "NUI_SAVE_HEIGHT",
+        "NUI_SAVE_ADDRL",
+        "NUI_SAVE_ADDRM",
+        "NUI_SAVE_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nui_restore_under",
+      "summary": "Restore text planes previously saved by NUI.SAVE_UNDER."
+    },
+    {
+      "label": "NUI.RESTORE_UNDER_FULL",
+      "source": "../runtime/asm/nui.s",
+      "line": 299,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NUI_SAVE_LEFT",
+        "NUI_SAVE_TOP",
+        "NUI_SAVE_WIDTH",
+        "NUI_SAVE_HEIGHT",
+        "NUI_SAVE_ADDRL",
+        "NUI_SAVE_ADDRM",
+        "NUI_SAVE_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nui_restore_under_full",
+      "summary": "Restore text and graphics planes previously saved by NUI.SAVE_UNDER_FULL."
+    },
+    {
+      "label": "NUI.SAVE_UNDER",
+      "source": "../runtime/asm/nui.s",
+      "line": 215,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NUI_SAVE_LEFT",
+        "NUI_SAVE_TOP",
+        "NUI_SAVE_WIDTH",
+        "NUI_SAVE_HEIGHT",
+        "NUI_SAVE_ADDRL",
+        "NUI_SAVE_ADDRM",
+        "NUI_SAVE_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nui_save_under",
+      "summary": "Save the text planes under NUI_SAVE_* into caller-provided XRAM buffers."
+    },
+    {
+      "label": "NUI.SAVE_UNDER_FULL",
+      "source": "../runtime/asm/nui.s",
+      "line": 279,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "NUI_SAVE_LEFT",
+        "NUI_SAVE_TOP",
+        "NUI_SAVE_WIDTH",
+        "NUI_SAVE_HEIGHT",
+        "NUI_SAVE_ADDRL",
+        "NUI_SAVE_ADDRM",
+        "NUI_SAVE_ADDRH"
+      ],
+      "kind": "routine",
+      "symbol": "nui_save_under_full",
+      "summary": "Save the text and graphics planes under NUI_SAVE_* into caller-provided XRAM buffers."
+    },
+    {
+      "label": "NUI.SHOW_DIALOG",
+      "source": "../runtime/asm/nui.s",
+      "line": 957,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_show_dialog",
+      "summary": "Draw the configured modal dialog without waiting for input."
+    },
+    {
+      "label": "NUI.SHOW_DIALOG_WAIT",
+      "source": "../runtime/asm/nui.s",
+      "line": 974,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_show_dialog_wait",
+      "summary": "Draw the configured modal dialog and wait for one key."
+    },
+    {
+      "label": "NUI.SHOW_ERROR",
+      "source": "../runtime/asm/nui.s",
+      "line": 986,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_show_error",
+      "summary": "Draw a modal error dialog and wait for one key."
+    },
+    {
+      "label": "NUI.WAIT_KEY",
+      "source": "../runtime/asm/nui.s",
+      "line": 998,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_wait_key",
+      "summary": "Wait for one keyboard byte and return it in A."
+    },
+    {
       "label": "NVG.ADDRH",
       "source": "../runtime/asm/nvg.inc",
       "line": 31,
@@ -2773,7 +3036,7 @@
     {
       "label": "NVG.DRAW",
       "source": "../runtime/asm/nvg.s",
-      "line": 70,
+      "line": 65,
       "inputs": [],
       "outputs": [
         {
@@ -2792,7 +3055,7 @@
     {
       "label": "NVG.DRAW_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 88,
+      "line": 83,
       "inputs": [],
       "outputs": [
         {
@@ -2816,7 +3079,7 @@
     {
       "label": "NVG.DRAW_NAMED",
       "source": "../runtime/asm/nvg.s",
-      "line": 142,
+      "line": 137,
       "inputs": [],
       "outputs": [
         {
@@ -2836,7 +3099,7 @@
     {
       "label": "NVG.DRAW_NAMED_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 158,
+      "line": 153,
       "inputs": [],
       "outputs": [
         {
@@ -2897,7 +3160,7 @@
     {
       "label": "NVG.LOAD",
       "source": "../runtime/asm/nvg.s",
-      "line": 40,
+      "line": 35,
       "inputs": [],
       "outputs": [
         {
@@ -2916,7 +3179,7 @@
     {
       "label": "NVG.LOAD_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 58,
+      "line": 53,
       "inputs": [],
       "outputs": [
         {
@@ -2937,7 +3200,7 @@
     {
       "label": "NVG.LOAD_NAMED",
       "source": "../runtime/asm/nvg.s",
-      "line": 112,
+      "line": 107,
       "inputs": [],
       "outputs": [
         {
@@ -2957,7 +3220,7 @@
     {
       "label": "NVG.LOAD_NAMED_AT",
       "source": "../runtime/asm/nvg.s",
-      "line": 127,
+      "line": 122,
       "inputs": [],
       "outputs": [
         {
@@ -3111,7 +3374,7 @@
     {
       "label": "PAGER.LOAD_CURRENT_FILE_PAGE",
       "source": "../runtime/asm/pager.s",
-      "line": 32,
+      "line": 27,
       "inputs": [],
       "outputs": [
         {
@@ -3139,7 +3402,7 @@
     {
       "label": "PAGER.LOAD_FILE_PAGE",
       "source": "../runtime/asm/pager.s",
-      "line": 19,
+      "line": 14,
       "inputs": [],
       "outputs": [
         {
@@ -3252,7 +3515,7 @@
     {
       "label": "RNG.GET16",
       "source": "../runtime/asm/rng.s",
-      "line": 31,
+      "line": 26,
       "inputs": [],
       "outputs": [
         {
@@ -3272,7 +3535,7 @@
     {
       "label": "RNG.GET32",
       "source": "../runtime/asm/rng.s",
-      "line": 20,
+      "line": 15,
       "inputs": [],
       "outputs": [
         {
@@ -3292,7 +3555,7 @@
     {
       "label": "RNG.GET8",
       "source": "../runtime/asm/rng.s",
-      "line": 41,
+      "line": 36,
       "inputs": [],
       "outputs": [
         {
@@ -4500,7 +4763,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 378,
+      "line": 384,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4520,7 +4783,7 @@
     {
       "label": "VGC.CLS",
       "source": "../runtime/asm/vgc.s",
-      "line": 122,
+      "line": 128,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4531,7 +4794,7 @@
     {
       "label": "VGC.COMMAND",
       "source": "../runtime/asm/vgc.s",
-      "line": 58,
+      "line": 64,
       "inputs": [
         {
           "name": "A",
@@ -4558,7 +4821,7 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 172,
+      "line": 178,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4569,7 +4832,7 @@
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 163,
+      "line": 169,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4580,7 +4843,7 @@
     {
       "label": "VGC.EXEC",
       "source": "../runtime/asm/vgc.s",
-      "line": 81,
+      "line": 87,
       "inputs": [
         {
           "name": "A",
@@ -4596,7 +4859,7 @@
     {
       "label": "VGC.FILL",
       "source": "../runtime/asm/vgc.s",
-      "line": 405,
+      "line": 411,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4616,7 +4879,7 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 323,
+      "line": 329,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4627,7 +4890,7 @@
     {
       "label": "VGC.FLASH_ON",
       "source": "../runtime/asm/vgc.s",
-      "line": 313,
+      "line": 319,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4638,7 +4901,7 @@
     {
       "label": "VGC.GCLS",
       "source": "../runtime/asm/vgc.s",
-      "line": 334,
+      "line": 340,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4649,7 +4912,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../runtime/asm/vgc.s",
-      "line": 342,
+      "line": 348,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4674,7 +4937,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../runtime/asm/vgc.s",
-      "line": 387,
+      "line": 393,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4694,7 +4957,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../runtime/asm/vgc.s",
-      "line": 217,
+      "line": 223,
       "inputs": [
         {
           "name": "A",
@@ -4710,7 +4973,7 @@
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 206,
+      "line": 212,
       "inputs": [
         {
           "name": "A",
@@ -4726,7 +4989,7 @@
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../runtime/asm/vgc.s",
-      "line": 195,
+      "line": 201,
       "inputs": [
         {
           "name": "A",
@@ -4742,7 +5005,7 @@
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../runtime/asm/vgc.s",
-      "line": 181,
+      "line": 187,
       "inputs": [
         {
           "name": "A",
@@ -4762,7 +5025,7 @@
     {
       "label": "VGC.LINE",
       "source": "../runtime/asm/vgc.s",
-      "line": 369,
+      "line": 375,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4782,7 +5045,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../runtime/asm/vgc.s",
-      "line": 226,
+      "line": 232,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -4802,7 +5065,7 @@
     {
       "label": "VGC.MEM_READ",
       "source": "../runtime/asm/vgc.s",
-      "line": 257,
+      "line": 263,
       "inputs": [],
       "outputs": [
         {
@@ -4823,7 +5086,7 @@
     {
       "label": "VGC.MEM_WRITE",
       "source": "../runtime/asm/vgc.s",
-      "line": 267,
+      "line": 273,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4840,7 +5103,7 @@
     {
       "label": "VGC.PAINT",
       "source": "../runtime/asm/vgc.s",
-      "line": 414,
+      "line": 420,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4904,7 +5167,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 351,
+      "line": 357,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4920,7 +5183,7 @@
     {
       "label": "VGC.RECT",
       "source": "../runtime/asm/vgc.s",
-      "line": 396,
+      "line": 402,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4940,7 +5203,7 @@
     {
       "label": "VGC.REVERSE",
       "source": "../runtime/asm/vgc.s",
-      "line": 278,
+      "line": 284,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4951,7 +5214,7 @@
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../runtime/asm/vgc.s",
-      "line": 290,
+      "line": 296,
       "inputs": [
         {
           "name": "A",
@@ -4967,7 +5230,7 @@
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../runtime/asm/vgc.s",
-      "line": 303,
+      "line": 309,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4978,7 +5241,7 @@
     {
       "label": "VGC.SET_BG",
       "source": "../runtime/asm/vgc.s",
-      "line": 145,
+      "line": 151,
       "inputs": [
         {
           "name": "X",
@@ -4994,7 +5257,7 @@
     {
       "label": "VGC.SET_BORDER",
       "source": "../runtime/asm/vgc.s",
-      "line": 154,
+      "line": 160,
       "inputs": [
         {
           "name": "X",
@@ -5010,7 +5273,7 @@
     {
       "label": "VGC.SET_FG",
       "source": "../runtime/asm/vgc.s",
-      "line": 136,
+      "line": 142,
       "inputs": [
         {
           "name": "X",
@@ -5026,7 +5289,7 @@
     {
       "label": "VGC.SET_FONT",
       "source": "../runtime/asm/vgc.s",
-      "line": 248,
+      "line": 254,
       "inputs": [
         {
           "name": "X",
@@ -5042,7 +5305,7 @@
     {
       "label": "VGC.SET_MODE",
       "source": "../runtime/asm/vgc.s",
-      "line": 239,
+      "line": 245,
       "inputs": [
         {
           "name": "X",
@@ -5111,7 +5374,7 @@
     {
       "label": "VGC.UNPLOT",
       "source": "../runtime/asm/vgc.s",
-      "line": 360,
+      "line": 366,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5148,7 +5411,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "../runtime/asm/vgc.s",
-      "line": 92,
+      "line": 98,
       "inputs": [],
       "outputs": [
         {
@@ -5164,7 +5427,7 @@
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "../runtime/asm/vgc.s",
-      "line": 68,
+      "line": 74,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5175,7 +5438,7 @@
     {
       "label": "VGC.WAIT_FRAMES",
       "source": "../runtime/asm/vgc.s",
-      "line": 105,
+      "line": 111,
       "inputs": [
         {
           "name": "A",
@@ -5257,7 +5520,7 @@
     {
       "label": "VSPRITE.BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 109,
+      "line": 110,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -5295,7 +5558,7 @@
     {
       "label": "VSPRITE.BLIT_START",
       "source": "../runtime/asm/vsprite.s",
-      "line": 126,
+      "line": 127,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -5442,7 +5705,7 @@
     {
       "label": "VSPRITE.FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 183,
+      "line": 184,
       "inputs": [],
       "outputs": [
         {
@@ -5498,7 +5761,7 @@
     {
       "label": "VSPRITE.GFX_ADDR",
       "source": "../runtime/asm/vsprite.s",
-      "line": 314,
+      "line": 315,
       "inputs": [],
       "outputs": [
         {
@@ -5518,7 +5781,7 @@
     {
       "label": "VSPRITE.GFX_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 359,
+      "line": 360,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5548,7 +5811,7 @@
     {
       "label": "VSPRITE.GFX_BLIT_START",
       "source": "../runtime/asm/vsprite.s",
-      "line": 376,
+      "line": 377,
       "inputs": [],
       "outputs": [
         {
@@ -5573,7 +5836,7 @@
     {
       "label": "VSPRITE.GFX_FILL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 485,
+      "line": 491,
       "inputs": [],
       "outputs": [
         {
@@ -5596,7 +5859,7 @@
     {
       "label": "VSPRITE.GFX_RESTORE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 543,
+      "line": 549,
       "inputs": [],
       "outputs": [
         {
@@ -5621,7 +5884,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 392,
+      "line": 393,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5656,7 +5919,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT_KEYED",
       "source": "../runtime/asm/vsprite.s",
-      "line": 409,
+      "line": 410,
       "inputs": [
         {
           "name": "VSPRITE_FLAGS",
@@ -5683,7 +5946,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT_KEYED_NOWF",
       "source": "../runtime/asm/vsprite.s",
-      "line": 425,
+      "line": 426,
       "inputs": [],
       "outputs": [
         {
@@ -5705,7 +5968,7 @@
     {
       "label": "VSPRITE.GFX_ROTATE_BLIT_NOWAIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 444,
+      "line": 445,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5740,7 +6003,7 @@
     {
       "label": "VSPRITE.GFX_SAVE_BG",
       "source": "../runtime/asm/vsprite.s",
-      "line": 501,
+      "line": 507,
       "inputs": [],
       "outputs": [
         {
@@ -5897,7 +6160,7 @@
     {
       "label": "VSPRITE.ROTATE",
       "source": "../runtime/asm/vsprite.s",
-      "line": 258,
+      "line": 259,
       "inputs": [
         {
           "name": "VSPRITE_COLORKEY",
@@ -5984,7 +6247,7 @@
     {
       "label": "VSPRITE.SCENE_BEGIN",
       "source": "../runtime/asm/vsprite.s",
-      "line": 585,
+      "line": 591,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -6000,7 +6263,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT",
       "source": "../runtime/asm/vsprite.s",
-      "line": 612,
+      "line": 618,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -6016,7 +6279,7 @@
     {
       "label": "VSPRITE.SCENE_COMMIT_ATOMIC",
       "source": "../runtime/asm/vsprite.s",
-      "line": 644,
+      "line": 650,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -6048,7 +6311,7 @@
     {
       "label": "VSPRITE.SCENE_DRAW",
       "source": "../runtime/asm/vsprite.s",
-      "line": 622,
+      "line": 628,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -6272,7 +6535,7 @@
     {
       "label": "VSPRITE.USE_ORIGINAL",
       "source": "../runtime/asm/vsprite.s",
-      "line": 214,
+      "line": 215,
       "inputs": [],
       "outputs": [
         {
@@ -6292,7 +6555,7 @@
     {
       "label": "VSPRITE.USE_ROTATED",
       "source": "../runtime/asm/vsprite.s",
-      "line": 236,
+      "line": 237,
       "inputs": [],
       "outputs": [
         {
@@ -6308,6 +6571,22 @@
       "kind": "routine",
       "symbol": "vsprite_use_rotated",
       "summary": "Point VSPRITE.SRC* at the configured rotated output buffer."
+    },
+    {
+      "label": "VSPRITE.WAIT_FRAME",
+      "source": "../runtime/asm/vsprite.s",
+      "line": 479,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Last observed frame counter value."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vsprite_wait_frame",
+      "summary": "Wait until the VGC frame counter advances."
     },
     {
       "label": "VSPRITE.WIDTHH",
@@ -6367,7 +6646,7 @@
     {
       "label": "VTEXT.CLEAR_LINE",
       "source": "../runtime/asm/vtext.s",
-      "line": 811,
+      "line": 889,
       "inputs": [],
       "outputs": [
         {
@@ -6392,7 +6671,7 @@
     {
       "label": "VTEXT.CLEAR_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 659,
+      "line": 735,
       "inputs": [],
       "outputs": [
         {
@@ -6413,9 +6692,25 @@
       "summary": "Fill the current VTEXT rectangle with spaces and the current color/attribute."
     },
     {
+      "label": "VTEXT.CLEAR_SCROLL_HOOK",
+      "source": "../runtime/asm/vtext.s",
+      "line": 698,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vtext_clear_scroll_hook",
+      "summary": "Restore default text-only automatic scrolling."
+    },
+    {
       "label": "VTEXT.DEFINE_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 95,
+      "line": 101,
       "inputs": [],
       "outputs": [
         {
@@ -6444,7 +6739,7 @@
     {
       "label": "VTEXT.EXPOSE_GFX_SPACES_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 718,
+      "line": 794,
       "inputs": [],
       "outputs": [
         {
@@ -6466,9 +6761,36 @@
       "note": "This is for split text/graphics compositing: callers can set VTEXT_COLOR"
     },
     {
+      "label": "VTEXT.FILL_GFX_REGION",
+      "source": "../runtime/asm/vtext_mixed.s",
+      "line": 99,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Gfx-plane fill colour."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_fill_gfx_region",
+      "summary": "Fill the graphics pixels under the current VTEXT cell rectangle.",
+      "details": "This is the graphics-plane half of making a mixed text/gfx cell"
+    },
+    {
       "label": "VTEXT.FILL_STYLE_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 692,
+      "line": 768,
       "inputs": [],
       "outputs": [
         {
@@ -6491,7 +6813,7 @@
     {
       "label": "VTEXT.HOME",
       "source": "../runtime/asm/vtext.s",
-      "line": 267,
+      "line": 273,
       "inputs": [],
       "outputs": [
         {
@@ -6512,7 +6834,7 @@
     {
       "label": "VTEXT.NEWLINE",
       "source": "../runtime/asm/vtext.s",
-      "line": 621,
+      "line": 663,
       "inputs": [],
       "outputs": [
         {
@@ -6536,9 +6858,43 @@
       "summary": "Move to the start of the next VTEXT row, scrolling when enabled."
     },
     {
+      "label": "VTEXT.PRINT_AT",
+      "source": "../runtime/asm/vtext.s",
+      "line": 508,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "string pointer low byte."
+        },
+        {
+          "name": "Y",
+          "description": "string pointer high byte."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 if the cursor was outside the region (nothing printed)."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_print_at",
+      "summary": "Position the cursor at VTEXT_CURX,VTEXT_CURY in the current region,"
+    },
+    {
       "label": "VTEXT.PUTS",
       "source": "../runtime/asm/vtext.s",
-      "line": 476,
+      "line": 482,
       "inputs": [
         {
           "name": "A/Y",
@@ -6568,7 +6924,7 @@
     {
       "label": "VTEXT.PUT_CHAR",
       "source": "../runtime/asm/vtext.s",
-      "line": 409,
+      "line": 415,
       "inputs": [],
       "outputs": [
         {
@@ -6595,7 +6951,7 @@
     {
       "label": "VTEXT.PUT_HEX_BYTE",
       "source": "../runtime/asm/vtext.s",
-      "line": 599,
+      "line": 627,
       "inputs": [
         {
           "name": "A",
@@ -6626,7 +6982,7 @@
     {
       "label": "VTEXT.PUT_HEX_NIBBLE",
       "source": "../runtime/asm/vtext.s",
-      "line": 585,
+      "line": 613,
       "inputs": [
         {
           "name": "A",
@@ -6657,7 +7013,7 @@
     {
       "label": "VTEXT.PUT_RUN",
       "source": "../runtime/asm/vtext.s",
-      "line": 502,
+      "line": 530,
       "inputs": [
         {
           "name": "A/Y",
@@ -6690,9 +7046,96 @@
       "note": "Does not interpret controls, wrap, or scroll. The run must fit on the"
     },
     {
+      "label": "VTEXT.READ_CHAR",
+      "source": "../runtime/asm/vtext.s",
+      "line": 649,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "Character byte from the VGC character plane."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_CURX",
+        "VTEXT_CURY"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_read_char",
+      "summary": "Read the character byte at VTEXT.CURX/CURY in the current region."
+    },
+    {
+      "label": "VTEXT.SCROLL_GFX_PIXELS_UP",
+      "source": "../runtime/asm/vtext_mixed.s",
+      "line": 150,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Number of graphics pixel rows to scroll upward."
+        },
+        {
+          "name": "X",
+          "description": "Gfx-plane fill colour for the newly exposed bottom strip."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_GFX_LEFTL/H",
+        "VTEXT_GFX_TOP",
+        "VTEXT_GFX_WIDTHL/H",
+        "VTEXT_GFX_HEIGHT"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_scroll_gfx_pixels_up",
+      "summary": "Scroll an arbitrary VGC gfx pixel rectangle up by A pixel rows.",
+      "details": "This is the graphics-plane half of a transactional mixed scroll."
+    },
+    {
+      "label": "VTEXT.SCROLL_MIXED_UP",
+      "source": "../runtime/asm/vtext_mixed.s",
+      "line": 52,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Number of text rows to scroll upward."
+        },
+        {
+          "name": "X",
+          "description": "Gfx-plane fill colour for the newly exposed bottom strip."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_scroll_mixed_up",
+      "summary": "Scroll the current VTEXT rectangle and matching gfx rectangle up by A text rows.",
+      "details": "This is the software transactional scroll used by mixed"
+    },
+    {
       "label": "VTEXT.SCROLL_UP",
       "source": "../runtime/asm/vtext.s",
-      "line": 849,
+      "line": 927,
       "inputs": [],
       "outputs": [
         {
@@ -6715,7 +7158,7 @@
     {
       "label": "VTEXT.SELECT_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 139,
+      "line": 145,
       "inputs": [],
       "outputs": [
         {
@@ -6735,7 +7178,7 @@
     {
       "label": "VTEXT.SET_CURSOR",
       "source": "../runtime/asm/vtext.s",
-      "line": 245,
+      "line": 251,
       "inputs": [],
       "outputs": [
         {
@@ -6756,9 +7199,35 @@
       "summary": "Validate the current region and cursor, then sync the visible VGC cursor."
     },
     {
+      "label": "VTEXT.SET_SCROLL_HOOK",
+      "source": "../runtime/asm/vtext.s",
+      "line": 707,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Low byte of hook address."
+        },
+        {
+          "name": "Y",
+          "description": "High byte of hook address."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vtext_set_scroll_hook",
+      "summary": "Install an automatic-scroll hook for the current process.",
+      "details": "The hook is called instead of vtext_scroll_up when VTEXT newline"
+    },
+    {
       "label": "VTEXT.STORE_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 180,
+      "line": 186,
       "inputs": [],
       "outputs": [
         {
@@ -6787,7 +7256,7 @@
     {
       "label": "VTEXT.SYNC_CURSOR",
       "source": "../runtime/asm/vtext.s",
-      "line": 229,
+      "line": 235,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -6803,7 +7272,7 @@
     {
       "label": "VTEXT.VALIDATE_REGION",
       "source": "../runtime/asm/vtext.s",
-      "line": 198,
+      "line": 204,
       "inputs": [],
       "outputs": [
         {
@@ -6824,7 +7293,7 @@
     {
       "label": "VTEXT.WAIT_BLITTER",
       "source": "../runtime/asm/vtext.s",
-      "line": 976,
+      "line": 1054,
       "inputs": [],
       "outputs": [
         {
@@ -7188,7 +7657,7 @@
     {
       "label": "XRAM.ADDR_IN_RANGE",
       "source": "../runtime/asm/xram.s",
-      "line": 215,
+      "line": 212,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7201,7 +7670,7 @@
     {
       "label": "XRAM.COPY_FROM_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 285,
+      "line": 282,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7220,7 +7689,7 @@
     {
       "label": "XRAM.COPY_TO_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 312,
+      "line": 309,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7251,7 +7720,7 @@
     {
       "label": "XRAM.FILL",
       "source": "../runtime/asm/xram.s",
-      "line": 339,
+      "line": 336,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7293,7 +7762,7 @@
     {
       "label": "XRAM.MAP_WINDOW3",
       "source": "../runtime/asm/xram.s",
-      "line": 233,
+      "line": 230,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7367,7 +7836,7 @@
     {
       "label": "XRAM.READ8",
       "source": "../runtime/asm/xram.s",
-      "line": 249,
+      "line": 246,
       "inputs": [],
       "outputs": [
         {
@@ -7387,7 +7856,7 @@
     {
       "label": "XRAM.SET_ERROR",
       "source": "../runtime/asm/xram.s",
-      "line": 52,
+      "line": 49,
       "inputs": [
         {
           "name": "A",
@@ -7408,7 +7877,7 @@
     {
       "label": "XRAM.SET_OK",
       "source": "../runtime/asm/xram.s",
-      "line": 40,
+      "line": 37,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -7419,7 +7888,7 @@
     {
       "label": "XRAM.WAIT_DMA",
       "source": "../runtime/asm/xram.s",
-      "line": 374,
+      "line": 371,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -7430,7 +7899,7 @@
     {
       "label": "XRAM.WRITE8",
       "source": "../runtime/asm/xram.s",
-      "line": 266,
+      "line": 263,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7446,7 +7915,7 @@
     {
       "label": "XRAM.XLOAD",
       "source": "../runtime/asm/xram.s",
-      "line": 164,
+      "line": 161,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7466,7 +7935,7 @@
     {
       "label": "XRAM.XMC_COPY_FROM_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 119,
+      "line": 116,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7485,7 +7954,7 @@
     {
       "label": "XRAM.XMC_COPY_TO_RAM",
       "source": "../runtime/asm/xram.s",
-      "line": 130,
+      "line": 127,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7504,7 +7973,7 @@
     {
       "label": "XRAM.XMC_FILL",
       "source": "../runtime/asm/xram.s",
-      "line": 141,
+      "line": 138,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7522,7 +7991,7 @@
     {
       "label": "XRAM.XMC_READ8",
       "source": "../runtime/asm/xram.s",
-      "line": 93,
+      "line": 90,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7537,7 +8006,7 @@
     {
       "label": "XRAM.XMC_WRITE8",
       "source": "../runtime/asm/xram.s",
-      "line": 108,
+      "line": 105,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -7553,7 +8022,7 @@
     {
       "label": "XRAM.XSAVE",
       "source": "../runtime/asm/xram.s",
-      "line": 180,
+      "line": 177,
       "inputs": [],
       "outputs": [],
       "requires": [

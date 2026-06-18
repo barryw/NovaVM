@@ -12,7 +12,7 @@ public sealed class NovaHostManagementClient : IDisposable
     private const int HeaderBytes = 24;
     private const int DefaultPort = 6504;
     private const int ChunkBytes = 512;
-    private static readonly TimeSpan DefaultCommandTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan DefaultCommandTimeout = TimeSpan.FromSeconds(60);
 
     private enum Command : ushort
     {

@@ -36,6 +36,7 @@
 AUDIO_INC_INCLUDED = 1
 
 .include "fio.inc"
+.include "vgc.inc"
 
 ; MUSIC_STATUS bit layout.
 ; These bits are shared by BASIC, assembly apps, and hosted playback.
@@ -259,5 +260,33 @@ AUDIO_STRH       = FIO_ENDH
 ; @symbol AUDIO_STRLEN
 ; @summary MML string length for AUDIO.MUSIC_SEQUENCE.
 AUDIO_STRLEN     = FIO_NAMELEN
+
+.global audio_play_sound
+.global audio_set_volume
+.global audio_sound
+.global audio_volume
+.global audio_tone
+.global audio_noise
+.global audio_instrument
+.global audio_init
+.global audio_tick
+.global audio_sidplay
+.global audio_sidstop
+.global audio_midplay
+.global audio_midstop
+.global audio_sfload
+.global audio_sidplay_file
+.global audio_midplay_file
+.global audio_sfload_file
+.global audio_music_sequence
+.global audio_music_play
+.global audio_music_stop
+.global audio_music_tempo
+.global audio_music_loop
+.global audio_music_priority
+.global audio_status
+.global audio_sfx_playing
+.global audio_music_playing
+.global audio_music_note
 
 .endif

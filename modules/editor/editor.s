@@ -488,12 +488,12 @@ sys_indent_load_scan_char:
       LDA   EDITBUF_BUFL
       CLC
       ADC   se_scanL
-      STA   z:EB_SRCL
+      STA   z:se_srcL
       LDA   EDITBUF_BUFH
       ADC   se_scanH
-      STA   z:EB_SRCH
+      STA   z:se_srcH
       LDY   #0
-      LDA   (EB_SRCL),Y
+      LDA   (se_srcL),Y
       RTS
 
 sys_indent_add2:
@@ -627,6 +627,10 @@ sys_hl_is_alpha:
       SEC
       RTS
 
+      .segment "ZEROPAGE"
+se_srcL:          .res 1
+se_srcH:          .res 1
+
       .segment "BSS"
 se_saved_mode:    .res 1
 se_saved_palette: .res 1
@@ -665,9 +669,9 @@ se_line_endH:     .res 1
 ; Shared driver + editor bodies (all include-guarded).
 ; copper.s -> copper_off. editui.s pulls vtext.s -> blitter.s. editbuf.s.
 ; ===========================================================================
-      .include "copper.s"
-      .include "editui.s"
-      .include "editbuf.s"
+      .include "copper.inc"
+      .include "editui.inc"
+      .include "editbuf.inc"
       .segment "RODATA"
 sys_edit_type_text:
       .byte "Text", 0

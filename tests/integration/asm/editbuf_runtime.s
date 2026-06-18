@@ -9,7 +9,7 @@
 ;   goto_entry ($4000): parse goto-line strings -> [validity, lineL, lineH] x N
 ;   cut_entry  ($4003): cut an all-selected 300-byte buffer -> len + cliplen
 
-.setcpu "65c02"
+.setcpu "w65c02"
 
 .include "editbuf.inc"
 

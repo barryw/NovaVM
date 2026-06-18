@@ -753,12 +753,12 @@ net_build_opp_list_req:
 ; ===========================================================================
 ; NDK driver bodies, included AFTER the wrappers so .referenced(nic_*/ngs_*) is
 ; true (selective emit keeps the image small). gameserver.s itself .includes
-; nic.s (via its .include "nic.s"), so including gameserver.s pulls both; the
+; nic.s (via its .include "nic.inc"), so including gameserver.s pulls both; the
 ; selective-emit guards keep only the wrapped routines + their transitive
 ; callees. NIC_SERVER_COMMANDS is forced on so nic_listen/nic_accept are emitted.
 ; ===========================================================================
 NIC_SERVER_COMMANDS = 1
-      .include "gameserver.s"
+      .include "gameserver.inc"
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000      ; NMI, RESET, IRQ (module runs under SEI)

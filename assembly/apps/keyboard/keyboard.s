@@ -3,7 +3,7 @@
 ; using sprites while music plays via the SID/MIDI engine.
 ;
 ; Load address: $9000   Invoke: SYS $9000
-; Assembler:    ca65 --cpu 65c02
+; Assembler:    ca65 --cpu w65c02
 ; Linker:       ld65 -C keyboard.cfg
 
 .include "novavm.inc"

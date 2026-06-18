@@ -28,6 +28,8 @@ VTEXT_INC_INCLUDED = 1
 
 VTEXT_SCREEN_COLS = NOVA_SCREEN_COLS
 VTEXT_SCREEN_ROWS = NOVA_SCREEN_ROWS
+VTEXT_GFX_CELL_PIXELS = 4
+VTEXT_GFX_ROW_PIXELS = VTEXT_SCREEN_COLS * VTEXT_GFX_CELL_PIXELS
 
 VTEXT_PLANE_CHAR = VGC_PLANE_CHAR
 VTEXT_PLANE_COLOR = VGC_PLANE_COLOR
@@ -95,6 +97,7 @@ VTEXT_REGION_SIZE = 10
 .global vtext_print_at
 .global vtext_put_hex_nibble
 .global vtext_put_hex_byte
+.global vtext_read_char
 .global vtext_newline
 .global vtext_set_scroll_hook
 .global vtext_clear_scroll_hook
@@ -103,7 +106,19 @@ VTEXT_REGION_SIZE = 10
 .global vtext_expose_gfx_spaces_region
 .global vtext_clear_line
 .global vtext_scroll_up
+.global vtext_scroll_mixed_up
+.global vtext_fill_gfx_region
+.global vtext_scroll_gfx_pixels_up
 .global vtext_wait_blitter
+
+; Pixel-rectangle state for vtext_scroll_gfx_pixels_up. Coordinates are gfx
+; pixels, not text cells. Height and scroll amount are pixel rows.
+.global VTEXT_GFX_LEFTL
+.global VTEXT_GFX_LEFTH
+.global VTEXT_GFX_TOP
+.global VTEXT_GFX_WIDTHL
+.global VTEXT_GFX_WIDTHH
+.global VTEXT_GFX_HEIGHT
 
 ; Internal region-addressing helper and its zero-page output, exposed so
 ; separately-linked consumers (nui save/restore-under) can compute and read a
