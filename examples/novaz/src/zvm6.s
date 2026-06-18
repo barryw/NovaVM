@@ -1625,6 +1625,7 @@ nz6_scroll_live_composite:
         LDA nz6_win_current
         STA nz6_tmp_win
         JSR nz6_build_full_region_tmp_win
+        JSR nz6_clear_scroll_excluded_top_rows
         LDA nz6_tmp_lines
         JSR nz6_scroll_live_rows_composite
         PHA
@@ -1639,6 +1640,59 @@ nz6_scroll_live_composite:
         LDA nz6_stk_lo
         STA VTEXT_FLAGS
         PLA
+        RTS
+
+; The text renderer can place existing glyphs in the floor-aligned top cell,
+; but composite scrolling uses only complete cells inside the pixel window so
+; new text does not overwrite adjacent chrome. Clear the excluded leading rows
+; before every scroll, or those old glyphs become pinned above the scrollable
+; transcript.
+nz6_clear_scroll_excluded_top_rows:
+        LDX #0
+        JSR nz6_prop_top_cell
+        CMP VTEXT_TOP
+        BCC :+
+        RTS
+:
+        STA nz6_marg_l                  ; clear top
+        LDA VTEXT_TOP
+        SEC
+        SBC nz6_marg_l
+        BEQ @rts
+        STA nz6_marg_r                  ; clear height
+        LDA VTEXT_LEFT
+        PHA
+        LDA VTEXT_TOP
+        PHA
+        LDA VTEXT_WIDTH
+        PHA
+        LDA VTEXT_HEIGHT
+        PHA
+        LDA VTEXT_COLOR
+        PHA
+        LDA VTEXT_ATTR
+        PHA
+        LDA nz6_marg_l
+        STA VTEXT_TOP
+        LDA nz6_marg_r
+        STA VTEXT_HEIGHT
+        LDA #NZ6_COLOR_DEFAULT          ; bg 0: reveal graphics/chrome
+        STA VTEXT_COLOR
+        STZ VTEXT_ATTR
+        JSR vtext_clear_region
+        PLA
+        STA VTEXT_ATTR
+        PLA
+        STA VTEXT_COLOR
+        PLA
+        STA VTEXT_HEIGHT
+        PLA
+        STA VTEXT_WIDTH
+        PLA
+        STA VTEXT_TOP
+        PLA
+        STA VTEXT_LEFT
+@rts:
         RTS
 
 nz6_scroll_live_rows_composite:
@@ -2011,6 +2065,7 @@ nz6_ext_scroll_window:
         ORA zvm_operand_lo+1
         BEQ @restore                    ; amount 0: nothing to scroll
         JSR nz6_build_full_region_tmp_win ; target rect -> live vtext state
+        JSR nz6_clear_scroll_excluded_top_rows
         LDA zvm_operand_lo+1
         STA nz6_unit_lo
         LDA zvm_operand_hi+1

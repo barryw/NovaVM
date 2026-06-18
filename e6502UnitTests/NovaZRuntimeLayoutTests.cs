@@ -192,6 +192,7 @@ public sealed class NovaZRuntimeLayoutTests
         string gfxBuilder = Slice(zvm6, "nz6_build_gfx_region_tmp_win:", "; Freshen the CURRENT window");
         string fullBuilder = Slice(zvm6, "nz6_build_full_region_tmp_win:", "; Pixel-precise graphics rectangle");
         string hook = Slice(zvm6, "nz6_scroll_live_composite:", "; ROM newline hook");
+        string clearTop = Slice(zvm6, "nz6_clear_scroll_excluded_top_rows:", "nz6_scroll_live_rows_composite:");
         string rows = Slice(zvm6, "nz6_scroll_live_rows_composite:", "; ROM newline hook");
 
         // Z6 windows are pixel rectangles, but Nova's text plane can only own
@@ -210,7 +211,13 @@ public sealed class NovaZRuntimeLayoutTests
         StringAssert.Contains(fullBuilder, "JSR nz6_unit_edge_start_cell");
 
         StringAssert.Contains(hook, "JSR nz6_build_full_region_tmp_win");
+        StringAssert.Contains(hook, "JSR nz6_clear_scroll_excluded_top_rows");
         StringAssert.Contains(hook, "JSR nz6_scroll_live_rows_composite");
+
+        StringAssert.Contains(clearTop, "JSR nz6_prop_top_cell");
+        StringAssert.Contains(clearTop, "CMP VTEXT_TOP");
+        StringAssert.Contains(clearTop, "LDA #NZ6_COLOR_DEFAULT");
+        StringAssert.Contains(clearTop, "JSR vtext_clear_region");
 
         StringAssert.Contains(rows, "JSR nz6_build_gfx_region_tmp_win");
         StringAssert.Contains(rows, "JSR vtext_scroll_gfx_pixels_up");

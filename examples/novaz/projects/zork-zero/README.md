@@ -92,7 +92,9 @@ get parchment
 ```
 
 When the story shows `[Hit any key to continue.]`, press Enter. This is not a
-normal command prompt and not the same as `[ MORE ]`.
+normal command prompt and not the same as `[ MORE ]`. Zork Zero then shows its
+graphic title screen and waits again; press Enter a second time to reach the
+real Great Hall prompt.
 
 Then type:
 
