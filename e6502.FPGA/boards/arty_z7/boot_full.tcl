@@ -17,6 +17,13 @@ set fdata [read $ff]; close $ff
 binary scan $fdata i* fwords
 mwr -force 0x10060000 $fwords [llength $fwords]
 puts "FILES staged @ 0x10060000: [llength $fwords] words; readback [mrd -value -force 0x10060000]"
+# SYSTEM module -> XRAM slot 1 ($064000 -> DDR 0x10064000): READY line-reader +
+# cursor (lib_call(SYSTEM)). shelf dir seeds SHELF_TAG[1]=SYSTEM in the loader.
+set sf [open "/home/barry/NovaVM/modules/system/system.bin" rb]
+set sdata [read $sf]; close $sf
+binary scan $sdata i* swords
+mwr -force 0x10064000 $swords [llength $swords]
+puts "SYSTEM staged @ 0x10064000: [llength $swords] words; readback [mrd -value -force 0x10064000]"
 fpga -file build/ps_full/ps_full.runs/impl_1/arty_z7_full.bit
 after 3000
 puts "BOOT_DONE"
