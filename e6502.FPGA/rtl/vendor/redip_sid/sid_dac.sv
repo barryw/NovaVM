@@ -48,8 +48,8 @@ module sid_dac #(
     parameter  BITS       = 12,
     parameter  _2R_DIV_R  = 2.20,
     parameter  TERM       = 0,
-    localparam SCALEBITS  = 4,
-    localparam MSB        = BITS+SCALEBITS-1
+    parameter  SCALEBITS  = 4,
+    parameter  MSB        = BITS+SCALEBITS-1
 )(
     input  logic [BITS-1:0] vin,
     output logic [BITS-1:0] vout

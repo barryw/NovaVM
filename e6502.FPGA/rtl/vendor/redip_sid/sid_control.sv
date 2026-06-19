@@ -19,8 +19,8 @@
 // SID control registers for two chips.
 // Fully pipelined operation, shifting out registers for one voice per cycle.
 module sid_control #(
-    localparam DBUS_VALUE_TTL_MOS6581 = 10'd7,
-    localparam DBUS_VALUE_TTL_MOS8580 = 10'd664
+    parameter  DBUS_VALUE_TTL_MOS6581 = 10'd7,
+    parameter  DBUS_VALUE_TTL_MOS8580 = 10'd664
 )(
     input  logic               clk,
     input  logic               tick_ms,

@@ -25,13 +25,13 @@
 
 module sid_waveform #(
     // Even bits are high on powerup, and there is no reset.
-    localparam OSC_INIT       = { 12{2'b01} },
+    parameter  OSC_INIT       = { 12{2'b01} },
     // Time for noise LFSR to be filled with 1 bits when reset or test is held.
-    localparam NOISE_TTL_6581 = 14'd33,   // ~30ms
-    localparam NOISE_TTL_8580 = 14'd9765, // ~10s
+    parameter  NOISE_TTL_6581 = 14'd33,   // ~30ms
+    parameter  NOISE_TTL_8580 = 14'd9765, // ~10s
     // Time for waveform 0 to fade out.
-    localparam WF_0_TTL_6581  = 13'd200,  // ~200ms
-    localparam WF_0_TTL_8580  = 13'd5000  // ~5s
+    parameter  WF_0_TTL_6581  = 13'd200,  // ~200ms
+    parameter  WF_0_TTL_8580  = 13'd5000  // ~5s
 )(
     input  logic          clk,
     input  logic          tick_ms,

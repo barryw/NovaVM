@@ -19,8 +19,8 @@
 module sid_envelope #(
     // Default to no init, since the counter will reach 0 after a maximum of
     // one exponential release cycle (at release = 0) after reset release.
-    localparam INIT_ENV = 0,
-    localparam ENV_INIT = INIT_ENV ? { 4{2'b10} } : 'hFF
+    parameter  INIT_ENV = 0,
+    parameter  ENV_INIT = INIT_ENV ? { 4{2'b10} } : 'hFF
 )(
     input  logic               clk,
     input  sid::cycle_t        cycle,

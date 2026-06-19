@@ -18,7 +18,7 @@
 
 module sid_pot #(
     // Default is no init, since operation will be normal within 512 cycles.
-    localparam INIT_POT = 0
+    parameter  INIT_POT = 0
 )(
     input  logic          clk,
     input  sid::cycle_t   cycle,

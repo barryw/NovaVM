@@ -26,7 +26,7 @@ VIVADO_BATCH = $(VIVADO) -mode batch -nojournal -notrace
 
 HDMI_SRC = $(wildcard ../../rtl/thirdparty/hdl-util-hdmi/*.sv)
 
-.PHONY: all bitstream prog hdmi prog-hdmi vgc prog-vgc vgcgfx prog-vgcgfx hw_server clean
+.PHONY: all bitstream prog hdmi prog-hdmi vgc prog-vgc vgcgfx prog-vgcgfx cpu prog-cpu hw_server clean
 
 all: bitstream
 
@@ -63,6 +63,19 @@ $(VGCGFX_BIT): $(VGCGFX_TOP).sv arty_z7_vgc.xdc build_vgcgfx.tcl $(VGC_SRC)
 
 prog-vgcgfx: hw_server $(VGCGFX_BIT)
 	$(VIVADO_BATCH) -source program.tcl -tclargs $(VGCGFX_BIT)
+
+CPU_TOP = arty_z7_cpu
+CPU_BIT = $(BUILDDIR)/$(CPU_TOP).bit
+CPU_SRC = $(wildcard ../../rtl/*.sv ../../rtl/sid/*.sv ../../rtl/sdram/*.sv \
+            ../../rtl/vendor/redip_sid/*.sv ../../rtl/arlet_6502/*.v) $(HDMI_SRC)
+
+cpu: $(CPU_BIT)
+
+$(CPU_BIT): $(CPU_TOP).sv arty_z7_vgc.xdc build_cpu.tcl $(CPU_SRC)
+	$(VIVADO_BATCH) -log $(BUILDDIR)/vivado_cpu.log -source build_cpu.tcl
+
+prog-cpu: hw_server $(CPU_BIT)
+	$(VIVADO_BATCH) -source program.tcl -tclargs $(CPU_BIT)
 
 # Start a JTAG hardware server if one isn't already listening on 3121.
 hw_server:

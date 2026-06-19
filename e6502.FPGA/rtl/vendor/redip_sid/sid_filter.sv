@@ -47,11 +47,11 @@ endfunction
 
 module sid_filter #(
     // FC offset for average 6581 filter curve.
-    localparam FC_OFFSET_6581 = 12'sh600,
+    parameter  FC_OFFSET_6581 = 12'sh600,
     // The 6581 mixer DC offset is approximately -1/18 of the dynamic range of one voice.
-    localparam MIXER_DC_6581 = 24'(-(1 << 20)/18),
-    localparam MIXER_DC_8580 = 24'(0),
-    localparam PI = $acos(-1)
+    parameter  MIXER_DC_6581 = 24'(-(1 << 20)/18),
+    parameter  MIXER_DC_8580 = 24'(0),
+    parameter  PI = $acos(-1)
 )(
     input  logic             clk,
     input  logic             res,
