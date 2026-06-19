@@ -489,10 +489,10 @@ module sid_waveform #(
     // dd ibs=1 skip=2 < waveforms/8580wf50.dat | od -An -tx1 -v | head -128 | cut -b2- > sid_waveform_P_T_8580.hex
     initial begin
 `ifdef YOSYS
-        $readmemh("../rtl/vendor/redip_sid/sid_waveform_PS__6581.hex", sid_waveform_PS__6581);
-        $readmemh("../rtl/vendor/redip_sid/sid_waveform_PS__8580.hex", sid_waveform_PS__8580);
-        $readmemh("../rtl/vendor/redip_sid/sid_waveform_P_T_6581.hex", sid_waveform_P_T_6581);
-        $readmemh("../rtl/vendor/redip_sid/sid_waveform_P_T_8580.hex", sid_waveform_P_T_8580);
+        $readmemh("../../rtl/vendor/redip_sid/sid_waveform_PS__6581.hex", sid_waveform_PS__6581);
+        $readmemh("../../rtl/vendor/redip_sid/sid_waveform_PS__8580.hex", sid_waveform_PS__8580);
+        $readmemh("../../rtl/vendor/redip_sid/sid_waveform_P_T_6581.hex", sid_waveform_P_T_6581);
+        $readmemh("../../rtl/vendor/redip_sid/sid_waveform_P_T_8580.hex", sid_waveform_P_T_8580);
 `else
         // Unit tests execute from e6502.FPGA so read tables through the repo path.
         $readmemh("rtl/vendor/redip_sid/sid_waveform_PS__6581.hex", sid_waveform_PS__6581);

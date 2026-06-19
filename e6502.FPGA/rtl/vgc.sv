@@ -521,6 +521,31 @@ module vgc (
         .gfx_b_dout(gfx_b_dout)
     );
 
+    // ---------------------------------------------------------------------
+    // Forward net declarations (Vivado). These signals are connected at the
+    // artist/sprite instances below, ahead of their natural declaration
+    // sites further down. yosys tolerates the late declarations; Vivado would
+    // otherwise infer implicit 1-bit nets and silently break the graphics and
+    // sprite paths. Declared once here; originals removed where they were.
+    // ---------------------------------------------------------------------
+    logic [3:0]  gfx_color;
+    logic [5:0]  fio_name_len;
+    logic        sprite_shape_sync_busy;
+    logic        sprite_shape_publish_block;
+    logic        sprite_frame_publish;
+    logic        artist_cmd_valid;
+    logic [7:0]  artist_cmd_code;
+    logic [16:0] artist_gfx_addr;
+    logic [3:0]  artist_gfx_wdata;
+    logic        artist_gfx_we;
+    logic [16:0] artist_gfx_raddr;
+    logic [3:0]  artist_gfx_rdata;
+    logic        artist_gfx_re;
+    logic [10:0] artist_font_addr;
+    logic [7:0]  artist_font_data;
+    logic        artist_font_re;
+    logic        artist_busy;
+
     // =========================================================================
     // Drawing coprocessor (ARTIST)
     // =========================================================================
@@ -823,7 +848,7 @@ module vgc (
     logic [7:0]  regs [0:31];
     logic [6:0]  cursor_x;
     logic [5:0]  cursor_y;
-    logic [3:0]  border_color, fg_color, bg_color, gfx_color, display_dim;
+    logic [3:0]  border_color, fg_color, bg_color, display_dim;  // gfx_color declared earlier
     logic [7:0]  gfx_trans_color;
     logic [2:0]  mode;
     logic        cursor_enable;
@@ -851,16 +876,17 @@ module vgc (
     logic        cmd_busy;
     logic [7:0]  cmd_op;
     logic        sprdef_wait;
-    logic        sprite_shape_sync_busy;
-    // PIXIE prepares native row 0 while native row 479 is still being displayed.
-    // Commit sprite attributes here so the whole next frame uses one coherent
-    // snapshot; committing at V_ACTIVE would leave row 0 one frame stale.
+    // sprite_shape_sync_busy / _publish_block / _publish declared earlier
+    // (before the sprite instance). PIXIE prepares native row 0 while native
+    // row 479 is still being displayed. Commit sprite attributes here so the
+    // whole next frame uses one coherent snapshot; committing at V_ACTIVE would
+    // leave row 0 one frame stale.
     wire         sprite_frame_commit = (h_count == 10'd0 && v_count == V_ACTIVE - 1);
-    wire         sprite_shape_publish_block =
+    assign       sprite_shape_publish_block =
         (cmd_busy && (cmd_op == CMD_SPRDEF || cmd_op == CMD_SPRROW ||
                       cmd_op == CMD_SPRCLR || cmd_op == CMD_SPRCOPY)) ||
         sprdef_wait;
-    wire         sprite_frame_publish = sprite_frame_commit &&
+    assign       sprite_frame_publish = sprite_frame_commit &&
                                         !sprite_shape_publish_block &&
                                         !sprite_shape_sync_busy;
     logic [7:0]  scroll_x, scroll_y, scroll_ctl;
@@ -937,7 +963,7 @@ module vgc (
 
     // FIO name buffer shadow (snooped from CPU writes for Gtext)
     logic [7:0]  fio_name [0:63];
-    logic [5:0]  fio_name_len;
+    // fio_name_len declared earlier (before the artist instance).
 
     initial begin
         for (int i = 0; i < 64; i++) fio_name[i] = 0;
@@ -996,19 +1022,8 @@ module vgc (
     logic [16:0] reset_clear_addr = 17'd0;
     wire         reset_clear_busy = (reset_clear_phase != RCLR_IDLE);
 
-    // ARTIST drawing coprocessor signals
-    logic        artist_cmd_valid;
-    logic [7:0]  artist_cmd_code;
-    logic [16:0] artist_gfx_addr;
-    logic [3:0]  artist_gfx_wdata;
-    logic        artist_gfx_we;
-    logic [16:0] artist_gfx_raddr;
-    logic [3:0]  artist_gfx_rdata;
-    logic        artist_gfx_re;
-    logic [10:0] artist_font_addr;
-    logic [7:0]  artist_font_data;
-    logic        artist_font_re;
-    logic        artist_busy;
+    // ARTIST drawing coprocessor signals — declared earlier (before the artist
+    // instance) so Vivado does not infer implicit 1-bit nets.
 
     initial begin
         for (int i = 0; i < 32; i++) regs[i] = 0;

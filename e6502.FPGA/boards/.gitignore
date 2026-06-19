@@ -1,0 +1,10 @@
+# FPGA build artifacts (per-board build/ dirs + Vivado/yosys droppings)
+*/build/
+*/.Xil/
+*/clockInfo.txt
+*/usage_statistics_webtalk.*
+*/vivado*.jou
+*/vivado*.log
+*/vivado_pid*.str
+*/*.backup.jou
+*/*.backup.log

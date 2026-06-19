@@ -2,7 +2,7 @@
 # beast-synth.sh — single-command FPGA synth on beast with bitstream pull.
 #
 # Replaces the error-prone 3-step "rsync, ssh make, rsync back" dance.
-# Always mirrors the full e6502.FPGA/{rtl,fpga,rom} tree (no per-file rsync
+# Always mirrors the full e6502.FPGA/{rtl,boards/ulx3s,rom} tree (no per-file rsync
 # syntax to get wrong), runs the build target on beast, pulls the bitstream
 # back to bit_backups/ with a date-versioned name, writes metadata, prunes old
 # script-managed artifacts, and prints timing.
@@ -67,7 +67,7 @@ EXTRA_DEFINES="${EXTRA_DEFINES:-${3:-$DEFAULT_EXTRA_DEFINES}}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCAL_FPGA="$REPO_ROOT/e6502.FPGA"
-BACKUP_DIR="$LOCAL_FPGA/fpga/bit_backups"
+BACKUP_DIR="$LOCAL_FPGA/boards/ulx3s/bit_backups"
 
 if [ ! -d "$LOCAL_FPGA" ]; then
     echo "error: e6502.FPGA dir not found at $LOCAL_FPGA" >&2
@@ -128,8 +128,10 @@ prune_bitstream_backups() {
 echo "=== [1/4] mirroring $LOCAL_FPGA → $BEAST_HOST:$BEAST_WS/e6502.FPGA"
 rsync -az --delete \
       "$LOCAL_FPGA/rtl/"  "$BEAST_HOST:$BEAST_WS/e6502.FPGA/rtl/"
+# rsync does not create intermediate parent dirs; ensure boards/ exists on beast.
+ssh "$BEAST_HOST" "mkdir -p $BEAST_WS/e6502.FPGA/boards"
 rsync -az --delete \
-      "$LOCAL_FPGA/fpga/" "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/" \
+      "$LOCAL_FPGA/boards/ulx3s/" "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/" \
       --exclude='build/' --exclude='bit_backups/'
 rsync -az --delete \
       "$LOCAL_FPGA/rom/"  "$BEAST_HOST:$BEAST_WS/e6502.FPGA/rom/"
@@ -166,7 +168,7 @@ else
 fi
 
 remote_status=0
-ssh "$BEAST_HOST" "set -o pipefail; cd $BEAST_WS/e6502.FPGA/fpga && \
+ssh "$BEAST_HOST" "set -o pipefail; cd $BEAST_WS/e6502.FPGA/boards/ulx3s && \
     $remote_clean_cmd \
     { $remote_build_cmd; } 2>&1 | tee /tmp/beast-synth.log | tail -200" || remote_status=$?
 
@@ -179,14 +181,14 @@ if [ "$remote_status" -ne 0 ]; then
     failed_log="$BACKUP_DIR/e6502.${ts}${label_part}.${TARGET}.failed.log"
     rsync -az "$BEAST_HOST:/tmp/beast-synth.log" "$failed_log" || true
     echo "failed_log: $failed_log"
-    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json"; then
+    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place-report.json"; then
         failed_place_report="$BACKUP_DIR/e6502.${ts}${label_part}.failed.nextpnr-place-report.json"
-        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json" "$failed_place_report" || true
+        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place-report.json" "$failed_place_report" || true
         echo "failed_place_report: $failed_place_report"
     fi
-    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log"; then
+    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place.log"; then
         failed_place_log="$BACKUP_DIR/e6502.${ts}${label_part}.failed.nextpnr-place.log"
-        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log" "$failed_place_log" || true
+        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place.log" "$failed_place_log" || true
         echo "failed_place_log: $failed_place_log"
     fi
     exit "$remote_status"
@@ -204,11 +206,11 @@ if [ "$TARGET" = "bitstream" ]; then
     metadata_out="${out%.bit}.metadata.json"
     manifest_out="${out%.bit}.manifest"
     report_out="${out%.bit}.nextpnr-report.json"
-    rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/e6502.bit" "$out"
-    rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/e6502.config" "$config_out"
+    rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/e6502.bit" "$out"
+    rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/e6502.config" "$config_out"
     rsync -az "$BEAST_HOST:/tmp/beast-synth.log" "$log_out"
-    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-report.json"; then
-        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-report.json" "$report_out"
+    if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-report.json"; then
+        rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-report.json" "$report_out"
     else
         echo "warning: nextpnr report was not produced" >&2
     fi
@@ -275,7 +277,7 @@ def file_info(path: Path) -> dict:
 def collect_inputs() -> list[dict]:
     roots = [
         repo_root / "e6502.FPGA" / "rtl",
-        repo_root / "e6502.FPGA" / "fpga",
+        repo_root / "e6502.FPGA" / "boards" / "ulx3s",
     ]
     suffixes = {".sv", ".v", ".vh", ".lpf", ".mk"}
     names = {"Makefile"}
@@ -429,28 +431,28 @@ else
             place_log="$BACKUP_DIR/e6502.${ts}${label_part}.placecheck.log"
             place_report="$BACKUP_DIR/e6502.${ts}${label_part}.nextpnr-place-report.json"
             rsync -az "$BEAST_HOST:/tmp/beast-synth.log" "$place_log" || true
-            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json"; then
-                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.json" "$place_report"
+            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place-report.json"; then
+                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place-report.json" "$place_report"
                 echo "place_report: $place_report"
             fi
-            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log"; then
+            if ssh "$BEAST_HOST" "test -f $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place.log"; then
                 place_npnr_log="$BACKUP_DIR/e6502.${ts}${label_part}.nextpnr-place.log"
-                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place.log" "$place_npnr_log"
+                rsync -az "$BEAST_HOST:$BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place.log" "$place_npnr_log"
                 echo "nextpnr_log:  $place_npnr_log"
             fi
             echo "log:          $place_log"
             ;;
         seed-sweep)
-            echo "seed reports on beast: $BEAST_WS/e6502.FPGA/fpga/build/nextpnr-place-report.seed*.json"
+            echo "seed reports on beast: $BEAST_WS/e6502.FPGA/boards/ulx3s/build/nextpnr-place-report.seed*.json"
             ;;
         diag-sprites)
-            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/fpga/build/post_synth_sprites.v"
+            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/boards/ulx3s/build/post_synth_sprites.v"
             ;;
         diag-vgc)
-            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/fpga/build/post_synth_vgc.v"
+            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/boards/ulx3s/build/post_synth_vgc.v"
             ;;
         *)
-            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/fpga/build/post_synth.v"
+            echo "post_synth.v on beast: $BEAST_WS/e6502.FPGA/boards/ulx3s/build/post_synth.v"
             ;;
     esac
     echo "log:                   $BEAST_HOST:/tmp/beast-synth.log"

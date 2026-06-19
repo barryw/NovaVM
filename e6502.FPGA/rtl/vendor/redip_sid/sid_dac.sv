@@ -86,9 +86,9 @@ module sid_dac #(
         // which doesn't support variables of data type real.
         if (_2R_DIV_R == 2.20 && TERM == 0 && SCALEBITS == 4) begin
             case (BITS)
-              12: $readmemh("../rtl/vendor/redip_sid/dac_6581_waveform.hex", bitval);
-              11: $readmemh("../rtl/vendor/redip_sid/dac_6581_cutoff.hex",   bitval);
-               8: $readmemh("../rtl/vendor/redip_sid/dac_6581_envelope.hex", bitval);
+              12: $readmemh("../../rtl/vendor/redip_sid/dac_6581_waveform.hex", bitval);
+              11: $readmemh("../../rtl/vendor/redip_sid/dac_6581_cutoff.hex",   bitval);
+               8: $readmemh("../../rtl/vendor/redip_sid/dac_6581_envelope.hex", bitval);
             endcase
         end
 `else

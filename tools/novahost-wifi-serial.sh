@@ -19,7 +19,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FPGA_DIR="$REPO_ROOT/e6502.FPGA/fpga"
+FPGA_DIR="$REPO_ROOT/e6502.FPGA/boards/ulx3s"
 
 SERIAL="${SERIAL:-/dev/cu.usbserial-D01457}"
 BAUD="${BAUD:-115200}"

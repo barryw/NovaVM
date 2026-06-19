@@ -3,7 +3,7 @@ DEVICE   = 85k
 PACKAGE  = CABGA381
 PIN_DEF  = ulx3s.lpf
 BUILDDIR = build
-RTLDIR   = ../rtl
+RTLDIR   = ../../rtl
 
 # OSS CAD Suite (yosys, nextpnr-ecp5, ecppack, fujprog) — use absolute
 # paths so the build works regardless of the user's shell configuration.
@@ -46,7 +46,7 @@ NEXTPNR_PLACE_REPORT = $(BUILDDIR)/nextpnr-place-report.json
 NEXTPNR_PLACE_LOG = $(BUILDDIR)/nextpnr-place.log
 NEXTPNR_PLACE_CONFIG = $(BUILDDIR)/$(PROJ).place.config
 NEXTPNR_PLACE_MARGIN_MHZ ?= 0.5
-TIMING_CHECKER ?= ../../tools/check-fpga-timing.py
+TIMING_CHECKER ?= ../../../tools/check-fpga-timing.py
 NOVA_FLOORPLAN_MODE ?= critical
 NOVA_FLOORPLAN_ENFORCE ?=
 NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
@@ -66,7 +66,7 @@ all: ehbasic bitstream
 # parent Makefile's hex target, which rebuilds ehbasic and regenerates
 # rom/*.hex only when content changed (so synth skips unchanged builds).
 ehbasic:
-	@$(MAKE) --no-print-directory -C .. hex
+	@$(MAKE) --no-print-directory -C ../.. hex
 
 # =========================================================================
 # Source files
@@ -102,7 +102,7 @@ RTL_TOP  = $(RTLDIR)/top.sv $(RTLDIR)/dpram_dc.sv $(RTLDIR)/rom_load_cdc_fifo.sv
            $(RTLDIR)/wts_chip.sv \
            $(RTLDIR)/nic.sv $(RTLDIR)/math_copro.sv \
            fpga_top.sv \
-           uart_rx.sv $(RTL_BRIDGE) $(RTL_USB)
+           $(RTLDIR)/uart_rx.sv $(RTL_BRIDGE) $(RTL_USB)
 RTL_CPU  = $(RTLDIR)/arlet_6502/cpu.v $(RTLDIR)/arlet_6502/ALU.v
 RTL_REDIP = $(RTLDIR)/vendor/redip_sid/sid_pkg.sv \
             $(RTLDIR)/vendor/redip_sid/muladd.sv \
@@ -162,7 +162,7 @@ $(PNR_ARGS): FORCE
 		rm -f $(BUILDDIR)/build_args.new; \
 	fi
 
-$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_DEPS)
+$(BUILDDIR)/$(PROJ).json: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../../rom/ehbasic.hex ../../rom/extension.hex $(USB_HID_DEPS)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \
@@ -182,7 +182,7 @@ diag-vgc: $(BUILDDIR)/post_synth_vgc.v
 
 diag-sprites: $(BUILDDIR)/post_synth_sprites.v
 
-$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../rom/ehbasic.hex ../rom/extension.hex $(USB_HID_DEPS)
+$(BUILDDIR)/post_synth.v: $(SYNTH_ARGS) $(RTL_VGC) $(RTL_TOP) $(RTL_CPU) $(RTL_SID) $(RTL_HDMI) $(RTL_SDRAM_V) $(RTL_SDRAM_SV) ../../rom/ehbasic.hex ../../rom/extension.hex $(USB_HID_DEPS)
 	@mkdir -p $(BUILDDIR)
 	$(YOSYS) -p "\
 		verilog_defaults -add -DSYNTHESIS; \

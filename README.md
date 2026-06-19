@@ -184,7 +184,7 @@ tools/publish-nova-cli.sh                 # NativeAOT single-binary Nova CLI
 make -C ehbasic                           # Rebuild NovaBASIC ROM artifacts
 make -C e6502.FPGA                        # Build the Verilator simulator
 make -C e6502.FPGA run                    # Run the Verilator simulator
-make -C e6502.FPGA/fpga bitstream         # Build ULX3S bitstream
+make -C e6502.FPGA/boards/ulx3s bitstream # Build ULX3S bitstream
 ```
 
 FPGA bitstream builds require the OSS CAD Suite tools (`yosys`,

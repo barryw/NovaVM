@@ -12,4 +12,4 @@ Imported files:
 Nova change:
 
 - usb_hid_host_rom.v reads the ROM hex file through the path used by the
-  e6502.FPGA/fpga Makefile working directory.
+  e6502.FPGA/boards/ulx3s Makefile working directory.

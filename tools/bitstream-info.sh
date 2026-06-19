@@ -5,13 +5,13 @@
 #   tools/bitstream-info.sh
 #   tools/bitstream-info.sh list
 #   tools/bitstream-info.sh show latest
-#   tools/bitstream-info.sh show e6502.FPGA/fpga/bit_backups/e6502.20260430_010203.label.bit
-#   tools/bitstream-info.sh show e6502.FPGA/fpga/bit_backups/e6502.20260430_010203.label.metadata.json
+#   tools/bitstream-info.sh show e6502.FPGA/boards/ulx3s/bit_backups/e6502.20260430_010203.label.bit
+#   tools/bitstream-info.sh show e6502.FPGA/boards/ulx3s/bit_backups/e6502.20260430_010203.label.metadata.json
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIT_BACKUPS="${BIT_BACKUPS:-$REPO_ROOT/e6502.FPGA/fpga/bit_backups}"
+BIT_BACKUPS="${BIT_BACKUPS:-$REPO_ROOT/e6502.FPGA/boards/ulx3s/bit_backups}"
 COMMAND="${1:-list}"
 ARG="${2:-latest}"
 

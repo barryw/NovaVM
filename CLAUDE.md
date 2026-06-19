@@ -126,7 +126,7 @@ ROM (`ehbasic.bin`, 16KB) loaded at $C000. Reset vector at $FFFC points to monit
 ## FPGA / ULX3S hardware notes
 
 The `e6502.FPGA/` directory targets the ULX3S (ECP5) with a matching ESP32
-companion in `e6502.ESP32/novahost/`. See `e6502.FPGA/fpga/BOARD.md` for the
+companion in `e6502.ESP32/novahost/`. See `e6502.FPGA/boards/ulx3s/BOARD.md` for the
 important gotcha: **boards labeled v3.0.8 in silkscreen/FTDI product string
 can actually have the v3.1.x physical pinout** (`wifi_en=J5`, `wifi_gpio0=F1`
 instead of `F1`/`L2`). If ESP32 serial flashing fails silently ("No serial

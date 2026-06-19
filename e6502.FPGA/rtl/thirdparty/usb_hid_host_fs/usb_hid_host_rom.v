@@ -1,7 +1,7 @@
 `default_nettype none
 `timescale 1ns / 1ps
 module usb_hid_host_rom #(
-  parameter MEMORY_FILE = "../rtl/thirdparty/usb_hid_host_fs/usb_hid_host_rom.mem"
+  parameter MEMORY_FILE = "../../rtl/thirdparty/usb_hid_host_fs/usb_hid_host_rom.mem"
 ) (
   input  wire       clk,
 
