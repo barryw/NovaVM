@@ -66,9 +66,25 @@ bitstream, then the FreeRTOS app. Package `BOOT.bin` (FSBL + bit + app) on the
 microSD FAT partition, or JTAG-download via Vitis/XSDB for dev. PS console on
 UART0 -> /dev/ttyUSB1 (verifiable on the build host).
 
+## Tooling notes (this build host)
+- Vivado/Vitis 2024.2. Arty Z7-20 board files installed (`digilentinc.com:
+  arty-z7-20:part0:1.1`).
+- **Vitis classic xsct platform/app flow is NOT available** ("--classic only
+  with full Vitis install"). Use the **new `vitis -s <script.py>` Python CLI**
+  (`vitis/build_ps_hello.py` — confirmed working: builds platform + FSBL BSP +
+  hello.elf). Use a FRESH workspace dir; the CLI rejects a workspace touched by
+  classic xsct.
+- JTAG boot of the PS app is still pending: `xsct connect; targets` returned an
+  EMPTY list even though Vivado's hw_manager sees `arm_dap_0` + `xc7z020`. So
+  the cable/DAP are fine — it's an xsct/hw_server contention or boot-mode issue.
+  To resolve next: ensure no Vivado hw_manager session holds the FT2232 cable,
+  confirm `JP4` boot-mode = JTAG, then `connect` / `targets` / `ps7_init` /
+  `dow` / `con` (see `vitis/boot_ps.tcl`). PS UART0 -> /dev/ttyUSB1 @115200.
+
 ## Milestones
-- [ ] **PS smoke test**: minimal PS7 (DDR + UART0), "hello" app over JTAG ->
-      confirm on /dev/ttyUSB1. Proves PS config + DDR + boot + Vitis flow.
+- [~] **PS smoke test**: PS7 BD + XSA build ✓; Vitis platform + hello.elf build
+      ✓ (vitis/build_ps_hello.py). JTAG boot to confirm on /dev/ttyUSB1 PENDING
+      (xsct target enumeration, see Tooling notes).
 - [ ] **XRAM via DDR**: axi_xram bridge + PS7 block design wrapping nova_core;
       DDR init by FSBL; keep FIO NAK -> reach READY with libraries.
 - [ ] **FIO/SD backend**: fio_bridge (AXI-GP) + FreeRTOS fio_svc task + FatFs
