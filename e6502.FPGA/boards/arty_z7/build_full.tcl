@@ -66,13 +66,10 @@ puts $fh "exec cp -r $rom_abs rom"
 close $fh
 set_property STEPS.SYNTH_DESIGN.TCL.PRE $pre_tcl [get_runs synth_1]
 
-# SYNTHESIS / VIDEO_720X480 defines via a GLOBAL INCLUDE (deterministic — the
-# STEPS MORE_OPTIONS and fileset verilog_define were both flakily dropped on
-# freshly-recreated projects, breaking hdl-util-hdmi's SYNTHESIS/timing paths).
-add_files -norecurse defines.vh
-set_property is_global_include true [get_files defines.vh]
-set_property file_type {Verilog Header} [get_files defines.vh]
-update_compile_order -fileset sources_1
+# SYNTHESIS / VIDEO_720X480 defines for hdl-util-hdmi (OSERDESE2 + 720x480).
+set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
+    -value {-verilog_define SYNTHESIS=1 -verilog_define VIDEO_720X480=1} \
+    -objects [get_runs synth_1]
 
 puts "=== launch impl -> bitstream ==="
 launch_runs impl_1 -to_step write_bitstream -jobs 6
