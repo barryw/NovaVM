@@ -97,6 +97,23 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## READY blocker = lib_call dispatch, NOT the Zynq/XRAM work (2026-06-19, latest)
+- Tried autoboot-skip in hardware: pause the CPU (dbg_pause) right after reset,
+  poke AUTOBOOT_SKIP ($B9F0)=1, release. RESULT: WORSE — no banner at all.
+  Pausing the arlet 6502 at/just-after reset corrupts its startup. Reverted.
+  (Continuous dbg_poke to set $B9F0 is also unusable: it hijacks RAM port A
+  from CPU reads.)
+- ILA (d_pc/d_addr): in the banner-showing build the CPU runs (rdy toggling)
+  but PC sits at ~$021D executing the input-buffer RAM region with d_addr in the
+  stack ($010C) — i.e. the autoboot lib_call(FILES) DISPATCHED INTO GARBAGE
+  before reaching the FIO (so the FIO NAK never fires). The lib_call/bank-switch
+  (ROMSWAP) path appears broken under the Vivado build; same symptom on BRAM-only.
+- This is a firmware/RTL co-debug thread, INDEPENDENT of the Zynq + axi_xram +
+  DDR work (all of which build, time-close, and run). Clean ways to READY:
+  (a) rebuild the ROM with autoboot disabled / AUTOBOOT_SKIP defaulted (needs
+  cc65, not on this host); (b) PC-trace the lib_call dispatch from the banner to
+  find the bad jump; (c) bring up the PS file backend so autoboot succeeds.
+
 ## XRAM bring-up — RESOLVED diagnosis (2026-06-19, later)
 ILA on the CPU (d_pc/d_rdy/d_we/d_addr) + a PS-DAP DDR read settled it:
 - The "no banner" in the integrated build was NOT axi_xram — it was the EhBASIC
