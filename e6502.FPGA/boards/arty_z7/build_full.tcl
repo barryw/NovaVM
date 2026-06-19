@@ -60,6 +60,14 @@ set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
     -value {-verilog_define SYNTHESIS=1 -verilog_define VIDEO_720X480=1} \
     -objects [get_runs synth_1]
 
+# Link the OOC hdmi checkpoint into the black-box cell before opt_design (a manual
+# dcp added as a source is NOT auto-linked in the launch_runs flow -> DRC INBB-3).
+set impl_pre [file normalize impl_pre_hdmi.tcl]
+set ph [open $impl_pre w]
+puts $ph "read_checkpoint -cell hdmi_inst [file normalize build/hdmi_ooc.dcp]"
+close $ph
+set_property STEPS.OPT_DESIGN.TCL.PRE $impl_pre [get_runs impl_1]
+
 puts "=== launch impl -> bitstream ==="
 launch_runs impl_1 -to_step write_bitstream -jobs 6
 wait_on_run impl_1
