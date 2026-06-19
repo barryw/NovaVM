@@ -16,6 +16,7 @@
 #include "xil_printf.h"
 #include "ff.h"
 #include "loader_bin.h"
+#include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
 
 // ---- fio_bridge register map (AXI4-Lite @ 0x40000000) ----------------------
 #define FIO_BASE     0x40000000u
@@ -105,13 +106,21 @@ static int scan_load(const char *dir, const char *pfx, int slot) {
     return rc;
 }
 
-// Stream a module image from SD into the XRAM shelf slot (DDR). Try /lib then /.
+// Load a module into the XRAM shelf slot (DDR). Use the embedded image (always
+// present, repo-built); fall back to scanning the SD (/lib then /).
 static int load_module(int id, int slot) {
+    if (slot < 0 || slot > 3) return -1;
+    if (id >= 1 && id <= 8 && EMBEDDED_MOD[id]) {
+        UINTPTR ddr = XRAM_DDR_BASE + SHELF_BASE + (unsigned)slot * SHELF_SLOT;
+        memcpy((void *)ddr, EMBEDDED_MOD[id], MODULE_BYTES);
+        Xil_DCacheFlushRange(ddr, MODULE_BYTES);
+        xil_printf("[fio] module %d -> XRAM slot %d (embedded)\r\n", id, slot);
+        return 0;
+    }
     const char *pfx = module_prefix(id);
-    if (!pfx || slot < 0 || slot > 3) return -1;
-    if (scan_load("0:/lib", pfx, slot) == 0) return 0;
-    if (scan_load("0:/", pfx, slot) == 0) return 0;
-    xil_printf("[fio] module %d (%s*) not found\r\n", id, pfx);
+    if (pfx && (scan_load("0:/lib", pfx, slot) == 0 || scan_load("0:/", pfx, slot) == 0))
+        return 0;
+    xil_printf("[fio] module %d not found\r\n", id);
     return -1;
 }
 
@@ -138,7 +147,6 @@ int main(void) {
         xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
     else {
         xil_printf("[fio] microSD mounted\r\n");
-        list_dir("0:/lib");
     }
 
     // Stage the resident lib_call loader into CPU RAM $0320.
