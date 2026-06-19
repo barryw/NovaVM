@@ -97,6 +97,22 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## MILESTONE: NovaBASIC reaches READY on the Arty (2026-06-19)
+Full NovaVM boots to the BASIC **banner + READY** on the Arty Z7-20 over HDMI,
+with XRAM backed by PS DDR3. The end-to-end chain that works:
+- ROM + fonts load (after fixing the rom-wipe hook); cold-start draws the banner.
+- autoboot lib_call(FILES): shelf HIT (SHELF_TAG[0]=FILES seeded in the loader
+  image) -> PGD page-in from XRAM slot 0 (DDR 0x10060000, files.bin pre-staged by
+  boot_full.tcl) -> this EXERCISES + VALIDATES the axi_xram STREAM path -> FILES
+  MOD_ENTRY -> FILE_LOAD(AUTOBOOT) -> FIO NAK not-found -> READY.
+Reproduce: build_full_bd.tcl then build_full.tcl (fresh project), then
+boot_full.tcl (ps7_init + DDR + stage files.bin to 0x10060000 + program PL).
+Remaining: NO CURSOR — the READY line-reader does lib_call(SYSTEM) (basic.asm
+:1215) and SYSTEM isn't staged; the SYSTEM module turns the cursor ON at entry.
+Fix: stage SYSTEM (id 3) too (slot 1 / shelf_tag[1]=3, system.bin -> 0x10064000).
+Typing also needs a keyboard (key_valid tied 0 — USB HID later). Long-term: PS
+host services FIO_CMD_LOAD_MODULE so modules stream from SD on demand.
+
 ## Root cause nailed: resident loader + staged module both required (2026-06-19)
 ILA (d_pc/d_addr) + the NovaHost boot spec settled the READY blocker:
 - The resident lib_call loader (libcall.bin, 248B) MUST live in CPU RAM $0320.
