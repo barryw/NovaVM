@@ -114,12 +114,14 @@ module arty_z7_full (
     wire [15:0]  dbg_poke_addr = staging_done ? nak_poke_addr : stg_poke_addr;
     wire [7:0]   dbg_poke_data = staging_done ? nak_poke_data : stg_poke_data;
 
-    // Resident loader image (libcall.bin @ $0320), padded to 256 bytes.
-    (* rom_style="block" *) reg [7:0] loader_rom [0:255];
+    // Resident loader image: libcall.bin @ $0320 (248B) + seeded shelf dir
+    // ($0418-$041F: tag[0]=FILES, lru=0,1,2,3). Distributed (combinational read)
+    // so the registered poke addr/data stay aligned.
+    (* rom_style="distributed" *) reg [7:0] loader_rom [0:255];
     initial $readmemh("rom/libcall_loader.hex", loader_rom);
 
     localparam [15:0] LOADER_BASE = 16'h0320;
-    localparam [8:0]  LOADER_LEN  = 9'd248;
+    localparam [8:0]  LOADER_LEN  = 9'd256;   // 248B loader + 8B shelf dir ($0418-$041F)
     reg [8:0]  stg_idx;
     reg        staging_done;
     reg        stg_poke_en;

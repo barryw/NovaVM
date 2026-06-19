@@ -55,8 +55,14 @@ update_compile_order -fileset sources_1
 set rom_abs [file normalize ../../rom]
 set pre_tcl [file normalize presyn_rom.tcl]
 set fh [open $pre_tcl w]
-puts $fh "catch { file delete -force rom }"
-puts $fh "exec ln -sfn $rom_abs rom"
+# COPY the rom .hex into the run dir — do NOT symlink. `reset_run synth_1` cleans
+# the run dir with Tcl `file delete -force`, which FOLLOWS a `rom` symlink and
+# recursively deletes the real rom/ contents (this silently wiped every .hex ->
+# ROM=0 -> CPU BRK loop for many builds). Copies are safe: the clean only removes
+# the copies, never the source. rm -rf on the leftover (copy dir or symlink) is
+# safe — without a trailing slash it never recurses a symlink's target.
+puts $fh "catch { exec rm -rf rom }"
+puts $fh "exec cp -r $rom_abs rom"
 close $fh
 set_property STEPS.SYNTH_DESIGN.TCL.PRE $pre_tcl [get_runs synth_1]
 
