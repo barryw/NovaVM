@@ -103,7 +103,7 @@ always_ff @(posedge clk_pixel) acc <= mode != 3'd1 ? 5'sd0 : acc + acc_add;
 logic [9:0] control_coding;
 always_comb
 begin
-    unique case(control_data)
+    case(control_data)
         2'b00: control_coding = 10'b1101010100;
         2'b01: control_coding = 10'b0010101011;
         2'b10: control_coding = 10'b0101010100;
@@ -115,7 +115,7 @@ end
 logic [9:0] terc4_coding;
 always_comb
 begin
-    unique case(data_island_data)
+    case(data_island_data)
         4'b0000 : terc4_coding = 10'b1010011100;
         4'b0001 : terc4_coding = 10'b1001100011;
         4'b0010 : terc4_coding = 10'b1011100100;

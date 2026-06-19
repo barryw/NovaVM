@@ -362,14 +362,15 @@ endgenerate
 
 // All logic below relates to the production and output of the 10-bit TMDS code.
 logic [NUM_CHANNELS-1:0][9:0] tmds_internal /* verilator public_flat */ ;
-genvar i;
-generate
-    // TMDS code production.
-    for (i = 0; i < NUM_CHANNELS; i++)
-    begin: tmds_gen
-        tmds_channel #(.CN(i)) tmds_channel (.clk_pixel(clk_pixel), .video_data(video_data[i*8+7:i*8]), .data_island_data(data_island_data[i*4+3:i*4]), .control_data(control_data[i*2+1:i*2]), .mode(mode), .tmds(tmds_internal[i]));
-    end
-endgenerate
+// TMDS code production — UNROLLED (CN as a literal 0/1/2). Vivado intermittently
+// fails to constant-fold the genvar-passed CN into tmds_channel's CN-dependent
+// guard-band ternaries ("conditional expression could not be resolved to a
+// constant"), and the failure is sensitive to unrelated design changes. Explicit
+// instances make CN a literal so it always folds. (Matches the tmds_channel.sv
+// generate-if -> ternary fix.)
+tmds_channel #(.CN(0)) tmds_channel0 (.clk_pixel(clk_pixel), .video_data(video_data[7:0]),   .data_island_data(data_island_data[3:0]),  .control_data(control_data[1:0]), .mode(mode), .tmds(tmds_internal[0]));
+tmds_channel #(.CN(1)) tmds_channel1 (.clk_pixel(clk_pixel), .video_data(video_data[15:8]),  .data_island_data(data_island_data[7:4]),  .control_data(control_data[3:2]), .mode(mode), .tmds(tmds_internal[1]));
+tmds_channel #(.CN(2)) tmds_channel2 (.clk_pixel(clk_pixel), .video_data(video_data[23:16]), .data_island_data(data_island_data[11:8]), .control_data(control_data[5:4]), .mode(mode), .tmds(tmds_internal[2]));
 
 serializer #(.NUM_CHANNELS(NUM_CHANNELS), .VIDEO_RATE_HZ(VIDEO_RATE_HZ)) serializer(.clk_pixel(clk_pixel), .clk_pixel_x5(clk_pixel_x5), .reset(reset), .tmds_internal(tmds_internal), .tmds(tmds), .tmds_clock(tmds_clock));
 

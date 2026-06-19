@@ -18,8 +18,6 @@
 // The CPU is held in reset at PL config (dbg_cpu_reset=1) until the PS stages the
 // resident loader and clears CTRL.bit0 — mirroring NovaHost's resetHold/Release.
 
-`default_nettype none
-
 module fio_bridge (
     input  wire        aclk,
     input  wire        aresetn,
@@ -117,5 +115,3 @@ module fio_bridge (
         end
     end
 endmodule
-
-`default_nettype wire
