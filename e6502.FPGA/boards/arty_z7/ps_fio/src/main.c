@@ -48,40 +48,83 @@ static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? 1u : 0u); }
 static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 
-static const char *module_path(int id) {
+// Module id -> 8.3 name prefix. Modules may appear as <NAME>.MOD (raw 16KB image)
+// or <NAME>~1.NMO (.nmod: 16KB image + doc trailer; we read the first 16KB). We
+// scan /lib then / matching the prefix + .MOD/.NMO (xilffs is built without LFN).
+static const char *module_prefix(int id) {
     switch (id) {
-        case 1: return "0:/lib/graphics.nmod";
-        case 2: return "0:/lib/sound.nmod";
-        case 3: return "0:/lib/system.nmod";
-        case 4: return "0:/lib/files.nmod";
-        case 5: return "0:/lib/memory.nmod";
-        case 6: return "0:/lib/net.nmod";
-        case 7: return "0:/lib/turtle.nmod";
-        case 8: return "0:/lib/editor.nmod";
+        case 1: return "GRAPHI";   // graphics
+        case 2: return "SOUND";    // sound
+        case 3: return "SYSTEM";   // system
+        case 4: return "FILES";    // files
+        case 5: return "MEMORY";   // memory
+        case 6: return "NET";      // net
+        case 7: return "TURTLE";   // turtle
+        case 8: return "EDITOR";   // editor
         default: return 0;
     }
 }
 
-// Stream a module image from SD into the XRAM shelf slot (DDR), flush cache.
-static int load_module(int id, int slot) {
-    const char *fn = module_path(id);
-    if (!fn || slot < 0 || slot > 3) return -1;
+static int is_mod_ext(const char *name) {
+    const char *d = strrchr(name, '.');
+    if (!d) return 0;
+    return (strncasecmp(d, ".MOD", 4) == 0) || (strncasecmp(d, ".NMO", 4) == 0);
+}
+
+static int read_to_slot(const char *path, int slot) {
     FIL f;
-    if (f_open(&f, fn, FA_READ) != FR_OK) {
-        xil_printf("[fio] module %d: open %s failed\r\n", id, fn);
-        return -1;
-    }
+    if (f_open(&f, path, FA_READ) != FR_OK) return -1;
     UINTPTR ddr = XRAM_DDR_BASE + SHELF_BASE + (unsigned)slot * SHELF_SLOT;
     UINT br = 0;
     FRESULT r = f_read(&f, (void *)ddr, MODULE_BYTES, &br);
     f_close(&f);
     if (r != FR_OK || br < MODULE_BYTES) {
-        xil_printf("[fio] module %d: read %u/%u failed\r\n", id, br, MODULE_BYTES);
+        xil_printf("[fio] read %s: %u/%u failed\r\n", path, br, MODULE_BYTES);
         return -1;
     }
     Xil_DCacheFlushRange(ddr, MODULE_BYTES);   // make the write visible to PL HP0
-    xil_printf("[fio] module %d (%s) -> XRAM slot %d (0x%08x)\r\n", id, fn, slot, (unsigned)ddr);
+    xil_printf("[fio] %s -> XRAM slot %d (0x%08x)\r\n", path, slot, (unsigned)ddr);
     return 0;
+}
+
+static int scan_load(const char *dir, const char *pfx, int slot) {
+    DIR d; FILINFO fno; size_t n = strlen(pfx);
+    if (f_opendir(&d, dir) != FR_OK) return -1;
+    int rc = -1;
+    for (;;) {
+        if (f_readdir(&d, &fno) != FR_OK || fno.fname[0] == 0) break;
+        if (fno.fattrib & AM_DIR) continue;
+        if (strncasecmp(fno.fname, pfx, n) == 0 && is_mod_ext(fno.fname)) {
+            char path[96];
+            snprintf(path, sizeof(path), "%s/%s", dir, fno.fname);
+            rc = read_to_slot(path, slot);
+            break;
+        }
+    }
+    f_closedir(&d);
+    return rc;
+}
+
+// Stream a module image from SD into the XRAM shelf slot (DDR). Try /lib then /.
+static int load_module(int id, int slot) {
+    const char *pfx = module_prefix(id);
+    if (!pfx || slot < 0 || slot > 3) return -1;
+    if (scan_load("0:/lib", pfx, slot) == 0) return 0;
+    if (scan_load("0:/", pfx, slot) == 0) return 0;
+    xil_printf("[fio] module %d (%s*) not found\r\n", id, pfx);
+    return -1;
+}
+
+static void list_dir(const char *path) {
+    DIR d; FILINFO fno;
+    xil_printf("[fio] dir %s:\r\n", path);
+    if (f_opendir(&d, path) != FR_OK) { xil_printf("  (open failed)\r\n"); return; }
+    for (;;) {
+        if (f_readdir(&d, &fno) != FR_OK || fno.fname[0] == 0) break;
+        xil_printf("  %s %-20s %u\r\n", (fno.fattrib & AM_DIR) ? "<DIR>" : "     ",
+                   fno.fname, (unsigned)fno.fsize);
+    }
+    f_closedir(&d);
 }
 
 int main(void) {
@@ -93,8 +136,10 @@ int main(void) {
 
     if (f_mount(&fs, "0:/", 1) != FR_OK)
         xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
-    else
+    else {
         xil_printf("[fio] microSD mounted\r\n");
+        list_dir("0:/lib");
+    }
 
     // Stage the resident lib_call loader into CPU RAM $0320.
     for (unsigned i = 0; i < sizeof(LOADER_BIN); i++)

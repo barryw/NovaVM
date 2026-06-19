@@ -25,9 +25,13 @@ plat = client.create_platform_component(
 try:
     domain = plat.get_domain(name=DOMAIN)
     domain.set_lib(lib_name="xilffs")
-    print("xilffs enabled on", DOMAIN)
+    # Enable Long File Name support so f_open matches names like "system.nmod"
+    # (without LFN, FatFs only sees 8.3 short names like SYSTEM~1.NMO).
+    domain.set_config(option="lib", param="XILFFS_use_lfn", value="2", lib_name="xilffs")
+    domain.regenerate()   # regenerate BSP sources (ffconf.h) with the new config
+    print("xilffs + LFN enabled on", DOMAIN)
 except Exception as e:
-    print("WARN: could not set xilffs via get_domain:", e)
+    print("WARN: could not set xilffs/LFN via get_domain:", e)
 
 plat.build()
 xpfm = glob.glob(f"{WS}/nova_fio_plat/export/nova_fio_plat/nova_fio_plat.xpfm")[0]
