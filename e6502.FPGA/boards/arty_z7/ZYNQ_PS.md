@@ -97,6 +97,26 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## Root cause nailed: resident loader + staged module both required (2026-06-19)
+ILA (d_pc/d_addr) + the NovaHost boot spec settled the READY blocker:
+- The resident lib_call loader (libcall.bin, 248B) MUST live in CPU RAM $0320.
+  Without it, lib_call's `JSR $0320` = $00 = BRK -> garbage. NovaHost pokes it at
+  boot while holding dbg_cpu_reset. We now do this in a PL "staging FSM" in
+  arty_z7_full (holds dbg_cpu_reset, pokes rom/libcall_loader.hex into $0320,
+  releases). dbg_poke outranks the held CPU on RAM port A (top.sv:1131) — the
+  NovaHost model. (A 64KB main_ram $readmemh bake also worked mechanically but
+  is the wrong approach: large init'd byte-write BRAM misbehaved under Vivado.)
+- Loader ALONE is NOT enough: lib_call(FILES) with no FILES module staged in
+  XRAM -> PGD page-in maps a ZEROED bank-1 overlay at $C000, lc_validate sees
+  bad magic, and control returns into the zero overlay -> BRK loop (ILA: 5 PCs,
+  $0002 BRK -> vector $FFFE/$FFFF=$0000 -> $0000). ROMSWAP stuck on the empty
+  bank. NovaHost never hits this because it always stages the module first.
+- THEREFORE minimum READY = loader@$0320 (done) + FILES module (.nmod) staged in
+  XRAM at its shelf slot ($06xxxx) + shelf dir @ $0418, then release CPU. The
+  module page-in exercises the axi_xram STREAM path (untested) — next to verify.
+  Build FILES.nmod with cc65 (installed) + tools/nmod_pack.py; stage to DDR
+  (PS/xsct write XRAM=DDR directly) BEFORE releasing the CPU.
+
 ## READY blocker = lib_call dispatch, NOT the Zynq/XRAM work (2026-06-19, latest)
 - Tried autoboot-skip in hardware: pause the CPU (dbg_pause) right after reset,
   poke AUTOBOOT_SKIP ($B9F0)=1, release. RESULT: WORSE — no banner at all.

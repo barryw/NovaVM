@@ -103,11 +103,46 @@ module arty_z7_full (
     wire [3:0] vid_r, vid_g, vid_b;
     wire       vid_hsync, vid_vsync, vid_de;
 
-    // ---- FIO NAK (no PS file backend yet) ----------------------------------
+    // ---- lib_call loader staging + FIO NAK ---------------------------------
+    // Mini-NovaHost bring-up: while dbg_cpu_reset holds the 6502, poke the
+    // resident lib_call loader (libcall.bin) into main RAM $0320, then release
+    // the CPU. Without the loader, lib_call's JSR $0320 hits $00=BRK and
+    // dispatches into garbage (the post-banner $0200 loop). After staging, the
+    // same dbg_poke port serves the FIO NAK.
     wire         fio_event;
-    logic        dbg_poke_en;
-    logic [15:0] dbg_poke_addr;
-    logic [7:0]  dbg_poke_data;
+    wire         dbg_poke_en   = staging_done ? nak_poke_en   : stg_poke_en;
+    wire [15:0]  dbg_poke_addr = staging_done ? nak_poke_addr : stg_poke_addr;
+    wire [7:0]   dbg_poke_data = staging_done ? nak_poke_data : stg_poke_data;
+
+    // Resident loader image (libcall.bin @ $0320), padded to 256 bytes.
+    (* rom_style="block" *) reg [7:0] loader_rom [0:255];
+    initial $readmemh("rom/libcall_loader.hex", loader_rom);
+
+    localparam [15:0] LOADER_BASE = 16'h0320;
+    localparam [8:0]  LOADER_LEN  = 9'd248;
+    reg [8:0]  stg_idx;
+    reg        staging_done;
+    reg        stg_poke_en;
+    reg [15:0] stg_poke_addr;
+    reg [7:0]  stg_poke_data;
+    always_ff @(posedge clk_pixel) begin
+        if (reset) begin
+            stg_idx <= 9'd0; staging_done <= 1'b0; stg_poke_en <= 1'b0;
+            stg_poke_addr <= 16'd0; stg_poke_data <= 8'd0;
+        end else if (!staging_done) begin
+            if (stg_idx < LOADER_LEN) begin
+                stg_poke_en   <= 1'b1;
+                stg_poke_addr <= LOADER_BASE + {7'd0, stg_idx};
+                stg_poke_data <= loader_rom[stg_idx[7:0]];
+                stg_idx       <= stg_idx + 9'd1;
+            end else begin
+                stg_poke_en  <= 1'b0;
+                staging_done <= 1'b1;     // release CPU (dbg_cpu_reset deasserts)
+            end
+        end else begin
+            stg_poke_en <= 1'b0;
+        end
+    end
 
     top core (
         .clk(clk_pixel), .rst(reset),
@@ -129,7 +164,7 @@ module arty_z7_full (
         .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
         .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
         .dbg_rom_we(1'b0), .dbg_rom_idx(1'b0), .dbg_rom_addr(14'd0), .dbg_rom_data(8'd0),
-        .dbg_cpu_reset(1'b0), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
+        .dbg_cpu_reset(~staging_done), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .host_wts_event_we(1'b0), .host_wts_event_data(8'd0), .host_wts_event_ready(),
@@ -224,19 +259,22 @@ module arty_z7_full (
     assign hdmi_tx_hpdn = 1'b0;
 
     // ---- FIO NAK FSM (see arty_z7_cpu.sv) ----------------------------------
+    logic        nak_poke_en;
+    logic [15:0] nak_poke_addr;
+    logic [7:0]  nak_poke_data;
     typedef enum logic [1:0] { NAK_IDLE, NAK_WAIT, NAK_ERR, NAK_STATUS } nak_t;
     nak_t nak_state; logic [4:0] nak_cnt;
     always_ff @(posedge clk_pixel) begin
         if (reset) begin
             nak_state <= NAK_IDLE; nak_cnt <= 0;
-            dbg_poke_en <= 0; dbg_poke_addr <= 0; dbg_poke_data <= 0;
+            nak_poke_en <= 0; nak_poke_addr <= 0; nak_poke_data <= 0;
         end else begin
-            dbg_poke_en <= 1'b0;
+            nak_poke_en <= 1'b0;
             case (nak_state)
                 NAK_IDLE:   if (fio_event) begin nak_cnt <= 0; nak_state <= NAK_WAIT; end
                 NAK_WAIT:   if (nak_cnt == 5'd31) nak_state <= NAK_ERR; else nak_cnt <= nak_cnt + 1;
-                NAK_ERR:    begin dbg_poke_en <= 1; dbg_poke_addr <= 16'hB9A2; dbg_poke_data <= 8'h01; nak_state <= NAK_STATUS; end
-                NAK_STATUS: begin dbg_poke_en <= 1; dbg_poke_addr <= 16'hB9A1; dbg_poke_data <= 8'h03; nak_state <= NAK_IDLE; end
+                NAK_ERR:    begin nak_poke_en <= 1; nak_poke_addr <= 16'hB9A2; nak_poke_data <= 8'h01; nak_state <= NAK_STATUS; end
+                NAK_STATUS: begin nak_poke_en <= 1; nak_poke_addr <= 16'hB9A1; nak_poke_data <= 8'h03; nak_state <= NAK_IDLE; end
                 default:    nak_state <= NAK_IDLE;
             endcase
         end
