@@ -136,25 +136,19 @@ begin
 end
 
 // See Section 5.2.2.1
+// (CN is a constant parameter; use a ternary rather than a `generate if` —
+// Vivado project-mode synthesis fails to constant-fold the genvar-passed
+// parameter inside a generate-if. The ternary is identical and tool-agnostic.)
 logic [9:0] video_guard_band;
-generate
-    if (CN == 0 || CN == 2)
-        assign video_guard_band = 10'b1011001100;
-    else
-        assign video_guard_band = 10'b0100110011;
-endgenerate
+assign video_guard_band = (CN == 0 || CN == 2) ? 10'b1011001100 : 10'b0100110011;
 
 // See Section 5.2.3.3
 logic [9:0] data_guard_band;
-generate
-    if (CN == 1 || CN == 2)
-        assign data_guard_band = 10'b0100110011;
-    else
-        assign data_guard_band = control_data == 2'b00 ? 10'b1010001110
-            : control_data == 2'b01 ? 10'b1001110001
-            : control_data == 2'b10 ? 10'b0101100011
-            : 10'b1011000011;
-endgenerate
+assign data_guard_band = (CN == 1 || CN == 2) ? 10'b0100110011
+    : control_data == 2'b00 ? 10'b1010001110
+    : control_data == 2'b01 ? 10'b1001110001
+    : control_data == 2'b10 ? 10'b0101100011
+    : 10'b1011000011;
 
 // Apply selected mode.
 always @(posedge clk_pixel)
