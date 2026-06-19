@@ -8,3 +8,5 @@
 */vivado_pid*.str
 */*.backup.jou
 */*.backup.log
+*/build/ps_smoke/
+*/*.xsa
