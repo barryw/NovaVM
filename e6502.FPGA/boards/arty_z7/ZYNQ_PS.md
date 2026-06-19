@@ -81,6 +81,22 @@ UART0 -> /dev/ttyUSB1 (verifiable on the build host).
   confirm `JP4` boot-mode = JTAG, then `connect` / `targets` / `ps7_init` /
   `dow` / `con` (see `vitis/boot_ps.tcl`). PS UART0 -> /dev/ttyUSB1 @115200.
 
+## Future capabilities the Zynq unlocks (beyond ULX3S parity)
+Confirmed Arty Z7-20 PS resources (board preset): 512 MB DDR3, ENET0
+(Ethernet), USB0 (host), SD0 (microSD), QSPI, UART0; dual A9 @667MHz + NEON;
+PL has 220 DSP + 4.9 Mb BRAM.
+- **Memory**: XRAM 512 KB -> many MB; DDR framebuffers (hi-res/24-bit, page
+  flip, huge virtual scroll); instant whole-machine save-states to DDR/SD.
+- **PS as super-NovaHost**: FAT/ext4 on microSD; USB-host keyboards/mice/
+  gamepads/storage; **Ethernet** -> telnet-to-BASIC, board-hosted web IDE/
+  panel, network load/save, multiplayer.
+- **Audio**: more SID voices; large SF2 soundfonts in DDR; PS software synth
+  (FreeRTOS high-prio task) for MOD/XM/MIDI/mp3; DSP reverb/chorus.
+- **Video**: 1080p HDMI out; HDMI **IN** as a live layer/texture/capture;
+  DSP-accelerated blit (scale/rotate/alpha), more+bigger sprites/layers.
+- **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
+  room in PL for multiple 6502s.
+
 ## Milestones
 - [~] **PS smoke test**: PS7 BD + XSA build ✓; Vitis platform + hello.elf build
       ✓ (vitis/build_ps_hello.py). JTAG boot to confirm on /dev/ttyUSB1 PENDING
