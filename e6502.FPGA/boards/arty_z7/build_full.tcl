@@ -72,6 +72,10 @@ set_property STEPS.SYNTH_DESIGN.TCL.PRE $pre_tcl [get_runs synth_1]
 set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
     -value {-verilog_define SYNTHESIS=1 -verilog_define VIDEO_720X480=1} \
     -objects [get_runs synth_1]
+# Belt-and-suspenders: also set the fileset verilog_define (so hdmi.sv's
+# SYNTHESIS/VIDEO_720X480 paths resolve even if MORE OPTIONS is dropped on a
+# freshly-recreated project run).
+set_property verilog_define {SYNTHESIS=1 VIDEO_720X480=1} [get_filesets sources_1]
 
 puts "=== launch impl -> bitstream ==="
 launch_runs impl_1 -to_step write_bitstream -jobs 6
