@@ -98,9 +98,10 @@ PL has 220 DSP + 4.9 Mb BRAM.
   room in PL for multiple 6502s.
 
 ## Milestones
-- [~] **PS smoke test**: PS7 BD + XSA build ✓; Vitis platform + hello.elf build
-      ✓ (vitis/build_ps_hello.py). JTAG boot to confirm on /dev/ttyUSB1 PENDING
-      (xsct target enumeration, see Tooling notes).
+- [x] **PS smoke test**: PS7 BD + XSA ✓; Vitis platform + hello.elf ✓; JTAG
+      boot CONFIRMED — "Hello World" on /dev/ttyUSB1. **JP4 boot-mode jumper
+      MUST be set to JTAG** (that was the earlier APB/empty-target failure).
+      Boot: `xsct vitis/boot_ps.tcl` (connect; ps7_init; dow hello.elf; con).
 - [ ] **XRAM via DDR**: axi_xram bridge + PS7 block design wrapping nova_core;
       DDR init by FSBL; keep FIO NAK -> reach READY with libraries.
 - [ ] **FIO/SD backend**: fio_bridge (AXI-GP) + FreeRTOS fio_svc task + FatFs
