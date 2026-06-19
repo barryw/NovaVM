@@ -33,8 +33,32 @@ add_files -norecurse [list \
 ]
 add_files -fileset constrs_1 -norecurse arty_z7_vgc.xdc
 
+# Debug ILA on the axi_xram handshake (probe13 = awaddr, 32-bit; rest 1-bit).
+if {[llength [get_ips -quiet ila_0]] == 0} {
+    create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
+}
+set_property -dict [list \
+    CONFIG.C_NUM_OF_PROBES {11} \
+    CONFIG.C_DATA_DEPTH {4096} \
+    CONFIG.C_PROBE0_WIDTH {16} \
+    CONFIG.C_PROBE1_WIDTH {16} \
+] [get_ips ila_0]
+generate_target {all} [get_ips ila_0]
+
 set_property top arty_z7_full [current_fileset]
 update_compile_order -fileset sources_1
+
+# $readmemh INIT_FILEs use relative "rom/..." paths. Project-mode synthesis runs
+# in the run dir (not boards/arty_z7), so without help the BRAMs (EhBASIC ROM,
+# fonts, char/color init) silently load nothing -> ROM=0x00 -> CPU BRK loop.
+# Pre-synth hook: symlink the real rom/ into the synth run dir.
+set rom_abs [file normalize ../../rom]
+set pre_tcl [file normalize presyn_rom.tcl]
+set fh [open $pre_tcl w]
+puts $fh "catch { file delete -force rom }"
+puts $fh "exec ln -sfn $rom_abs rom"
+close $fh
+set_property STEPS.SYNTH_DESIGN.TCL.PRE $pre_tcl [get_runs synth_1]
 
 # Pass defines straight to synth_design (the fileset verilog_define property did
 # not reach synthesis in project mode -> hdmi.sv SYNTHESIS paths broke). This is

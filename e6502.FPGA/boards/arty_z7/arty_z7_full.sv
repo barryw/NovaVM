@@ -95,6 +95,10 @@ module arty_z7_full (
     wire        x_bvalid, x_bready, x_arvalid, x_arready;
     wire        x_rvalid, x_rready, x_rlast;
 
+    // ---- CPU debug taps (for ILA) ------------------------------------------
+    wire [15:0] d_pc, d_addr;
+    wire        d_we, d_rdy, d_waiting, d_stopped;
+
     // ---- VGC video ---------------------------------------------------------
     wire [3:0] vid_r, vid_g, vid_b;
     wire       vid_hsync, vid_vsync, vid_de;
@@ -129,10 +133,10 @@ module arty_z7_full (
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .host_wts_event_we(1'b0), .host_wts_event_data(8'd0), .host_wts_event_ready(),
-        .dbg_cpu_pc(), .dbg_cpu_a(), .dbg_cpu_x(), .dbg_cpu_y(), .dbg_cpu_sp(),
-        .dbg_cpu_flags(), .dbg_cpu_state(), .dbg_cpu_ir(), .dbg_cpu_addr(),
-        .dbg_cpu_din(), .dbg_cpu_dout(), .dbg_cpu_we(), .dbg_cpu_rdy(),
-        .dbg_cpu_irq(), .dbg_cpu_nmi(), .dbg_cpu_waiting(), .dbg_cpu_stopped(),
+        .dbg_cpu_pc(d_pc), .dbg_cpu_a(), .dbg_cpu_x(), .dbg_cpu_y(), .dbg_cpu_sp(),
+        .dbg_cpu_flags(), .dbg_cpu_state(), .dbg_cpu_ir(), .dbg_cpu_addr(d_addr),
+        .dbg_cpu_din(), .dbg_cpu_dout(), .dbg_cpu_we(d_we), .dbg_cpu_rdy(d_rdy),
+        .dbg_cpu_irq(), .dbg_cpu_nmi(), .dbg_cpu_waiting(d_waiting), .dbg_cpu_stopped(d_stopped),
         // SDRAM ports -> axi_xram (real XRAM in PS DDR3)
         .sdram_clk(clk_pixel),
         .sdram_addrA(xa_addrA), .sdram_dinA(xa_dinA), .sdram_weA(xa_weA), .sdram_oeA(xa_oeA),
@@ -237,6 +241,17 @@ module arty_z7_full (
             endcase
         end
     end
+
+    // ---- Debug ILA on the axi_xram handshake (find where the first XMC
+    //      access stalls). Triggered on weA|oeA at capture time. ------------
+    ila_0 dbg_ila (
+        .clk    (clk_pixel),
+        .probe0 (d_pc),       .probe1 (d_addr),
+        .probe2 (d_rdy),      .probe3 (d_we),
+        .probe4 (d_waiting),  .probe5 (d_stopped),
+        .probe6 (xa_weA),     .probe7 (xa_oeA),    .probe8 (xa_doneA),
+        .probe9 (x_awvalid),  .probe10(reset)
+    );
 
     // ---- Status LEDs -------------------------------------------------------
     logic [24:0] heartbeat;

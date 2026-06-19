@@ -97,6 +97,25 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## XRAM bring-up — RESOLVED diagnosis (2026-06-19, later)
+ILA on the CPU (d_pc/d_rdy/d_we/d_addr) + a PS-DAP DDR read settled it:
+- The "no banner" in the integrated build was NOT axi_xram — it was the EhBASIC
+  ROM BRAM loading all-zeros under **project-mode synthesis** ($readmemh
+  "rom/..." resolves from the run dir, not boards/arty_z7). FIX: a pre-synth
+  hook (STEPS.SYNTH_DESIGN.TCL.PRE in build_full.tcl) symlinks rom/ into the
+  run dir. After the fix the CPU runs real code (129 distinct PCs vs 5 BRK-loop
+  PCs) and the banner renders.
+- axi_xram / XRAM is NOT the boot blocker: at boot LIB_RESIDENT=HOSTEXT so the
+  ext ROM is resident in BRAM and ensure_ext_resident is a no-op (XRAM staging
+  $07C000 reads 0, as expected). DDR confirmed working (PS DAP). d_rdy toggles
+  (CPU running, not stalled) -> no XMC access pending.
+- Remaining READY blocker (SAME as BRAM-only build): after the banner the CPU
+  loops at ~$0200 (input-buffer RAM) accessing the stack -> it jumped into
+  RAM/garbage in the autoboot lib_call(FILES) path. This is a firmware/bank-
+  switch (ROMSWAP/lib_call) issue, independent of the Zynq/XRAM work.
+  Next: AUTOBOOT_SKIP ($B9F0=1, gated on ~d_we so CPU writes aren't dropped) to
+  confirm autoboot is the culprit, or PC-trace the lib_call path from the banner.
+
 ## XRAM bring-up status (2026-06-19)
 Full integration (arty_z7_full) BUILDS with timing met; PS DDR3 confirmed
 working via the PS DAP (mwr/mrd 0x10000000 reads back). Booted on hardware

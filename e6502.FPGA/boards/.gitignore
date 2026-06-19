@@ -11,3 +11,4 @@
 */build/ps_smoke/
 */*.xsa
 */NA/
+*/presyn_rom.tcl
