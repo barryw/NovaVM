@@ -97,6 +97,35 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## PS FIO host: built, blocked on a Vivado tmds_channel synth heisenbug (2026-06-19)
+The Zynq PS is now the NovaVM host (replacing manual xsct staging + the FIO NAK):
+- PL: fio_bridge.sv (AXI4-Lite slave on M_AXI_GP0 @ 0x40000000) — PS pokes/peeks
+  CPU RAM + the FIO bank, injects keys, holds/releases the 6502 reset (held at
+  config), observes fio_event. XRAM is staged by the PS writing DDR directly.
+- BD: M_AXI_GP0 -> axi_protocol_converter (AXI3->AXI4-Lite) -> external M_AXI_FIO,
+  all on hp_aclk (=clk_pixel, no CDC); fio_aresetn exposed.
+- arty_z7_full drives top's dbg surface from fio_bridge (staging FSM + NAK gone).
+- PS app (ps_fio/src/main.c + vitis/build_ps_fio.py): standalone + xilffs FatFs;
+  holds CPU reset, stages libcall.bin to $0320, mounts microSD, releases CPU,
+  services FIO_CMD_LOAD_MODULE ($2C: id in FIO_SRC_LO, slot in FIO_END_LO) by
+  reading /lib/<name>.nmod into the XRAM shelf slot (DDR 0x10000000+0x060000+
+  slot*0x4000) + DCacheFlush, then FIO_STATUS=OK.
+
+BLOCKER (open): with fio_bridge in the design, Vivado synth FAILS hdl-util-hdmi
+tmds_channel (Synth 8-6156, NO error cause) -> cascades to hdmi -> arty_z7_full.
+The IDENTICAL hdmi/tmds synthesizes fine WITHOUT fio_bridge (that's the working
+READY build). Ruled out: genvar/CN constant-fold (unrolled the 3 tmds_channel
+instances to literal CN), default_nettype (removed from fio_bridge), OOM (44G
+free), project-state (multiple fresh rm -rf + BD + full), defines (runme confirms
+-verilog_define SYNTHESIS/VIDEO_720X480 applied), multithreaded synth (maxThreads
+1 still fails), unique-case (both are full; changed to plain case), debug ILA
+(removed). All still fail tmds_channel identically.
+Recommended next: synthesize hdmi out-of-context (synth_design -mode
+out_of_context -top hdmi -> hdmi.dcp, reference as a black box) to isolate it from
+the design; or try a different Vivado version. The PS app is ready to test the
+moment a bitstream+XSA with fio_bridge exists. READY milestone (no fio_bridge)
+is unaffected and remains the demoable state.
+
 ## MILESTONE: NovaBASIC reaches READY on the Arty (2026-06-19)
 Full NovaVM boots to the BASIC **banner + READY** on the Arty Z7-20 over HDMI,
 with XRAM backed by PS DDR3. The end-to-end chain that works:

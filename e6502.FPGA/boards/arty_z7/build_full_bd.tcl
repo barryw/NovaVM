@@ -58,8 +58,7 @@ connect_bd_intf_net [get_bd_intf_pins ps7/M_AXI_GP0] [get_bd_intf_pins conv/S_AX
 connect_bd_net [get_bd_ports hp_aclk]                    [get_bd_pins conv/aclk]
 connect_bd_net [get_bd_pins rstgen/peripheral_aresetn]  [get_bd_pins conv/aresetn]
 make_bd_intf_pins_external -name M_AXI_FIO [get_bd_intf_pins conv/M_AXI]
-# Expose the peripheral reset (active-low, hp_aclk) for the PL fio_bridge.
-make_bd_pins_external -name fio_aresetn [get_bd_pins rstgen/peripheral_aresetn]
+# (fio_bridge is reset from the PL ~reset in arty_z7_full — no BD reset port.)
 
 # Expose the SmartConnect 32-bit slave for the PL axi_xram master.
 make_bd_intf_pins_external -name S_AXI_XRAM [get_bd_intf_pins smc/S00_AXI]

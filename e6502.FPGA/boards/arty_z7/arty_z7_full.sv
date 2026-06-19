@@ -182,7 +182,6 @@ module arty_z7_full (
     );
 
     // ---- PS M_AXI_GP0 -> fio_bridge (AXI4-Lite) ----------------------------
-    wire        fio_aresetn;
     wire [31:0] f_awaddr, f_wdata, f_araddr, f_rdata;
     wire [2:0]  f_awprot, f_arprot;
     wire [3:0]  f_wstrb;
@@ -213,7 +212,6 @@ module arty_z7_full (
         .S_AXI_XRAM_arvalid(x_arvalid), .S_AXI_XRAM_arready(x_arready),
         .S_AXI_XRAM_rdata(x_rdata), .S_AXI_XRAM_rresp(x_rresp), .S_AXI_XRAM_rlast(x_rlast),
         .S_AXI_XRAM_rvalid(x_rvalid), .S_AXI_XRAM_rready(x_rready),
-        .fio_aresetn(fio_aresetn),
         .M_AXI_FIO_awaddr(f_awaddr), .M_AXI_FIO_awprot(f_awprot),
         .M_AXI_FIO_awvalid(f_awvalid), .M_AXI_FIO_awready(f_awready),
         .M_AXI_FIO_wdata(f_wdata), .M_AXI_FIO_wstrb(f_wstrb),
@@ -232,9 +230,13 @@ module arty_z7_full (
     localparam int HDMI_START_Y = 525 - 1;
     wire [2:0] tmds; wire tmds_clock;
     logic [9:0] cx, cy, fw, fh, sw, sh;
-    hdmi #(.VIDEO_ID_CODE(2), .DVI_OUTPUT(1'b1), .IT_CONTENT(1'b1),
-           .VIDEO_REFRESH_RATE_MILLIHZ(59940), .START_X(HDMI_START_X), .START_Y(HDMI_START_Y)
-    ) hdmi_inst (
+    // hdmi is provided as an out-of-context checkpoint (build/hdmi_ooc.dcp) with
+    // these generics baked in (VIDEO_ID_CODE=2, DVI_OUTPUT=1, IT_CONTENT=1,
+    // VIDEO_REFRESH_RATE_MILLIHZ=59940, START_X=855, START_Y=524). OOC isolates
+    // hdmi/tmds_channel synth from the full design, which otherwise crashes
+    // Vivado synth on tmds_channel once fio_bridge is present. Instantiated with
+    // NO params so it links the dcp. (HDMI_START_X/Y above == 855/524.)
+    hdmi hdmi_inst (
         .clk_pixel_x5(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(1'b0),
         .reset(reset), .rgb(hdmi_rgb), .audio_sample_word('0),
         .tmds(tmds), .tmds_clock(tmds_clock),
@@ -250,7 +252,7 @@ module arty_z7_full (
 
     // ---- PS FIO host bridge (AXI4-Lite slave on M_AXI_GP0) -----------------
     fio_bridge fio_host (
-        .aclk(clk_pixel), .aresetn(fio_aresetn),
+        .aclk(clk_pixel), .aresetn(~reset),
         .s_awaddr(f_awaddr), .s_awvalid(f_awvalid), .s_awready(f_awready),
         .s_wdata(f_wdata), .s_wstrb(f_wstrb), .s_wvalid(f_wvalid), .s_wready(f_wready),
         .s_bresp(f_bresp), .s_bvalid(f_bvalid), .s_bready(f_bready),
@@ -263,16 +265,7 @@ module arty_z7_full (
         .fio_event(fio_event), .dbg_cpu_pc(d_pc)
     );
 
-    // ---- Debug ILA on the axi_xram handshake (find where the first XMC
-    //      access stalls). Triggered on weA|oeA at capture time. ------------
-    ila_0 dbg_ila (
-        .clk    (clk_pixel),
-        .probe0 (d_pc),       .probe1 (d_addr),
-        .probe2 (d_rdy),      .probe3 (d_we),
-        .probe4 (d_waiting),  .probe5 (d_stopped),
-        .probe6 (xa_weA),     .probe7 (xa_oeA),    .probe8 (xa_doneA),
-        .probe9 (x_awvalid),  .probe10(reset)
-    );
+    // (debug ILA removed — no longer needed; shrinks the design)
 
     // ---- Status LEDs -------------------------------------------------------
     logic [24:0] heartbeat;

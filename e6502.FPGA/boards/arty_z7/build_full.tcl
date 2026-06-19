@@ -14,7 +14,7 @@ add_files -norecurse build/ps_full/ps_full.gen/sources_1/bd/ps_full/hdl/ps_full_
 reset_run synth_1
 
 add_files -norecurse [list \
-    "arty_z7_full.sv" "axi_xram.sv" "fio_bridge.sv" "sid_stubs.sv" \
+    "arty_z7_full.sv" "axi_xram.sv" "fio_bridge.sv" "hdmi_bb.sv" "sid_stubs.sv" \
     "$rtl/dpram.sv" "$rtl/dpram_dc.sv" \
     "$rtl/vgc.sv" "$rtl/vgc_timing.sv" "$rtl/vgc_text.sv" "$rtl/vgc_gfx.sv" \
     "$rtl/artist.sv" "$rtl/vgc_sprites.sv" "$rtl/vgc_copper.sv" \
@@ -24,26 +24,15 @@ add_files -norecurse [list \
     "$rtl/sdram/xram_sdram.sv" "$rtl/sdram/debug_sdram_port_b_cdc.sv" \
     "$rtl/top.sv" \
     "$rtl/arlet_6502/cpu.v" "$rtl/arlet_6502/ALU.v" "$rtl/thirdparty/sfifo.v" \
-    "$hdmi/hdmi.sv" "$hdmi/tmds_channel.sv" "$hdmi/serializer.sv" \
-    "$hdmi/packet_assembler.sv" "$hdmi/packet_picker.sv" \
-    "$hdmi/audio_clock_regeneration_packet.sv" "$hdmi/audio_info_frame.sv" \
-    "$hdmi/audio_sample_packet.sv" \
-    "$hdmi/auxiliary_video_information_info_frame.sv" \
-    "$hdmi/source_product_description_info_frame.sv" \
 ]
+# hdmi is synthesized out-of-context (synth_hdmi_ooc.tcl -> build/hdmi_ooc.dcp)
+# because Vivado synth intermittently crashes on hdl-util-hdmi tmds_channel
+# (8-6156, no cause) in the full design once fio_bridge is present; OOC isolates
+# it (hdmi synthesizes cleanly alone). hdmi_bb.sv is the black-box stub used in
+# synth; the dcp supplies the netlist at implementation only.
+add_files -norecurse build/hdmi_ooc.dcp
+set_property used_in_synthesis false [get_files build/hdmi_ooc.dcp]
 add_files -fileset constrs_1 -norecurse arty_z7_vgc.xdc
-
-# Debug ILA on the axi_xram handshake (probe13 = awaddr, 32-bit; rest 1-bit).
-if {[llength [get_ips -quiet ila_0]] == 0} {
-    create_ip -name ila -vendor xilinx.com -library ip -module_name ila_0
-}
-set_property -dict [list \
-    CONFIG.C_NUM_OF_PROBES {11} \
-    CONFIG.C_DATA_DEPTH {4096} \
-    CONFIG.C_PROBE0_WIDTH {16} \
-    CONFIG.C_PROBE1_WIDTH {16} \
-] [get_ips ila_0]
-generate_target {all} [get_ips ila_0]
 
 set_property top arty_z7_full [current_fileset]
 update_compile_order -fileset sources_1
