@@ -103,52 +103,21 @@ module arty_z7_full (
     wire [3:0] vid_r, vid_g, vid_b;
     wire       vid_hsync, vid_vsync, vid_de;
 
-    // ---- lib_call loader staging + FIO NAK ---------------------------------
-    // Mini-NovaHost bring-up: while dbg_cpu_reset holds the 6502, poke the
-    // resident lib_call loader (libcall.bin) into main RAM $0320, then release
-    // the CPU. Without the loader, lib_call's JSR $0320 hits $00=BRK and
-    // dispatches into garbage (the post-banner $0200 loop). After staging, the
-    // same dbg_poke port serves the FIO NAK.
+    // ---- PS FIO host bridge ------------------------------------------------
+    // The Zynq PS A9 is the host (via M_AXI_GP0 -> fio_bridge). It pokes/peeks
+    // CPU RAM + the FIO bank ($B9A0-$B9EF), injects keys, holds/releases the
+    // 6502 reset (held at config until the PS stages the resident loader), and
+    // services fio_event. XRAM (the library shelf) is staged by the PS writing
+    // PS DDR3 directly (axi_xram maps XRAM -> DDR), not through this bridge.
     wire         fio_event;
-    wire         dbg_poke_en   = staging_done ? nak_poke_en   : stg_poke_en;
-    wire [15:0]  dbg_poke_addr = staging_done ? nak_poke_addr : stg_poke_addr;
-    wire [7:0]   dbg_poke_data = staging_done ? nak_poke_data : stg_poke_data;
-
-    // Resident loader image: libcall.bin @ $0320 (248B) + seeded shelf dir
-    // ($0418-$041F: tag[0]=FILES, lru=0,1,2,3). Distributed (combinational read)
-    // so the registered poke addr/data stay aligned.
-    (* rom_style="distributed" *) reg [7:0] loader_rom [0:255];
-    initial $readmemh("rom/libcall_loader.hex", loader_rom);
-
-    localparam [15:0] LOADER_BASE = 16'h0320;
-    localparam [8:0]  LOADER_LEN  = 9'd256;   // 248B loader + 8B shelf dir ($0418-$041F)
-    reg [8:0]  stg_idx;
-    reg        staging_done;
-    reg        stg_poke_en;
-    reg [15:0] stg_poke_addr;
-    reg [7:0]  stg_poke_data;
-    always_ff @(posedge clk_pixel) begin
-        if (reset) begin
-            stg_idx <= 9'd0; staging_done <= 1'b0; stg_poke_en <= 1'b0;
-            stg_poke_addr <= 16'd0; stg_poke_data <= 8'd0;
-        end else if (!staging_done) begin
-            if (stg_idx < LOADER_LEN) begin
-                stg_poke_en   <= 1'b1;
-                stg_poke_addr <= LOADER_BASE + {7'd0, stg_idx};
-                stg_poke_data <= loader_rom[stg_idx[7:0]];
-                stg_idx       <= stg_idx + 9'd1;
-            end else begin
-                stg_poke_en  <= 1'b0;
-                staging_done <= 1'b1;     // release CPU (dbg_cpu_reset deasserts)
-            end
-        end else begin
-            stg_poke_en <= 1'b0;
-        end
-    end
+    wire         fb_poke_en;  wire [15:0] fb_poke_addr; wire [7:0] fb_poke_data;
+    wire [15:0]  fb_peek_addr; wire fb_peek_en; wire [7:0] fb_peek_data;
+    wire         fb_key_valid; wire [7:0] fb_key_data; wire fb_key_ready;
+    wire         fb_cpu_reset;
 
     top core (
         .clk(clk_pixel), .rst(reset),
-        .key_valid(1'b0), .key_data(8'd0), .key_ready(),
+        .key_valid(fb_key_valid), .key_data(fb_key_data), .key_ready(fb_key_ready),
         .board_buttons(8'd0), .board_switches(8'd0),
         .usb_hid_status(8'd0), .usb_hid_device_type(8'd0),
         .usb_hid_last_scan(8'd0), .usb_hid_last_ascii(8'd0),
@@ -158,15 +127,15 @@ module arty_z7_full (
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b),
         .vid_hsync(vid_hsync), .vid_vsync(vid_vsync), .vid_de(vid_de),
         .audio_l(), .audio_r(),
-        .dbg_peek_en(1'b0), .dbg_peek_addr(16'd0), .dbg_peek_data(),
-        .dbg_poke_en(dbg_poke_en), .dbg_poke_addr(dbg_poke_addr), .dbg_poke_data(dbg_poke_data),
+        .dbg_peek_en(fb_peek_en), .dbg_peek_addr(fb_peek_addr), .dbg_peek_data(fb_peek_data),
+        .dbg_poke_en(fb_poke_en), .dbg_poke_addr(fb_poke_addr), .dbg_poke_data(fb_poke_data),
         .dbg_pause(1'b0),
         .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
         .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
         .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
         .dbg_rom_we(1'b0), .dbg_rom_idx(1'b0), .dbg_rom_addr(14'd0), .dbg_rom_data(8'd0),
-        .dbg_cpu_reset(~staging_done), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
+        .dbg_cpu_reset(fb_cpu_reset), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .host_wts_event_we(1'b0), .host_wts_event_data(8'd0), .host_wts_event_ready(),
@@ -212,6 +181,15 @@ module arty_z7_full (
         .m_axi_rvalid(x_rvalid), .m_axi_rready(x_rready)
     );
 
+    // ---- PS M_AXI_GP0 -> fio_bridge (AXI4-Lite) ----------------------------
+    wire        fio_aresetn;
+    wire [31:0] f_awaddr, f_wdata, f_araddr, f_rdata;
+    wire [2:0]  f_awprot, f_arprot;
+    wire [3:0]  f_wstrb;
+    wire [1:0]  f_bresp, f_rresp;
+    wire        f_awvalid, f_awready, f_wvalid, f_wready, f_bvalid, f_bready;
+    wire        f_arvalid, f_arready, f_rvalid, f_rready;
+
     ps_full_wrapper ps (
         .DDR_addr(DDR_addr), .DDR_ba(DDR_ba), .DDR_cas_n(DDR_cas_n),
         .DDR_ck_n(DDR_ck_n), .DDR_ck_p(DDR_ck_p), .DDR_cke(DDR_cke),
@@ -234,7 +212,17 @@ module arty_z7_full (
         .S_AXI_XRAM_arprot(3'b000), .S_AXI_XRAM_arqos(4'b0000),
         .S_AXI_XRAM_arvalid(x_arvalid), .S_AXI_XRAM_arready(x_arready),
         .S_AXI_XRAM_rdata(x_rdata), .S_AXI_XRAM_rresp(x_rresp), .S_AXI_XRAM_rlast(x_rlast),
-        .S_AXI_XRAM_rvalid(x_rvalid), .S_AXI_XRAM_rready(x_rready)
+        .S_AXI_XRAM_rvalid(x_rvalid), .S_AXI_XRAM_rready(x_rready),
+        .fio_aresetn(fio_aresetn),
+        .M_AXI_FIO_awaddr(f_awaddr), .M_AXI_FIO_awprot(f_awprot),
+        .M_AXI_FIO_awvalid(f_awvalid), .M_AXI_FIO_awready(f_awready),
+        .M_AXI_FIO_wdata(f_wdata), .M_AXI_FIO_wstrb(f_wstrb),
+        .M_AXI_FIO_wvalid(f_wvalid), .M_AXI_FIO_wready(f_wready),
+        .M_AXI_FIO_bresp(f_bresp), .M_AXI_FIO_bvalid(f_bvalid), .M_AXI_FIO_bready(f_bready),
+        .M_AXI_FIO_araddr(f_araddr), .M_AXI_FIO_arprot(f_arprot),
+        .M_AXI_FIO_arvalid(f_arvalid), .M_AXI_FIO_arready(f_arready),
+        .M_AXI_FIO_rdata(f_rdata), .M_AXI_FIO_rresp(f_rresp),
+        .M_AXI_FIO_rvalid(f_rvalid), .M_AXI_FIO_rready(f_rready)
     );
 
     // ---- VGC RGB -> HDMI ---------------------------------------------------
@@ -260,27 +248,20 @@ module arty_z7_full (
     end endgenerate
     assign hdmi_tx_hpdn = 1'b0;
 
-    // ---- FIO NAK FSM (see arty_z7_cpu.sv) ----------------------------------
-    logic        nak_poke_en;
-    logic [15:0] nak_poke_addr;
-    logic [7:0]  nak_poke_data;
-    typedef enum logic [1:0] { NAK_IDLE, NAK_WAIT, NAK_ERR, NAK_STATUS } nak_t;
-    nak_t nak_state; logic [4:0] nak_cnt;
-    always_ff @(posedge clk_pixel) begin
-        if (reset) begin
-            nak_state <= NAK_IDLE; nak_cnt <= 0;
-            nak_poke_en <= 0; nak_poke_addr <= 0; nak_poke_data <= 0;
-        end else begin
-            nak_poke_en <= 1'b0;
-            case (nak_state)
-                NAK_IDLE:   if (fio_event) begin nak_cnt <= 0; nak_state <= NAK_WAIT; end
-                NAK_WAIT:   if (nak_cnt == 5'd31) nak_state <= NAK_ERR; else nak_cnt <= nak_cnt + 1;
-                NAK_ERR:    begin nak_poke_en <= 1; nak_poke_addr <= 16'hB9A2; nak_poke_data <= 8'h01; nak_state <= NAK_STATUS; end
-                NAK_STATUS: begin nak_poke_en <= 1; nak_poke_addr <= 16'hB9A1; nak_poke_data <= 8'h03; nak_state <= NAK_IDLE; end
-                default:    nak_state <= NAK_IDLE;
-            endcase
-        end
-    end
+    // ---- PS FIO host bridge (AXI4-Lite slave on M_AXI_GP0) -----------------
+    fio_bridge fio_host (
+        .aclk(clk_pixel), .aresetn(fio_aresetn),
+        .s_awaddr(f_awaddr), .s_awvalid(f_awvalid), .s_awready(f_awready),
+        .s_wdata(f_wdata), .s_wstrb(f_wstrb), .s_wvalid(f_wvalid), .s_wready(f_wready),
+        .s_bresp(f_bresp), .s_bvalid(f_bvalid), .s_bready(f_bready),
+        .s_araddr(f_araddr), .s_arvalid(f_arvalid), .s_arready(f_arready),
+        .s_rdata(f_rdata), .s_rresp(f_rresp), .s_rvalid(f_rvalid), .s_rready(f_rready),
+        .dbg_poke_en(fb_poke_en), .dbg_poke_addr(fb_poke_addr), .dbg_poke_data(fb_poke_data),
+        .dbg_peek_addr(fb_peek_addr), .dbg_peek_en(fb_peek_en), .dbg_peek_data(fb_peek_data),
+        .key_valid(fb_key_valid), .key_data(fb_key_data), .key_ready(fb_key_ready),
+        .dbg_cpu_reset(fb_cpu_reset),
+        .fio_event(fio_event), .dbg_cpu_pc(d_pc)
+    );
 
     // ---- Debug ILA on the axi_xram handshake (find where the first XMC
     //      access stalls). Triggered on weA|oeA at capture time. ------------

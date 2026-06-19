@@ -36,10 +36,10 @@ connect_bd_intf_net [get_bd_intf_pins smc/M00_AXI] [get_bd_intf_pins ps7/S_AXI_H
 
 # --- Clocks/resets ----------------------------------------------------------
 # PL-driven AXI clock for the HP path + SmartConnect + the PL axi_xram master.
+# Everything (HP0, GP0, fio_bridge) runs on hp_aclk = the PL pixel clock so the
+# whole PS<->PL fabric shares the 6502's clock domain (no CDC).
 create_bd_port -dir I -type clk hp_aclk
-# GP0 ACLK from PS fabric clock (GP0 unused for now but needs a clock).
-connect_bd_net [get_bd_pins ps7/FCLK_CLK0] [get_bd_pins ps7/M_AXI_GP0_ACLK]
-# HP0 + SmartConnect on the PL clock.
+connect_bd_net [get_bd_ports hp_aclk] [get_bd_pins ps7/M_AXI_GP0_ACLK]
 connect_bd_net [get_bd_ports hp_aclk] [get_bd_pins ps7/S_AXI_HP0_ACLK]
 connect_bd_net [get_bd_ports hp_aclk] [get_bd_pins smc/aclk]
 
@@ -48,6 +48,18 @@ create_bd_cell -type ip -vlnv xilinx.com:ip:proc_sys_reset rstgen
 connect_bd_net [get_bd_ports hp_aclk]            [get_bd_pins rstgen/slowest_sync_clk]
 connect_bd_net [get_bd_pins ps7/FCLK_RESET0_N]   [get_bd_pins rstgen/ext_reset_in]
 connect_bd_net [get_bd_pins rstgen/interconnect_aresetn] [get_bd_pins smc/aresetn]
+
+# --- GP0 -> fio_bridge: AXI3 -> AXI4-Lite via a protocol converter ----------
+# PS M_AXI_GP0 (AXI3) drives the PL fio_bridge (AXI4-Lite). Convert + expose the
+# AXI4-Lite master externally for the RTL top to wire to fio_bridge.
+create_bd_cell -type ip -vlnv xilinx.com:ip:axi_protocol_converter conv
+set_property -dict [list CONFIG.SI_PROTOCOL {AXI3} CONFIG.MI_PROTOCOL {AXI4LITE}] [get_bd_cells conv]
+connect_bd_intf_net [get_bd_intf_pins ps7/M_AXI_GP0] [get_bd_intf_pins conv/S_AXI]
+connect_bd_net [get_bd_ports hp_aclk]                    [get_bd_pins conv/aclk]
+connect_bd_net [get_bd_pins rstgen/peripheral_aresetn]  [get_bd_pins conv/aresetn]
+make_bd_intf_pins_external -name M_AXI_FIO [get_bd_intf_pins conv/M_AXI]
+# Expose the peripheral reset (active-low, hp_aclk) for the PL fio_bridge.
+make_bd_pins_external -name fio_aresetn [get_bd_pins rstgen/peripheral_aresetn]
 
 # Expose the SmartConnect 32-bit slave for the PL axi_xram master.
 make_bd_intf_pins_external -name S_AXI_XRAM [get_bd_intf_pins smc/S00_AXI]
@@ -67,6 +79,11 @@ assign_bd_address -force -target_address_space $xspace \
     -range 1G -offset 0x00000000
 puts "=== assigned segs ==="
 foreach seg [get_bd_addr_segs -of_objects $xspace] { puts "SEG: $seg" }
+
+# Map the fio_bridge (external GP0 slave) at 0x40000000 in the PS GP0 space so
+# the PS A9 reaches it at that base (PS app FIO_BASE = 0x40000000).
+assign_bd_address -target_address_space [get_bd_addr_spaces ps7/Data] \
+    [get_bd_addr_segs M_AXI_FIO/Reg] -range 64K -offset 0x40000000
 
 regenerate_bd_layout
 validate_bd_design

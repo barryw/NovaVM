@@ -14,7 +14,7 @@ add_files -norecurse build/ps_full/ps_full.gen/sources_1/bd/ps_full/hdl/ps_full_
 reset_run synth_1
 
 add_files -norecurse [list \
-    "arty_z7_full.sv" "axi_xram.sv" "sid_stubs.sv" \
+    "arty_z7_full.sv" "axi_xram.sv" "fio_bridge.sv" "sid_stubs.sv" \
     "$rtl/dpram.sv" "$rtl/dpram_dc.sv" \
     "$rtl/vgc.sv" "$rtl/vgc_timing.sv" "$rtl/vgc_text.sv" "$rtl/vgc_gfx.sv" \
     "$rtl/artist.sv" "$rtl/vgc_sprites.sv" "$rtl/vgc_copper.sv" \
