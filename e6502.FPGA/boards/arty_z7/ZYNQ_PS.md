@@ -97,6 +97,27 @@ PL has 220 DSP + 4.9 Mb BRAM.
 - **Compute**: PS as coprocessor (math/float/strings, accelerate BASIC);
   room in PL for multiple 6502s.
 
+## XRAM bring-up status (2026-06-19)
+Full integration (arty_z7_full) BUILDS with timing met; PS DDR3 confirmed
+working via the PS DAP (mwr/mrd 0x10000000 reads back). Booted on hardware
+(ps7_init -> DDR up -> program PL). Result: **gray border renders (MMCM/VGC/
+HDMI/reset all good) but NO banner** — i.e. the 6502 now stalls on its FIRST
+XMC access through axi_xram (previously, with the BRAM stub doneA=1, it ran far
+enough to render the banner and only hung later at the lib page-in).
+
+Diagnosis: xram_sdram holds we/oe through SD_ACTIVE until it sees doneA, then
+captures doutA the next cycle (axi_xram holds doutA, so reads are fine). The
+only way the CPU hangs here is axi_xram never pulsing doneA -> its AXI
+transaction to S_AXI_HP0 never completes. The DDR test used the PS DAP, NOT the
+PL->SmartConnect->HP0 path, so that path is unverified.
+
+Next debug (needs visibility): add an ILA on axi_xram's AXI handshake
+(aw/w/b/ar/r valid+ready, state) to see where it stalls. Prime suspects:
+SmartConnect aresetn (rstgen/ FCLK_RESET0_N) not released; HP0 not routing;
+boot order (try program PL before ps7_init, or assert a PL reset after). Minor
+(not the hang): axi_xram re-triggers a redundant write because we/oe stay
+asserted one cycle after doneA — harmless, but worth gating on we/oe deassert.
+
 ## Milestones
 - [x] **PS smoke test**: PS7 BD + XSA ✓; Vitis platform + hello.elf ✓; JTAG
       boot CONFIRMED — "Hello World" on /dev/ttyUSB1. **JP4 boot-mode jumper
