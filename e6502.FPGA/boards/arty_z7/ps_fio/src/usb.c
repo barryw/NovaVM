@@ -340,11 +340,11 @@ static void enumerate(void)
     xil_printf("[usb] keyboard ready -- type!\r\n");
 }
 
-// HID boot-keyboard usage -> ASCII. Letters emit UPPERCASE (BASIC convention);
-// shift adds the symbol set. Enter=CR, Backspace=0x08.
+// HID boot-keyboard usage -> ASCII. Letters lowercase by default, shift -> uppercase
+// (standard keyboard). Shift also selects the symbol set. Enter=CR, Backspace=0x08.
 static char hid2ascii(u8 u, int shift)
 {
-    if (u >= 0x04 && u <= 0x1D) return 'A' + (u - 0x04);        // a..z -> A..Z
+    if (u >= 0x04 && u <= 0x1D) return (char)((shift ? 'A' : 'a') + (u - 0x04));  // letters
     if (u >= 0x1E && u <= 0x26) { static const char sh[] = "!@#$%^&*("; return shift ? sh[u - 0x1E] : (char)('1' + (u - 0x1E)); }
     if (u == 0x27) return shift ? ')' : '0';
     if (u == 0x28) return '\r';                                 // Enter
