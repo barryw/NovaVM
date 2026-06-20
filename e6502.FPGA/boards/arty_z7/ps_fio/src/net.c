@@ -131,6 +131,15 @@ void net_init(void)
         XEmacPs_PhyRead(&xs->emacps, 1, 0, &bmcr);
         XEmacPs_PhyWrite(&xs->emacps, 1, 0, (u16_t)(bmcr | 0x1200));   // autoneg restart
         xil_printf("[net] PHY: 1000 advertise off, autoneg restarted\r\n");
+
+        // The driver left NET_CFG at 10Mbps/half-duplex (0x1C) while the link is
+        // 100FD -> speed mismatch -> zero error-free TX. Force MAC = 100 full-duplex.
+        u32_t base = XPAR_XEMACPS_0_BASEADDR;
+        u32_t cfg = XEmacPs_ReadReg(base, 0x0);
+        cfg = (cfg & ~0x00000400u) | 0x1u | 0x2u;   // clear gige, set speed=100 + full-duplex
+        XEmacPs_WriteReg(base, 0x0, cfg);
+        xil_printf("[net] MAC NET_CFG forced to 100FD (was %05x now %05x)\r\n",
+                   XEmacPs_ReadReg(base, 0x0), cfg);
     }
 
     dhcp_start(&nif);
