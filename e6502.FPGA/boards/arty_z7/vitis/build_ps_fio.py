@@ -105,7 +105,7 @@ app = client.create_app_component(
     name="ps_fio", platform=xpfm, domain=DOMAIN, template="empty_application")
 
 # Import our sources into the app's src/.
-for f in ("main.c", "net.c", "loader_bin.h", "modules_embedded.h"):
+for f in ("main.c", "net.c", "usb.c", "loader_bin.h", "modules_embedded.h"):
     app.import_files(from_loc=SRC, files=[f], dest_dir_in_cmp="src")
 
 app.build()

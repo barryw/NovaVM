@@ -21,6 +21,8 @@
 
 void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP upload)
 void net_poll(void);
+void usb_init(void);            // usb.c — PS USB host (HID keyboard)
+void usb_poll(void);
 
 // ---- fio_bridge register map (AXI4-Lite @ 0x40000000) ----------------------
 #define FIO_BASE     0x40000000u
@@ -182,6 +184,7 @@ int main(void) {
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
 
     net_init();                                 // bring up PS Ethernet (DHCP + TCP upload)
+    usb_init();                                 // bring up PS USB host (HID keyboard)
 
     for (;;) {
         // --- FIO host service ---
@@ -212,6 +215,8 @@ int main(void) {
         }
         // --- PS Ethernet: service lwIP (RX + TCP timers + DHCP) ---
         net_poll();
+        // --- PS USB host: detect/poll the HID keyboard ---
+        usb_poll();
     }
     return 0;
 }
