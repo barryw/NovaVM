@@ -229,3 +229,22 @@ asserted one cycle after doneA — harmless, but worth gating on we/oe deassert.
 - [ ] **FIO/SD backend**: fio_bridge (AXI-GP) + FreeRTOS fio_svc task + FatFs
       on microSD -> real LOAD/SAVE/DIR; drop the NAK.
 - [ ] **(later) PS audio**: DDR-backed SF2/WTS + high-priority FreeRTOS task.
+
+## ✅ MILESTONE: interactive NovaBASIC on Arty Z7-20 (2026-06-20)
+
+Full interactive machine confirmed on hardware over HDMI:
+- READY + **flashing cursor**, console keyboard input works (`PRINT 3*7` -> `21`).
+- LED0 (CPU-alive, gated on cpu_rdy) blinking = CPU running, no stall.
+- PS (Zynq A9) is the NovaHost: mounts microSD, stages the lib_call loader, services
+  FIO, and **writes library modules directly into bank-1 (ext_rom) via the fio_bridge
+  ROM-load port** (idx=1). Reliable GP0 single-writes.
+- The lib_call XRAM/HP0 page-in is BYPASSED: axi_xram's stream is a no-op
+  (S_SDONE immediately), because the HP0 burst-read DMA was unreliable (flakily
+  stalled in S_STR_R / never reached S_SDONE). PS-direct-write is the Arty-native fix.
+- Console keys: PS reads UART RX (RX_EN enabled explicitly) -> fio_bridge KEY ->
+  VGC key queue -> CHARIN.
+
+Remaining: multi-module ALTERNATION (a loader shelf-HIT would no-op the page-in and
+leave the wrong module resident -> needs a 1-slot/always-MISS loader tweak); real
+file I/O FIO commands (LOAD/SAVE/DIR currently NAK'd); USB-HID keyboard; PS Ethernet
++ network LED (LED2/LD5).
