@@ -60,6 +60,7 @@ static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
 static inline void     key_send(unsigned char k){ Xil_Out32(R_KEY, k); }
+void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key queue
 
 // Non-blocking read of one byte from the console UART (same UART as xil_printf).
 static int uart_getc(void) {
