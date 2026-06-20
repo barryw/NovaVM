@@ -53,6 +53,9 @@ def patch_lwipopts():
         # fails in the Xilinx driver, but the forced path (configure_IEEE_phy_speed)
         # skips it. 100BASE-TX can be forced (1000 can't). Plenty for NDI uploads.
         t = _re.sub(r'#define\s+CONFIG_LINKSPEED_AUTODETECT\s+\d+', '#define CONFIG_LINKSPEED100 1', t)
+        # Enable link stats so the app can see TX/RX/drop counts (RX-vs-TX debug).
+        t = _re.sub(r'#define\s+LWIP_STATS\s+\d+', '#define LWIP_STATS 1', t)
+        t = _re.sub(r'#define\s+LINK_STATS\s+\d+', '#define LINK_STATS 1', t)
         open(lo, "w").write(t); n += 1
     print("  patched", n, "lwipopts.h")
 

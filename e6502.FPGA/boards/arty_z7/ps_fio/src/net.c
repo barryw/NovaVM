@@ -27,6 +27,7 @@ unsigned int sys_now(void)
 #include "lwip/dhcp.h"
 #include "lwip/tcp.h"
 #include "lwip/timeouts.h"
+#include "lwip/stats.h"
 #include "netif/xadapter.h"
 
 #ifndef PLATFORM_EMAC_BASEADDR
@@ -80,24 +81,15 @@ static err_t on_accept(void *arg, struct tcp_pcb *pcb, err_t err)
     return ERR_OK;
 }
 
-static int gic_setup(void)
-{
-    XScuGic_Config *cfg = XScuGic_LookupConfig(XPAR_SCUGIC_DIST_BASEADDR);
-    if (!cfg) return -1;
-    if (XScuGic_CfgInitialize(&gic, cfg, cfg->CpuBaseAddress) != XST_SUCCESS) return -1;
-    Xil_ExceptionInit();
-    Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_IRQ_INT,
-        (Xil_ExceptionHandler)XScuGic_InterruptHandler, &gic);
-    Xil_ExceptionEnable();
-    return 0;
-}
-
 void net_init(void)
 {
     ip_addr_t ip, mask, gw;
     unsigned char mac[6] = { 0x00, 0x0a, 0x35, 0x00, 0x01, 0x77 };
 
-    if (gic_setup() != 0) { xil_printf("[net] GIC init failed\r\n"); return; }
+    // NOTE: do NOT init the GIC here. The Xilinx lwIP SDT adapter sets up the EMAC
+    // interrupt itself via XSetupInterruptSystem (full GIC init/connect/enable). A
+    // second app-side XScuGic instance steals the IRQ exception vector -> EMAC IRQ
+    // routes to the wrong instance -> no RX -> no DHCP.
 
     ip_addr_set_zero(&ip); ip_addr_set_zero(&mask); ip_addr_set_zero(&gw);
     lwip_init();
@@ -127,4 +119,9 @@ void net_poll(void)
         xil_printf("[net] DHCP IP: %d.%d.%d.%d  (upload: nc <ip> 6502 < disk.ndi)\r\n",
                    ip4_addr1(a), ip4_addr2(a), ip4_addr3(a), ip4_addr4(a));
     }
+    // Periodic diagnostic: is lwIP's link up + are we receiving anything?
+    static unsigned beats = 0;
+    if ((++beats % 1500000u) == 0)
+        xil_printf("[net] link_up=%d dhcp=%d t=%ums\r\n",
+                   netif_is_link_up(&nif), dhcp_done, sys_now());
 }
