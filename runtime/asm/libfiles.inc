@@ -104,8 +104,9 @@ FILE_FFLUSH    = $18   ; (fileid:ARG0 b0)                                       
 FILE_FSTATUS   = $19   ; (nameptr:ARG0, namelen:ARG1)                           -> RESULT=implementation fam
 FILE_FDELETE   = $1A   ; (nameptr:ARG0, namelen:ARG1)                           -> exact delete
 FILE_FRENAME   = $1B   ; (oldptr:ARG0, oldlen:ARG1, newptr:ARG2, newlen:ARG3)   -> exact rename
+FILE_DIR_LIST  = $1C   ; (nameptr:ARG0, namelen:ARG1 optional filter)            -> open+iterate+print whole listing (bank-0 handler stays thin)
 
 ; Highest implemented fn-id + 1. Gaps / ids >= FILE_FN_COUNT -> LERR_NO_FN.
-FILE_FN_COUNT  = $1C
+FILE_FN_COUNT  = $1D
 
 .endif

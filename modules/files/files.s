@@ -193,6 +193,7 @@ file_jtable:
       .word   file_fstatus-1           ; $19 FILE_FSTATUS
       .word   file_fdelete-1           ; $1A FILE_FDELETE
       .word   file_frename-1           ; $1B FILE_FRENAME
+      .word   file_dir_list-1          ; $1C FILE_DIR_LIST
 
 ; ===========================================================================
 ; Shared epilogues. file_finish_status maps the NDK A result (0=OK / 1=err) to
@@ -326,6 +327,63 @@ file_dir_open:
 file_dir_read:
       JSR   fio_dir_read
       JMP   file_finish_status
+
+; --- $1C FILE_DIR_LIST: optional filter -> open + iterate + print whole listing.
+; Keeps the bank-0 BASIC DIR handler thin: this module (bank-1, with VGC MMIO)
+; does the open/read loop and prints each entry (type + name + CR) itself.
+file_dir_list:
+      LDA   LIB_ARG1+0                 ; filter length (0 = list everything)
+      BEQ   @fdl_nofilter
+      JSR   file_marshal_name
+      BEQ   @fdl_open
+      JMP   file_name_fail
+@fdl_nofilter:
+      STZ   FIO_NAMELEN
+@fdl_open:
+      JSR   fio_dir_open               ; A=0 entry ready, !=0 empty/EOD
+      CMP   #$00
+      BNE   @fdl_done
+@fdl_loop:
+      LDA   FIO_DIRTYPE                ; type string ("  BAS  " ...) -- 8-byte entries
+      CMP   #$06
+      BCC   @fdl_typeok
+      LDA   #$02                       ; out of range -> BIN
+@fdl_typeok:
+      ASL   a
+      ASL   a
+      ASL   a                          ; type * 8
+      TAX
+      LDY   #$07                       ; print 7 chars of the entry
+@fdl_tl:
+      LDA   fdl_strs,X
+      STA   VGC_CHAROUT
+      INX
+      DEY
+      BNE   @fdl_tl
+      LDY   #$00                       ; filename
+@fdl_nl:
+      CPY   FIO_NAMELEN
+      BCS   @fdl_eol
+      LDA   FIO_NAME,Y
+      STA   VGC_CHAROUT
+      INY
+      BRA   @fdl_nl
+@fdl_eol:
+      LDA   #$0D
+      STA   VGC_CHAROUT
+      JSR   fio_dir_read               ; next entry
+      CMP   #$00
+      BEQ   @fdl_loop                  ; A=0 -> more
+@fdl_done:
+      STZ   LIB_STATUS                 ; listing completed OK
+      RTS
+fdl_strs:                              ; 6 x 8-byte type fields (print first 7)
+      .byte "  BAS   "
+      .byte "  SID   "
+      .byte "  BIN   "
+      .byte "  MID   "
+      .byte "  GFX   "
+      .byte "  DIR   "
 
 ; --- $04 FILE_DELETE: name -> fio_delete ---
 file_delete:

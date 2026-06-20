@@ -11001,18 +11001,21 @@ ERR_FNF     .byte $0D,$0A,"File not found",$00
 ; perform DIR — list saved programs
 
 LAB_DIR
-      ; check for optional pattern argument
+      ; Directory listing via the FILES module -- thin bank-0 handler; FILE_DIR_LIST
+      ; does the open/iterate/print loop in bank-1 (no extension overlay).
       JSR   LAB_GBYT          ; peek at current byte
-      BEQ   @dir_noarg        ; end of line
+      BEQ   @dir_noarg        ; end of line / no pattern
       CMP   #':'
       BEQ   @dir_noarg        ; statement separator
-      JSR   LAB_FIO_GETNAME   ; parse string, copy to FIO_NAME
-      LDA   #EXT_CMD_DIR
-      JMP   EXT_vec            ; extension ROM handles listing
+      JSR   LAB_FIO_GETNAME   ; parse pattern string -> FIO_NAME
+      JSR   basic_lib_zargs   ; zero ARG0..3
+      JSR   basic_file_arg_name ; ARG0=&FIO_NAME, ARG1 byte0=FIO_NAMELEN (filter)
+      BRA   @dir_call
 @dir_noarg
-      STZ   FIO_NAMELEN
-      LDA   #EXT_CMD_DIR
-      JMP   EXT_vec            ; extension ROM handles listing
+      JSR   basic_lib_zargs   ; ARG1=0 -> list everything
+@dir_call
+      LDX   #FILE_DIR_LIST
+      JMP   basic_file_call   ; module lists+prints; returns A=LIB_STATUS
 
 ; --- XMC expansion memory handlers ---
 
