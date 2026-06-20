@@ -102,7 +102,8 @@ void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key 
 // Triggered by Ctrl-\ (0x1C) on the console UART (intercepted in the main loop).
 #define VGC_SPACE_CHAR 1u
 static void screen_dump(void) {
-    xil_printf("\r\n--- SCREEN ---\r\n");
+    unsigned ttr = peek(0xA0ED);                       // text_top_row (ring base)
+    xil_printf("\r\n--- SCREEN ttr=%u ---\r\n", ttr);
     for (int row = 0; row < 50; row++) {
         char line[81]; int any = 0;
         for (int col = 0; col < 80; col++) {
@@ -421,11 +422,6 @@ int main(void) {
                 key_send((unsigned char)ch);
             }
         }
-        // Console RX doesn't reach us under JTAG boot, so auto-dump the screen
-        // periodically -- lets us "watch" the HDMI over serial while the USB
-        // keyboard drives NovaVM. ~every few seconds.
-        static unsigned sd_cnt = 0;
-        if ((++sd_cnt % 4000000u) == 0) screen_dump();
         // --- PS Ethernet: service lwIP (RX + TCP timers + DHCP) ---
         net_poll();
         // --- PS USB host: detect/poll the HID keyboard ---
