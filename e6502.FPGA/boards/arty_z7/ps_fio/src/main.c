@@ -354,7 +354,7 @@ int main(void) {
         if (fio_pending()) {
             fio_clear();
             unsigned char cmd = peek(FIO_CMD);
-            if (cmd != 0) poke(FIO_STATUS, 0);   // mark busy: clear any stale OK before handling
+            if (cmd != 0) { xil_printf("[fio] cmd=0x%02x\r\n", cmd); poke(FIO_STATUS, 0); }  // log + mark busy
             if      (cmd == FIO_CMD_LOAD)    fio_load();
             else if (cmd == FIO_CMD_SAVE)    fio_save();
             else if (cmd == FIO_CMD_DIROPEN) fio_diropen();
