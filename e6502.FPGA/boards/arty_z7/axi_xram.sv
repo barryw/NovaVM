@@ -161,13 +161,16 @@ module axi_xram #(
                         state         <= S_AR_AB;
                     end
                 end else if (stream_req && !stream_busy) begin
+                    // ARTY PAGE-IN BYPASS: the lib_call page-in stream is a NO-OP.
+                    // The PS writes each module image directly into bank-1 (ext_rom)
+                    // via the fio_bridge ROM-load port, so the page-in only needs to
+                    // signal completion. This sidesteps the unreliable HP0 burst-read
+                    // path (which flakily stalled in S_STR_R / never reached S_SDONE).
+                    // No stream_valid words are emitted -> page_dma writes nothing to
+                    // bank-1, preserving the PS-loaded image. (S_STR_* states below
+                    // are now dead code, kept for reference / future real-DMA use.)
                     stream_busy <= 1;
-                    stream_left <= stream_words;
-                    stream_hi   <= stream_addr[1];   // 2-byte-aligned start
-                    stream_axi  <= XRAM_BASE + {7'd0, stream_addr[24:2], 2'b00};
-                    m_axi_araddr  <= XRAM_BASE + {7'd0, stream_addr[24:2], 2'b00};
-                    m_axi_arvalid <= 1;
-                    state         <= S_STR_AR;
+                    state       <= S_SDONE;
                 end
             end
 

@@ -51,6 +51,11 @@ module fio_bridge (
     output reg         key_valid,
     output reg  [7:0]  key_data,
     input  wire        key_ready,
+    // host ROM-load port (PS writes a module image straight into bank-1 ext_rom).
+    output reg         dbg_rom_we,      // 1-cycle pulse
+    output reg         dbg_rom_idx,     // 0=basic_rom, 1=ext_rom (bank-1 modules)
+    output reg  [13:0] dbg_rom_addr,
+    output reg  [7:0]  dbg_rom_data,
     output reg         dbg_cpu_reset,
     input  wire        fio_event,
     input  wire [15:0] dbg_cpu_pc,
@@ -69,9 +74,11 @@ module fio_bridge (
             dbg_peek_addr <= 16'd0; key_valid <= 1'b0; key_data <= 8'd0;
             dbg_cpu_reset <= 1'b1;            // hold the 6502 until the PS releases it
             fio_event_sticky <= 1'b0;
+            dbg_rom_we <= 1'b0; dbg_rom_idx <= 1'b0; dbg_rom_addr <= 14'd0; dbg_rom_data <= 8'd0;
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
+            dbg_rom_we  <= 1'b0;
             if (fio_event) fio_event_sticky <= 1'b1;
 
             // ---- write channel (single outstanding) ----
@@ -88,6 +95,12 @@ module fio_bridge (
                     4'h3: begin key_valid <= 1'b1; key_data <= s_wdata[7:0]; end // KEY
                     4'h4: dbg_cpu_reset <= s_wdata[0];             // CTRL
                     4'h5: if (s_wdata[0]) fio_event_sticky <= 1'b0; // STATUS clear
+                    4'h9: begin                                    // ROMW (0x24)
+                        dbg_rom_we   <= 1'b1;
+                        dbg_rom_data <= s_wdata[7:0];
+                        dbg_rom_addr <= s_wdata[21:8];
+                        dbg_rom_idx  <= s_wdata[22];
+                    end
                     default: ;
                 endcase
                 s_bvalid <= 1'b1;

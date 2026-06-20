@@ -30,6 +30,7 @@
 #define R_CPU_PC     (FIO_BASE + 0x18)   // R live 6502 PC
 #define R_DBG        (FIO_BASE + 0x1C)   // R [0]rdy [1]sreq [2]sbusy [3]svalid [4]sdone [5]sready [6]we
 #define R_AUX        (FIO_BASE + 0x20)   // R {stream_words[13:0], stream_left[13:0]}
+#define R_ROMW       (FIO_BASE + 0x24)   // W {idx@22, addr[13:0]@8, data[7:0]} -> bank ROM write
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -119,22 +120,21 @@ static int scan_load(const char *dir, const char *pfx, int slot) {
     return rc;
 }
 
-// Load a module into the XRAM shelf slot (DDR). Use the embedded image (always
-// present, repo-built); fall back to scanning the SD (/lib then /).
+// ARTY PAGE-IN: write the module image DIRECTLY into the 6502's bank-1 (ext_rom)
+// via the fio_bridge ROM-load port (idx=1). The loader's subsequent PGD page-in
+// is a no-op (axi_xram stream instant-completes), so bank-1 keeps this image.
+// Reliable GP0 single-writes -- avoids the flaky HP0 burst-read DMA entirely.
 static int load_module(int id, int slot) {
-    if (slot < 0 || slot > 3) return -1;
-    if (id >= 1 && id <= 8 && EMBEDDED_MOD[id]) {
-        UINTPTR ddr = XRAM_DDR_BASE + SHELF_BASE + (unsigned)slot * SHELF_SLOT;
-        memcpy((void *)ddr, EMBEDDED_MOD[id], MODULE_BYTES);
-        Xil_DCacheFlushRange(ddr, MODULE_BYTES);
-        xil_printf("[fio] module %d -> XRAM slot %d (embedded)\r\n", id, slot);
-        return 0;
+    (void)slot;
+    if (id < 1 || id > 8 || !EMBEDDED_MOD[id]) {
+        xil_printf("[fio] module %d not embedded\r\n", id);
+        return -1;
     }
-    const char *pfx = module_prefix(id);
-    if (pfx && (scan_load("0:/lib", pfx, slot) == 0 || scan_load("0:/", pfx, slot) == 0))
-        return 0;
-    xil_printf("[fio] module %d not found\r\n", id);
-    return -1;
+    const unsigned char *img = EMBEDDED_MOD[id];
+    for (unsigned a = 0; a < MODULE_BYTES; a++)
+        Xil_Out32(R_ROMW, (1u << 22) | (a << 8) | img[a]);   // idx=1 (ext_rom)
+    xil_printf("[fio] module %d -> bank-1 (PS direct, %u bytes)\r\n", id, (unsigned)MODULE_BYTES);
+    return 0;
 }
 
 static void list_dir(const char *path) {

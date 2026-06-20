@@ -116,6 +116,7 @@ module arty_z7_full (
     wire [15:0]  fb_peek_addr; wire fb_peek_en; wire [7:0] fb_peek_data;
     wire         fb_key_valid; wire [7:0] fb_key_data; wire fb_key_ready;
     wire         fb_cpu_reset;
+    wire         fb_rom_we, fb_rom_idx; wire [13:0] fb_rom_addr; wire [7:0] fb_rom_data;
 
     top core (
         .clk(clk_pixel), .rst(reset),
@@ -136,7 +137,8 @@ module arty_z7_full (
         .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(1'b0), .dbg_vmem_re(1'b0), .dbg_vmem_space(3'd0),
         .dbg_vmem_addr(17'd0), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(),
-        .dbg_rom_we(1'b0), .dbg_rom_idx(1'b0), .dbg_rom_addr(14'd0), .dbg_rom_data(8'd0),
+        .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
+        .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
         .dbg_cpu_reset(fb_cpu_reset), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
@@ -264,6 +266,8 @@ module arty_z7_full (
         .dbg_poke_en(fb_poke_en), .dbg_poke_addr(fb_poke_addr), .dbg_poke_data(fb_poke_data),
         .dbg_peek_addr(fb_peek_addr), .dbg_peek_en(fb_peek_en), .dbg_peek_data(fb_peek_data),
         .key_valid(fb_key_valid), .key_data(fb_key_data), .key_ready(fb_key_ready),
+        .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
+        .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
         .dbg_cpu_reset(fb_cpu_reset),
         .fio_event(fio_event), .dbg_cpu_pc(d_pc),
         // dbg_bus: [0]=cpu_rdy [1]=stream_busy [2]=stream_valid [3]=stream_done
