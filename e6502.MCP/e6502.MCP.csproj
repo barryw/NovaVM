@@ -8,6 +8,12 @@
         <PublishSingleFile>true</PublishSingleFile>
         <PublishTrimmed>true</PublishTrimmed>
         <SelfContained>true</SelfContained>
+        <!-- Re-enable reflection-based JSON so tool types not in the MCP SDK's
+             source-gen JsonContext (e.g. int[] in EmulatorTools.DrawPixels) can
+             serialize. Without this, trimming disables reflection JSON and the MCP
+             host throws "JsonTypeInfo metadata for type 'System.Int32[]' not provided"
+             on startup -> the server dies -> Claude sees "Connection closed". -->
+        <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
     </PropertyGroup>
 
     <ItemGroup>
