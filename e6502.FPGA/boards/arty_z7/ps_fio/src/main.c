@@ -185,8 +185,17 @@ int main(void) {
             unsigned char cmd = peek(FIO_CMD);
             if (cmd == FIO_CMD_LOAD_MODULE) {
                 int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
-                if (load_module(id, slot) == 0) { poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK); }
-                else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+                if (load_module(id, slot) == 0) {
+                    // Cap the loader's 4-slot module shelf ($0418..$041B) at one
+                    // entry (the resident). The page-in is a no-op (PS wrote bank-1),
+                    // so a stale shelf-HIT on a module SWITCH would skip the load and
+                    // leave the wrong module resident. Clearing the tags forces every
+                    // switch to MISS -> FIO -> PS rewrites bank-1; repeats still hit
+                    // the fast LIB_RESIDENT path before the shelf scan. The loader
+                    // re-records the victim slot after FIO_STATUS=OK -> exactly 1 tag.
+                    for (int s = 0; s < 4; s++) poke(0x0418 + s, 0);
+                    poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK);
+                } else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
             } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
         }
         // --- console keyboard: forward serial bytes into the VGC key queue ---
