@@ -19,6 +19,9 @@
 #include "loader_bin.h"
 #include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
 
+void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP upload)
+void net_poll(void);
+
 // ---- fio_bridge register map (AXI4-Lite @ 0x40000000) ----------------------
 #define FIO_BASE     0x40000000u
 #define R_POKE       (FIO_BASE + 0x00)   // W {addr[15:0]<<8 | data[7:0]}
@@ -178,6 +181,8 @@ int main(void) {
     cpu_hold(0);                                // release the 6502 -> boots to READY
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
 
+    net_init();                                 // bring up PS Ethernet (DHCP + TCP upload)
+
     for (;;) {
         // --- FIO host service ---
         if (fio_pending()) {
@@ -205,6 +210,8 @@ int main(void) {
             else if (ch == 0x7F) ch = 0x08;
             key_send((unsigned char)ch);
         }
+        // --- PS Ethernet: service lwIP (RX + TCP timers + DHCP) ---
+        net_poll();
     }
     return 0;
 }
