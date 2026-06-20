@@ -173,11 +173,23 @@ void usb_init(void)
     u32 cap = Xil_In8(USB_CAPLENGTH);
     Xil_SetTlbAttributes((INTPTR)usb_region, NORM_NONCACHE);   // DMA-coherent region
 
+    // Faithful U-Boot ehci-zynq.c order: reset + configure the ULPI PHY FIRST,
+    // THEN reset the controller (the controller reset does NOT reset the external
+    // PHY, so the FS/VBUS config persists), THEN host mode + run.
+    // 1) PHY reset (ulpi_reset): Function Control SET reg (0x05) = RESET (bit5), poll.
+    ulpi_write(0x05, 0x20);
+    for (volatile int i = 0; i < 100000 && (ulpi_read(0x04) & 0x20); i++) {}
+    // 2) PHY host config.
+    ulpi_write(0x0A, 0x06);   // OTG Control: DpPulldown|DmPulldown (no ExtVbusInd on Arty)
+    ulpi_write(0x04, 0x41);   // Function Control: FULL_SPEED | OpMode normal | SuspendM
+    ulpi_write(0x07, 0x00);   // Interface Control: 0
+    ulpi_write(0x0B, 0x60);   // OTG Control SET: DrvVbus | DrvVbusExternal (power port)
+
+    // 3) Controller reset + host mode.
     Xil_Out32(USB_USBCMD, CMD_RST);
     for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_USBCMD) & CMD_RST); i++) {}
     Xil_Out32(USB_USBINTR, 0);
-    Xil_Out32(USB_USBMODE, MODE_CM_HOST | 0x10u);   // host + SDIS (stream disable)
-    ulpi_write(0x0A, 0x60);   // drive VBUS (detect works with this)
+    Xil_Out32(USB_USBMODE, MODE_CM_HOST | 0x10u);   // host + SDIS
 
     // Async schedule: one QH, self-linked, head of reclamation.
     g_qh.link = (u32)(UINTPTR)&g_qh | 0x2u;             // self, typ=QH
@@ -211,12 +223,19 @@ static void enumerate(void)
     u8 s[8], desc[64];
 
     udelay(150000);                                  // device debounce/power settle
-    xil_printf("[usb] PHY before reset: FUNC(0x04)=%02x OTG(0x0A)=%02x IFC(0x07)=%02x\r\n",
-               ulpi_read(0x04), ulpi_read(0x0A), ulpi_read(0x07));
-    port_reset();
-    u32 p = Xil_In32(USB_PORTSC1);
-    xil_printf("[usb] post-reset PORTSC=%08x (PED=%d speed=%d) PHY FUNC=%02x OTG=%02x\r\n",
-               p, (p & PORTSC_PED) ? 1 : 0, (int)((p >> 26) & 3), ulpi_read(0x04), ulpi_read(0x0A));
+
+    // Reset until the port enables (PED=1) -- the controller needs PED set to run
+    // transactions; the reset is flaky so retry.
+    u32 p = 0;
+    for (int i = 0; i < 6; i++) {
+        port_reset();
+        p = Xil_In32(USB_PORTSC1);
+        if (p & PORTSC_PED) break;
+    }
+    // (FS PHY mode is set in usb_init before the controller runs -- do NOT write
+    // the ULPI viewport here; it disrupts the running controller's schedule.)
+    xil_printf("[usb] post-reset PORTSC=%08x (PED=%d speed=%d)\r\n",
+               p, (p & PORTSC_PED) ? 1 : 0, (int)((p >> 26) & 3));
 
     dev_addr = 0; ep0_mps = 8;
     mk_setup(s, 0x80, 6, 0x0100, 0, 8);              // GET_DESCRIPTOR(device, 8)
