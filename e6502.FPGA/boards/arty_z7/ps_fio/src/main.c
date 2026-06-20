@@ -29,6 +29,7 @@
 #define R_STATUS     (FIO_BASE + 0x14)   // R {key_ready,fio_event}; W bit0 clears event
 #define R_CPU_PC     (FIO_BASE + 0x18)   // R live 6502 PC
 #define R_DBG        (FIO_BASE + 0x1C)   // R [0]rdy [1]sreq [2]sbusy [3]svalid [4]sdone [5]sready [6]we
+#define R_AUX        (FIO_BASE + 0x20)   // R {stream_words[13:0], stream_left[13:0]}
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -176,6 +177,33 @@ int main(void) {
 
     cpu_hold(0);                                // release the 6502 -> boots to READY
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
+
+    // Dense diagnostic burst: sample PC + dbg right after release, printing only
+    // on CHANGE, to catch the page-in stream states (FILES works, SYSTEM hangs).
+    // The FIO load_module events are serviced inline so the page-ins can proceed.
+    {
+        unsigned plast = 0xFFFFFFFF, dlast = 0xFFFFFFFF;
+        for (long i = 0; i < 4000000; i++) {
+            if (fio_pending()) {                  // service module loads during the burst
+                fio_clear();
+                unsigned char cmd = peek(FIO_CMD);
+                if (cmd == FIO_CMD_LOAD_MODULE) {
+                    int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
+                    if (load_module(id, slot) == 0) { poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK); }
+                    else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+                } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+            }
+            unsigned pc = Xil_In32(R_CPU_PC) & 0xFFFF;
+            unsigned d  = Xil_In32(R_DBG)    & 0xFFFF;
+            if (pc != plast || d != dlast) {
+                unsigned aux = Xil_In32(R_AUX);
+                xil_printf("[s] PC=%04x dbg=%04x sl=%04x sw=%04x\r\n",
+                           pc, d, aux & 0x3FFF, (aux >> 14) & 0x3FFF);
+                plast = pc; dlast = d;
+            }
+        }
+        xil_printf("[fio] dense sample done\r\n");
+    }
 
     unsigned long tick = 0;
     for (;;) {

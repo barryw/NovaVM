@@ -55,6 +55,7 @@ module axi_xram #(
     output reg         stream_busy,
     output reg         stream_done,
     output wire [3:0]  dbg_state,
+    output wire [13:0] dbg_sleft,
 
     // ---- AXI4 master (to PS S_AXI_HP via SmartConnect) ----------------------
     output reg  [31:0] m_axi_awaddr,
@@ -105,6 +106,7 @@ module axi_xram #(
 
     reg [3:0]  state;
     assign dbg_state = state;
+    assign dbg_sleft = stream_left;
     reg        cur_is_b;       // current A/B job target
     reg [1:0]  cur_byte;       // byte lane for A/B
     reg [31:0] beat;           // latched stream read beat

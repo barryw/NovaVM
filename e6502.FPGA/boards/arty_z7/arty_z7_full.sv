@@ -84,6 +84,7 @@ module arty_z7_full (
     wire [13:0] xa_swords;
     wire        xa_sreq, xa_sready, xa_svalid, xa_sbusy, xa_sdone;
     wire [3:0]  xa_dbg_state;
+    wire [13:0] xa_sleft;
     wire [15:0] xa_sdout;
 
     // ---- axi_xram master <-> PS BD S_AXI_XRAM ------------------------------
@@ -171,6 +172,7 @@ module arty_z7_full (
         .stream_ready(xa_sready),
         .stream_dout(xa_sdout), .stream_valid(xa_svalid),
         .stream_busy(xa_sbusy), .stream_done(xa_sdone), .dbg_state(xa_dbg_state),
+        .dbg_sleft(xa_sleft),
         .m_axi_awaddr(x_awaddr), .m_axi_awlen(x_awlen), .m_axi_awsize(x_awsize),
         .m_axi_awburst(x_awburst), .m_axi_awvalid(x_awvalid), .m_axi_awready(x_awready),
         .m_axi_wdata(x_wdata), .m_axi_wstrb(x_wstrb), .m_axi_wlast(x_wlast),
@@ -267,17 +269,34 @@ module arty_z7_full (
         // dbg_bus: [0]=cpu_rdy [1]=stream_busy [2]=stream_valid [3]=stream_done
         //          [4]=arvalid [5]=arready [6]=rvalid [7]=rready [11:8]=axi state
         .dbg_bus({4'd0, xa_dbg_state, x_rready, x_rvalid, x_arready, x_arvalid,
-                  xa_sdone, xa_svalid, xa_sbusy, d_rdy})
+                  xa_sdone, xa_svalid, xa_sbusy, d_rdy}),
+        .dbg_aux({xa_swords, xa_sleft})
+
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)
 
     // ---- Status LEDs -------------------------------------------------------
-    logic [24:0] heartbeat;
-    always_ff @(posedge clk_pixel) heartbeat <= heartbeat + 25'd1;
-    assign led4_b = heartbeat[23];
-    assign led4_g = mmcm_locked;
-    assign led    = {reset, vid_vsync, xa_sbusy, heartbeat[24]};
+    // led[0] CPU ALIVE : counter advances only while the 6502 is running (rdy=1).
+    //                    Blinks ~1.6Hz when alive; FREEZES if the CPU stalls
+    //                    (e.g. a page-in hang) -> instant "is the CPU stuck?" tell.
+    // led[1] I/O       : SD->XRAM page-in stream + FIO host requests, stretched so
+    //                    brief transfers are visible.
+    // led[2] NETWORK   : reserved (PS Ethernet) -- off for now.
+    // led[3] SYSTEM    : reset / fault.
+    logic [23:0] alive_cnt;
+    always_ff @(posedge clk_pixel) if (d_rdy) alive_cnt <= alive_cnt + 24'd1;
+
+    logic [22:0] io_stretch;
+    always_ff @(posedge clk_pixel)
+        if (xa_sbusy || fio_event) io_stretch <= 23'h7FFFFF;
+        else if (io_stretch != 0)  io_stretch <= io_stretch - 23'd1;
+
+    logic [23:0] heartbeat;
+    always_ff @(posedge clk_pixel) heartbeat <= heartbeat + 24'd1;
+    assign led4_b = heartbeat[23];     // board/clock alive (free-running)
+    assign led4_g = mmcm_locked;       // pixel clock locked
+    assign led    = {reset, 1'b0, |io_stretch, alive_cnt[23]};
 
 endmodule
 
