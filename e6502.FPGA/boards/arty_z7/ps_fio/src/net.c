@@ -29,6 +29,8 @@ unsigned int sys_now(void)
 #include "lwip/timeouts.h"
 #include "lwip/stats.h"
 #include "netif/xadapter.h"
+#include "netif/xemacpsif.h"
+#include "xemacps.h"
 
 #ifndef PLATFORM_EMAC_BASEADDR
 #define PLATFORM_EMAC_BASEADDR XPAR_XEMACPS_0_BASEADDR
@@ -99,6 +101,38 @@ void net_init(void)
     }
     netif_set_default(&nif);
     netif_set_up(&nif);
+
+    // The Xilinx driver forces the MAC to 100Mbps (the RTL8211 autoneg speed-read
+    // is broken, PHYSR reads 0), but the PHY still autonegotiates 1000 with a
+    // gigabit switch -> speed mismatch -> no data. Stop advertising 1000 so the
+    // PHY renegotiates to 100FD, matching the forced MAC.
+    {
+        struct xemac_s *xemac = (struct xemac_s *)nif.state;
+        xemacpsif_s *xs = (xemacpsif_s *)xemac->state;
+        u16_t v = 0;
+
+        // RTL8211F (PHY ID2=0xC916): the Xilinx driver treats it as an RTL8211E and
+        // never configures the RGMII clock delays -> MAC<->PHY data path is broken
+        // (TX frames invalid, error-free TX count stays 0). Enable the PHY's internal
+        // RGMII TX + RX delays (page 0xd08: reg0x11 bit8 = TX delay, reg0x15 bit3 = RX
+        // delay), i.e. "rgmii-id" mode.
+        XEmacPs_PhyWrite(&xs->emacps, 1, 0x1f, 0x0d08);
+        XEmacPs_PhyRead (&xs->emacps, 1, 0x11, &v);
+        XEmacPs_PhyWrite(&xs->emacps, 1, 0x11, (u16_t)(v | 0x0100));   // TX delay on
+        XEmacPs_PhyRead (&xs->emacps, 1, 0x15, &v);
+        XEmacPs_PhyWrite(&xs->emacps, 1, 0x15, (u16_t)(v | 0x0008));   // RX delay on
+        XEmacPs_PhyWrite(&xs->emacps, 1, 0x1f, 0x0000);                // back to page 0
+        xil_printf("[net] RTL8211F: RGMII TX+RX delays enabled\r\n");
+
+        // Drop 1000 advertise so the PHY negotiates 100FD to match the forced MAC.
+        u16_t gbcr = 0, bmcr = 0;
+        XEmacPs_PhyRead(&xs->emacps, 1, 9, &gbcr);
+        XEmacPs_PhyWrite(&xs->emacps, 1, 9, (u16_t)(gbcr & ~0x0300));
+        XEmacPs_PhyRead(&xs->emacps, 1, 0, &bmcr);
+        XEmacPs_PhyWrite(&xs->emacps, 1, 0, (u16_t)(bmcr | 0x1200));   // autoneg restart
+        xil_printf("[net] PHY: 1000 advertise off, autoneg restarted\r\n");
+    }
+
     dhcp_start(&nif);
 
     struct tcp_pcb *pcb = tcp_new_ip_type(IPADDR_TYPE_ANY);
@@ -121,7 +155,18 @@ void net_poll(void)
     }
     // Periodic diagnostic: is lwIP's link up + are we receiving anything?
     static unsigned beats = 0;
-    if ((++beats % 1500000u) == 0)
-        xil_printf("[net] link_up=%d dhcp=%d t=%ums\r\n",
-                   netif_is_link_up(&nif), dhcp_done, sys_now());
+    if ((++beats % 1500000u) == 0) {
+        u32_t base = XPAR_XEMACPS_0_BASEADDR;
+        u32_t txf = XEmacPs_ReadReg(base, 0x108);   // error-free frames TX'd
+        u32_t rxf = XEmacPs_ReadReg(base, 0x158);   // error-free frames RX'd
+        u32_t netcfg = XEmacPs_ReadReg(base, 0x0);  // bit0=100,bit10=gige
+        struct xemac_s *xemac = (struct xemac_s *)nif.state;
+        xemacpsif_s *xs = (xemacpsif_s *)xemac->state;
+        u32_t netctrl = XEmacPs_ReadReg(base, 0x4);  // bit3=TXEN bit2=RXEN
+        struct dhcp *d = netif_dhcp_data(&nif);
+        int dst = d ? d->state : -1;                  // 0=OFF 6=SELECTING 5=BOUND ...
+        (void)xs; (void)netcfg;
+        xil_printf("[net] link=%d dhcpst=%d TX=%u RX=%u NETCTRL=%03x t=%u\r\n",
+                   netif_is_link_up(&nif), dst, txf, rxf, netctrl, sys_now());
+    }
 }
