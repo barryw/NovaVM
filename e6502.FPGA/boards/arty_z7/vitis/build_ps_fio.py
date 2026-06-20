@@ -49,10 +49,10 @@ def patch_lwipopts():
         t = open(lo).read()
         t = _re.sub(r'#define\s+NO_SYS_NO_TIMERS\s+\d+', '#define NO_SYS_NO_TIMERS 0', t)
         t = _re.sub(r'#define\s+LWIP_DHCP\s+\d+',        '#define LWIP_DHCP 1',        t)
-        # Force 100Mbps full-duplex: the RTL8211E autoneg speed-read (reg 0x11)
-        # fails in the Xilinx driver, but the forced path (configure_IEEE_phy_speed)
-        # skips it. 100BASE-TX can be forced (1000 can't). Plenty for NDI uploads.
-        t = _re.sub(r'#define\s+CONFIG_LINKSPEED_AUTODETECT\s+\d+', '#define CONFIG_LINKSPEED100 1', t)
+        # Keep AUTODETECT: forcing a speed makes the driver re-drive the PHY and the
+        # link bounces (DMA dies). Let it autonegotiate (this board settles at 10FD,
+        # matching a known-good U-Boot). net.c then only corrects the MAC NET_CFG.
+        t = _re.sub(r'#define\s+CONFIG_LINKSPEED_AUTODETECT\s+\d+', '#define CONFIG_LINKSPEED_AUTODETECT 1', t)
         # Enable link stats so the app can see TX/RX/drop counts (RX-vs-TX debug).
         t = _re.sub(r'#define\s+LWIP_STATS\s+\d+', '#define LWIP_STATS 1', t)
         t = _re.sub(r'#define\s+LINK_STATS\s+\d+', '#define LINK_STATS 1', t)
