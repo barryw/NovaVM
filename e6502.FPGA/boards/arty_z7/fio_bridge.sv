@@ -60,9 +60,16 @@ module fio_bridge (
     input  wire        fio_event,
     input  wire [15:0] dbg_cpu_pc,
     input  wire [15:0] dbg_bus,      // misc debug signals (page-in/stream/rdy)
-    input  wire [27:0] dbg_aux       // {stream_words[13:0], stream_left[13:0]}
+    input  wire [27:0] dbg_aux,      // {stream_words[13:0], stream_left[13:0]}
+    // VGC vmem debug read: lets the PS read screen/char/color/gfx/sprite RAM
+    // (the VGC's internal dprams, NOT on the 6502 bus) -> serial screen-dump.
+    output wire        dbg_vmem_re,
+    output reg  [2:0]  dbg_vmem_space,
+    output reg  [16:0] dbg_vmem_addr,
+    input  wire [7:0]  dbg_vmem_rdata
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
+    assign dbg_vmem_re = 1'b1;   // continuously read the latched vmem addr/space
 
     reg fio_event_sticky;
 
@@ -75,6 +82,7 @@ module fio_bridge (
             dbg_cpu_reset <= 1'b1;            // hold the 6502 until the PS releases it
             fio_event_sticky <= 1'b0;
             dbg_rom_we <= 1'b0; dbg_rom_idx <= 1'b0; dbg_rom_addr <= 14'd0; dbg_rom_data <= 8'd0;
+            dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
@@ -101,6 +109,10 @@ module fio_bridge (
                         dbg_rom_addr <= s_wdata[21:8];
                         dbg_rom_idx  <= s_wdata[22];
                     end
+                    4'hA: begin                                    // VMEM_ADDR (0x28)
+                        dbg_vmem_addr  <= s_wdata[16:0];
+                        dbg_vmem_space <= s_wdata[19:17];
+                    end
                     default: ;
                 endcase
                 s_bvalid <= 1'b1;
@@ -121,6 +133,7 @@ module fio_bridge (
                     4'h6: s_rdata <= {16'd0, dbg_cpu_pc};               // CPU_PC
                     4'h7: s_rdata <= {16'd0, dbg_bus};                  // DBG (0x1C)
                     4'h8: s_rdata <= {4'd0, dbg_aux};                   // AUX (0x20) sleft/swords
+                    4'hB: s_rdata <= {24'd0, dbg_vmem_rdata};           // VMEM_DATA (0x2C)
                     default: s_rdata <= 32'hDEAD_0000;
                 endcase
                 s_rvalid <= 1'b1;

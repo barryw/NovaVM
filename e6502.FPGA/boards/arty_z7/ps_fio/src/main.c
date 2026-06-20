@@ -37,6 +37,8 @@ void usb_poll(void);
 #define R_DBG        (FIO_BASE + 0x1C)   // R [0]rdy [1]sreq [2]sbusy [3]svalid [4]sdone [5]sready [6]we
 #define R_AUX        (FIO_BASE + 0x20)   // R {stream_words[13:0], stream_left[13:0]}
 #define R_ROMW       (FIO_BASE + 0x24)   // W {idx@22, addr[13:0]@8, data[7:0]} -> bank ROM write
+#define R_VMEM_ADDR  (FIO_BASE + 0x28)   // W {space[2:0]@17, addr[16:0]} -> latch VGC vmem read addr
+#define R_VMEM_DATA  (FIO_BASE + 0x2C)   // R {24'b0, data[7:0]} from VGC vmem (char/color/gfx/spr)
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -81,12 +83,38 @@ void usb_poll(void);
 
 static inline void     poke(unsigned a, unsigned char d){ Xil_Out32(R_POKE, (a << 8) | d); }
 static inline unsigned char peek(unsigned a){ Xil_Out32(R_PEEK_ADDR, a); return (unsigned char)Xil_In32(R_PEEK_DATA); }
+// Read a byte of VGC video memory (space 1=char 2=color 3=gfx 4=sprite 7=textattr).
+// The char/etc RAM is internal to the VGC (not 6502-addressable); this rides the
+// dbg_vmem read port wired into the fio_bridge. First read settles dpram latency.
+static inline unsigned char vmem_read(unsigned space, unsigned addr){
+    Xil_Out32(R_VMEM_ADDR, ((space & 7u) << 17) | (addr & 0x1FFFFu));
+    (void)Xil_In32(R_VMEM_DATA);
+    return (unsigned char)Xil_In32(R_VMEM_DATA);
+}
 static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? 1u : 0u); }
 static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
 static inline void     key_send(unsigned char k){ Xil_Out32(R_KEY, k); }
 void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key queue
+
+// Debug: dump the VGC character RAM (80x50) to the serial so we can "see" the HDMI.
+// Triggered by Ctrl-\ (0x1C) on the console UART (intercepted in the main loop).
+#define VGC_SPACE_CHAR 1u
+static void screen_dump(void) {
+    xil_printf("\r\n--- SCREEN ---\r\n");
+    for (int row = 0; row < 50; row++) {
+        char line[81]; int any = 0;
+        for (int col = 0; col < 80; col++) {
+            unsigned char ch = vmem_read(VGC_SPACE_CHAR, (unsigned)(row * 80 + col));
+            if (ch >= 0x21 && ch < 0x7F) any = 1;
+            line[col] = (ch >= 0x20 && ch < 0x7F) ? (char)ch : '.';
+        }
+        line[80] = 0;
+        if (any) xil_printf("%02d|%s|\r\n", row, line);   // skip all-blank rows
+    }
+    xil_printf("--- END ---\r\n");
+}
 
 // Non-blocking read of one byte from the console UART (same UART as xil_printf).
 static int uart_getc(void) {
@@ -386,10 +414,18 @@ int main(void) {
         // --- console keyboard: forward serial bytes into the VGC key queue ---
         int ch = uart_getc();
         if (ch >= 0) {
-            if (ch == '\n') ch = '\r';
-            else if (ch == 0x7F) ch = 0x08;
-            key_send((unsigned char)ch);
+            if (ch == 0x1C || ch == '~') { screen_dump(); }  // console trigger (if RX ever works)
+            else {
+                if (ch == '\n') ch = '\r';
+                else if (ch == 0x7F) ch = 0x08;
+                key_send((unsigned char)ch);
+            }
         }
+        // Console RX doesn't reach us under JTAG boot, so auto-dump the screen
+        // periodically -- lets us "watch" the HDMI over serial while the USB
+        // keyboard drives NovaVM. ~every few seconds.
+        static unsigned sd_cnt = 0;
+        if ((++sd_cnt % 4000000u) == 0) screen_dump();
         // --- PS Ethernet: service lwIP (RX + TCP timers + DHCP) ---
         net_poll();
         // --- PS USB host: detect/poll the HID keyboard ---
