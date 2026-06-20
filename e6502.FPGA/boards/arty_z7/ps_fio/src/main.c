@@ -18,6 +18,7 @@
 #include "xuartps_hw.h"
 #include "loader_bin.h"
 #include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
+#include "ehbasic_rom.h"        // EHBASIC_ROM[16384] -> basic_rom (idx=0) at boot
 
 void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP upload)
 void net_poll(void);
@@ -323,6 +324,13 @@ int main(void) {
     xil_printf("\r\n[NovaVM PS FIO host] starting\r\n");
 
     cpu_hold(1);                                // keep the 6502 in reset
+
+    // PS-load the (patched) BASIC ROM into basic_rom (dbg_rom idx=0) while the CPU
+    // is held, so basic.asm changes take effect without a bitstream rebuild. The
+    // bitstream's BRAM init is the fallback if this is ever removed.
+    for (unsigned a = 0; a < 16384; a++)
+        Xil_Out32(R_ROMW, (a << 8) | EHBASIC_ROM[a]);   // idx=0 (bit22=0) = basic_rom
+    xil_printf("[fio] basic_rom loaded from PS (16384 bytes)\r\n");
 
     if (f_mount(&fs, "0:/", 1) != FR_OK)
         xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
