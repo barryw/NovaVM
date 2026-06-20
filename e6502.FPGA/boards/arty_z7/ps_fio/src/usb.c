@@ -77,6 +77,12 @@ static u8    *const g_buf  = (u8    *)(usb_region + 0x400);
 typedef struct { u8 addr; u8 speed; u8 mps; u8 hub_addr; u8 hub_port; } usbdev_t;
 
 static int kbd_ready  = 0;
+static u8  kbd_ep     = 0;           // HID interrupt IN endpoint number
+static int kbd_mps    = 8;           // its max packet size
+static u8  kbd_iface  = 0;           // the HID interface (for SET_PROTOCOL/SET_IDLE)
+static int kbd_toggle = 0;           // interrupt IN data toggle
+static int kbd_armed  = 0;           // an IN qTD is pending
+static u8  prev_keys[8];             // previous boot report (for key-down edges)
 
 // ULPI viewport (Zynq): bit31 WU, bit30 RUN, bit29 RW(1=write), bit27 SS(sync),
 // bits23:16 addr, bits15:8 read-data, bits7:0 write-data. Per U-Boot ulpi-viewport.c.
@@ -287,8 +293,116 @@ static void enumerate(void)
     mk_setup(s, 0x80, 6, 0x0100, 0, 18);             // GET_DESCRIPTOR(device, full)
     r = control_xfer(&g_root, s, 1, desc, 18);
     if (r < 18) { xil_printf("[usb] GET_DESC(dev,18)@addr1 failed (r=%d)\r\n", r); return; }
-    xil_printf("[usb] dev1: class=%d sub=%d vid=%04x pid=%04x  (class 9 = HUB)\r\n",
+    xil_printf("[usb] dev1: class=%d sub=%d vid=%04x pid=%04x\r\n",
                desc[4], desc[5], (desc[9] << 8) | desc[8], (desc[11] << 8) | desc[10]);
+
+    // --- read the configuration descriptor, find the HID interrupt-IN endpoint ---
+    mk_setup(s, 0x80, 6, 0x0200, 0, 9);              // GET_DESCRIPTOR(config, header)
+    if (control_xfer(&g_root, s, 1, desc, 9) < 9) { xil_printf("[usb] GET cfg hdr failed\r\n"); return; }
+    int total = desc[2] | (desc[3] << 8);
+    if (total > 64) total = 64;
+    mk_setup(s, 0x80, 6, 0x0200, 0, total);          // GET_DESCRIPTOR(config, full)
+    int cl = control_xfer(&g_root, s, 1, desc, total);
+    if (cl < 4) { xil_printf("[usb] GET cfg full failed (%d)\r\n", cl); return; }
+    u8 cfgval = desc[5];
+
+    int i = 9, cur_class = 0, cur_proto = 0;
+    kbd_ep = 0;
+    while (i + 2 <= cl) {
+        int blen = desc[i], btype = desc[i + 1];
+        if (blen < 2) break;
+        if (btype == 0x04) {                         // interface descriptor
+            cur_class = desc[i + 5]; cur_proto = desc[i + 7];
+            if (cur_class == 3 && cur_proto == 1) kbd_iface = desc[i + 2];  // boot keyboard iface
+        } else if (btype == 0x05 && cur_class == 3) { // endpoint under an HID interface
+            u8 epa = desc[i + 2], attr = desc[i + 3];
+            if ((epa & 0x80) && (attr & 3) == 3) {   // interrupt IN
+                if (kbd_ep == 0 || cur_proto == 1) { // prefer the keyboard (protocol 1)
+                    kbd_ep  = epa & 0x0F;
+                    kbd_mps = desc[i + 4] | (desc[i + 5] << 8);
+                }
+            }
+        }
+        i += blen;
+    }
+    if (kbd_ep == 0) { xil_printf("[usb] no HID interrupt-IN endpoint\r\n"); return; }
+    xil_printf("[usb] HID kbd: iface=%d ep=%d mps=%d cfg=%d\r\n", kbd_iface, kbd_ep, kbd_mps, cfgval);
+
+    mk_setup(s, 0x00, 9, cfgval, 0, 0);              // SET_CONFIGURATION
+    control_xfer(&g_root, s, 0, 0, 0); udelay(5000);
+    mk_setup(s, 0x21, 0x0B, 0, kbd_iface, 0);        // SET_PROTOCOL(boot=0)
+    control_xfer(&g_root, s, 0, 0, 0);
+    mk_setup(s, 0x21, 0x0A, 0, kbd_iface, 0);        // SET_IDLE(0)
+    control_xfer(&g_root, s, 0, 0, 0);
+
+    for (int k = 0; k < 8; k++) prev_keys[k] = 0;
+    kbd_toggle = 0; kbd_armed = 0; kbd_ready = 1;
+    xil_printf("[usb] keyboard ready -- type!\r\n");
+}
+
+// HID boot-keyboard usage -> ASCII. Letters emit UPPERCASE (BASIC convention);
+// shift adds the symbol set. Enter=CR, Backspace=0x08.
+static char hid2ascii(u8 u, int shift)
+{
+    if (u >= 0x04 && u <= 0x1D) return 'A' + (u - 0x04);        // a..z -> A..Z
+    if (u >= 0x1E && u <= 0x26) { static const char sh[] = "!@#$%^&*("; return shift ? sh[u - 0x1E] : (char)('1' + (u - 0x1E)); }
+    if (u == 0x27) return shift ? ')' : '0';
+    if (u == 0x28) return '\r';                                 // Enter
+    if (u == 0x29) return 0x1B;                                 // Esc
+    if (u == 0x2A) return 0x08;                                 // Backspace
+    if (u == 0x2B) return '\t';                                 // Tab
+    if (u == 0x2C) return ' ';                                  // Space
+    if (u == 0x2D) return shift ? '_' : '-';
+    if (u == 0x2E) return shift ? '+' : '=';
+    if (u == 0x2F) return shift ? '{' : '[';
+    if (u == 0x30) return shift ? '}' : ']';
+    if (u == 0x31) return shift ? '|' : '\\';
+    if (u == 0x33) return shift ? ':' : ';';
+    if (u == 0x34) return shift ? '"' : '\'';
+    if (u == 0x35) return shift ? '~' : '`';
+    if (u == 0x36) return shift ? '<' : ',';
+    if (u == 0x37) return shift ? '>' : '.';
+    if (u == 0x38) return shift ? '?' : '/';
+    return 0;
+}
+
+// Decode an 8-byte boot report, emitting only newly-pressed keys (key-down edges).
+static void kbd_report(u8 *r, int len)
+{
+    if (len < 3) return;
+    int shift = (r[0] & 0x22) ? 1 : 0;                          // L-shift(0x02) | R-shift(0x20)
+    int ctrl  = (r[0] & 0x11) ? 1 : 0;                          // L-ctrl(0x01) | R-ctrl(0x10)
+    for (int i = 2; i < len && i < 8; i++) {
+        u8 k = r[i];
+        if (k == 0) continue;
+        int held = 0;
+        for (int j = 2; j < 8; j++) if (prev_keys[j] == k) { held = 1; break; }
+        if (!held) {
+            char c;
+            if (ctrl && k >= 0x04 && k <= 0x1D) c = (char)(0x01 + (k - 0x04));  // Ctrl-A..Z -> 0x01..0x1A (Ctrl-C=0x03 break)
+            else c = hid2ascii(k, shift);
+            if (c) kb_emit((unsigned char)c);
+        }
+    }
+    for (int i = 0; i < 8 && i < len; i++) prev_keys[i] = r[i];
+}
+
+// Arm one interrupt-IN qTD on the keyboard's endpoint (async schedule, no split for FS).
+static void kbd_arm(void)
+{
+    g_td[0].next = QTD_T; g_td[0].alt = QTD_T;
+    g_td[0].bufp[0] = (u32)(UINTPTR)g_buf;
+    g_td[0].token = ((u32)kbd_toggle << 31) | ((u32)kbd_mps << 16) | (3u << 10) | (1u << 8) | 0x80u;
+    g_qh.cur_qtd = QTD_T;
+    g_qh.ov_next = (u32)(UINTPTR)&g_td[0];
+    g_qh.ov_alt  = QTD_T;
+    g_qh.ov_token = 0;
+    u32 eps = (u32)g_root.speed << 12;
+    g_qh.ep_char = (u32)g_root.addr | ((u32)kbd_ep << 8) | eps | (1u << 14) | (1u << 15) |
+                   ((u32)kbd_mps << 16);
+    g_qh.ep_cap = (1u << 30);
+    if (g_root.speed != 2) g_qh.ep_cap |= ((u32)g_root.hub_addr << 16) | ((u32)g_root.hub_port << 23);
+    kbd_armed = 1;
 }
 
 void usb_poll(void)
@@ -298,6 +412,17 @@ void usb_poll(void)
     if (ccs != last_ccs) {
         last_ccs = ccs;
         if (ccs) { xil_printf("[usb] connected, enumerating...\r\n"); enumerate(); }
-        else     { xil_printf("[usb] disconnected\r\n"); kbd_ready = 0; }
+        else     { xil_printf("[usb] disconnected\r\n"); kbd_ready = 0; kbd_armed = 0; }
     }
+    if (!kbd_ready) return;
+    if (!kbd_armed) { kbd_arm(); return; }
+    if (g_td[0].token & 0x80u) return;                 // still active (NAK = no key yet)
+    if (!(g_td[0].token & 0x40u)) {                    // completed OK
+        int got = kbd_mps - (int)((g_td[0].token >> 16) & 0x7FFF);
+        kbd_report(g_buf, got);
+        kbd_toggle ^= 1;
+    } else {
+        kbd_toggle = 0;                                // halted: resync toggle
+    }
+    kbd_armed = 0;                                     // re-arm next poll
 }
