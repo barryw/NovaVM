@@ -178,63 +178,23 @@ int main(void) {
     cpu_hold(0);                                // release the 6502 -> boots to READY
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
 
-    // Dense diagnostic burst: sample PC + dbg right after release, printing only
-    // on CHANGE, to catch the page-in stream states (FILES works, SYSTEM hangs).
-    // The FIO load_module events are serviced inline so the page-ins can proceed.
-    {
-        unsigned plast = 0xFFFFFFFF, dlast = 0xFFFFFFFF;
-        for (long i = 0; i < 4000000; i++) {
-            if (fio_pending()) {                  // service module loads during the burst
-                fio_clear();
-                unsigned char cmd = peek(FIO_CMD);
-                if (cmd == FIO_CMD_LOAD_MODULE) {
-                    int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
-                    if (load_module(id, slot) == 0) { poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK); }
-                    else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
-                } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
-            }
-            unsigned pc = Xil_In32(R_CPU_PC) & 0xFFFF;
-            unsigned d  = Xil_In32(R_DBG)    & 0xFFFF;
-            if (pc != plast || d != dlast) {
-                unsigned aux = Xil_In32(R_AUX);
-                xil_printf("[s] PC=%04x dbg=%04x sl=%04x sw=%04x\r\n",
-                           pc, d, aux & 0x3FFF, (aux >> 14) & 0x3FFF);
-                plast = pc; dlast = d;
-            }
-        }
-        xil_printf("[fio] dense sample done\r\n");
-    }
-
-    unsigned long tick = 0;
     for (;;) {
-        // periodic CPU PC sample (where is the 6502?)
-        if ((++tick & 0x1FFFFF) == 0)
-            xil_printf("[fio] PC=0x%04x dbg=0x%04x\r\n",
-                       (unsigned)(Xil_In32(R_CPU_PC) & 0xFFFF),
-                       (unsigned)(Xil_In32(R_DBG) & 0xFFFF));
-        // --- console keyboard: forward serial bytes into the VGC key queue ---
-        int ch = uart_getc();
-        if (ch >= 0) {
-            if (ch == '\n') ch = '\r';        // LF -> CR (Enter)
-            else if (ch == 0x7F) ch = 0x08;   // DEL -> Backspace
-            key_send((unsigned char)ch);
-            xil_printf("[fio] key 0x%02x ready=%d PC=0x%04x\r\n", ch, key_ready(),
-                       (unsigned)(Xil_In32(R_CPU_PC) & 0xFFFF));
-        }
         // --- FIO host service ---
         if (fio_pending()) {
             fio_clear();
             unsigned char cmd = peek(FIO_CMD);
             if (cmd == FIO_CMD_LOAD_MODULE) {
-                int id   = peek(FIO_SRC_LO);
-                int slot = peek(FIO_END_LO);
-                if (load_module(id, slot) == 0) { poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK); }
-                else                            { poke(FIO_ERRCODE, 1); poke(FIO_STATUS, FIO_ERR); }
-            } else if (cmd != 0) {
-                // Unimplemented (file I/O etc.) — NAK so the runtime fails gracefully.
-                poke(FIO_ERRCODE, 1);
-                poke(FIO_STATUS, FIO_ERR);
-            }
+                int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
+                if (load_module(id, slot) == 0) { poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK); }
+                else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+            } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+        }
+        // --- console keyboard: forward serial bytes into the VGC key queue ---
+        int ch = uart_getc();
+        if (ch >= 0) {
+            if (ch == '\n') ch = '\r';
+            else if (ch == 0x7F) ch = 0x08;
+            key_send((unsigned char)ch);
         }
     }
     return 0;
