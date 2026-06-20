@@ -47,6 +47,31 @@ void usb_poll(void);
 #define FIO_ERR      0x03
 #define FIO_CMD_LOAD_MODULE 0x2C
 
+// ---- FIO file I/O register map (mirrors Avalonia FileIoController ABI) -------
+#define FIO_NAMELEN  0xB9A3
+#define FIO_SRC_HI   0xB9A5
+#define FIO_END_HI   0xB9A7
+#define FIO_SIZE_LO  0xB9A8
+#define FIO_SIZE_HI  0xB9A9
+#define FIO_SIZE2    0xB9AA   // FioGSpace: dir size byte 2
+#define FIO_DIRTYPE  0xB9AF   // 0=BAS 1=SID 2=BIN 3=MID 4=GFX 5=DIR 6=FORTH
+#define FIO_NAME     0xB9B0   // 64-byte filename buffer
+#define FIO_CMD_SAVE     0x01
+#define FIO_CMD_LOAD     0x02
+#define FIO_CMD_DIROPEN  0x03
+#define FIO_CMD_DIRREAD  0x04
+#define FIO_CMD_DELETE   0x05
+#define FIO_ERR_NOTFOUND 1
+#define FIO_ERR_IO       2
+#define FIO_ERR_EOD      3
+#define DT_BAS 0
+#define DT_SID 1
+#define DT_BIN 2
+#define DT_MID 3
+#define DT_GFX 4
+#define DT_DIR 5
+#define DT_FORTH 6
+
 // ---- XRAM (PS DDR3) library shelf ------------------------------------------
 #define XRAM_DDR_BASE  0x10000000u
 #define SHELF_BASE     0x00060000u
@@ -143,6 +168,143 @@ static int load_module(int id, int slot) {
     return 0;
 }
 
+// ---- FIO file I/O (LOAD/SAVE/DIR/DELETE from microSD) -----------------------
+// The FIO registers live in 6502 RAM ($B9A0+); the PS reads params via peek() and
+// writes results via poke() (matching the Avalonia FileIoController semantics).
+static unsigned char g_fbuf[65536];     // file <-> 6502-RAM staging buffer
+static DIR  g_dir;                       // open directory for DIROPEN/DIRREAD
+static int  g_dir_open = 0;
+
+static void fio_ok(void)        { poke(FIO_ERRCODE, 0);    poke(FIO_STATUS, FIO_OK);  poke(FIO_CMD, 0); }
+static void fio_fail(int code)  { poke(FIO_ERRCODE, code); poke(FIO_STATUS, FIO_ERR); poke(FIO_CMD, 0); }
+
+// Read the filename from FioNameLen/FioName into out (NUL-terminated). <0 on bad len.
+static int fio_read_name(char *out, int maxlen) {
+    int n = peek(FIO_NAMELEN);
+    if (n < 1 || n > 63 || n >= maxlen) return -1;
+    for (int i = 0; i < n; i++) out[i] = (char)peek(FIO_NAME + i);
+    out[n] = 0;
+    while (n > 0 && (out[n-1] == ' ' || out[n-1] == 0)) out[--n] = 0;
+    return n;
+}
+
+// Build "0:/<name>" -- append .bas if the name has no extension (BASIC default).
+static void fio_path(const char *name, char *path, int sz) {
+    if (strrchr(name, '.')) snprintf(path, sz, "0:/%s", name);
+    else                    snprintf(path, sz, "0:/%s.bas", name);
+}
+
+static int fio_dirtype_for(const FILINFO *fno) {
+    if (fno->fattrib & AM_DIR) return DT_DIR;
+    const char *d = strrchr(fno->fname, '.');
+    if (!d) return DT_BIN;
+    if (!strncasecmp(d, ".bas", 5)) return DT_BAS;
+    if (!strncasecmp(d, ".bin", 5)) return DT_BIN;
+    if (!strncasecmp(d, ".sid", 5)) return DT_SID;
+    if (!strncasecmp(d, ".mid", 5)) return DT_MID;
+    if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
+    if (!strncasecmp(d, ".4th", 5)) return DT_FORTH;
+    return DT_BIN;
+}
+
+static void fio_load(void) {
+    char name[80], path[96];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    fio_path(name, path, sizeof path);
+    int is_bin = 0; { const char *d = strrchr(path, '.'); if (d && !strncasecmp(d, ".bin", 5)) is_bin = 1; }
+
+    FIL f;
+    if (f_open(&f, path, FA_READ) != FR_OK) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    UINT br = 0;
+    FRESULT r = f_read(&f, g_fbuf, sizeof g_fbuf, &br);
+    f_close(&f);
+    if (r != FR_OK || br < 2) { fio_fail(FIO_ERR_IO); return; }
+
+    // Files carry a 2-byte load-address prefix. .bin loads at the file's address
+    // (write it back to FioSrc); everything else loads at the caller's FioSrc.
+    unsigned dst = is_bin ? (g_fbuf[0] | (g_fbuf[1] << 8))
+                          : (peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8));
+    unsigned len = br - 2;
+    if (dst + len > 0x10000) { fio_fail(FIO_ERR_IO); return; }
+    for (unsigned i = 0; i < len; i++) poke((dst + i) & 0xFFFF, g_fbuf[2 + i]);
+    if (is_bin) { poke(FIO_SRC_LO, dst & 0xFF); poke(FIO_SRC_HI, (dst >> 8) & 0xFF); }
+    poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF);
+    poke(FIO_DIRTYPE, is_bin ? DT_BIN : DT_BAS);
+    xil_printf("[fio] LOAD %s -> $%04x (%u bytes)\r\n", path, dst, len);
+    fio_ok();
+}
+
+static void fio_save(void) {
+    char name[80], path[96];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    fio_path(name, path, sizeof path);
+    unsigned src = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8);
+    unsigned end = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
+    if (end <= src) { fio_fail(FIO_ERR_IO); return; }
+    unsigned len = end - src;
+    g_fbuf[0] = src & 0xFF; g_fbuf[1] = (src >> 8) & 0xFF;     // 2-byte load-address prefix
+    for (unsigned i = 0; i < len; i++) g_fbuf[2 + i] = peek((src + i) & 0xFFFF);
+
+    FIL f;
+    if (f_open(&f, path, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) { fio_fail(FIO_ERR_IO); return; }
+    UINT bw = 0;
+    FRESULT r = f_write(&f, g_fbuf, len + 2, &bw);
+    f_close(&f);
+    if (r != FR_OK || bw != len + 2) { fio_fail(FIO_ERR_IO); return; }
+    xil_printf("[fio] SAVE %s ($%04x-$%04x, %u bytes)\r\n", path, src, end, len);
+    fio_ok();
+}
+
+// Write a directory entry to the FIO regs: display name (base, no ext), type, size.
+static void fio_populate(const FILINFO *fno) {
+    int type = fio_dirtype_for(fno);
+    poke(FIO_DIRTYPE, type);
+    char disp[64]; int dl = 0;
+    for (; fno->fname[dl] && dl < 63; dl++) disp[dl] = fno->fname[dl];
+    disp[dl] = 0;
+    if (!(fno->fattrib & AM_DIR)) { char *dot = strrchr(disp, '.'); if (dot) { *dot = 0; dl = (int)(dot - disp); } }
+    poke(FIO_NAMELEN, dl);
+    for (int i = 0; i < dl; i++) poke(FIO_NAME + i, disp[i]);
+    xil_printf("[fio] dirent: %-20s type=%d\r\n", disp, type);
+    unsigned sz = (unsigned)fno->fsize;
+    if (!(fno->fattrib & AM_DIR) && (type == DT_BAS || type == DT_BIN)) sz = sz >= 2 ? sz - 2 : 0;
+    poke(FIO_SIZE_LO, sz & 0xFF); poke(FIO_SIZE_HI, (sz >> 8) & 0xFF); poke(FIO_SIZE2, (sz >> 16) & 0xFF);
+}
+
+static int fio_next_entry(FILINFO *fno) {
+    for (;;) {
+        if (f_readdir(&g_dir, fno) != FR_OK || fno->fname[0] == 0) return 0;
+        if (fno->fname[0] == '.') continue;       // skip ., .., .Spotlight-V100 etc.
+        return 1;
+    }
+}
+
+static void fio_diropen(void) {
+    if (g_dir_open) { f_closedir(&g_dir); g_dir_open = 0; }
+    FRESULT od = f_opendir(&g_dir, "0:/");
+    xil_printf("[fio] DIROPEN f_opendir=%d\r\n", od);
+    if (od != FR_OK) { fio_fail(FIO_ERR_IO); return; }
+    g_dir_open = 1;
+    FILINFO fno;
+    if (fio_next_entry(&fno)) { fio_populate(&fno); fio_ok(); }      // DIROPEN returns entry[0]
+    else { f_closedir(&g_dir); g_dir_open = 0; fio_fail(FIO_ERR_EOD); }
+}
+
+static void fio_dirread(void) {
+    if (!g_dir_open) { fio_fail(FIO_ERR_EOD); return; }
+    FILINFO fno;
+    if (fio_next_entry(&fno)) { fio_populate(&fno); fio_ok(); }
+    else { f_closedir(&g_dir); g_dir_open = 0; fio_fail(FIO_ERR_EOD); }
+}
+
+static void fio_delete(void) {
+    char name[80], path[96];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    fio_path(name, path, sizeof path);
+    if (f_unlink(path) != FR_OK) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    fio_ok();
+}
+
 static void list_dir(const char *path) {
     DIR d; FILINFO fno;
     xil_printf("[fio] dir %s:\r\n", path);
@@ -192,7 +354,13 @@ int main(void) {
         if (fio_pending()) {
             fio_clear();
             unsigned char cmd = peek(FIO_CMD);
-            if (cmd == FIO_CMD_LOAD_MODULE) {
+            if (cmd != 0) poke(FIO_STATUS, 0);   // mark busy: clear any stale OK before handling
+            if      (cmd == FIO_CMD_LOAD)    fio_load();
+            else if (cmd == FIO_CMD_SAVE)    fio_save();
+            else if (cmd == FIO_CMD_DIROPEN) fio_diropen();
+            else if (cmd == FIO_CMD_DIRREAD) fio_dirread();
+            else if (cmd == FIO_CMD_DELETE)  fio_delete();
+            else if (cmd == FIO_CMD_LOAD_MODULE) {
                 int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
                 if (load_module(id, slot) == 0) {
                     // Cap the loader's 4-slot module shelf ($0418..$041B) at one
