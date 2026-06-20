@@ -180,10 +180,10 @@ int main(void) {
     unsigned long tick = 0;
     for (;;) {
         // periodic CPU PC sample (where is the 6502?)
-        if ((++tick & 0x3FFFFF) == 0)
-            xil_printf("[fio] PC=0x%04x dbg=0x%03x\r\n",
+        if ((++tick & 0x1FFFFF) == 0)
+            xil_printf("[fio] PC=0x%04x dbg=0x%04x\r\n",
                        (unsigned)(Xil_In32(R_CPU_PC) & 0xFFFF),
-                       (unsigned)(Xil_In32(R_DBG) & 0xFFF));
+                       (unsigned)(Xil_In32(R_DBG) & 0xFFFF));
         // --- console keyboard: forward serial bytes into the VGC key queue ---
         int ch = uart_getc();
         if (ch >= 0) {

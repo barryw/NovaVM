@@ -83,6 +83,7 @@ module arty_z7_full (
     wire        xa_weA, xa_oeA, xa_doneA, xa_weB, xa_oeB, xa_doneB;
     wire [13:0] xa_swords;
     wire        xa_sreq, xa_sready, xa_svalid, xa_sbusy, xa_sdone;
+    wire [3:0]  xa_dbg_state;
     wire [15:0] xa_sdout;
 
     // ---- axi_xram master <-> PS BD S_AXI_XRAM ------------------------------
@@ -169,7 +170,7 @@ module arty_z7_full (
         .stream_req(xa_sreq), .stream_addr(xa_saddr), .stream_words(xa_swords),
         .stream_ready(xa_sready),
         .stream_dout(xa_sdout), .stream_valid(xa_svalid),
-        .stream_busy(xa_sbusy), .stream_done(xa_sdone),
+        .stream_busy(xa_sbusy), .stream_done(xa_sdone), .dbg_state(xa_dbg_state),
         .m_axi_awaddr(x_awaddr), .m_axi_awlen(x_awlen), .m_axi_awsize(x_awsize),
         .m_axi_awburst(x_awburst), .m_axi_awvalid(x_awvalid), .m_axi_awready(x_awready),
         .m_axi_wdata(x_wdata), .m_axi_wstrb(x_wstrb), .m_axi_wlast(x_wlast),
@@ -263,9 +264,10 @@ module arty_z7_full (
         .key_valid(fb_key_valid), .key_data(fb_key_data), .key_ready(fb_key_ready),
         .dbg_cpu_reset(fb_cpu_reset),
         .fio_event(fio_event), .dbg_cpu_pc(d_pc),
-        // dbg_bus: [0]=cpu_rdy [1]=stream_req [2]=stream_busy [3]=stream_valid
-        //          [4]=stream_done [5]=stream_ready [6]=cpu_we
-        .dbg_bus({9'd0, d_we, xa_sready, xa_sdone, xa_svalid, xa_sbusy, xa_sreq, d_rdy})
+        // dbg_bus: [0]=cpu_rdy [1]=stream_busy [2]=stream_valid [3]=stream_done
+        //          [4]=arvalid [5]=arready [6]=rvalid [7]=rready [11:8]=axi state
+        .dbg_bus({4'd0, xa_dbg_state, x_rready, x_rvalid, x_arready, x_arvalid,
+                  xa_sdone, xa_svalid, xa_sbusy, d_rdy})
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)
