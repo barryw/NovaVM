@@ -71,29 +71,42 @@ static u8    *const g_buf  = (u8    *)(usb_region + 0x400);
 #define INVAL(p,n) do { (void)(p); (void)(n); } while (0)
 #define QTD_T  0x1u                  // terminate bit
 
-static u8  dev_addr   = 0;
-static u8  ep0_mps    = 8;
-static u8  kbd_ep     = 0;           // HID interrupt IN endpoint
+// A USB device on the bus. speed: 0=FS, 1=LS, 2=HS (matches EHCI QH EPS encoding).
+// For a FS/LS device behind a HS hub, hub_addr/hub_port drive the EHCI split-
+// transaction fields so the hub's transaction translator relays for us.
+typedef struct { u8 addr; u8 speed; u8 mps; u8 hub_addr; u8 hub_port; } usbdev_t;
+
 static int kbd_ready  = 0;
+
+// ULPI viewport (Zynq): bit31 WU, bit30 RUN, bit29 RW(1=write), bit27 SS(sync),
+// bits23:16 addr, bits15:8 read-data, bits7:0 write-data. Per U-Boot ulpi-viewport.c.
+static void ulpi_wakeup(void)
+{
+    if (Xil_In32(USB_ULPIVP) & (1u << 27)) return;          // already in sync state
+    Xil_Out32(USB_ULPIVP, (1u << 31));                      // WU
+    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 31)); i++) {}
+}
 
 static void ulpi_write(u8 addr, u8 data)
 {
-    Xil_Out32(USB_ULPIVP, (1u << 30) | (1u << 29) | ((u32)addr << 16) | ((u32)data << 8));
+    ulpi_wakeup();
+    Xil_Out32(USB_ULPIVP, (1u << 30) | (1u << 29) | ((u32)addr << 16) | (u32)data);  // data in [7:0]
     for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) {}
 }
 
 static u8 ulpi_read(u8 addr)
 {
-    Xil_Out32(USB_ULPIVP, (1u << 30) | ((u32)addr << 16));   // RUN, RW=0 (read)
+    ulpi_wakeup();
+    Xil_Out32(USB_ULPIVP, (1u << 30) | ((u32)addr << 16));  // RUN, RW=0 (read)
     for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) {}
-    return (u8)(Xil_In32(USB_ULPIVP) & 0xFF);
+    return (u8)((Xil_In32(USB_ULPIVP) >> 8) & 0xFF);        // read data in [15:8]
 }
 
 static void udelay(unsigned us) { for (volatile unsigned i = 0; i < us * 60u; i++) {} }
 
 // One control transfer on EP0 of `dev_addr`. setup[8] is the SETUP packet; for an
 // IN transfer, up to len bytes land in g_buf. Returns bytes transferred or -1.
-static int control_xfer(const u8 *setup, int dir_in, u8 *data, int len)
+static int control_xfer(usbdev_t *d, const u8 *setup, int dir_in, u8 *data, int len)
 {
     // qTD0 = SETUP, qTD1 = DATA (optional), qTD2 = STATUS
     for (int i = 0; i < 3; i++) { g_td[i].next = QTD_T; g_td[i].alt = QTD_T; g_td[i].token = 0; }
@@ -124,9 +137,13 @@ static int control_xfer(const u8 *setup, int dir_in, u8 *data, int len)
     g_qh.ov_next = (u32)(UINTPTR)&g_td[0];
     g_qh.ov_alt  = QTD_T;
     g_qh.ov_token = 0;
-    g_qh.ep_char = (u32)dev_addr | (0u << 8) | (0u << 12) | (1u << 14) | (1u << 15) |
-                   ((u32)ep0_mps << 16) | (1u << 27);   // addr, EP0, FS, DTC, H, mps, C
+    u32 eps = (u32)d->speed << 12;                       // 0=FS 1=LS 2=HS
+    u32 c   = (d->speed != 2) ? (1u << 27) : 0u;         // C bit: non-HS control endpoint
+    g_qh.ep_char = (u32)d->addr | (0u << 8) | eps | (1u << 14) | (1u << 15) |
+                   ((u32)d->mps << 16) | c;              // addr, EP0, EPS, DTC, H, mps, C
     g_qh.ep_cap = (1u << 30);                            // mult=1
+    if (d->speed != 2)                                   // split: FS/LS behind a HS hub
+        g_qh.ep_cap |= ((u32)d->hub_addr << 16) | ((u32)d->hub_port << 23);
 
     FLUSH(g_buf, sizeof(g_buf));
     FLUSH(g_td, sizeof(g_td));
@@ -173,23 +190,27 @@ void usb_init(void)
     u32 cap = Xil_In8(USB_CAPLENGTH);
     Xil_SetTlbAttributes((INTPTR)usb_region, NORM_NONCACHE);   // DMA-coherent region
 
-    // Faithful U-Boot ehci-zynq.c order: reset + configure the ULPI PHY FIRST,
-    // THEN reset the controller (the controller reset does NOT reset the external
-    // PHY, so the FS/VBUS config persists), THEN host mode + run.
-    // 1) PHY reset (ulpi_reset): Function Control SET reg (0x05) = RESET (bit5), poll.
-    ulpi_write(0x05, 0x20);
-    for (volatile int i = 0; i < 100000 && (ulpi_read(0x04) & 0x20); i++) {}
-    // 2) PHY host config.
-    ulpi_write(0x0A, 0x06);   // OTG Control: DpPulldown|DmPulldown (no ExtVbusInd on Arty)
-    ulpi_write(0x04, 0x41);   // Function Control: FULL_SPEED | OpMode normal | SuspendM
-    ulpi_write(0x07, 0x00);   // Interface Control: 0
-    ulpi_write(0x0B, 0x60);   // OTG Control SET: DrvVbus | DrvVbusExternal (power port)
-
-    // 3) Controller reset + host mode.
+    // Correct order (mine was backwards): reset the controller FIRST -- a CMD_RST
+    // re-syncs the ULPI *link*, so any PHY config written before it is lost. Then
+    // host mode, THEN configure the PHY (link is up), matching U-Boot ehci-zynq.c.
+    // 1) Controller reset + host mode.
     Xil_Out32(USB_USBCMD, CMD_RST);
     for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_USBCMD) & CMD_RST); i++) {}
     Xil_Out32(USB_USBINTR, 0);
     Xil_Out32(USB_USBMODE, MODE_CM_HOST | 0x10u);   // host + SDIS
+    udelay(1000);
+
+    // 2) PHY reset, then host config (U-Boot otg=0x86 with pull-downs + ExtVbusInd).
+    ulpi_write(0x05, 0x20);                          // Function Control SET: PHY RESET
+    udelay(2000);                                    // reset completes (ulpi_read poll unreliable)
+    ulpi_write(0x0A, 0x86);   // OTG Control: DpPulldown | DmPulldown | ExtVbusInd
+    ulpi_write(0x04, 0x41);   // Function Control: FULL_SPEED | OpMode normal | SuspendM
+    ulpi_write(0x07, 0x00);   // Interface Control: 0
+    ulpi_write(0x0B, 0x60);   // OTG Control SET: DrvVbus | DrvVbusExternal (power port)
+    udelay(2000);
+    // Diagnostic: read the PHY back (vendor id should be 0424 = SMSC USB3320).
+    xil_printf("[usb] ULPI vid=%02x%02x otg=%02x func=%02x\r\n",
+               ulpi_read(0x01), ulpi_read(0x00), ulpi_read(0x0A), ulpi_read(0x04));
 
     // Async schedule: one QH, self-linked, head of reclamation.
     g_qh.link = (u32)(UINTPTR)&g_qh | 0x2u;             // self, typ=QH
@@ -202,6 +223,10 @@ void usb_init(void)
     Xil_Out32(USB_PORTSC1, Xil_In32(USB_PORTSC1) | PORTSC_PP);
     Xil_Out32(USB_USBCMD, CMD_RS | CMD_ASE);           // run + async schedule
     for (volatile int i = 0; i < 1000000 && !(Xil_In32(USB_USBSTS) & STS_ASS); i++) {}
+    // CONFIGFLAG=1: route all ports to this EHCI controller. U-Boot notes the root
+    // hub won't detect new devices until RUN is set + CONFIGFLAG taken.
+    Xil_Out32(USB0_BASE + 0x180u, 1u);
+    udelay(5000);
     xil_printf("[usb] host started: CAP=%02x MODE=%x PORTSC=%08x STS=%08x(ASS=%d)\r\n",
                (unsigned)cap, (unsigned)Xil_In32(USB_USBMODE), (unsigned)Xil_In32(USB_PORTSC1),
                (unsigned)Xil_In32(USB_USBSTS), (Xil_In32(USB_USBSTS) & STS_ASS) ? 1 : 0);
@@ -211,12 +236,16 @@ void usb_init(void)
 
 static void port_reset(void)
 {
+    // NO PFSC: let the EHCI reset run the HS chirp so a HS device (the Apple
+    // keyboard's internal hub) is detected at high speed.
     u32 p = Xil_In32(USB_PORTSC1);
-    Xil_Out32(USB_PORTSC1, (p & ~PORTSC_PED) | PORTSC_PFSC | PORTSC_PR);
+    Xil_Out32(USB_PORTSC1, (p & ~PORTSC_PED) | PORTSC_PR);
     udelay(60000);                                   // hold reset >= 50ms
     Xil_Out32(USB_PORTSC1, Xil_In32(USB_PORTSC1) & ~PORTSC_PR);
     udelay(100000);                                  // recovery (>=10ms; be generous)
 }
+
+static usbdev_t g_root;   // the root-port device (the Apple keyboard's internal hub)
 
 static void enumerate(void)
 {
@@ -224,30 +253,42 @@ static void enumerate(void)
 
     udelay(150000);                                  // device debounce/power settle
 
-    // Reset until the port enables (PED=1) -- the controller needs PED set to run
-    // transactions; the reset is flaky so retry.
+    // Reset until the port enables (PED=1). The reset runs the HS chirp, so PORTSC
+    // PSPD reflects the device's real speed afterward.
     u32 p = 0;
     for (int i = 0; i < 6; i++) {
         port_reset();
         p = Xil_In32(USB_PORTSC1);
         if (p & PORTSC_PED) break;
     }
-    // (FS PHY mode is set in usb_init before the controller runs -- do NOT write
-    // the ULPI viewport here; it disrupts the running controller's schedule.)
+    int speed = (int)((p >> 26) & 3);                // PSPD: 0=FS 1=LS 2=HS
     xil_printf("[usb] post-reset PORTSC=%08x (PED=%d speed=%d)\r\n",
-               p, (p & PORTSC_PED) ? 1 : 0, (int)((p >> 26) & 3));
+               p, (p & PORTSC_PED) ? 1 : 0, speed);
 
-    dev_addr = 0; ep0_mps = 8;
-    mk_setup(s, 0x80, 6, 0x0100, 0, 8);              // GET_DESCRIPTOR(device, 8)
+    // Root-port device at address 0. Default EP0 max packet: 64 for HS, else 8.
+    g_root.addr = 0; g_root.speed = (u8)speed; g_root.mps = (speed == 2) ? 64 : 8;
+    g_root.hub_addr = 0; g_root.hub_port = 0;
+
+    mk_setup(s, 0x80, 6, 0x0100, 0, 8);              // GET_DESCRIPTOR(device, first 8)
     int r = -1;
-    for (int attempt = 0; attempt < 5 && r < 8; attempt++) {
-        r = control_xfer(s, 1, desc, 8);
-        if (r < 8) { udelay(50000); if (attempt == 2) { port_reset(); } }
+    for (int a = 0; a < 5 && r < 8; a++) {
+        r = control_xfer(&g_root, s, 1, desc, 8);
+        if (r < 8) { udelay(50000); if (a == 2) port_reset(); }
     }
-    if (r < 8) { xil_printf("[usb] GET_DESC(dev,8) failed after retries\r\n"); return; }
-    ep0_mps = desc[7];
-    xil_printf("[usb] device descr: mps0=%d vid=%02x%02x pid=%02x%02x\r\n",
-               ep0_mps, desc[9], desc[8], desc[11], desc[10]);
+    if (r < 8) { xil_printf("[usb] GET_DESC(dev,8) failed\r\n"); return; }
+    g_root.mps = desc[7];                            // real bMaxPacketSize0
+    xil_printf("[usb] dev0: mps0=%d class=%d\r\n", g_root.mps, desc[4]);
+
+    mk_setup(s, 0x00, 5, 1, 0, 0);                   // SET_ADDRESS(1)
+    if (control_xfer(&g_root, s, 0, 0, 0) < 0) { xil_printf("[usb] SET_ADDRESS failed\r\n"); return; }
+    udelay(5000);
+    g_root.addr = 1;
+
+    mk_setup(s, 0x80, 6, 0x0100, 0, 18);             // GET_DESCRIPTOR(device, full)
+    r = control_xfer(&g_root, s, 1, desc, 18);
+    if (r < 18) { xil_printf("[usb] GET_DESC(dev,18)@addr1 failed (r=%d)\r\n", r); return; }
+    xil_printf("[usb] dev1: class=%d sub=%d vid=%04x pid=%04x  (class 9 = HUB)\r\n",
+               desc[4], desc[5], (desc[9] << 8) | desc[8], (desc[11] << 8) | desc[10]);
 }
 
 void usb_poll(void)
