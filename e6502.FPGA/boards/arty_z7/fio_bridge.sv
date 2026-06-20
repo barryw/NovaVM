@@ -53,7 +53,8 @@ module fio_bridge (
     input  wire        key_ready,
     output reg         dbg_cpu_reset,
     input  wire        fio_event,
-    input  wire [15:0] dbg_cpu_pc
+    input  wire [15:0] dbg_cpu_pc,
+    input  wire [15:0] dbg_bus       // misc debug signals (page-in/stream/rdy)
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
 
@@ -104,6 +105,7 @@ module fio_bridge (
                     4'h4: s_rdata <= {31'd0, dbg_cpu_reset};            // CTRL
                     4'h5: s_rdata <= {30'd0, key_ready, fio_event_sticky}; // STATUS
                     4'h6: s_rdata <= {16'd0, dbg_cpu_pc};               // CPU_PC
+                    4'h7: s_rdata <= {16'd0, dbg_bus};                  // DBG (0x1C)
                     default: s_rdata <= 32'hDEAD_0000;
                 endcase
                 s_rvalid <= 1'b1;

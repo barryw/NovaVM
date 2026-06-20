@@ -262,7 +262,10 @@ module arty_z7_full (
         .dbg_peek_addr(fb_peek_addr), .dbg_peek_en(fb_peek_en), .dbg_peek_data(fb_peek_data),
         .key_valid(fb_key_valid), .key_data(fb_key_data), .key_ready(fb_key_ready),
         .dbg_cpu_reset(fb_cpu_reset),
-        .fio_event(fio_event), .dbg_cpu_pc(d_pc)
+        .fio_event(fio_event), .dbg_cpu_pc(d_pc),
+        // dbg_bus: [0]=cpu_rdy [1]=stream_req [2]=stream_busy [3]=stream_valid
+        //          [4]=stream_done [5]=stream_ready [6]=cpu_we
+        .dbg_bus({9'd0, d_we, xa_sready, xa_sdone, xa_svalid, xa_sbusy, xa_sreq, d_rdy})
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)

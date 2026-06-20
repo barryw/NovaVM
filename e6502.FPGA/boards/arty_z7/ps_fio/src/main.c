@@ -15,6 +15,7 @@
 #include "xil_cache.h"
 #include "xil_printf.h"
 #include "ff.h"
+#include "xuartps_hw.h"
 #include "loader_bin.h"
 #include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
 
@@ -26,6 +27,8 @@
 #define R_KEY        (FIO_BASE + 0x0C)   // W key[7:0]
 #define R_CTRL       (FIO_BASE + 0x10)   // RW bit0 = cpu_reset (1=hold)
 #define R_STATUS     (FIO_BASE + 0x14)   // R {key_ready,fio_event}; W bit0 clears event
+#define R_CPU_PC     (FIO_BASE + 0x18)   // R live 6502 PC
+#define R_DBG        (FIO_BASE + 0x1C)   // R [0]rdy [1]sreq [2]sbusy [3]svalid [4]sdone [5]sready [6]we
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -48,6 +51,15 @@ static inline unsigned char peek(unsigned a){ Xil_Out32(R_PEEK_ADDR, a); return 
 static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? 1u : 0u); }
 static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
+static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
+static inline void     key_send(unsigned char k){ Xil_Out32(R_KEY, k); }
+
+// Non-blocking read of one byte from the console UART (same UART as xil_printf).
+static int uart_getc(void) {
+    if (XUartPs_IsReceiveData(STDOUT_BASEADDRESS))
+        return (int)(XUartPs_ReadReg(STDOUT_BASEADDRESS, XUARTPS_FIFO_OFFSET) & 0xFF);
+    return -1;
+}
 
 // Module id -> 8.3 name prefix. Modules may appear as <NAME>.MOD (raw 16KB image)
 // or <NAME>~1.NMO (.nmod: 16KB image + doc trailer; we read the first 16KB). We
@@ -154,22 +166,47 @@ int main(void) {
         poke(0x0320 + i, LOADER_BIN[i]);
     xil_printf("[fio] resident loader staged @ $0320 (%u bytes)\r\n", (unsigned)sizeof(LOADER_BIN));
 
-    cpu_hold(0);                                // release the 6502 -> boots to READY
-    xil_printf("[fio] 6502 released; servicing FIO events\r\n");
+    // Make sure the console UART RX path is enabled (for console keyboard input).
+    {
+        u32 cr = XUartPs_ReadReg(STDOUT_BASEADDRESS, XUARTPS_CR_OFFSET);
+        cr &= ~((u32)(XUARTPS_CR_RX_DIS | XUARTPS_CR_TX_DIS));
+        cr |=  (u32)(XUARTPS_CR_RX_EN | XUARTPS_CR_TX_EN);
+        XUartPs_WriteReg(STDOUT_BASEADDRESS, XUARTPS_CR_OFFSET, cr);
+    }
 
+    cpu_hold(0);                                // release the 6502 -> boots to READY
+    xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
+
+    unsigned long tick = 0;
     for (;;) {
-        if (!fio_pending()) continue;
-        fio_clear();
-        unsigned char cmd = peek(FIO_CMD);
-        if (cmd == FIO_CMD_LOAD_MODULE) {
-            int id   = peek(FIO_SRC_LO);
-            int slot = peek(FIO_END_LO);
-            if (load_module(id, slot) == 0) { poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK); }
-            else                            { poke(FIO_ERRCODE, 1); poke(FIO_STATUS, FIO_ERR); }
-        } else if (cmd != 0) {
-            // Unimplemented (file I/O etc.) — NAK so the runtime fails gracefully.
-            poke(FIO_ERRCODE, 1);
-            poke(FIO_STATUS, FIO_ERR);
+        // periodic CPU PC sample (where is the 6502?)
+        if ((++tick & 0x3FFFFF) == 0)
+            xil_printf("[fio] PC=0x%04x dbg=0x%03x\r\n",
+                       (unsigned)(Xil_In32(R_CPU_PC) & 0xFFFF),
+                       (unsigned)(Xil_In32(R_DBG) & 0xFFF));
+        // --- console keyboard: forward serial bytes into the VGC key queue ---
+        int ch = uart_getc();
+        if (ch >= 0) {
+            if (ch == '\n') ch = '\r';        // LF -> CR (Enter)
+            else if (ch == 0x7F) ch = 0x08;   // DEL -> Backspace
+            key_send((unsigned char)ch);
+            xil_printf("[fio] key 0x%02x ready=%d PC=0x%04x\r\n", ch, key_ready(),
+                       (unsigned)(Xil_In32(R_CPU_PC) & 0xFFFF));
+        }
+        // --- FIO host service ---
+        if (fio_pending()) {
+            fio_clear();
+            unsigned char cmd = peek(FIO_CMD);
+            if (cmd == FIO_CMD_LOAD_MODULE) {
+                int id   = peek(FIO_SRC_LO);
+                int slot = peek(FIO_END_LO);
+                if (load_module(id, slot) == 0) { poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK); }
+                else                            { poke(FIO_ERRCODE, 1); poke(FIO_STATUS, FIO_ERR); }
+            } else if (cmd != 0) {
+                // Unimplemented (file I/O etc.) — NAK so the runtime fails gracefully.
+                poke(FIO_ERRCODE, 1);
+                poke(FIO_STATUS, FIO_ERR);
+            }
         }
     }
     return 0;
