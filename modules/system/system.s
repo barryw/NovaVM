@@ -917,6 +917,24 @@ sys_screen_readline:
       LDA   #$01
       STA   VGC_CURSEN
 
+      ; --- record the input ORIGIN row and clear stale text on the input row ---
+      ; A program that prints wrapped output (every row's col-79 non-space, e.g.
+      ; PRINT x;) leaves the whole screen looking like one giant "full" logical
+      ; line. Without this, the ENTER walk-up climbs the entire screen and ingests
+      ; that leftover text as the command (-> Syntax Error). Bound the walk-up to
+      ; the origin (below) and wipe the input row from the cursor onward so the
+      ; row read back is exactly what the user types.
+      LDA   VGC_CURSY
+      STA   srl_origin
+      JSR   screen_row_base            ; srl_winL/H = $A200 + CURSY*80
+      LDY   VGC_CURSX
+      LDA   #$20
+@clr_inrow:
+      STA   (srl_winL),Y
+      INY
+      CPY   #NOVA_SCREEN_COLS
+      BCC   @clr_inrow
+
       ; --- key dispatch loop. Poll CHARIN (0 = empty -> keep polling); on a key,
       ; route to ENTER (read-row) or echo (printable >= $20). Arrows / backspace /
       ; scroll land in later chunks; unknown control bytes are ignored. ---
@@ -1042,6 +1060,8 @@ sys_screen_readline:
 @find_start:
       LDA   srl_startrow
       BEQ   @start_found               ; already at row 0 -> can't go higher
+      CMP   srl_origin                 ; reached the input origin row?
+      BEQ   @start_found               ; -> stop: never read above where input began
       DEC   A                          ; A = row above the current start row
       JSR   screen_row_base            ; srl_winL/H = base of the row above
       LDY   #(NOVA_SCREEN_COLS-1)      ; col 79 of that row
@@ -1233,6 +1253,7 @@ srl_startrow:     .res 1               ; multi-row read: logical-line start row
 srl_cur:          .res 1               ; multi-row read: current physical row
 srl_dsti:         .res 1               ; multi-row read: bytes written so far
 srl_pend:         .res 1               ; multi-row read: deferred (pending) spaces
+srl_origin:       .res 1               ; input-start row: walk-up clamp (don't read above it)
 srb_row:          .res 1               ; screen_row_base: saved row
 srb_tH:           .res 1               ; screen_row_base: row<<4 high byte
 ; sys_addr_lookup non-pointer scratch (the 3 live indirect pointers are in
