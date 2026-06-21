@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -1286,6 +1287,9 @@ static int DoVm(string[] args, string? host)
         if (host is not null && (command is "reset" or "vm-reset"))
             return DoRemoteVmReset(host, rest, allowError, json, pretty);
 
+        if (command is "screenshot" or "shot")
+            return DoVmScreenshot(targetHost, port, rest);
+
         JsonObject request = command switch
         {
             "raw" => BuildVmRawRequest(rest),
@@ -1531,6 +1535,131 @@ static JsonObject BuildVmRunCyclesRequest(List<string> args)
     int cycles = ParseVmNumber(args[0]);
     args.RemoveAt(0);
     return new JsonObject { ["command"] = "run_cycles", ["cycles"] = cycles };
+}
+
+// Capture the VGC graphics framebuffer (320x200, 4-bit/pixel, space 3) + the
+// 16-colour palette over the 6503 debug protocol and write a PNG, so the gfx
+// output (e.g. Z6 pictures) can be inspected without HDMI. One persistent
+// connection batches the ~250 read_vram calls + palette reads.
+static int DoVmScreenshot(string host, int port, List<string> args)
+{
+    string outPath = args.Count > 0 && !args[0].StartsWith('-') ? args[0] : "screenshot.png";
+    const int W = 320, H = 200;        // VGC gfx plane
+    const int PAL_IDX = 0xA0F4;        // RegPaletteIndex
+    const int PAL_DATA = 0xA0F5;       // RegPaletteData (quantized RGB444 byte, auto-inc)
+
+    using var client = new TcpClient { NoDelay = true };
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+    client.ConnectAsync(host, port, cts.Token).GetAwaiter().GetResult();
+    using NetworkStream ns = client.GetStream();
+    ns.ReadTimeout = 30000; ns.WriteTimeout = 30000;
+    using var reader = new StreamReader(ns, Encoding.UTF8, false, 1 << 16, leaveOpen: true);
+    using var writer = new StreamWriter(ns, new UTF8Encoding(false), 4096, leaveOpen: true)
+        { AutoFlush = true, NewLine = "\n" };
+
+    JsonNode Send(string js)
+    {
+        writer.WriteLine(js);
+        string? l = reader.ReadLine();
+        return JsonNode.Parse(l ?? "{}") ?? new JsonObject();
+    }
+
+    // Read the 16x3 RGB palette (RegPaletteData returns the quantized RGB444 byte).
+    byte[] pal = new byte[48];
+    bool palOk = true, palNonZero = false;
+    for (int i = 0; i < 48; i++)
+    {
+        Send($"{{\"command\":\"poke\",\"address\":{PAL_IDX},\"value\":{i}}}");
+        var r = Send($"{{\"command\":\"peek\",\"address\":{PAL_DATA}}}");
+        int v = r["value"]?.GetValue<int>() ?? -1;
+        if (v < 0) { palOk = false; break; }
+        byte q = (byte)(v & 0xF0);
+        pal[i] = (byte)(q | (q >> 4));          // expand RGB444 high nibble -> 8-bit
+        if (pal[i] != 0) palNonZero = true;
+    }
+    bool useColor = palOk && palNonZero;
+
+    // Read the gfx framebuffer: 64000 pixels (low nibble = colour index).
+    byte[] idx = new byte[W * H];
+    int p = 0;
+    for (int a = 0; a < W * H; a += 256)
+    {
+        int len = Math.Min(256, W * H - a);
+        var r = Send($"{{\"command\":\"read_vram\",\"space\":3,\"address\":{a},\"length\":{len}}}");
+        JsonArray? arr = r["data"] as JsonArray;
+        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+        if (arr is null) { Console.Error.WriteLine($"screenshot: no gfx data at {a}: {r.ToJsonString()}"); return 1; }
+        foreach (var n in arr) idx[p++] = (byte)(n!.GetValue<int>() & 0x0F);
+    }
+
+    byte[] img = new byte[W * H * 3];
+    for (int i = 0; i < W * H; i++)
+    {
+        byte ci = idx[i];
+        byte rr, gg, bb;
+        if (useColor) { rr = pal[ci * 3]; gg = pal[ci * 3 + 1]; bb = pal[ci * 3 + 2]; }
+        else { rr = gg = bb = (byte)(ci * 17); }   // grayscale-by-index fallback
+        img[i * 3] = rr; img[i * 3 + 1] = gg; img[i * 3 + 2] = bb;
+    }
+    WritePng(outPath, W, H, img);
+    Console.WriteLine($"Screenshot {W}x{H} -> {outPath}{(useColor ? "" : " (grayscale; palette unavailable)")}");
+    return 0;
+}
+
+// ---- minimal PNG (truecolour 8-bit) ----------------------------------------
+static void WritePng(string path, int w, int h, byte[] rgb)
+{
+    using var fs = File.Create(path);
+    fs.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+    void Chunk(string type, byte[] data)
+    {
+        Span<byte> len = stackalloc byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(len, (uint)data.Length);
+        fs.Write(len);
+        byte[] t = Encoding.ASCII.GetBytes(type);
+        fs.Write(t); fs.Write(data);
+        uint crc = Crc32(t, data);
+        Span<byte> c = stackalloc byte[4];
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(c, crc);
+        fs.Write(c);
+    }
+    byte[] ihdr = new byte[13];
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(ihdr.AsSpan(0), (uint)w);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(ihdr.AsSpan(4), (uint)h);
+    ihdr[8] = 8; ihdr[9] = 2;   // 8-bit depth, colour type 2 (truecolour RGB)
+    Chunk("IHDR", ihdr);
+
+    using var raw = new MemoryStream();
+    for (int y = 0; y < h; y++) { raw.WriteByte(0); raw.Write(rgb, y * w * 3, w * 3); }
+    Chunk("IDAT", ZlibCompress(raw.ToArray()));
+    Chunk("IEND", Array.Empty<byte>());
+}
+
+static byte[] ZlibCompress(byte[] data)
+{
+    using var ms = new MemoryStream();
+    ms.WriteByte(0x78); ms.WriteByte(0x9C);
+    using (var ds = new DeflateStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+        ds.Write(data, 0, data.Length);
+    uint a = Adler32(data);
+    ms.WriteByte((byte)(a >> 24)); ms.WriteByte((byte)(a >> 16));
+    ms.WriteByte((byte)(a >> 8)); ms.WriteByte((byte)a);
+    return ms.ToArray();
+}
+
+static uint Adler32(byte[] d)
+{
+    uint a = 1, b = 0;
+    foreach (byte x in d) { a = (a + x) % 65521; b = (b + a) % 65521; }
+    return (b << 16) | a;
+}
+
+static uint Crc32(byte[] a, byte[] b)
+{
+    uint crc = 0xFFFFFFFF;
+    void Up(byte[] d) { foreach (byte x in d) { crc ^= x; for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320 : crc >> 1; } }
+    Up(a); Up(b);
+    return crc ^ 0xFFFFFFFF;
 }
 
 static JsonNode SendVmRequest(string host, int port, JsonObject request)
