@@ -2475,7 +2475,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.nvg"), BuildNvg2(4, 2, pixels));
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.NVG"), BuildNvg2(4, 2, pixels));
 
             // Stage filename "NVGFIX"; NVGLOAD reads FIO_NAME via the BYTES arg.
             const ushort nameAddr = 0x0500;
@@ -2501,7 +2501,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x0A, 0x0B, 0x0C, 0x0D };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.nvg"), BuildNvg2(4, 1, pixels));
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.NVG"), BuildNvg2(4, 1, pixels));
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGAT");
@@ -2525,7 +2525,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x09, 0x08, 0x07, 0x06 };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.nvg"), BuildNvg2(4, 1, pixels));
+            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.NVG"), BuildNvg2(4, 1, pixels));
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGNAMED");
