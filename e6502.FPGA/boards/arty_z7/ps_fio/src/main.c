@@ -24,6 +24,9 @@ void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP uplo
 void net_poll(void);
 void usb_init(void);            // usb.c — PS USB host (HID keyboard)
 void usb_poll(void);
+void mgmt_init(void);           // mgmt.c — NovaHost 6504 management server (NVH1/CBOR)
+void mgmt_set_sd(int mounted);
+void debug_init(void);          // debug.c — NovaHost 6503 debug server (newline JSON)
 
 // ---- fio_bridge register map (AXI4-Lite @ 0x40000000) ----------------------
 #define FIO_BASE     0x40000000u
@@ -92,11 +95,19 @@ static inline unsigned char vmem_read(unsigned space, unsigned addr){
     return (unsigned char)Xil_In32(R_VMEM_DATA);
 }
 static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? 1u : 0u); }
+// Pulse the 6502 reset line: it re-runs from the reset vector and boots to READY.
+// The ROM + resident loader staged at boot stay resident, so no restage needed.
+void vm_reset(void){ cpu_hold(1); for (volatile int i = 0; i < 200000; i++) {} cpu_hold(0); }
 static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
 static inline void     key_send(unsigned char k){ Xil_Out32(R_KEY, k); }
 void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key queue
+
+// Non-static wrappers so mgmt.c / debug.c can reach the AXI bridge primitives.
+unsigned char dbg_peek(unsigned a){ return peek(a); }
+void dbg_poke(unsigned a, unsigned char d){ poke(a, d); }
+unsigned char dbg_vmem(unsigned space, unsigned addr){ return vmem_read(space, addr); }
 
 // Debug: dump the VGC character RAM (80x50) to the serial so we can "see" the HDMI.
 // Triggered by Ctrl-\ (0x1C) on the console UART (intercepted in the main loop).
@@ -361,10 +372,12 @@ int main(void) {
         Xil_Out32(R_ROMW, (a << 8) | EHBASIC_ROM[a]);   // idx=0 (bit22=0) = basic_rom
     xil_printf("[fio] basic_rom loaded from PS (16384 bytes)\r\n");
 
-    if (f_mount(&fs, "0:/", 1) != FR_OK)
+    if (f_mount(&fs, "0:/", 1) != FR_OK) {
         xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
-    else {
+        mgmt_set_sd(0);
+    } else {
         xil_printf("[fio] microSD mounted\r\n");
+        mgmt_set_sd(1);
     }
 
     // Stage the resident lib_call loader into CPU RAM $0320.
@@ -384,6 +397,8 @@ int main(void) {
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
 
     net_init();                                 // bring up PS Ethernet (DHCP + TCP upload)
+    mgmt_init();                                // NovaHost 6504 management server (after lwip_init)
+    debug_init();                               // NovaHost 6503 debug server (after lwip_init)
     usb_init();                                 // bring up PS USB host (HID keyboard)
 
     for (;;) {

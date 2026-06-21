@@ -8,6 +8,7 @@
 // needs no bitstream change. Call net_init() once (after the SD is mounted) and
 // net_poll() frequently from the main loop.
 
+#include <stdio.h>
 #include "xparameters.h"
 #include "xscugic.h"
 #include "xil_exception.h"
@@ -126,6 +127,15 @@ void net_init(void)
         tcp_accept(pcb, on_accept);
     }
     xil_printf("[net] lwIP up; DHCP requesting... (TCP 6502 -> %s)\r\n", UPLOAD_PATH);
+}
+
+// Current DHCP IPv4 address as text ("0.0.0.0" before DHCP completes). Used by
+// the 6504 management server (mgmt.c) for GetStatus.
+void net_ip(char *out, int n)
+{
+    const ip4_addr_t *a = netif_ip4_addr(&nif);
+    snprintf(out, n, "%d.%d.%d.%d",
+             ip4_addr1(a), ip4_addr2(a), ip4_addr3(a), ip4_addr4(a));
 }
 
 void net_poll(void)
