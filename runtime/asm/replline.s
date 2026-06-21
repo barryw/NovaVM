@@ -40,19 +40,18 @@ REPL_PTRL     = buf_idx       ; private history pointer low during copy helpers
 REPL_PTRH:    .res 1
 
 ; =====================================================================
-; BSS segment — the shared line buffer
-; =====================================================================
-      .segment "BSS"
-
-input_buf:    .res 128        ; input line buffer
-
-; =====================================================================
-; Command-line history (shell-style up/down recall at the prompt).
-; Lives in the FREE $9800-$9BFF region. On NovaLogo: BSS ends $1304, heap ends
-; $9800, turtle state is $9C00+; nothing else uses this band. All state is
-; hardcoded here — a plain BSS .res would land in the heap-overlap zone. Any
-; single resident runtime adopting this reader must keep $9800-$9BFF free.
-;   header $9800-$980F, live-line $9810-$988F (128), 6 slots $9890-$9B8F (6*128).
+; Shared line buffer + command-line history — ALL hardcoded into the FREE
+; $9800-$9BFF band. A plain BSS .res for input_buf lands in the runtime's
+; heap/dictionary growth zone (novaforth's dict grows toward DICT_LIMIT=$9800),
+; where defining words overwrite the line buffer mid-read and corrupt EVERY
+; parse (the regression this fixes). So input_buf lives in the band too, beside
+; the history ring. On NovaLogo: BSS ends $1304, heap ends $9800, turtle is
+; $9C00+; nothing else uses this band. Any single resident runtime adopting this
+; reader must keep $9800-$9BFF free.
+;   header   $9800-$980F
+;   input_buf $9810-$988F (128)
+;   live-line $9890-$990F (128)
+;   5 slots   $9910-$9B8F (5*128)   [one slot traded for input_buf; band is 1KB]
 ; Arrow key codes (queued by EmulatorCanvas): up=$1E down=$1F left=$1C right=$1D.
 ; =====================================================================
 HIST_BASE     = $9800
@@ -64,9 +63,10 @@ HIST_SY       = HIST_BASE+4     ; input-start cursor Y
 HIST_OLDLEN   = HIST_BASE+5     ; on-screen length to clear on a redraw
 HIST_K        = HIST_BASE+6     ; scratch: entry ordinal
 HIST_IDX      = HIST_BASE+7     ; scratch: ring slot index
-HIST_MAX      = 6
-HIST_LIVE     = HIST_BASE+$10   ; saved in-progress line ($9810-$988F)
-HIST_SLOTS    = HIST_BASE+$90   ; slot k at HIST_SLOTS + idx*128 ($9890-$9B8F)
+input_buf     = HIST_BASE+$10   ; line buffer ($9810-$988F, 128) -- in-band, not BSS
+HIST_MAX      = 5               ; one slot traded for input_buf (1KB band)
+HIST_LIVE     = HIST_BASE+$90   ; saved in-progress line ($9890-$990F)
+HIST_SLOTS    = HIST_BASE+$110  ; slot k at HIST_SLOTS + idx*128 ($9910-$9B8F)
 
 KEY_UP        = $1E
 KEY_DOWN      = $1F
