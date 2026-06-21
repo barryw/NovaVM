@@ -1043,7 +1043,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$FFB7`
+- Address: `$FFBA`
 
 Outputs:
 - `A`: 0 on success.

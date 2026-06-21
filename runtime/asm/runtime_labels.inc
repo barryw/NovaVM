@@ -309,7 +309,7 @@ RuntimeLabelBuckets:
 
 @bucket_1C:
       .byte 15
-      .word $FFB7
+      .word $FFBA
       .byte "FIO.CLEAR_ERROR"
       .byte 0
 

@@ -1516,7 +1516,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$FFB7"
+      "address": "$FFBA"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
