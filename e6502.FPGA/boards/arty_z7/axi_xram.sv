@@ -109,6 +109,13 @@ module axi_xram #(
     assign dbg_sleft = stream_left;
     reg        cur_is_b;       // current A/B job target
     reg [1:0]  cur_byte;       // byte lane for A/B
+    // oeA/weA are held HIGH (level) by xram_sdram for the whole SD_ACTIVE window.
+    // Without a guard, axi_xram finishes the access, returns to S_IDLE while the
+    // line is still high, and re-triggers a SPURIOUS second access — whose extra
+    // doneA desyncs xram_sdram (the next read returns the previous byte). At high
+    // DDR latency this manifests as an off-by-one in DMA/blitter XRAM reads.
+    // Service each assertion once: set on accept, clear when the line drops.
+    reg        oeA_done, weA_done, oeB_done, weB_done;
     reg [31:0] beat;           // latched stream read beat
     reg [13:0] stream_left;    // words remaining
     reg [31:0] stream_axi;     // current 4-aligned AXI read addr
@@ -126,36 +133,47 @@ module axi_xram #(
             m_axi_arvalid <= 0; m_axi_rready <= 0;
             stream_valid  <= 0; stream_busy <= 0; stream_done <= 0;
             stream_left   <= 0; stream_hi <= 0;
+            oeA_done <= 0; weA_done <= 0; oeB_done <= 0; weB_done <= 0;
         end else begin
             doneA <= 0; doneB <= 0; stream_valid <= 0; stream_done <= 0;
+
+            // Clear the per-assertion guard once the request line returns low.
+            if (!oeA) oeA_done <= 0;
+            if (!weA) weA_done <= 0;
+            if (!oeB) oeB_done <= 0;
+            if (!weB) weB_done <= 0;
 
             case (state)
             // ----------------------------------------------------------------
             S_IDLE: begin
-                if (weA || oeA) begin
+                if ((weA && !weA_done) || (oeA && !oeA_done)) begin
                     cur_is_b <= 0;
                     cur_byte <= addrA[1:0];
                     if (weA) begin
+                        weA_done      <= 1;
                         m_axi_awaddr  <= XRAM_BASE + {7'd0, addrA[24:2], 2'b00};
                         m_axi_wdata   <= {4{dinA}};
                         m_axi_wstrb   <= strb_for(addrA[1:0]);
                         m_axi_awvalid <= 1; m_axi_wvalid <= 1;
                         state         <= S_AW;
                     end else begin
+                        oeA_done      <= 1;
                         m_axi_araddr  <= XRAM_BASE + {7'd0, addrA[24:2], 2'b00};
                         m_axi_arvalid <= 1;
                         state         <= S_AR_AB;
                     end
-                end else if (weB || oeB) begin
+                end else if ((weB && !weB_done) || (oeB && !oeB_done)) begin
                     cur_is_b <= 1;
                     cur_byte <= addrB[1:0];
                     if (weB) begin
+                        weB_done <= 1;
                         m_axi_awaddr  <= XRAM_BASE + {7'd0, addrB[24:2], 2'b00};
                         m_axi_wdata   <= {4{dinB}};
                         m_axi_wstrb   <= strb_for(addrB[1:0]);
                         m_axi_awvalid <= 1; m_axi_wvalid <= 1;
                         state         <= S_AW;
                     end else begin
+                        oeB_done      <= 1;
                         m_axi_araddr  <= XRAM_BASE + {7'd0, addrB[24:2], 2'b00};
                         m_axi_arvalid <= 1;
                         state         <= S_AR_AB;

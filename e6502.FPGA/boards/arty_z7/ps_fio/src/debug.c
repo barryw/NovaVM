@@ -25,6 +25,7 @@
 unsigned char dbg_peek(unsigned a);                 // main.c — AXI bridge primitives
 void          dbg_poke(unsigned a, unsigned char d);
 unsigned char dbg_vmem(unsigned space, unsigned addr);
+unsigned char dbg_xram(unsigned addr);              // main.c — read XRAM from PS DDR
 void          kb_emit(unsigned char c);
 void          vm_reset(void);
 
@@ -206,6 +207,20 @@ static void do_poke(struct tcp_pcb *pcb, const char *s) {
     respond_ok(pcb);
 }
 
+// DEBUG: dump XRAM bytes from PS DDR (read_xram {address,length}).
+static void do_read_xram(struct tcp_pcb *pcb, const char *s) {
+    int addr = json_int(s, "address", -1);
+    int length = json_int(s, "length", 16);
+    if (addr < 0) { respond_err(pcb, "Missing 'address'"); return; }
+    if (length < 1 || length > 256) length = 16;
+    int pos = snprintf(g_tx, TXCAP, "{\"ok\":true,\"address\":%d,\"values\":[", addr);
+    for (int i = 0; i < length; i++)
+        pos += snprintf(g_tx + pos, TXCAP - pos, "%s%d", i ? "," : "", dbg_xram((unsigned)(addr + i)));
+    pos += snprintf(g_tx + pos, TXCAP - pos, "]}\n");
+    g_txlen = (uint32_t)pos; g_txoff = 0;
+    dbg_flush(pcb);
+}
+
 static void do_read_vram(struct tcp_pcb *pcb, const char *s) {
     int space = json_int(s, "space", -1);
     int addr = json_int(s, "address", -1);
@@ -302,6 +317,7 @@ static void dispatch(struct tcp_pcb *pcb, const char *line) {
     else if (!strcmp(cmd, "peek_block"))  do_peek_block(pcb, line);
     else if (!strcmp(cmd, "poke"))        do_poke(pcb, line);
     else if (!strcmp(cmd, "read_vram"))   do_read_vram(pcb, line);
+    else if (!strcmp(cmd, "read_xram"))   do_read_xram(pcb, line);
     else if (!strcmp(cmd, "send_key"))    do_send_key(pcb, line);
     else if (!strcmp(cmd, "type_text"))   do_type_text(pcb, line);
     else if (!strcmp(cmd, "read_screen")) do_read_screen(pcb);

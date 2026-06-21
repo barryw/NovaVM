@@ -134,6 +134,13 @@ void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key 
 unsigned char dbg_peek(unsigned a){ return peek(a); }
 void dbg_poke(unsigned a, unsigned char d){ poke(a, d); }
 unsigned char dbg_vmem(unsigned space, unsigned addr){ return vmem_read(space, addr); }
+// Read a byte of XRAM straight from PS DDR3 (cache-invalidated so we see what the
+// PL bus masters see). Debug aid for the NOVAZ6/DMA off-by-one investigation.
+unsigned char dbg_xram(unsigned addr){
+    UINTPTR a = XRAM_DDR_BASE + (addr & 0x7FFFF);
+    Xil_DCacheInvalidateRange(a, 1);
+    return *(volatile unsigned char *)a;
+}
 
 // Debug: dump the VGC character RAM (80x50) to the serial so we can "see" the HDMI.
 // Triggered by Ctrl-\ (0x1C) on the console UART (intercepted in the main loop).
