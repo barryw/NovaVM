@@ -7,6 +7,13 @@ BOOK_DIR="$SCRIPT_DIR"
 HELP_DIR="$REPO_ROOT/docs/help"
 OUTPUT_DIR="$BOOK_DIR"
 
+# Optional docs build: if the PDF toolchain isn't installed, skip cleanly instead
+# of failing the whole (ROM/test) build. CI/dev with pandoc+latexmk still builds it.
+if ! command -v pandoc &>/dev/null || ! command -v latexmk &>/dev/null; then
+    echo "build-pdf: pandoc/latexmk not found -- skipping PDF user guide (not required for ROM/tests)."
+    exit 0
+fi
+
 # Check required tools
 for tool in pandoc python3; do
     if ! command -v "$tool" &>/dev/null; then
