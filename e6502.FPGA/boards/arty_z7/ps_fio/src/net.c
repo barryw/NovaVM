@@ -31,6 +31,7 @@ unsigned int sys_now(void)
 #include "netif/xadapter.h"
 #include "netif/xemacpsif.h"
 #include "xemacps.h"
+#include "xil_cache.h"
 
 #ifndef PLATFORM_EMAC_BASEADDR
 #define PLATFORM_EMAC_BASEADDR XPAR_XEMACPS_0_BASEADDR
@@ -102,52 +103,19 @@ void net_init(void)
     netif_set_default(&nif);
     netif_set_up(&nif);
 
-    // The Xilinx driver forces the MAC to 100Mbps (the RTL8211 autoneg speed-read
-    // is broken, PHYSR reads 0), but the PHY still autonegotiates 1000 with a
-    // gigabit switch -> speed mismatch -> no data. Stop advertising 1000 so the
-    // PHY renegotiates to 100FD, matching the forced MAC.
+    // RX FIX: clear NVLANDISC in NET_CFG. GEM register offsets are NET_CTRL=0x0 and
+    // NET_CFG=0x4 (xemacps_hw.h). NET_CFG bit2 = XEMACPS_NWCFG_NVLANDISC_MASK
+    // ("receive only VLAN frames") makes the MAC discard every non-VLAN frame -- all
+    // DHCP/ARP/normal traffic -- so RX reads zero while TX is fine. Speed detection +
+    // the RTL8211F RGMII-id delays are handled in the BSP driver's
+    // get_Realtek_phy_speed (patched for the F by vitis/build_ps_fio.py), and the lwIP
+    // adapter already enables RX/TX in NET_CTRL -- so all that's needed here is to make
+    // sure NVLANDISC is not set.
     {
-        struct xemac_s *xemac = (struct xemac_s *)nif.state;
-        xemacpsif_s *xs = (xemacpsif_s *)xemac->state;
-        u16_t v = 0;
-
-        // RTL8211F (PHY ID2=0xC916): the Xilinx driver treats it as an RTL8211E and
-        // never configures the RGMII clock delays -> MAC<->PHY data path is broken
-        // (TX frames invalid, error-free TX count stays 0). Enable the PHY's internal
-        // RGMII TX + RX delays (page 0xd08: reg0x11 bit8 = TX delay, reg0x15 bit3 = RX
-        // delay), i.e. "rgmii-id" mode.
-        XEmacPs_PhyWrite(&xs->emacps, 0, 0x1f, 0x0d08);
-        XEmacPs_PhyRead (&xs->emacps, 0, 0x11, &v);
-        XEmacPs_PhyWrite(&xs->emacps, 0, 0x11, (u16_t)(v | 0x0100));   // TX delay on
-        XEmacPs_PhyRead (&xs->emacps, 0, 0x15, &v);
-        XEmacPs_PhyWrite(&xs->emacps, 0, 0x15, (u16_t)(v | 0x0008));   // RX delay on
-        XEmacPs_PhyWrite(&xs->emacps, 0, 0x1f, 0x0000);                // back to page 0
-        xil_printf("[net] RTL8211F: RGMII TX+RX delays enabled\r\n");
-
-        // DO NOT restart autoneg / re-advertise here: bouncing the link AFTER the
-        // lwIP adapter set up its DMA leaves RX/TX dead (all GEM counters 0). The
-        // driver already autonegotiated at init (this board's link settles at 10FD,
-        // verified against a known-good U-Boot: NET_CFG=0x16, TX/RX flow). Only the
-        // MAC is touched below -- no PHY writes that would re-trigger negotiation.
-
-        // The Xilinx driver MISREADS the RTL8211F speed (it reads the 8211E PHYSR
-        // reg 0x11, wrong for the F). Force MAC = 10 full-duplex to match the real
-        // 10FD link (clear gige bit10 + speed bit0 + jumbo bit3, set FD).
         u32_t base = XPAR_XEMACPS_0_BASEADDR;
-        u32_t cfg = XEmacPs_ReadReg(base, 0x0);
-        cfg = (cfg & ~0x00000409u) | 0x2u;          // -> 10Mbps full-duplex (NET_CFG ~0x16)
-        XEmacPs_WriteReg(base, 0x0, cfg);
-        xil_printf("[net] MAC NET_CFG forced to 10FD (was %05x now %05x)\r\n",
-                   XEmacPs_ReadReg(base, 0x0), cfg);
-
-        // The GEM data path is DISABLED in NET_CTRL (RX_EN bit2 / TX_EN bit3 both 0)
-        // -- all TX/RX + error counters read 0, i.e. the MAC moves nothing. The
-        // autoneg restart above bounced the link and the lwIP adapter never re-armed
-        // RX/TX. Explicitly enable receive + transmit (and keep MDIO enabled).
-        u32_t nc = XEmacPs_ReadReg(base, 0x4);
-        nc |= 0x00000004u | 0x00000008u | 0x00000010u;   // RX_EN | TX_EN | MD_EN
-        XEmacPs_WriteReg(base, 0x4, nc);
-        xil_printf("[net] NET_CTRL RX/TX enabled: %08x\r\n", XEmacPs_ReadReg(base, 0x4));
+        XEmacPs_WriteReg(base, 0x4, XEmacPs_ReadReg(base, 0x4) & ~0x00000004u);
+        xil_printf("[net] NET_CTRL=%08x NET_CFG=%08x (NVLANDISC cleared)\r\n",
+                   (unsigned)XEmacPs_ReadReg(base, 0x0), (unsigned)XEmacPs_ReadReg(base, 0x4));
     }
 
     dhcp_start(&nif);
@@ -162,6 +130,7 @@ void net_init(void)
 
 void net_poll(void)
 {
+    eth_link_detect(&nif);     // canonical Xilinx-lwIP app call: completes link-up bring-up (arms RX)
     xemacif_input(&nif);
     sys_check_timeouts();
     if (!dhcp_done && dhcp_supplied_address(&nif)) {
@@ -170,20 +139,14 @@ void net_poll(void)
         xil_printf("[net] DHCP IP: %d.%d.%d.%d  (upload: nc <ip> 6502 < disk.ndi)\r\n",
                    ip4_addr1(a), ip4_addr2(a), ip4_addr3(a), ip4_addr4(a));
     }
-    // Periodic diagnostic: is lwIP's link up + are we receiving anything?
+    // Light heartbeat: link + DHCP state + RX/TX frame counts. (The full GEM register
+    // dump used during bring-up is gone now that RX works.)
     static unsigned beats = 0;
-    if ((++beats % 1500000u) == 0) {
+    if ((++beats % 4000000u) == 0) {
         u32_t base = XPAR_XEMACPS_0_BASEADDR;
-        u32_t txf = XEmacPs_ReadReg(base, 0x108);   // error-free frames TX'd
-        u32_t rxf = XEmacPs_ReadReg(base, 0x158);   // error-free frames RX'd
-        u32_t netcfg = XEmacPs_ReadReg(base, 0x0);  // bit0=100,bit10=gige
-        struct xemac_s *xemac = (struct xemac_s *)nif.state;
-        xemacpsif_s *xs = (xemacpsif_s *)xemac->state;
-        u32_t netctrl = XEmacPs_ReadReg(base, 0x4);  // bit3=TXEN bit2=RXEN
         struct dhcp *d = netif_dhcp_data(&nif);
-        int dst = d ? d->state : -1;                  // 0=OFF 6=SELECTING 5=BOUND ...
-        (void)xs; (void)netcfg;
-        xil_printf("[net] link=%d dhcpst=%d TX=%u RX=%u NETCTRL=%03x t=%u\r\n",
-                   netif_is_link_up(&nif), dst, txf, rxf, netctrl, sys_now());
+        xil_printf("[net] link=%d dhcpst=%d TX=%u RX=%u\r\n",
+                   netif_is_link_up(&nif), d ? d->state : -1,
+                   (unsigned)XEmacPs_ReadReg(base, 0x108), (unsigned)XEmacPs_ReadReg(base, 0x158));
     }
 }

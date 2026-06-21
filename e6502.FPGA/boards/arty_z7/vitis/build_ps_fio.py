@@ -60,35 +60,65 @@ def patch_lwipopts():
     print("  patched", n, "lwipopts.h")
 
 def patch_physpeed():
-    # Arty Z7 RTL8211E: get_Realtek_phy_speed reads reg 0x11 ONCE right after
-    # autoneg-complete and fails if the link/speed-resolved bit (0x400) isn't set
-    # yet (it lags autoneg-complete). Retry the read, and print the reg value.
+    # The Arty Z7 has a Realtek RTL8211F (id1=0x1c, id2=0xc916). Stock
+    # get_Realtek_phy_speed() reads the RTL8211E PHYSR (reg 0x11) for link/speed;
+    # on the F the link bit (0x400) never sets -> returns XST_FAILURE -> "Phy setup
+    # error" -> init_emacps aborts the GEM bring-up (dead data path). Fix: read the
+    # RTL8211F PHYSR1 (page 0xa43 reg 0x1a: bit2=link, bits[5:4]=speed 0/1/2 =
+    # 10/100/1000) so the driver resolves the real speed and finishes init. This
+    # board links at GIGABIT (U-Boot confirms 1000M with RX working), so KEEP the
+    # gigabit advertisement -- do NOT drop to 100. NB: Marvell's get_*_phy_speed
+    # shares identical lines, so isolate the Realtek function by slice before
+    # replacing (a global count=1 replace would hit Marvell).
     n = 0
     for ps in glob.glob(f"{WS}/**/xemacpsif_physpeed.c", recursive=True):
         t = open(ps).read()
-        if "NOVA_RTL_RETRY" in t:
+        if "NOVA_RTL8211F" in t:
             continue
-        # (1) print the detected PHY address + identity at the dispatch.
+        # print the detected PHY address + identity at the dispatch (diagnostic).
         disp = "\tif (phy_identity == PHY_TI_IDENTIFIER) {"
         if disp in t:
             t = t.replace(disp,
-                "\t/* NOVA_RTL_RETRY */ xil_printf(\"NOVA PHY addr=%d id1=0x%x\\r\\n\", (int)phy_addr, phy_identity);\n" + disp, 1)
-        # (2) Realtek: retry the link/speed-resolved read after autoneg.
-        marker = "\tif (status_speed & 0x400) {"
-        if marker in t:
-            ins = ("\t{ u32_t _rt = 0;\n"
-                   "\t  while (!(status_speed & 0x400) && _rt++ < 10) { sleep(1);\n"
-                   "\t    XEmacPs_PhyRead(xemacpsp, phy_addr, IEEE_SPECIFIC_STATUS_REG, &status_speed); } }\n"
-                   "\txil_printf(\"Realtek reg0x11=0x%x\\r\\n\", status_speed);\n"
-                   + marker)
-            t = t.replace(marker, ins, 1)
+                "\txil_printf(\"NOVA PHY addr=%d id1=0x%x\\r\\n\", (int)phy_addr, phy_identity);\n" + disp, 1)
+        i = t.find("static u32_t get_Realtek_phy_speed")
+        if i >= 0:
+            j = t.find("\n}\n", i)
+            fn = t[i:j]
+            # KEEP gigabit advertisement (do not touch control |= ADVERTISE_1000).
+            # Only fix the speed READ: RTL8211F PHYSR1 (page 0xa43 reg 0x1a), not the
+            # E PHYSR (reg 0x11). NOVA_RTL8211F sentinel guards re-patching.
+            fn = fn.replace(
+                "XEmacPs_PhyRead(xemacpsp, phy_addr,IEEE_SPECIFIC_STATUS_REG,\n\t\t\t\t\t&status_speed);",
+                "/* NOVA_RTL8211F: read PHYSR1 (page 0xa43 reg 0x1a) */\n"
+                "\tXEmacPs_PhyWrite(xemacpsp, phy_addr, 0x1f, 0xa43);\n"
+                "\tXEmacPs_PhyRead(xemacpsp, phy_addr, 0x1a, &status_speed);\n"
+                "\tXEmacPs_PhyWrite(xemacpsp, phy_addr, 0x1f, 0x0);\n"
+                "\txil_printf(\"RTL8211F PHYSR1=0x%x\\r\\n\", status_speed);")
+            fn = fn.replace(
+                "if (status_speed & 0x400) {\n\t\ttemp_speed = status_speed & IEEE_SPEED_MASK;",
+                "if (status_speed & 0x4) {\n\t\ttemp_speed = (status_speed >> 4) & 0x3;")
+            fn = fn.replace("if (temp_speed == IEEE_SPEED_1000)", "if (temp_speed == 2)")
+            fn = fn.replace("else if(temp_speed == IEEE_SPEED_100)", "else if (temp_speed == 1)")
+            # Program the RGMII-id delays AFTER the PHY soft-reset but BEFORE the link
+            # finishes negotiating, so the RTL8211F latches the RX delay at link-up. A
+            # post-link write (what net.c did) reads back set (reg0x15=0x0019) but never
+            # takes effect -> MAC RXes nothing. Page 0xd08: reg0x11 bit8=TXDLY, 0x15 bit3=RXDLY.
+            fn = fn.replace(
+                "\t}\n\n\tXEmacPs_PhyRead(xemacpsp, phy_addr, IEEE_STATUS_REG_OFFSET, &status);\n\n\txil_printf(\"Waiting for PHY to complete autonegotiation",
+                "\t}\n\n"
+                "\t{ u16_t _d; /* NOVA_RTL8211F rgmii-id delays before link-up */\n"
+                "\t  XEmacPs_PhyWrite(xemacpsp, phy_addr, 0x1f, 0xd08);\n"
+                "\t  XEmacPs_PhyRead(xemacpsp, phy_addr, 0x11, &_d); XEmacPs_PhyWrite(xemacpsp, phy_addr, 0x11, (u16_t)(_d | 0x0100));\n"
+                "\t  XEmacPs_PhyRead(xemacpsp, phy_addr, 0x15, &_d); XEmacPs_PhyWrite(xemacpsp, phy_addr, 0x15, (u16_t)(_d | 0x0008));\n"
+                "\t  XEmacPs_PhyWrite(xemacpsp, phy_addr, 0x1f, 0x0); }\n\n"
+                "\tXEmacPs_PhyRead(xemacpsp, phy_addr, IEEE_STATUS_REG_OFFSET, &status);\n\n\txil_printf(\"Waiting for PHY to complete autonegotiation")
+            t = t[:i] + fn + t[j:]
         open(ps, "w").write(t); n += 1
-    # Force recompile: cmake doesn't always notice a .c edit (it did for the
-    # header-triggered lwipopts recompile, not for this source). Delete the stale
+    # Force recompile: cmake doesn't always notice a .c edit. Delete the stale
     # object + the archive so the 2nd build rebuilds physpeed + relinks liblwip220.
     for o in glob.glob(f"{WS}/**/xemacpsif_physpeed.c.obj", recursive=True): os.remove(o)
     for a in glob.glob(f"{WS}/**/liblwip220.a", recursive=True): os.remove(a)
-    print("  patched", n, "physpeed.c (+ removed stale obj/.a)")
+    print("  patched", n, "physpeed.c for RTL8211F (+ removed stale obj/.a)")
 
 plat.build()                 # 1st build regenerates lwipopts.h (DHCP=0)
 patch_lwipopts()             # force DHCP=1 + timers
