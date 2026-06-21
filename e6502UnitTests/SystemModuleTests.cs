@@ -493,31 +493,25 @@ public class SystemModuleTests
     }
 
     /// <summary>
-    /// Core mechanic: on ENTER, SYS_SCREEN_READLINE reads the physical screen row
-    /// under the cursor into the caller buffer and returns its length with trailing
-    /// spaces trimmed. Proves the row mapping (window row == CURSY directly).
+    /// Buffer-based reader: it does NOT read the screen — it returns exactly the keys
+    /// the user types, ignoring whatever stale text is on the cursor row. (The old
+    /// C64 read-the-row-under-the-cursor behavior was removed: its walk-up WAS the
+    /// Arty "wedge", ingesting a prior program's leftover wrapped screen text.)
     /// </summary>
     [TestMethod]
-    public void ScreenReadline_ReadsRowUnderCursorOnEnter()
+    public void ScreenReadline_TypedLineIgnoresPrePaintedScreen()
     {
         using var bus = MakeSystemBus();
 
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
 
-        // Set a NONZERO ring-scroll base. This makes the row mapping falsifiable:
-        // the screen window + VGC_CURSY index the physical plane row directly, while
-        // VGC_TEXT_TOPROW only remaps display-row -> physical-row at render time. If
-        // the module wrongly read (CURSY+TOPROW) mod 50 it would land on a blank row
-        // and the text/length asserts below would fail.
-        bus.Write(VGC_TEXT_TOPROW, 17);
-
-        // Select the char plane for the screen window, then paint "PRINT 7" at row R.
+        // Pre-paint stale text on the cursor row; the buffer-based reader must ignore
+        // it (it never reads the screen — it returns only the keys typed).
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
         const int row = 12;
-        WriteScreenWindowRow(bus, row, 0, "PRINT 7");
+        WriteScreenWindowRow(bus, row, 0, "STALETEXT");
 
-        // Cursor sits at the start of that row.
         bus.Write(VGC_CURSX, 0);
         bus.Write(VGC_CURSY, (byte)row);
 
@@ -527,18 +521,18 @@ public class SystemModuleTests
         for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
         SetArg(bus, ARG0, buf | (0x7F << 16));   // b0/b1 = ptr, b2 = maxlen
 
-        // Press ENTER — the only key needed for the read-row mechanic.
+        QueueText(editor, "PRINT 7");
         editor.QueueInput(0x0D);
 
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        // The submitted line is "PRINT 7" (7 chars), no trailing NUL, spaces trimmed.
-        Assert.AreEqual(7, bus.ReadRam(RESULT), "RESULT b0 must be the trimmed line length (7)");
+        // The submitted line is the TYPED "PRINT 7" (7 chars), not the pre-painted text.
+        Assert.AreEqual(7, bus.ReadRam(RESULT), "RESULT b0 must be the typed line length (7)");
         var got = new char[7];
         for (int i = 0; i < 7; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
-        Assert.AreEqual("PRINT 7", new string(got), "buffer must hold the row text under the cursor");
+        Assert.AreEqual("PRINT 7", new string(got), "buffer holds the typed line, not the pre-painted screen text");
         Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 7)),
-            "no trailing NUL or padding: the byte past the line must be untouched");
+            "no trailing NUL or padding: the byte past the typed line must be untouched");
     }
 
     /// <summary>
@@ -580,13 +574,13 @@ public class SystemModuleTests
     }
 
     /// <summary>
-    /// Task 4 — arrows move the cursor and clamp at the screen edges. From (5,5):
-    /// Up,Up,Left,Right,Down -> (5,4). The arrow-driven cursor position is verified
-    /// by typing a marker char and asserting the cell it lands in (ENTER's CR/LF
-    /// advance, added in Task 6, would otherwise mask the post-arrow cursor regs).
+    /// Buffer-based reader: arrow keys (28-31, control bytes &lt; $20) are ignored —
+    /// the reader accumulates only printable keys. Typing "AB", then arrows, then "C"
+    /// yields "ABC" in order. (In-place arrow cursor editing was part of the removed
+    /// C64 screen-reader, whose screen walk-up was the Arty wedge.)
     /// </summary>
     [TestMethod]
-    public void ScreenReadline_ArrowsMoveCursorClamped()
+    public void ScreenReadline_ArrowsIgnoredByBufferReader()
     {
         using var bus = MakeSystemBus();
         var editor = new ScreenEditor(bus.Vgc);
@@ -594,24 +588,24 @@ public class SystemModuleTests
 
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
         for (int r = 0; r < ScreenRows; r++) BlankScreenWindowRow(bus, r);
-        bus.Write(VGC_CURSX, 5);
-        bus.Write(VGC_CURSY, 5);
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, 0);
 
         const ushort buf = 0x0275;
+        for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
         SetArg(bus, ARG0, buf | (0x7F << 16));
 
-        // 30=Up, 28=Left, 29=Right, 31=Down. (5,5)->Up(5,4)->Up(5,3)->Left(4,3)
-        // ->Right(5,3)->Down(5,4). A typed 'X' must land at cell (5,4).
-        QueueKeys(editor, 30, 30, 28, 29, 31);
-        editor.QueueInput((byte)'X');
+        QueueText(editor, "AB");
+        QueueKeys(editor, 30, 28, 29, 31);   // Up/Left/Right/Down -- all ignored
+        QueueText(editor, "C");
         editor.QueueInput(0x0D);
 
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        Assert.AreEqual("X", ReadScreenWindowRow(bus, 4, 5, 1),
-            "arrows must land the cursor at (5,4): the marker char proves it");
-        Assert.AreEqual(" ", ReadScreenWindowRow(bus, 5, 5, 1),
-            "the starting cell (5,5) must be untouched");
+        Assert.AreEqual(3, bus.ReadRam(RESULT), "only the 3 printable keys are buffered");
+        var got = new char[3];
+        for (int i = 0; i < 3; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
+        Assert.AreEqual("ABC", new string(got), "arrows are ignored; buffer holds the typed chars in order");
     }
 
     /// <summary>
@@ -768,37 +762,30 @@ public class SystemModuleTests
         bus.Vgc.SetScreenEditor(editor);
 
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
-        const int startRow = 10;          // logical line starts here
-        BlankScreenWindowRow(bus, startRow - 1); // row above the line is NOT full
-        BlankScreenWindowRow(bus, startRow);
-        BlankScreenWindowRow(bus, startRow + 1);
+        const int startRow = 10;
+        for (int r = startRow - 1; r <= startRow + 2; r++) BlankScreenWindowRow(bus, r);
+        bus.Write(VGC_CURSX, 0);
+        bus.Write(VGC_CURSY, (byte)startRow);
 
-        // A 100-char logical line: 80 chars fill row 10 (col 79 non-space => "full"
-        // => wraps), the remaining 20 land on row 11. Built so the content is unique
-        // per column to catch any mis-ordered assembly.
+        // A 100-char line: the echo wraps across rows via VGC_CHAROUT, but the
+        // buffer-based reader accumulates ALL 100 typed chars (maxlen $7F=127).
         var line = new System.Text.StringBuilder(100);
         for (int i = 0; i < 100; i++)
             line.Append((char)('A' + (i % 26)));
         string expected = line.ToString();
-        WriteScreenWindowRow(bus, startRow, 0, expected.Substring(0, ScreenCols));   // 80 chars
-        WriteScreenWindowRow(bus, startRow + 1, 0, expected.Substring(ScreenCols));  // 20 chars
-
-        // Cursor on the SECOND row of the wrapped line (where the user would land
-        // after typing past col 79). ENTER must still ingest the whole line.
-        bus.Write(VGC_CURSX, 20);
-        bus.Write(VGC_CURSY, (byte)(startRow + 1));
 
         const ushort buf = 0x0275;
         for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA); // poison
         SetArg(bus, ARG0, buf | (0x7F << 16));   // b0/b1 = ptr, b2 = maxlen ($7F)
 
+        QueueText(editor, expected);
         editor.QueueInput(0x0D);
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        Assert.AreEqual(100, bus.ReadRam(RESULT), "RESULT b0 must be the full 100-char wrapped-line length");
+        Assert.AreEqual(100, bus.ReadRam(RESULT), "RESULT b0 must be the full 100-char typed-line length");
         var got = new char[100];
         for (int i = 0; i < 100; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
-        Assert.AreEqual(expected, new string(got), "buffer must hold the full wrapped logical line, in order");
+        Assert.AreEqual(expected, new string(got), "buffer must hold the full typed line, in order");
         Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 100)),
             "no padding past the line: the byte after the 100th char must be untouched");
     }
@@ -818,15 +805,10 @@ public class SystemModuleTests
 
         bus.Write(VGC_SCREENWIN_PLANE, VGC_SCREENWIN_CHAR);
         const int row = 15;
-        // The row above holds an unrelated short line (NOT full: col 79 is a space),
-        // so the walk-up must stop at the cursor row and the read must NOT merge the
-        // prior line. The cursor row's own col 79 is a space too, so the forward read
-        // must stop after this single row (no over-run into row 16).
         BlankScreenWindowRow(bus, row - 1);
         BlankScreenWindowRow(bus, row);
         BlankScreenWindowRow(bus, row + 1);
-        WriteScreenWindowRow(bus, row - 1, 0, "PRIOR LINE");
-        WriteScreenWindowRow(bus, row, 0, "GOTO 100");
+        WriteScreenWindowRow(bus, row - 1, 0, "PRIOR LINE");   // stale; must be ignored
 
         bus.Write(VGC_CURSX, 0);
         bus.Write(VGC_CURSY, (byte)row);
@@ -835,14 +817,15 @@ public class SystemModuleTests
         for (int i = 0; i < 0x80; i++) bus.WriteRam((ushort)(buf + i), 0xAA);
         SetArg(bus, ARG0, buf | (0x7F << 16));
 
+        QueueText(editor, "GOTO 100");
         editor.QueueInput(0x0D);
         RunFn(bus, SYS_SCREEN_READLINE);
 
-        Assert.AreEqual(8, bus.ReadRam(RESULT), "single non-wrapped row reads exactly its 8 chars");
+        Assert.AreEqual(8, bus.ReadRam(RESULT), "a short typed line is exactly its 8 chars");
         var got = new char[8];
         for (int i = 0; i < 8; i++) got[i] = (char)bus.ReadRam((ushort)(buf + i));
-        Assert.AreEqual("GOTO 100", new string(got), "buffer holds only the cursor row, not the prior line");
-        Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 8)), "no over-read past the single row");
+        Assert.AreEqual("GOTO 100", new string(got), "buffer holds the typed line, not the prior screen line");
+        Assert.AreEqual(0xAA, bus.ReadRam((ushort)(buf + 8)), "no over-read / padding past the typed line");
     }
 
     /// <summary>
