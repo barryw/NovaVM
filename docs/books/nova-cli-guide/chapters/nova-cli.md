@@ -657,6 +657,110 @@ Control keys:
 This command uses TCP port `6503`, not NovaHost's standard command port. Use
 `--port` only when the debug service is exposed on a non-default port.
 
+## Emulator & VM Debug Commands
+
+`nova vm` (alias `nova emulator`) drives a running NovaVM through its debug TCP
+service: read/write CPU memory and video RAM, read the text screen, inject keys,
+and control execution. It targets the desktop Avalonia emulator by default and a
+hardware board with `--remote`.
+
+```bash
+nova vm [--remote <host>] [--port <port>] <command> [args] [--json]
+```
+
+Connection defaults:
+
+- No `--remote`: `127.0.0.1:6502` (the Avalonia emulator's debug port).
+- With `--remote <host>`: debug commands use `<host>:6503`; `reset` and
+  `cold-start` go through the NovaHost management service.
+
+Override the debug port with `--port`. Add `--json` to print the raw JSON reply
+instead of the formatted result.
+
+### Execution control
+
+```bash
+nova vm cold-start [--runtime basic|logo|forth] [--text <text>] [--no-wait]
+nova vm reset [--text <text>] [--no-wait]
+nova vm wait [text] [--timeout-ms <ms>]
+nova vm run-cycles <count>
+```
+
+- `cold-start` performs a full cold boot, optionally selecting the language
+  runtime, typing `--text` once ready, and (unless `--no-wait`) blocking until
+  the `READY.` prompt returns.
+- `reset` pulses the CPU reset line and reboots to the current runtime.
+- `wait` blocks until the screen shows `text` (or the READY prompt) or the
+  timeout elapses.
+- `run-cycles` steps the CPU by a fixed cycle count (emulator only).
+
+### Screen & cursor
+
+```bash
+nova vm screen [--json]
+nova vm line <row>
+nova vm cursor
+```
+
+- `screen` prints the 80×50 text screen, one line per row.
+- `line` prints a single screen row.
+- `cursor` prints the current cursor position.
+
+### Keyboard injection
+
+```bash
+nova vm type-text <text>
+nova vm enter <text>
+nova vm key <key>
+```
+
+- `type-text` streams a string into the key queue (`\n` becomes carriage
+  return).
+- `enter` types the text and appends a carriage return.
+- `key` sends one named key (`ENTER`, `BACKSPACE`, `TAB`, `ESC`, `SPACE`,
+  arrows `LEFT`/`RIGHT`/`UP`/`DOWN`, `HOME`, `END`, `DELETE`, `CTRL-C`, or a
+  single character).
+
+### Memory & video RAM
+
+```bash
+nova vm peek <addr>
+nova vm peek-block <addr> <count> [--json]
+nova vm poke <addr> <value>
+nova vm read-vram <space> <addr> <length> [--json]
+nova vm fill-vram <space> <addr> <value> <length>
+```
+
+Addresses and values accept decimal, `$hex`, or `0xhex`. `peek` prints the byte
+as `$XX`. The VGC `space` selects the video-memory plane: `1`=char, `2`=color,
+`3`=gfx, `4`=sprite, `7`=text-attr.
+
+### Debugger (emulator only)
+
+```bash
+nova vm state|pause|resume|step|break-list|break-clear-all
+```
+
+These map to the Avalonia debugger and are not available on hardware.
+
+### Raw passthrough
+
+```bash
+nova vm raw '<json>' [--json] [--allow-error]
+```
+
+Sends a hand-written debug command (the JSON must include a `command` field).
+`--allow-error` keeps a non-OK reply from being treated as a CLI failure.
+
+Example session:
+
+```bash
+nova vm --remote 192.168.1.65 cold-start --runtime basic
+nova vm --remote 192.168.1.65 enter 'PRINT "HELLO"'
+nova vm --remote 192.168.1.65 screen
+nova vm --remote 192.168.1.65 peek $A0ED
+```
+
 ## Raw Remote SD Commands
 
 Raw remote commands map directly to NovaHost SD-card paths.
@@ -889,6 +993,29 @@ nova asset list --remote 192.168.1.65 --type boot
 nova asset download novavm_logo.nvg --remote 192.168.1.65 --type boot ./novavm_logo.downloaded.nvg
 ```
 
+### Library Modules
+
+`nova module` manages NovaVM library modules (`.nmod` / `.mod` — the resident
+overlay images loaded by `LIB` and the extension commands). On a board they live
+under `/lib`.
+
+```bash
+nova module info <file|name> [--remote <host>]
+nova module validate <file>
+nova module ls --remote <host>
+nova module put <file> [name] --remote <host>
+nova module get <name> [local] --remote <host>
+nova module rm <name> --remote <host>
+```
+
+- `info` shows a module's metadata, either from a local file or by reading it
+  back from the board.
+- `validate` checks a local module image.
+- `ls` lists the modules installed on the board's `/lib`.
+- `put` uploads a module (the on-board name defaults from the file name).
+- `get` downloads a module to a local file.
+- `rm` deletes a module from the board.
+
 ## Standard SD Layout
 
 NovaHost currently uses this SD-card layout:
@@ -906,7 +1033,7 @@ NovaHost currently uses this SD-card layout:
 /assets/sid/*
 ```
 
-## Hardware Runtime Commands
+## Hardware Command Quick Reference
 
 For normal hardware work, use the first-class `nova` commands:
 
@@ -927,6 +1054,43 @@ nova device reboot --remote 192.168.1.65
 The raw NovaHost SD commands are intentionally not the primary user-facing
 workflow. The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
 `nova get`, and `nova rm` for compatibility and diagnostics.
+
+## Runtime Configuration Commands
+
+`nova runtime` manages the language runtimes (a ROM plus an optional extension
+ROM) the board can boot, recorded in `/config/boot.json`.
+
+```bash
+nova runtime list --remote <host>
+nova runtime status --remote <host>
+nova runtime set <name> --remote <host>
+nova runtime add <name> --rom <sd-path> [--ext <sd-path>] --remote <host>
+nova runtime remove <name> --remote <host>
+nova runtime deploy <name> --rom <local-file> [--ext <local-file>] --remote <host>
+nova runtime boot-floppy <name> [remote-path] --remote <host>
+```
+
+- `list` shows the configured runtimes; `status` shows the active one.
+- `set` makes an already-configured runtime the default boot target.
+- `add` registers a runtime that points at ROM paths already on the SD card;
+  `remove` deletes the entry.
+- `deploy` uploads local ROM file(s) and registers/activates the runtime in one
+  step — the usual way to install a new language.
+- `boot-floppy` configures the named runtime to boot from a floppy image.
+
+## Local Web Admin Server
+
+`nova webserver` (alias `nova web`) runs a local web UI that proxies to a
+board's NovaHost management service — the browser-based equivalent of the
+`device`, `drive`, `wifi`, and `disk` commands.
+
+```bash
+nova webserver --remote <host> [--port 8080] [--bind 127.0.0.1] [--no-open]
+```
+
+- `--port` sets the local HTTP port (default `8080`).
+- `--bind` sets the local interface (default `127.0.0.1`).
+- `--no-open` skips auto-opening the system browser.
 
 ## Workflows
 
