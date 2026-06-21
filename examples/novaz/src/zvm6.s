@@ -158,6 +158,20 @@ nz6_gfx_list_fill: .res NZ6_GFX_LIST_MAX
 .assert nz6_gfx_base_color = NZ6_SAVE_GFX_STATE_BASE, error, "NZ6_SAVE_GFX_STATE_BASE must point at retained graphics state"
 .assert nz6_gfx_list_fill + NZ6_GFX_LIST_MAX - nz6_gfx_base_color = NZ6_SAVE_GFX_STATE_SIZE, error, "NZ6_SAVE_GFX_STATE_SIZE must cover retained graphics state"
 
+; Scratch for the region-change border clear (not part of save state).
+nz6_brd_fill:    .res 1          ; bg fill colour
+nz6_brd_py0:     .res 1          ; text window (win0) top pixel row
+nz6_brd_ph:      .res 1          ; text window height in pixels
+nz6_brd_xr_lo:   .res 1          ; text window right edge x (px0+pw), 16-bit
+nz6_brd_xr_hi:   .res 1
+nz6_brd_dst_lo:  .res 1          ; fill dest gfx byte addr, 16-bit
+nz6_brd_dst_hi:  .res 1
+nz6_brd_w_lo:    .res 1          ; fill width px, 16-bit
+nz6_brd_w_hi:    .res 1
+nz6_brd_h:       .res 1          ; fill height rows
+nz6_brd_t0:      .res 1          ; mul-by-320 scratch
+nz6_brd_t1:      .res 1
+
 nz6_saved_word_len: .res 1
 nz6_saved_word_buf: .res NZ6_WORD_SAVE_MAX
 
@@ -2637,6 +2651,22 @@ nz6_pic_draw_current_abs:
         BCS :+
         JMP @rts
 :
+        ; Region-change border clear: a picture anchored at the gfx origin
+        ; (dst 0,0) is the per-region frame base — the first draw of a border
+        ; (re)draw. The game redraws the header + columns with NO erase, so a
+        ; bigger previous border (vine-covered columns + header) bleeds through
+        ; the transparent gaps of the new one. Clear only the border FRAME here
+        ; (everything outside the text window) so the columns/header reset while
+        ; the text area — where flow room-images live and scroll — is preserved.
+        ; Only clobbers BLT regs (reloaded below) + nz6_brd_* scratch, so the
+        ; clip rect / picture state set above survives. Skipped in restore replay.
+        LDA nz6_gfx_replay_active
+        BNE @no_border_clear
+        LDA nz6_blt_dst_lo
+        ORA nz6_blt_dst_hi
+        BNE @no_border_clear
+        JSR nz6_gfx_clear_border
+@no_border_clear:
         ; Load the packed bitmap slice into the reusable XRAM bounce buffer.
         LDA #<nz6_pics_name
         STA PAGER_NAMEPTR_L
@@ -3456,6 +3486,176 @@ nz6_gfx_clear:
         LDA #BLT_CMD_START
         STA BLT_CMD_REG
         JMP blitter_wait
+
+; Clear the border frame (header + left/right columns + bottom margin) around
+; the text window (window 0), leaving the text area untouched. Used on a region
+; change so the columns/header reset without disturbing flow room-images that
+; scroll with the text. Window 0 props (pixels, 1-based origin): word +0=y0,
+; +2=x0, +4=h, +6=w. Clobbers BLT regs + nz6_brd_* only.
+nz6_gfx_clear_border:
+        LDA nz6_colour                  ; window background colour, 1px/byte
+        LSR A
+        LSR A
+        LSR A
+        LSR A
+        STA nz6_brd_fill
+        LDA nz6_win_props+0             ; py0 = y origin - 1
+        SEC
+        SBC #1
+        STA nz6_brd_py0
+        LDA nz6_win_props+4             ; ph = height (low byte; <= 200)
+        STA nz6_brd_ph
+        ; xr = (x origin - 1) + width   (text window right edge x, 16-bit)
+        LDA nz6_win_props+2
+        SEC
+        SBC #1
+        STA nz6_brd_xr_lo
+        LDA nz6_win_props+3
+        SBC #0
+        STA nz6_brd_xr_hi
+        CLC
+        LDA nz6_brd_xr_lo
+        ADC nz6_win_props+6
+        STA nz6_brd_xr_lo
+        LDA nz6_brd_xr_hi
+        ADC nz6_win_props+7
+        STA nz6_brd_xr_hi
+
+        ; TOP header strip: dst 0, w 320, h py0
+        STZ nz6_brd_dst_lo
+        STZ nz6_brd_dst_hi
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA nz6_brd_w_lo
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA nz6_brd_w_hi
+        LDA nz6_brd_py0
+        STA nz6_brd_h
+        JSR nz6_brd_fill_rect
+
+        ; LEFT column strip: dst py0*320, w px0, h ph
+        LDA nz6_brd_py0
+        JSR nz6_brd_row_addr
+        LDA nz6_win_props+2            ; px0 = x origin - 1
+        SEC
+        SBC #1
+        STA nz6_brd_w_lo
+        LDA nz6_win_props+3
+        SBC #0
+        STA nz6_brd_w_hi
+        LDA nz6_brd_ph
+        STA nz6_brd_h
+        JSR nz6_brd_fill_rect
+
+        ; RIGHT column strip: dst py0*320 + xr, w 320-xr, h ph
+        LDA nz6_brd_py0
+        JSR nz6_brd_row_addr
+        CLC
+        LDA nz6_brd_dst_lo
+        ADC nz6_brd_xr_lo
+        STA nz6_brd_dst_lo
+        LDA nz6_brd_dst_hi
+        ADC nz6_brd_xr_hi
+        STA nz6_brd_dst_hi
+        SEC
+        LDA #<NZ6_GFX_ROW_PIXELS
+        SBC nz6_brd_xr_lo
+        STA nz6_brd_w_lo
+        LDA #>NZ6_GFX_ROW_PIXELS
+        SBC nz6_brd_xr_hi
+        STA nz6_brd_w_hi
+        LDA nz6_brd_ph
+        STA nz6_brd_h
+        JSR nz6_brd_fill_rect
+
+        ; BOTTOM margin strip: dst (py0+ph)*320, w 320, h 200-(py0+ph)
+        CLC
+        LDA nz6_brd_py0
+        ADC nz6_brd_ph
+        CMP #NZ6_GFX_ROWS
+        BCS @done                      ; text window reaches the bottom: no strip
+        PHA
+        JSR nz6_brd_row_addr           ; A = py0+ph
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA nz6_brd_w_lo
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA nz6_brd_w_hi
+        PLA
+        STA nz6_brd_t0
+        SEC
+        LDA #NZ6_GFX_ROWS
+        SBC nz6_brd_t0
+        STA nz6_brd_h
+        JSR nz6_brd_fill_rect
+@done:
+        RTS
+
+; dst gfx byte addr := A * 320  (A = pixel row, < 200) -> nz6_brd_dst_lo/hi
+nz6_brd_row_addr:
+        PHA
+        STA nz6_brd_t0
+        STZ nz6_brd_t1
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x2
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x4
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x8
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x16
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x32
+        ASL nz6_brd_t0
+        ROL nz6_brd_t1                 ; x64
+        LDA nz6_brd_t0                 ; row*64 lo == row*320 lo (row*256 lo is 0)
+        STA nz6_brd_dst_lo
+        PLA                            ; row
+        CLC
+        ADC nz6_brd_t1                 ; row + (row*64 hi) == row*320 hi
+        STA nz6_brd_dst_hi
+        RTS
+
+; Blitter-fill a gfx rect: dst nz6_brd_dst_lo/hi, w nz6_brd_w_lo/hi, h A,
+; colour nz6_brd_fill. No-op when w==0 or h==0.
+nz6_brd_fill_rect:
+        STA nz6_brd_h
+        BEQ @skip
+        LDA nz6_brd_w_lo
+        ORA nz6_brd_w_hi
+        BEQ @skip
+        STZ BLT_SRCSPACE
+        STZ BLT_SRCL
+        STZ BLT_SRCM
+        STZ BLT_SRCH
+        STZ BLT_SRCSTRL
+        STZ BLT_SRCSTRH
+        LDA #NZ6_SPACE_GFX
+        STA BLT_DSTSPACE
+        LDA nz6_brd_dst_lo
+        STA BLT_DSTL
+        LDA nz6_brd_dst_hi
+        STA BLT_DSTM
+        STZ BLT_DSTH
+        LDA #<NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRL
+        LDA #>NZ6_GFX_ROW_PIXELS
+        STA BLT_DSTSTRH
+        LDA nz6_brd_w_lo
+        STA BLT_WIDTHL
+        LDA nz6_brd_w_hi
+        STA BLT_WIDTHH
+        LDA nz6_brd_h
+        STA BLT_HEIGHTL
+        STZ BLT_HEIGHTH
+        LDA #BLT_MODE_FILL
+        STA BLT_MODE_REG
+        STZ BLT_CKEY
+        LDA nz6_brd_fill
+        STA BLT_FILLVALUE
+        LDA #BLT_CMD_START
+        STA BLT_CMD_REG
+        JMP blitter_wait
+@skip:
+        RTS
 
 ; Read the index byte at the 24-bit cursor -> A; cursor += 1.
 nz6_pics_next_byte:
