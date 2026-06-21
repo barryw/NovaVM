@@ -335,7 +335,7 @@ static err_t dbg_recv(void *arg, struct tcp_pcb *pcb, struct pbuf *p, err_t err)
 
     // Process each complete '\n'-terminated line.
     for (;;) {
-        char *nl = memchr(g_rx, '\n', g_rxlen);
+        char *nl = (char *)memchr(g_rx, '\n', g_rxlen);
         if (!nl) break;
         *nl = 0;
         dispatch(pcb, g_rx);

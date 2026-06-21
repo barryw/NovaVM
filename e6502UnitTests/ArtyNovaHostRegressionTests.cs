@@ -98,4 +98,54 @@ public class ArtyNovaHostRegressionTests
         StringAssert.Contains(src, "debug_init();",
             "main.c must start the 6503 debug server.");
     }
+
+    // mgmt.c must handle drive mount/unmount (CBOR 10/11) -> `nova drive mount`.
+    [TestMethod]
+    public void MgmtC_HandlesDriveMountUnmount()
+    {
+        string src = File.ReadAllText(ArtySrc("mgmt.c"));
+        StringAssert.Contains(src, "handle_mount_drive",
+            "mgmt.c must handle MountDrive (CBOR 10) for `nova drive mount`.");
+        StringAssert.Contains(src, "handle_unmount_drive",
+            "mgmt.c must handle UnmountDrive (CBOR 11) for `nova drive unmount`.");
+    }
+
+    // The FIO host must service the Z-machine boot/story commands so a mounted
+    // .ndi game (Zork I verified) autoboots: LOAD_RUNTIME (0x28), XLOAD (0x18),
+    // XPAGE (0x29, story paging), and the FOPEN/FREAD/FSEEK file handles.
+    [TestMethod]
+    public void MainC_HandlesZMachineFioCommands()
+    {
+        string src = File.ReadAllText(ArtySrc("main.c"));
+        foreach (string h in new[]
+        {
+            "fio_load_runtime", "fio_xload", "fio_xpage",
+            "fio_fopen", "fio_fread", "fio_fseek",
+        })
+        {
+            StringAssert.Contains(src, h,
+                $"main.c must keep the {h} FIO handler (Z-machine boot path).");
+        }
+    }
+
+    // The .ndi parser must be the SHARED ndi_image.cpp from the ESP32 NovaHost
+    // tree (single source of truth), reused via the FatFs shim -- NOT a duplicate
+    // parser. Guard the build wiring + the shim so the reuse can't silently
+    // regress back into a fork.
+    [TestMethod]
+    public void Build_ReusesSharedNdiParser()
+    {
+        string py = File.ReadAllText(RepoPath("e6502.FPGA", "boards", "arty_z7", "vitis", "build_ps_fio.py"));
+        StringAssert.Contains(py, "e6502.ESP32",
+            "build_ps_fio.py must import ndi_image.cpp from the shared ESP32 NovaHost tree.");
+        StringAssert.Contains(py, "ndi_image.cpp",
+            "build must compile the shared ndi_image.cpp (no duplicate parser).");
+
+        string shim = File.ReadAllText(ArtySrc("ndi_shim.cpp"));
+        StringAssert.Contains(shim, "ndi::NdiImage",
+            "ndi_shim.cpp must delegate to the shared ndi::NdiImage, not reimplement parsing.");
+
+        Assert.IsFalse(File.Exists(ArtySrc("ndi.c")),
+            "the duplicate ndi.c parser must stay deleted (reuse ndi_image.cpp instead).");
+    }
 }

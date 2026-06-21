@@ -135,8 +135,15 @@ app = client.create_app_component(
     name="ps_fio", platform=xpfm, domain=DOMAIN, template="empty_application")
 
 # Import our sources into the app's src/.
-for f in ("main.c", "net.c", "mgmt.c", "debug.c", "usb.c", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
+for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
     app.import_files(from_loc=SRC, files=[f], dest_dir_in_cmp="src")
+
+# Reuse the cross-platform NDI parser straight from the ESP32 NovaHost tree
+# (single source of truth — compiled here unchanged, NOT duplicated). ndi_shim.cpp
+# binds it to FatFs + the C FIO host.
+NOVAHOST = os.path.abspath(os.path.join(HERE, "..", "..", "..", "..", "e6502.ESP32", "novahost"))
+for f in ("ndi_image.cpp", "ndi_image.h"):
+    app.import_files(from_loc=NOVAHOST, files=[f], dest_dir_in_cmp="src")
 
 app.build()
 print("ELF:", glob.glob(f"{WS}/ps_fio/build/*.elf"))

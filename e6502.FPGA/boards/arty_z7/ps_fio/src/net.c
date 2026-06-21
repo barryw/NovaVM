@@ -18,6 +18,11 @@
 
 // lwIP time source (ms). Required with NO_SYS_NO_TIMERS=0; the Xilinx port omits
 // it when timers are off, so provide it from the A9 64-bit global timer.
+// extern "C": the whole firmware now compiles as C++ (for the reused ndi_image.cpp),
+// but lwIP declares sys_now() with C linkage.
+#ifdef __cplusplus
+extern "C"
+#endif
 unsigned int sys_now(void)
 {
     XTime t; XTime_GetTime(&t);

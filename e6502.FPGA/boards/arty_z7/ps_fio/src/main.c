@@ -11,6 +11,8 @@
 // XRAM lives in PS DDR3 (axi_xram maps XRAM byte addr -> 0x10000000+addr), so a
 // module load is a plain DDR write + cache flush (so the PL HP0 port sees it).
 
+#include <stdio.h>
+#include <string.h>
 #include "xil_io.h"
 #include "xil_cache.h"
 #include "xil_printf.h"
@@ -19,6 +21,8 @@
 #include "loader_bin.h"
 #include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
 #include "ehbasic_rom.h"        // EHBASIC_ROM[16384] -> basic_rom (idx=0) at boot
+#include "ndi.h"                // read-only .ndi image reader
+#include "drives.h"             // drive-slot mount table
 
 void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP upload)
 void net_poll(void);
@@ -27,6 +31,7 @@ void usb_poll(void);
 void mgmt_init(void);           // mgmt.c — NovaHost 6504 management server (NVH1/CBOR)
 void mgmt_set_sd(int mounted);
 void debug_init(void);          // debug.c — NovaHost 6503 debug server (newline JSON)
+void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 
 // ---- fio_bridge register map (AXI4-Lite @ 0x40000000) ----------------------
 #define FIO_BASE     0x40000000u
@@ -62,14 +67,35 @@ void debug_init(void);          // debug.c — NovaHost 6503 debug server (newli
 #define FIO_SIZE2    0xB9AA   // FioGSpace: dir size byte 2
 #define FIO_DIRTYPE  0xB9AF   // 0=BAS 1=SID 2=BIN 3=MID 4=GFX 5=DIR 6=FORTH
 #define FIO_NAME     0xB9B0   // 64-byte filename buffer
+#define FIO_GSPACE   0xB9AA   // XRAM addr high byte (also size byte2)
+#define FIO_GADDR_LO 0xB9AB   // XRAM addr low
+#define FIO_GADDR_HI 0xB9AC   // XRAM addr mid
+#define FIO_GLEN_LO  0xB9AD   // transfer length low
+#define FIO_GLEN_HI  0xB9AE   // transfer length high
 #define FIO_CMD_SAVE     0x01
 #define FIO_CMD_LOAD     0x02
 #define FIO_CMD_DIROPEN  0x03
 #define FIO_CMD_DIRREAD  0x04
 #define FIO_CMD_DELETE   0x05
+#define FIO_CMD_XLOAD    0x18      // stream a file from the mounted image straight into XRAM
+#define FIO_CMD_XPAGE    0x29      // stream a file SLICE (offset,len) into XRAM/RAM (story paging)
+#define FIO_PAGE_XRAM    0x00      // XPAGE target: flat XRAM
+#define FIO_PAGE_RAM     0x01      // XPAGE target: CPU RAM
+#define FIO_CMD_LOADRUNTIME 0x28   // stream a 16KB runtime ROM into the $C000 primary bank
+#define FIO_CMD_FOPEN    0x2D      // open file -> handle
+#define FIO_CMD_FCREATE  0x2E
+#define FIO_CMD_FCLOSE   0x2F
+#define FIO_CMD_FREAD    0x30      // read chunk -> CPU RAM or XRAM
+#define FIO_CMD_FWRITE   0x31
+#define FIO_CMD_FSEEK    0x32
+#define FIO_CMD_FTELL    0x33
+#define FIO_CMD_FSIZE    0x34
+#define FIO_TARGET_MASK  0x30      // FIO_DIRTYPE high bits: FREAD/FWRITE target
+#define FIO_TARGET_XRAM  0x10      // 0x00 = CPU RAM (FIO_END addr), 0x10 = XRAM (FIO_GSPACE/GADDR)
 #define FIO_ERR_NOTFOUND 1
 #define FIO_ERR_IO       2
 #define FIO_ERR_EOD      3
+#define FIO_ERR_NOTMOUNTED 5
 #define DT_BAS 0
 #define DT_SID 1
 #define DT_BIN 2
@@ -216,6 +242,43 @@ static unsigned char g_fbuf[65536];     // file <-> 6502-RAM staging buffer
 static DIR  g_dir;                       // open directory for DIROPEN/DIRREAD
 static int  g_dir_open = 0;
 
+// ---- mounted boot image (.ndi) ---------------------------------------------
+// A game disk mounted via `nova drive mount` (drives.c) is read by the 6502
+// through the FIO LOAD/FOPEN/FREAD/LOAD_RUNTIME path. We keep the boot slot's
+// image open and resolve plain filenames (AUTOBOOT, NOVAZ.BIN, story.bin) inside
+// it. SD-root file ops still work when nothing is mounted.
+static ndi_t g_img;
+static int   g_img_slot = -1;
+
+static ndi_t *boot_image(void) {
+    int slot = drive_boot_slot();
+    if (slot < 0) { if (g_img_slot >= 0) { ndi_close(&g_img); g_img_slot = -1; } return 0; }
+    if (slot != g_img_slot) {
+        if (g_img_slot >= 0) ndi_close(&g_img);
+        char full[200];
+        snprintf(full, sizeof full, "0:%s", drive_path(slot));   // path stored as "/x.ndi"
+        if (ndi_open(&g_img, full) != 0) { g_img_slot = -1; return 0; }
+        g_img_slot = slot;
+        xil_printf("[fio] boot image %s = %s\r\n", drive_slot_name(slot), full);
+    }
+    return &g_img;
+}
+
+// Resolve a 6502 filename inside the mounted image: exact (ci), then "+.bin".
+static int img_find(ndi_t *img, const char *name) {
+    int idx = ndi_find(img, name, NDI_ROOT);
+    if (idx < 0 && !strchr(name, '.')) {
+        char tmp[40];
+        snprintf(tmp, sizeof tmp, "%s.bin", name);
+        idx = ndi_find(img, tmp, NDI_ROOT);
+    }
+    return idx;
+}
+
+// ---- low-level file handles (FOPEN/FREAD/FSEEK on the mounted image) --------
+#define FH_MAX 8
+static struct { int used; int idx; uint32_t pos; uint32_t size; } g_fh[FH_MAX];
+
 static void fio_ok(void)        { poke(FIO_ERRCODE, 0);    poke(FIO_STATUS, FIO_OK);  poke(FIO_CMD, 0); }
 static void fio_fail(int code)  { poke(FIO_ERRCODE, code); poke(FIO_STATUS, FIO_ERR); poke(FIO_CMD, 0); }
 
@@ -251,6 +314,32 @@ static int fio_dirtype_for(const FILINFO *fno) {
 static void fio_load(void) {
     char name[80], path[96];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+
+    // Mounted-image path: resolve the name inside the boot drive's .ndi first
+    // (the AUTOBOOT contract). Falls through to SD-root LOAD if not found / no mount.
+    {
+        ndi_t *img = boot_image();
+        if (img) {
+            int idx = img_find(img, name);
+            if (idx >= 0) {
+                ndi_entry_t e; ndi_get(img, idx, &e);
+                int n = ndi_read(img, idx, 0, g_fbuf, sizeof g_fbuf);
+                if (n < 2) { fio_fail(FIO_ERR_IO); return; }
+                int is_bin = (e.type == DT_BIN);
+                unsigned dst = is_bin ? (g_fbuf[0] | (g_fbuf[1] << 8))
+                                      : (peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8));
+                unsigned len = (unsigned)n - 2;
+                if (dst + len > 0x10000) { fio_fail(FIO_ERR_IO); return; }
+                for (unsigned i = 0; i < len; i++) poke((dst + i) & 0xFFFF, g_fbuf[2 + i]);
+                if (is_bin) { poke(FIO_SRC_LO, dst & 0xFF); poke(FIO_SRC_HI, (dst >> 8) & 0xFF); }
+                poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF);
+                poke(FIO_DIRTYPE, e.type);
+                xil_printf("[fio] LOAD(ndi) %s -> $%04x (%u bytes, type %d)\r\n", e.name, dst, len, e.type);
+                fio_ok(); return;
+            }
+        }
+    }
+
     fio_path(name, path, sizeof path);
     int is_bin = 0; { const char *d = strrchr(path, '.'); if (d && !strncasecmp(d, ".bin", 5)) is_bin = 1; }
 
@@ -346,6 +435,189 @@ static void fio_delete(void) {
     fio_ok();
 }
 
+// FILE_LOAD_RUNTIME: stream a 16KB runtime ROM (e.g. NOVAZ.BIN) from the mounted
+// image into the $C000 primary bank (dbg_rom idx=0). The 6502 caller runs from
+// RAM (autoboot @ $7200) and then JMP ($FFFC) into the freshly-loaded runtime.
+static void fio_load_runtime(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    int idx = img_find(img, name);
+    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t e; ndi_get(img, idx, &e);
+    if (e.size != 16384) { xil_printf("[fio] LOADRUNTIME %s wrong size %u\r\n", e.name, (unsigned)e.size); fio_fail(FIO_ERR_IO); return; }
+    if (ndi_read(img, idx, 0, g_fbuf, 16384) != 16384) { fio_fail(FIO_ERR_IO); return; }
+    for (unsigned a = 0; a < 16384; a++)
+        Xil_Out32(R_ROMW, (a << 8) | g_fbuf[a]);             // idx=0 (bit22=0) = primary $C000 bank
+    poke(FIO_SIZE_LO, 0x00); poke(FIO_SIZE_HI, 0x40);        // 16384
+    xil_printf("[fio] LOADRUNTIME %s -> $C000 primary bank (16384 bytes)\r\n", e.name);
+    fio_ok();
+}
+
+// FILE_XLOAD: stream a file from the mounted image straight into XRAM (PS DDR3).
+// The Z-machine runtime loads its story this way (XRAM dest in FIO_GSPACE/GADDR,
+// optional length in FIO_GLEN; 0 = whole file).
+static void fio_xload(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    int idx = img_find(img, name);
+    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t e; ndi_get(img, idx, &e);
+    unsigned xaddr  = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
+    unsigned reqlen = peek(FIO_GLEN_LO)  | (peek(FIO_GLEN_HI) << 8);
+    unsigned total  = e.size;
+    if (reqlen > 0 && reqlen < total) total = reqlen;
+
+    unsigned done = 0;
+    while (done < total) {
+        unsigned chunk = total - done;
+        if (chunk > sizeof g_fbuf) chunk = sizeof g_fbuf;
+        int n = ndi_read(img, idx, done, g_fbuf, chunk);
+        if (n <= 0) break;
+        UINTPTR ddr = XRAM_DDR_BASE + xaddr + done;
+        memcpy((void *)ddr, g_fbuf, (unsigned)n);
+        Xil_DCacheFlushRange(ddr, (unsigned)n);            // visible to PL HP0
+        done += (unsigned)n;
+        if ((unsigned)n < chunk) break;
+    }
+    poke(FIO_SIZE_LO, done & 0xFF); poke(FIO_SIZE_HI, (done >> 8) & 0xFF); poke(FIO_SIZE2, (done >> 16) & 0xFF);
+    xil_printf("[fio] XLOAD %s -> XRAM $%06x (%u bytes)\r\n", e.name, xaddr, done);
+    fio_ok();
+}
+
+// FILE_XPAGE: stream a SLICE (file offset + length) of a mounted file into XRAM
+// or CPU RAM. The Z-machine runtime pages large stories into XRAM this way.
+// File offset = FIO_SRC(L/H) | FIO_END_LO<<16 (24-bit); length = FIO_GLEN;
+// target = FIO_DIRTYPE (0=XRAM @ FIO_GSPACE/GADDR, 1=CPU RAM @ FIO_GADDR).
+static void fio_xpage(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    int idx = img_find(img, name);
+    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t e; ndi_get(img, idx, &e);
+
+    unsigned char target = peek(FIO_DIRTYPE);
+    unsigned reqlen = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
+    unsigned foff   = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8) | (peek(FIO_END_LO) << 16);
+    if (reqlen == 0 || foff >= e.size) { fio_fail(FIO_ERR_IO); return; }
+    unsigned len = reqlen;
+    if (len > e.size - foff) len = e.size - foff;
+
+    if (target == FIO_PAGE_XRAM) {
+        unsigned xaddr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
+        unsigned done = 0;
+        while (done < len) {
+            unsigned chunk = len - done;
+            if (chunk > sizeof g_fbuf) chunk = sizeof g_fbuf;
+            int n = ndi_read(img, idx, foff + done, g_fbuf, chunk);
+            if (n <= 0) break;
+            UINTPTR ddr = XRAM_DDR_BASE + xaddr + done;
+            memcpy((void *)ddr, g_fbuf, (unsigned)n);
+            Xil_DCacheFlushRange(ddr, (unsigned)n);
+            done += (unsigned)n;
+            if ((unsigned)n < chunk) break;
+        }
+        len = done;
+    } else if (target == FIO_PAGE_RAM) {
+        unsigned addr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8);
+        if (len > sizeof g_fbuf) len = sizeof g_fbuf;
+        int n = ndi_read(img, idx, foff, g_fbuf, len);
+        if (n < 0) { fio_fail(FIO_ERR_IO); return; }
+        for (int i = 0; i < n; i++) poke((addr + i) & 0xFFFF, g_fbuf[i]);
+        len = (unsigned)n;
+    } else {
+        fio_fail(FIO_ERR_IO); return;          // VGC / gfx4 picture targets = workstream C
+    }
+    poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF); poke(FIO_SIZE2, (len >> 16) & 0xFF);
+    fio_ok();
+}
+
+static void fio_fopen(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    int idx = img_find(img, name);
+    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t e; ndi_get(img, idx, &e);
+    int h = -1;
+    for (int i = 0; i < FH_MAX; i++) if (!g_fh[i].used) { h = i; break; }
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    g_fh[h].used = 1; g_fh[h].idx = idx; g_fh[h].pos = 0; g_fh[h].size = e.size;
+    poke(FIO_SRC_LO, (h + 1) & 0xFF); poke(FIO_SRC_HI, 0);   // handle = slot+1
+    poke(FIO_SIZE_LO, e.size & 0xFF); poke(FIO_SIZE_HI, (e.size >> 8) & 0xFF); poke(FIO_SIZE2, (e.size >> 16) & 0xFF);
+    xil_printf("[fio] FOPEN %s -> h%d (%u bytes)\r\n", e.name, h + 1, (unsigned)e.size);
+    fio_ok();
+}
+
+static int fh_from_regs(void) {
+    int handle = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8);
+    int h = handle - 1;
+    if (h < 0 || h >= FH_MAX || !g_fh[h].used) return -1;
+    return h;
+}
+
+static void fio_fclose(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    g_fh[h].used = 0;
+    fio_ok();
+}
+
+static void fio_fread(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    unsigned want = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
+    if (want == 0 || want > sizeof g_fbuf) want = sizeof g_fbuf;
+    int n = ndi_read(img, g_fh[h].idx, g_fh[h].pos, g_fbuf, want);
+    if (n < 0) { fio_fail(FIO_ERR_IO); return; }
+    unsigned char dirtype = peek(FIO_DIRTYPE);
+    if ((dirtype & FIO_TARGET_MASK) == FIO_TARGET_XRAM) {
+        unsigned xaddr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
+        UINTPTR ddr = XRAM_DDR_BASE + xaddr;
+        memcpy((void *)ddr, g_fbuf, (unsigned)n);
+        Xil_DCacheFlushRange(ddr, (unsigned)n);              // make visible to PL HP0
+    } else {
+        unsigned dst = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
+        for (int i = 0; i < n; i++) poke((dst + i) & 0xFFFF, g_fbuf[i]);
+    }
+    g_fh[h].pos += (unsigned)n;
+    poke(FIO_SIZE_LO, n & 0xFF); poke(FIO_SIZE_HI, (n >> 8) & 0xFF); poke(FIO_SIZE2, (n >> 16) & 0xFF);
+    fio_ok();
+}
+
+static void fio_fseek(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    unsigned off = peek(FIO_SIZE_LO) | (peek(FIO_SIZE_HI) << 8) | (peek(FIO_SIZE2) << 16);
+    if (off > g_fh[h].size) off = g_fh[h].size;
+    g_fh[h].pos = off;
+    fio_ok();
+}
+
+static void fio_ftell(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    unsigned p = g_fh[h].pos;
+    poke(FIO_SIZE_LO, p & 0xFF); poke(FIO_SIZE_HI, (p >> 8) & 0xFF); poke(FIO_SIZE2, (p >> 16) & 0xFF);
+    fio_ok();
+}
+
+static void fio_fsize(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    unsigned s = g_fh[h].size;
+    poke(FIO_SIZE_LO, s & 0xFF); poke(FIO_SIZE_HI, (s >> 8) & 0xFF); poke(FIO_SIZE2, (s >> 16) & 0xFF);
+    fio_ok();
+}
+
 static void list_dir(const char *path) {
     DIR d; FILINFO fno;
     xil_printf("[fio] dir %s:\r\n", path);
@@ -378,6 +650,7 @@ int main(void) {
     } else {
         xil_printf("[fio] microSD mounted\r\n");
         mgmt_set_sd(1);
+        drives_load();                          // restore mounted .ndi slots
     }
 
     // Stage the resident lib_call loader into CPU RAM $0320.
@@ -406,12 +679,22 @@ int main(void) {
         if (fio_pending()) {
             fio_clear();
             unsigned char cmd = peek(FIO_CMD);
-            if (cmd != 0) { xil_printf("[fio] cmd=0x%02x\r\n", cmd); poke(FIO_STATUS, 0); }  // log + mark busy
+            // log + mark busy (skip the high-frequency story-paging command to keep serial fast)
+            if (cmd != 0) { if (cmd != FIO_CMD_XPAGE) xil_printf("[fio] cmd=0x%02x\r\n", cmd); poke(FIO_STATUS, 0); }
             if      (cmd == FIO_CMD_LOAD)    fio_load();
             else if (cmd == FIO_CMD_SAVE)    fio_save();
             else if (cmd == FIO_CMD_DIROPEN) fio_diropen();
             else if (cmd == FIO_CMD_DIRREAD) fio_dirread();
             else if (cmd == FIO_CMD_DELETE)  fio_delete();
+            else if (cmd == FIO_CMD_XLOAD)   fio_xload();
+            else if (cmd == FIO_CMD_XPAGE)   fio_xpage();
+            else if (cmd == FIO_CMD_LOADRUNTIME) fio_load_runtime();
+            else if (cmd == FIO_CMD_FOPEN)   fio_fopen();
+            else if (cmd == FIO_CMD_FCLOSE)  fio_fclose();
+            else if (cmd == FIO_CMD_FREAD)   fio_fread();
+            else if (cmd == FIO_CMD_FSEEK)   fio_fseek();
+            else if (cmd == FIO_CMD_FTELL)   fio_ftell();
+            else if (cmd == FIO_CMD_FSIZE)   fio_fsize();
             else if (cmd == FIO_CMD_LOAD_MODULE) {
                 int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
                 if (load_module(id, slot) == 0) {

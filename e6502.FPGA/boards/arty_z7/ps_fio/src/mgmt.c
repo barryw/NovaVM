@@ -26,6 +26,7 @@
 #include "lwip/pbuf.h"
 #include "xil_printf.h"
 #include "ff.h"
+#include "drives.h"
 
 void net_ip(char *out, int n);          // net.c — current DHCP IPv4 as text
 void vm_reset(void);                     // main.c — pulse the 6502 reset line
@@ -272,7 +273,7 @@ static void handle_hello(struct tcp_pcb *pcb, uint32_t reqid) {
     cb_kv_bool("status", 1);
     cb_kv_bool("listing", 1);
     cb_kv_bool("upload", 1);
-    cb_kv_bool("drives", 0);
+    cb_kv_bool("drives", 1);
     cb_kv_bool("runtime", 0);
     cb_kv_bool("vmReset", 1);
     cb_kv_bool("hostReboot", 0);
@@ -306,17 +307,17 @@ static void handle_get_status(struct tcp_pcb *pcb, uint32_t reqid) {
     cb_kv_text("ip", ip);
     cb_kv_text("transport", "ethernet");
 
-    // 6 drive slots (fd0..fd3, hd0, hd1) — unmounted until Phase #20 wires FatFs
-    // drive config. `nova drive list` reads status["drives"].
+    // 6 drive slots (fd0..fd3, hd0, hd1) from the mount table. `nova drive list`
+    // reads status["drives"].
     cb_text("drives");
-    cb_arr(6);
-    static const char *slots[6] = { "fd0", "fd1", "fd2", "fd3", "hd0", "hd1" };
-    for (int i = 0; i < 6; i++) {
+    cb_arr(DRIVE_SLOTS);
+    for (int i = 0; i < DRIVE_SLOTS; i++) {
+        const char *p = drive_path(i);
         cb_map(4);
-        cb_kv_text("slot", slots[i]);
-        cb_kv_bool("mounted", 0);
-        cb_kv_text("currentPath", "");
-        cb_kv_text("configuredPath", "");
+        cb_kv_text("slot", drive_slot_name(i));
+        cb_kv_bool("mounted", p[0] != 0);
+        cb_kv_text("currentPath", p);
+        cb_kv_text("configuredPath", p);
     }
 
     cb_text("wifi");
@@ -507,6 +508,67 @@ static void handle_delete_path(struct tcp_pcb *pcb, uint16_t cmd, uint32_t reqid
     resp_send(pcb);
 }
 
+static int ends_with_ndi(const char *p) {
+    size_t n = strlen(p);
+    return n >= 4 && strcasecmp(p + n - 4, ".ndi") == 0;
+}
+
+static void handle_mount_drive(struct tcp_pcb *pcb, uint16_t cmd, uint32_t reqid,
+                               const uint8_t *payload, uint32_t plen) {
+    if (!g_sd_mounted) { send_error(pcb, cmd, reqid, "sd_missing", "sd not mounted"); return; }
+    char slot[8], path[160], full[200];
+    if (!payload_get_str(payload, plen, "slot", slot, sizeof slot)) {
+        send_error(pcb, cmd, reqid, "bad_request", "slot is required"); return;
+    }
+    int idx = drive_slot_index(slot);
+    if (idx < 0) { send_error(pcb, cmd, reqid, "bad_slot", "bad slot"); return; }
+
+    int have_path = payload_get_str(payload, plen, "path", path, sizeof path) && path[0];
+    if (!have_path) {                                  // remount the configured image
+        const char *cur = drive_path(idx);
+        if (!cur[0]) { send_error(pcb, cmd, reqid, "missing_path", "missing path"); return; }
+        snprintf(path, sizeof path, "%s", cur);
+    }
+    if (!ends_with_ndi(path)) { send_error(pcb, cmd, reqid, "bad_path", "path must end in .ndi"); return; }
+
+    sd_path(path, full, sizeof full);                  // "/x" -> "0:/x"
+    FIL f;
+    if (f_open(&f, full, FA_READ) != FR_OK) { send_error(pcb, cmd, reqid, "not_found", "not found"); return; }
+    f_close(&f);
+
+    drive_set(idx, path);
+    const char *boot = drive_slot_name(drive_boot_slot());
+    xil_printf("[mgmt] mount %s = %s (boot=%s)\r\n", drive_slot_name(idx), path, boot ? boot : "-");
+
+    resp_begin(cmd, reqid, 1, "ok", NULL);
+    cb_map(4);
+    cb_kv_text("slot", drive_slot_name(idx));
+    cb_kv_bool("mounted", 1);
+    cb_kv_text("path", path);
+    cb_kv_text("bootDefault", boot ? boot : "");
+    resp_send(pcb);
+}
+
+static void handle_unmount_drive(struct tcp_pcb *pcb, uint16_t cmd, uint32_t reqid,
+                                 const uint8_t *payload, uint32_t plen) {
+    char slot[8];
+    if (!payload_get_str(payload, plen, "slot", slot, sizeof slot)) {
+        send_error(pcb, cmd, reqid, "bad_request", "slot is required"); return;
+    }
+    int idx = drive_slot_index(slot);
+    if (idx < 0) { send_error(pcb, cmd, reqid, "bad_slot", "bad slot"); return; }
+    drive_set(idx, "");
+    const char *boot = drive_slot_name(drive_boot_slot());
+    xil_printf("[mgmt] unmount %s (boot=%s)\r\n", drive_slot_name(idx), boot ? boot : "-");
+
+    resp_begin(cmd, reqid, 1, "ok", NULL);
+    cb_map(3);
+    cb_kv_text("slot", drive_slot_name(idx));
+    cb_kv_bool("mounted", 0);
+    cb_kv_text("bootDefault", boot ? boot : "");
+    resp_send(pcb);
+}
+
 static void handle_vm_reset(struct tcp_pcb *pcb, uint16_t cmd, uint32_t reqid) {
     vm_reset();
     xil_printf("[mgmt] VM reset\r\n");
@@ -532,6 +594,8 @@ static void dispatch(struct tcp_pcb *pcb, const uint8_t *frame, uint32_t clen, u
         case 7:  handle_write_commit(pcb, command, reqid); break;
         case 8:  handle_write_abort(pcb, command, reqid); break;
         case 9:  handle_delete_path(pcb, command, reqid, payload, clen); break;
+        case 10: handle_mount_drive(pcb, command, reqid, payload, clen); break;
+        case 11: handle_unmount_drive(pcb, command, reqid, payload, clen); break;
         case 14: handle_vm_reset(pcb, command, reqid); break;
         case 19: handle_read_file_chunk(pcb, command, reqid, payload, clen); break;
         default: send_error(pcb, command, reqid, "not_implemented",
