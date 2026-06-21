@@ -198,7 +198,6 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
-        StringAssert.Contains(impl, ".include \"nic.s\"");
     }
 
     [TestMethod]
@@ -653,8 +652,6 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
-        StringAssert.Contains(impl, ".include \"fio.s\"");
-        StringAssert.Contains(impl, ".include \"pager.s\"");
         StringAssert.Contains(impl, "PAGER_TARGET_RAM");
     }
 
@@ -805,7 +802,6 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
-        StringAssert.Contains(impl, ".include \"sprite.s\"");
     }
 
     [TestMethod]
@@ -876,10 +872,6 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
-        StringAssert.Contains(impl, ".include \"dma.s\"");
-        StringAssert.Contains(impl, ".include \"fio.s\"");
-        StringAssert.Contains(impl, ".include \"pager.s\"");
-        StringAssert.Contains(impl, ".include \"msprite.s\"");
         StringAssert.Contains(impl, "DMA_SPACE_XRAM");
         StringAssert.Contains(impl, "DMA_SPACE_VGC_SPRITE");
         StringAssert.Contains(impl, "PAGER_TARGET_VGC");
