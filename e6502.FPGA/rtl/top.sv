@@ -1775,8 +1775,9 @@ module top (
     end
 
     // SID config register ($D440):
-    //   bit 0 = SID model (0 = 6581, 1 = 8580)
+    //   bit 0 = SID1 model (0 = 6581, 1 = 8580)
     //   bit 1 = SID clock (0 = PAL 985248 Hz, 1 = NTSC 1022727 Hz)
+    //   bit 2 = SID2 model (0 = 6581, 1 = 8580)   -- independent per chip
     //   bit 7 = HDMI audio test tone, used to prove the board emits audio
     wire dbg_poke_sid1 = dbg_poke_en &&
                          (dbg_poke_addr >= SID1_BASE && dbg_poke_addr <= SID1_END);
@@ -1794,15 +1795,20 @@ module top (
     assign cpu_mon_wdata = cpu_dout;
     assign cpu_mon_we    = cpu_we && cpu_active;
 
-    logic sid_mode_8580;
+    // $D440 SID config: bit0 = SID1 model, bit2 = SID2 model (0 = 6581, 1 = 8580,
+    // INDEPENDENT per chip), bit1 = SID clock (PAL/NTSC, shared), bit7 = HDMI test.
+    logic sid_mode_8580;        // SID1 model
+    logic sid2_mode_8580;       // SID2 model
     logic hdmi_audio_test_enable;
     always_ff @(posedge clk) begin
         if (custom_rst) begin
             sid_mode_8580 <= 1'b0;
+            sid2_mode_8580 <= 1'b0;
             sid_clock_ntsc <= 1'b0;
             hdmi_audio_test_enable <= 1'b0;
         end else if ((sid_cpu_we && cpu_addr == SID_CFG) || dbg_poke_sid_cfg) begin
             sid_mode_8580 <= sid_bus_dout[0];
+            sid2_mode_8580 <= sid_bus_dout[2];
             sid_clock_ntsc <= sid_bus_dout[1];
             hdmi_audio_test_enable <= sid_bus_dout[7];
         end
@@ -1845,7 +1851,7 @@ module top (
         .clk        (clk),
         .rst        (custom_rst),
         .ce_1m      (sid_ce_1m),
-        .mode       (sid_mode_8580),
+        .mode       (sid2_mode_8580),
         .cs         (sid2_cs),
         .we         (1'b1),
         .addr       (sid_bus_addr[4:0]),
