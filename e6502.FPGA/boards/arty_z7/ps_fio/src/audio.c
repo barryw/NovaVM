@@ -13,6 +13,7 @@
 #include "xil_exception.h"   // Xil_ExceptionDisable/Enable -- guard engine swaps
                              // against the high-priority audio TTC0 ISR
 #include "sid.h"             // software MOS 6581 (2 instances, 6502 register-driven)
+#include "sidplay.h"         // .sid file playback via the reused nova_sid::SidVm
 
 // The ps_fio app is built -O0 (-g3); TSF's per-sample float synthesis is far too
 // slow unoptimized and the HDMI FIFO underruns (scratchy, lurching playback).
@@ -48,7 +49,9 @@ static unsigned     g_total_frames = 0;   // song length in 60 Hz frames
 static sidchip      g_sid1, g_sid2;        // $D400 / $D420
 static float        g_sidbuf[BLOCK_FRAMES];// scratch mono SID render buffer
 static int          g_regs_active = 0;     // set once the 6502 touches any SID/WTS reg
-static float        g_vol_sid1 = 1.0f, g_vol_sid2 = 1.0f, g_vol_wts = 1.0f;
+// SID output is already near full-scale; keep it below the master gain+limiter
+// so loud bass/drums don't over-drive into buzz (tunable live via audio_mix).
+static float        g_vol_sid1 = 0.4f, g_vol_sid2 = 0.4f, g_vol_wts = 1.0f;
 // WTS voice state (8 voices -> TSF channels 0-7): current note + latched vel/bend.
 static unsigned char g_wts_note[8];
 static unsigned char g_wts_vel[8];
@@ -96,6 +99,27 @@ static void wts_apply(int off, unsigned char data) {
         default: break;                    // reverb/chorus ($A180/$A181): TODO effects port
         }
     }
+}
+
+static void *slurp(const char *path, UINT *len_out);   // defined below
+
+// Sink for SID register writes from the .sid player (sidplay.cpp). Routes to the
+// same two software SIDs that the live 6502 capture drives.
+void audio_sid_reg_write(int chip, int reg, unsigned char val) {
+    sid_write(chip ? &g_sid2 : &g_sid1, reg, val);
+    g_regs_active = 1;
+}
+
+// Load + start a .sid file (the tune runs sandboxed in nova_sid::SidVm; its SID
+// writes mirror into our software SID). buf may be freed after this returns.
+int audio_play_sidfile(const char *sd_path) {
+    UINT len = 0;
+    void *buf = slurp(sd_path, &len);
+    if (!buf) { xil_printf("[audio] SID read failed: %s\r\n", sd_path); return -1; }
+    int rc = sidplay_load((const unsigned char *)buf, (int)len, 0);
+    free(buf);
+    if (rc == 0) g_regs_active = 1;
+    return rc;
 }
 
 // Drain the PL capture FIFO: apply every queued 6502 SID/WTS register write.
@@ -315,6 +339,10 @@ void audio_service(void) {
             audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
             continue;
         }
+
+        // .sid playback: run the tune's play routine(s) at its frame rate; the
+        // emulated SID writes mirror into g_sid1/g_sid2 (rendered just below).
+        if (sidplay_active()) sidplay_advance(BLOCK_FRAMES);
 
         // Wavetable + MIDI file -> g_fblock (stereo). g_tsf may be null (SID-only).
         if (g_playing) { g_msec += (double)BLOCK_FRAMES * 1000.0 / (double)SAMPLE_RATE; fire_events(g_msec); }

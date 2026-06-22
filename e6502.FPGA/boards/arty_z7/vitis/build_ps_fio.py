@@ -138,8 +138,14 @@ app = client.create_app_component(
     name="ps_fio", platform=xpfm, domain=DOMAIN, template="empty_application")
 
 # Import our sources into the app's src/.
-for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "audio.c", "audio.h", "sid.c", "sid.h", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
+for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "audio.c", "audio.h", "sid.c", "sid.h", "sidplay.cpp", "sidplay.h", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
     app.import_files(from_loc=SRC, files=[f], dest_dir_in_cmp="src")
+
+# Reuse the ESP NovaHost's SID VM verbatim (the sandboxed 6502 + SID-poke mirror
+# that already drives .sid playback on the ULX3S). No copy -- single source.
+ESP_NOVAHOST = os.path.abspath(os.path.join(HERE, "..", "..", "..", "..", "e6502.ESP32", "novahost"))
+for f in ("sid_vm.cpp", "sid_vm.h"):
+    app.import_files(from_loc=ESP_NOVAHOST, files=[f], dest_dir_in_cmp="src")
 
 # TinySoundFont (SF2 synth) + TinyMIDILoader, single-header libs (audio.c
 # instantiates them). Kept under src/thirdparty/.

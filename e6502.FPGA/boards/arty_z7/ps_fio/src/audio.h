@@ -7,6 +7,10 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
+#ifdef __cplusplus
+extern "C" {            // C linkage so sidplay.cpp (C++) can call audio_sid_reg_write
+#endif
+
 int  audio_load_soundfont(const char *sd_path);   // load .sf2 into TSF. 0 ok, <0 err
 int  audio_play_midi(const char *sd_path);         // start .mid playback. 0 ok, <0 err
 void audio_stop(void);
@@ -16,11 +20,17 @@ void audio_test_tone(int on);                      // 440 Hz sine into the FIFO 
 void audio_set_gain(float g);                      // runtime linear master gain (1.0 = unity)
 void audio_init(void);                             // reset the software SIDs + per-source mix
 void audio_set_mix(float sid1, float sid2, float wts);  // per-source linear volumes
+int  audio_play_sidfile(const char *sd_path);      // play a .sid file (sandboxed 6502). 0 ok
+void audio_sid_reg_write(int chip, int reg, unsigned char val);  // SID write sink (from sidplay)
 
 // Implemented in main.c (owns the fio_bridge register base):
 void audio_fifo_write(const unsigned char *buf, int n);   // push PCM bytes to R_AUDIO
 int  audio_fifo_space(void);                              // free bytes in the HDMI FIFO
 void audio_mmio_poke(unsigned addr, unsigned char v);    // write a byte into 6502 MMIO ($BA50 status)
 unsigned audio_evt_read(void);                           // pop a captured SID/WTS reg-write event
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

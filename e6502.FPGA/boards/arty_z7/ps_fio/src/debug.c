@@ -343,6 +343,13 @@ static void do_audio_mix(struct tcp_pcb *pcb, const char *s) {
     char b[64]; snprintf(b, sizeof b, "{\"ok\":true,\"sid1\":%d,\"sid2\":%d,\"wts\":%d}", s1, s2, w);
     respond(pcb, b);
 }
+static void do_audio_sidfile(struct tcp_pcb *pcb, const char *s) {
+    char path[128];
+    if (json_str(s, "path", path, sizeof path) <= 0) { respond_err(pcb, "Missing 'path'"); return; }
+    int rc = audio_play_sidfile(path);
+    char b[64]; snprintf(b, sizeof b, "{\"ok\":%s,\"rc\":%d}", rc == 0 ? "true" : "false", rc);
+    respond(pcb, b);
+}
 
 // ---- dispatch ---------------------------------------------------------------
 static void dispatch(struct tcp_pcb *pcb, const char *line) {
@@ -367,6 +374,7 @@ static void dispatch(struct tcp_pcb *pcb, const char *line) {
     else if (!strcmp(cmd, "audio_stop"))  do_audio_stop(pcb, line);
     else if (!strcmp(cmd, "audio_gain"))  do_audio_gain(pcb, line);
     else if (!strcmp(cmd, "audio_mix"))   do_audio_mix(pcb, line);
+    else if (!strcmp(cmd, "audio_sidfile")) do_audio_sidfile(pcb, line);
     else if (!strcmp(cmd, "wait_ready"))  respond_ok(pcb);   // not pollable; best-effort
     else if (!strcmp(cmd, "fill_vram"))   respond_err(pcb, "fill_vram not supported on this host");
     else if (!strcmp(cmd, "run_cycles"))  respond_err(pcb, "run_cycles not supported (free-running CPU)");

@@ -162,6 +162,8 @@ void sid_render(sidchip *s, float *out_mono, int count) {
     unsigned char filterCtrl   = s->regs[0x17];
     float cutoff = 0.05f + 0.85f * (sinf((s->regs[0x16] / 255.0f - 0.5f) * 3.14159265f) * 0.5f + 0.5f);
     cutoff = powf(cutoff, 1.3f);
+    cutoff *= (44100.0f / SID_SAMPLE_RATE);   // SidChip.cs tunes the filter for 44.1 kHz;
+                                              // rescale the cutoff coeff for our 48 kHz rate
     float resonance = (s->regs[0x17] > 0x3F) ? 7.0f / (s->regs[0x17] >> 4) : 1.75f;
 
     for (int i = 0; i < count; i++) {
