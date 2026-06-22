@@ -108,6 +108,7 @@ public:
     const uint8_t* sid2Shadow() const { return _sid2; }
     uint8_t sid1(uint8_t off) const { return _sid1[off & 0x1F]; }
     uint8_t sid2(uint8_t off) const { return _sid2[off & 0x1F]; }
+    uint16_t ciaTimer() const { return _cia_timer; }   // tune's CIA Timer A latch (play rate)
 
 private:
     static constexpr uint16_t TrapAddress = 0x03D0;
