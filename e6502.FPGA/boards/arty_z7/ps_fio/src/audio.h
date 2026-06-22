@@ -14,10 +14,13 @@ void audio_service(void);                          // call frequently from the m
 int  audio_is_playing(void);
 void audio_test_tone(int on);                      // 440 Hz sine into the FIFO (P1b proof)
 void audio_set_gain(float g);                      // runtime linear master gain (1.0 = unity)
+void audio_init(void);                             // reset the software SIDs + per-source mix
+void audio_set_mix(float sid1, float sid2, float wts);  // per-source linear volumes
 
 // Implemented in main.c (owns the fio_bridge register base):
 void audio_fifo_write(const unsigned char *buf, int n);   // push PCM bytes to R_AUDIO
 int  audio_fifo_space(void);                              // free bytes in the HDMI FIFO
 void audio_mmio_poke(unsigned addr, unsigned char v);    // write a byte into 6502 MMIO ($BA50 status)
+unsigned audio_evt_read(void);                           // pop a captured SID/WTS reg-write event
 
 #endif

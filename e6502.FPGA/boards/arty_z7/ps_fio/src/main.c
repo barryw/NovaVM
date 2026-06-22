@@ -53,6 +53,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define R_VMEM_DATA  (FIO_BASE + 0x2C)   // R {24'b0, data[7:0]} from VGC vmem (char/color/gfx/spr)
 #define R_AUDIO      (FIO_BASE + 0x30)   // W [7:0] -> push 1 PCM byte to the HDMI audio FIFO
 #define R_AUDIO_SPACE (FIO_BASE + 0x34)  // R [15:0] -> free bytes in the HDMI audio FIFO
+#define R_AUDIO_EVT  (FIO_BASE + 0x38)   // R {valid@16, index[15:8], data[7:0]} -> pop a SID/WTS reg-write event
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -145,6 +146,9 @@ void audio_fifo_write(const unsigned char *buf, int n) {
     for (int i = 0; i < n; i++) Xil_Out32(R_AUDIO, buf[i]);
 }
 int audio_fifo_space(void) { return (int)(Xil_In32(R_AUDIO_SPACE) & 0xFFFFu); }
+// Pop one captured 6502 SID/WTS register-write event. Returns the raw word:
+// bit16 = valid, [15:8] = index (SID1 0-31, SID2 32-63, WTS 64-223), [7:0] = data.
+unsigned audio_evt_read(void) { return Xil_In32(R_AUDIO_EVT); }
 // audio.c publishes per-voice notes + playback state into the $BA50 music-status
 // block (the keyboard visualizer reads it). poke() reaches the PL music_regs RAM.
 void audio_mmio_poke(unsigned addr, unsigned char v) { poke(addr, v); }
@@ -870,6 +874,7 @@ int main(void) {
     debug_init();                               // NovaHost 6503 debug server (after lwip_init)
     usb_init();                                 // bring up PS USB host (HID keyboard)
 
+    audio_init();                               // reset the software SIDs + mix
     audio_timer_init();                         // start the 1 kHz audio IRQ (after the GIC is up)
 
     for (;;) {

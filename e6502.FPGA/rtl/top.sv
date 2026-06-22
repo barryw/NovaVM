@@ -140,7 +140,13 @@ module top (
     // command byte. fpga_top.sv routes these to the debug bridge, which emits
     // async events to NovaHost.
     output logic        fio_event,
-    output logic        nic_event
+    output logic        nic_event,
+    // CPU bus write monitor: lets a board wrapper snoop 6502 writes (the Arty
+    // captures SID/WTS register writes into an audio-event FIFO). ULX3S leaves
+    // these unconnected.
+    output logic [15:0] cpu_mon_addr,
+    output logic [7:0]  cpu_mon_wdata,
+    output logic        cpu_mon_we
 `ifndef SYNTHESIS
     ,
     // Simulation-only VRAM peek path. Excluded from synthesis so the
@@ -1782,6 +1788,11 @@ module top (
     wire sid_cpu_we = cpu_we && cpu_active && !dbg_poke_sid;
     wire [15:0] sid_bus_addr = dbg_poke_sid ? dbg_poke_addr : cpu_addr;
     wire [7:0]  sid_bus_dout = dbg_poke_sid ? dbg_poke_data : cpu_dout;
+
+    // CPU bus write monitor for board wrappers (Arty audio-register capture).
+    assign cpu_mon_addr  = cpu_addr;
+    assign cpu_mon_wdata = cpu_dout;
+    assign cpu_mon_we    = cpu_we && cpu_active;
 
     logic sid_mode_8580;
     logic hdmi_audio_test_enable;

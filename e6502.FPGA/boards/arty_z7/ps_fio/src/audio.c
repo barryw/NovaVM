@@ -12,6 +12,7 @@
 #include "xil_printf.h"
 #include "xil_exception.h"   // Xil_ExceptionDisable/Enable -- guard engine swaps
                              // against the high-priority audio TTC0 ISR
+#include "sid.h"             // software MOS 6581 (2 instances, 6502 register-driven)
 
 // The ps_fio app is built -O0 (-g3); TSF's per-sample float synthesis is far too
 // slow unoptimized and the HDMI FIFO underruns (scratchy, lurching playback).
@@ -42,6 +43,74 @@ static short        g_block[BLOCK_FRAMES * 2];
 static float        g_fblock[BLOCK_FRAMES * 2];
 static unsigned char g_note_active[128];  // count of sounding voices per MIDI note
 static unsigned     g_total_frames = 0;   // song length in 60 Hz frames
+
+// ---- 6502 register-driven sources: 2 software SIDs + the wavetable (via TSF) ---
+static sidchip      g_sid1, g_sid2;        // $D400 / $D420
+static float        g_sidbuf[BLOCK_FRAMES];// scratch mono SID render buffer
+static int          g_regs_active = 0;     // set once the 6502 touches any SID/WTS reg
+static float        g_vol_sid1 = 1.0f, g_vol_sid2 = 1.0f, g_vol_wts = 1.0f;
+// WTS voice state (8 voices -> TSF channels 0-7): current note + latched vel/bend.
+static unsigned char g_wts_note[8];
+static unsigned char g_wts_vel[8];
+static unsigned char g_wts_bendlo[8];
+
+void audio_init(void) {
+    sid_reset(&g_sid1);
+    sid_reset(&g_sid2);
+    for (int i = 0; i < 8; i++) { g_wts_note[i] = 0; g_wts_vel[i] = 100; g_wts_bendlo[i] = 0; }
+    xil_printf("[audio] software SIDs ready ($D400/$D420)\r\n");
+}
+
+void audio_set_mix(float sid1, float sid2, float wts) {
+    g_vol_sid1 = sid1; g_vol_sid2 = sid2; g_vol_wts = wts;
+    xil_printf("[audio] mix sid1=%d%% sid2=%d%% wts=%d%%\r\n",
+               (int)(sid1 * 100), (int)(sid2 * 100), (int)(wts * 100));
+}
+
+// Apply one captured wavetable register write ($A140-$A1DF) to TSF.
+static void wts_apply(int off, unsigned char data) {
+    if (!g_tsf) return;
+    if (off < 64) {                       // per-voice: 8 voices x 8 regs
+        int v = off >> 3, r = off & 7;
+        switch (r) {
+        case 0:                            // NOTE: >0 note-on, 0 note-off (monophonic/voice)
+            if (g_wts_note[v]) tsf_channel_note_off(g_tsf, v, g_wts_note[v]);
+            if (data) { tsf_channel_note_on(g_tsf, v, data, g_wts_vel[v] / 127.0f); g_wts_note[v] = data; }
+            else      g_wts_note[v] = 0;
+            break;
+        case 1: g_wts_vel[v] = data; break;                                  // VELOCITY (latch)
+        case 2: tsf_channel_set_presetnumber(g_tsf, v, data, 0); break;      // INSTRUMENT
+        case 3: tsf_channel_midi_control(g_tsf, v, 7,  data >> 1); break;    // VOLUME -> CC7
+        case 4: tsf_channel_midi_control(g_tsf, v, 10, data >> 1); break;    // PAN -> CC10
+        case 5: g_wts_bendlo[v] = data; break;                              // BEND lo (latch)
+        case 6: tsf_channel_set_pitchwheel(g_tsf, v,
+                    (((data << 8) | g_wts_bendlo[v]) >> 2)); break;          // BEND hi -> apply 14-bit
+        default: break;                                                     // 7 = status (R)
+        }
+    } else {                              // global ($A180+)
+        switch (off) {
+        case 66: g_vol_wts = data / 255.0f; break;                          // $A182 master
+        case 69: if (data == 1)                                            // $A185 command: all-notes-off
+                     for (int v = 0; v < 8; v++) { if (g_wts_note[v]) tsf_channel_note_off(g_tsf, v, g_wts_note[v]); g_wts_note[v] = 0; }
+                 break;
+        default: break;                    // reverb/chorus ($A180/$A181): TODO effects port
+        }
+    }
+}
+
+// Drain the PL capture FIFO: apply every queued 6502 SID/WTS register write.
+static void audio_drain_events(void) {
+    for (int guard = 0; guard < 512; guard++) {
+        unsigned e = audio_evt_read();
+        if (!(e & 0x10000)) break;         // bit16 = valid; empty -> done
+        int idx = (e >> 8) & 0xFF;
+        unsigned char data = e & 0xFF;
+        if      (idx < 32)  { sid_write(&g_sid1, idx, data); }
+        else if (idx < 64)  { sid_write(&g_sid2, idx - 32, data); }
+        else                { wts_apply(idx - 64, data); }
+        g_regs_active = 1;
+    }
+}
 
 // $BA50 music-status block (the keyboard visualizer reads it).
 #define MUSIC_STATUS   0xBA50            // bit1=music, bit3=WTS, bit4=loading
@@ -177,10 +246,10 @@ void audio_test_tone(int on) {
     xil_printf("[audio] test tone %s\r\n", on ? "ON" : "OFF");
 }
 
-// Max stereo blocks rendered per audio_service() call. This runs in the 1 kHz
-// TTC0 ISR, so it must be short: 2 blocks = ~10 ms of audio per tick, far more
-// than the ~1 ms drained, while keeping worst-case ISR time ~1 ms.
-#define ISR_MAX_BLOCKS 2
+// Max stereo blocks rendered per audio_service() call. Runs in the 1 kHz TTC0
+// ISR, so keep it short: 1 block (2 SIDs + TSF render) is ~0.8 ms worst case.
+// Steady state renders ~1 block per 5 ticks (the FIFO stays near full).
+#define ISR_MAX_BLOCKS 1
 
 // Fire all MIDI events due by 'msec' into TSF.
 static void fire_events(double msec) {
@@ -230,31 +299,51 @@ static void render_test_tone(short *out, int frames) {
 }
 
 void audio_service(void) {
-    if (!g_tsf && !g_testtone) return;
-    if (!g_playing && !g_testtone) return;
+    audio_drain_events();                  // apply queued 6502 SID/WTS writes (cheap when idle)
+    // Render whenever ANY source is live: MIDI file, test tone, or the 6502 has
+    // touched a SID/WTS register (then the engine mixes continuously).
+    if (!g_playing && !g_testtone && !g_regs_active) return;
 
     int guard = 0;
     for (;;) {
         if ((audio_fifo_space() >> 2) < BLOCK_FRAMES) break;   // FIFO full enough
         if (++guard > ISR_MAX_BLOCKS) break;                   // keep the ISR short
+        audio_drain_events();              // apply writes at block granularity
 
         if (g_testtone) {
             render_test_tone(g_block, BLOCK_FRAMES);
-        } else {
-            g_msec += (double)BLOCK_FRAMES * 1000.0 / (double)SAMPLE_RATE;
-            fire_events(g_msec);
-            tsf_render_float(g_tsf, g_fblock, BLOCK_FRAMES, 0);
-            render_limit(g_fblock, g_block, BLOCK_FRAMES);
-            if (!g_cur && tsf_active_voice_count(g_tsf) == 0) {  // song + tails done
-                audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
-                g_playing = 0;
-                for (int i = 0; i < 128; i++) g_note_active[i] = 0;
-                audio_publish_status();
-                xil_printf("[audio] MIDI playback complete\r\n");
-                break;
-            }
+            audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
+            continue;
         }
+
+        // Wavetable + MIDI file -> g_fblock (stereo). g_tsf may be null (SID-only).
+        if (g_playing) { g_msec += (double)BLOCK_FRAMES * 1000.0 / (double)SAMPLE_RATE; fire_events(g_msec); }
+        if (g_tsf) tsf_render_float(g_tsf, g_fblock, BLOCK_FRAMES, 0);
+        else       memset(g_fblock, 0, sizeof g_fblock);
+
+        // Mix SID1 (apply WTS volume to the TSF buffer at the same time).
+        sid_render(&g_sid1, g_sidbuf, BLOCK_FRAMES);
+        for (int i = 0; i < BLOCK_FRAMES; i++) {
+            float s = g_sidbuf[i] * g_vol_sid1;
+            g_fblock[2 * i]     = g_fblock[2 * i]     * g_vol_wts + s;
+            g_fblock[2 * i + 1] = g_fblock[2 * i + 1] * g_vol_wts + s;
+        }
+        // Mix SID2.
+        sid_render(&g_sid2, g_sidbuf, BLOCK_FRAMES);
+        for (int i = 0; i < BLOCK_FRAMES; i++) {
+            float s = g_sidbuf[i] * g_vol_sid2;
+            g_fblock[2 * i] += s; g_fblock[2 * i + 1] += s;
+        }
+
+        render_limit(g_fblock, g_block, BLOCK_FRAMES);   // master gain + peak limiter -> int16
         audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
+
+        if (g_playing && !g_cur && tsf_active_voice_count(g_tsf) == 0) {  // MIDI file done
+            g_playing = 0;
+            for (int i = 0; i < 128; i++) g_note_active[i] = 0;
+            audio_publish_status();
+            xil_printf("[audio] MIDI playback complete\r\n");
+        }
     }
     if (g_playing) audio_publish_status();   // live notes + elapsed for the visualizer
 }

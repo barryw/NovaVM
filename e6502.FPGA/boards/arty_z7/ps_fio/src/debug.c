@@ -337,6 +337,12 @@ static void do_audio_gain(struct tcp_pcb *pcb, const char *s) {
     char b[48]; snprintf(b, sizeof b, "{\"ok\":true,\"gain\":%d}", pct);
     respond(pcb, b);
 }
+static void do_audio_mix(struct tcp_pcb *pcb, const char *s) {
+    int s1 = json_int(s, "sid1", 100), s2 = json_int(s, "sid2", 100), w = json_int(s, "wts", 100);
+    audio_set_mix(s1 / 100.0f, s2 / 100.0f, w / 100.0f);   // per-source volumes (percent)
+    char b[64]; snprintf(b, sizeof b, "{\"ok\":true,\"sid1\":%d,\"sid2\":%d,\"wts\":%d}", s1, s2, w);
+    respond(pcb, b);
+}
 
 // ---- dispatch ---------------------------------------------------------------
 static void dispatch(struct tcp_pcb *pcb, const char *line) {
@@ -360,6 +366,7 @@ static void dispatch(struct tcp_pcb *pcb, const char *line) {
     else if (!strcmp(cmd, "audio_midi"))  do_audio_midi(pcb, line);
     else if (!strcmp(cmd, "audio_stop"))  do_audio_stop(pcb, line);
     else if (!strcmp(cmd, "audio_gain"))  do_audio_gain(pcb, line);
+    else if (!strcmp(cmd, "audio_mix"))   do_audio_mix(pcb, line);
     else if (!strcmp(cmd, "wait_ready"))  respond_ok(pcb);   // not pollable; best-effort
     else if (!strcmp(cmd, "fill_vram"))   respond_err(pcb, "fill_vram not supported on this host");
     else if (!strcmp(cmd, "run_cycles"))  respond_err(pcb, "run_cycles not supported (free-running CPU)");

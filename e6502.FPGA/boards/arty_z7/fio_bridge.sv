@@ -73,7 +73,12 @@ module fio_bridge (
     // (an overflowing write silently drops the sample).
     output reg         audio_we,        // 1-cycle pulse
     output reg  [7:0]  audio_data,
-    input  wire [15:0] audio_space
+    input  wire [15:0] audio_space,
+    // Audio-register event FIFO: each read of R_AUDIO_EVT (0x38) returns
+    // {valid, index[7:0], data[7:0]} and pops one entry.
+    output reg         audio_evt_rd,    // 1-cycle pop pulse
+    input  wire [15:0] audio_evt_data,  // {index[7:0], data[7:0]} at FIFO head
+    input  wire        audio_evt_empty
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
     assign dbg_vmem_re = 1'b1;   // continuously read the latched vmem addr/space
@@ -91,11 +96,13 @@ module fio_bridge (
             dbg_rom_we <= 1'b0; dbg_rom_idx <= 1'b0; dbg_rom_addr <= 14'd0; dbg_rom_data <= 8'd0;
             dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
             audio_we <= 1'b0; audio_data <= 8'd0;
+            audio_evt_rd <= 1'b0;
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
             dbg_rom_we  <= 1'b0;
             audio_we    <= 1'b0;
+            audio_evt_rd <= 1'b0;
             if (fio_event) fio_event_sticky <= 1'b1;
 
             // ---- write channel (single outstanding) ----
@@ -145,6 +152,9 @@ module fio_bridge (
                     4'h8: s_rdata <= {4'd0, dbg_aux};                   // AUX (0x20) sleft/swords
                     4'hB: s_rdata <= {24'd0, dbg_vmem_rdata};           // VMEM_DATA (0x2C)
                     4'hD: s_rdata <= {16'd0, audio_space};              // AUDIO_SPACE (0x34)
+                    // AUDIO_EVT (0x38): {valid, index[7:0], data[7:0]}; pop on read.
+                    4'hE: begin s_rdata <= {15'd0, ~audio_evt_empty, audio_evt_data};
+                                audio_evt_rd <= ~audio_evt_empty; end
                     default: s_rdata <= 32'hDEAD_0000;
                 endcase
                 s_rvalid <= 1'b1;

@@ -118,6 +118,9 @@ module arty_z7_full (
     wire         fb_cpu_reset;
     wire         fb_rom_we, fb_rom_idx; wire [13:0] fb_rom_addr; wire [7:0] fb_rom_data;
     wire         fb_vmem_re; wire [2:0] fb_vmem_space; wire [16:0] fb_vmem_addr; wire [7:0] fb_vmem_rdata;
+    wire [15:0]  cpu_mon_addr;   // 6502 bus write monitor (audio-register capture)
+    wire [7:0]   cpu_mon_wdata;
+    wire         cpu_mon_we;
 
     top core (
         .clk(clk_pixel), .rst(reset),
@@ -158,7 +161,30 @@ module arty_z7_full (
         .sdram_stream_ready(xa_sready),
         .sdram_stream_dout(xa_sdout), .sdram_stream_valid(xa_svalid),
         .sdram_stream_busy(xa_sbusy), .sdram_stream_done(xa_sdone),
-        .fio_event(fio_event), .nic_event()
+        .fio_event(fio_event), .nic_event(),
+        .cpu_mon_addr(cpu_mon_addr), .cpu_mon_wdata(cpu_mon_wdata), .cpu_mon_we(cpu_mon_we)
+    );
+
+    // ---- Audio-register capture FIFO -------------------------------------------
+    // Snoop 6502 writes to SID1 ($D400-$D41F), SID2 ($D420-$D43F) and the
+    // wavetable ($A140-$A1DF) into a 256-deep event FIFO. The PS drains it (via
+    // fio_bridge R_AUDIO_EVT) and applies the writes to its software SID + TSF.
+    // Event word = {index[7:0], data[7:0]}: SID1=0..31, SID2=32..63, WTS=64..223.
+    wire cap_sid1 = cpu_mon_we && (cpu_mon_addr >= 16'hD400 && cpu_mon_addr <= 16'hD41F);
+    wire cap_sid2 = cpu_mon_we && (cpu_mon_addr >= 16'hD420 && cpu_mon_addr <= 16'hD43F);
+    wire cap_wts  = cpu_mon_we && (cpu_mon_addr >= 16'hA140 && cpu_mon_addr <= 16'hA1DF);
+    wire cap_we   = cap_sid1 | cap_sid2 | cap_wts;
+    wire [7:0] cap_index =
+        cap_sid1 ? {3'd0, cpu_mon_addr[4:0]} :
+        cap_sid2 ? (8'd32 + {3'd0, cpu_mon_addr[4:0]}) :
+                   (8'd64 + (cpu_mon_addr[7:0] - 8'h40));   // $A140 -> 64
+    wire        aevt_rd;
+    wire [15:0] aevt_data;
+    wire        aevt_empty;
+    sfifo #(.BW(16), .LGFLEN(8)) audio_evt_fifo (
+        .i_clk(clk_pixel), .i_reset(reset),
+        .i_wr(cap_we), .i_data({cap_index, cpu_mon_wdata}), .o_full(), .o_fill(),
+        .i_rd(aevt_rd), .o_data(aevt_data), .o_empty(aevt_empty)
     );
 
     // Port B done is consumed inside sdram.v on the real board; top doesn't use
@@ -317,7 +343,8 @@ module arty_z7_full (
         .dbg_bus({4'd0, xa_dbg_state, x_rready, x_rvalid, x_arready, x_arvalid,
                   xa_sdone, xa_svalid, xa_sbusy, d_rdy}),
         .dbg_aux({xa_swords, xa_sleft}),
-        .audio_we(fb_audio_we), .audio_data(fb_audio_data), .audio_space(fb_audio_space)
+        .audio_we(fb_audio_we), .audio_data(fb_audio_data), .audio_space(fb_audio_space),
+        .audio_evt_rd(aevt_rd), .audio_evt_data(aevt_data), .audio_evt_empty(aevt_empty)
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)
