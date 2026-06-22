@@ -24,9 +24,13 @@ apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 \
     -config { make_external "FIXED_IO, DDR" apply_board_preset "1" Master "Disable" Slave "Disable" } \
     [get_bd_cells ps7]
 # Enable one HP slave port (PL -> DDR) and keep GP0 (future FIO bridge).
+# TTC0: required by the FreeRTOS BSP for the systick (xiltimer); internal clock,
+# no EMIO/PL pins. The A9 SCU timer alone doesn't satisfy the FreeRTOS DRC.
 set_property -dict [list \
     CONFIG.PCW_USE_S_AXI_HP0 {1} \
     CONFIG.PCW_USE_M_AXI_GP0 {1} \
+    CONFIG.PCW_EN_TTC0 {1} \
+    CONFIG.PCW_TTC0_PERIPHERAL_ENABLE {1} \
 ] [get_bd_cells ps7]
 
 # --- AXI SmartConnect: 32-bit AXI4 slave (PL) -> 64-bit AXI3 HP0 ------------

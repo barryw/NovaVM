@@ -18,6 +18,9 @@ DOMAIN = "standalone_ps7_cortexa9_0"
 client = vitis.create_client()
 client.set_workspace(WS)
 
+# Bare-metal (standalone). Audio is driven by a high-priority TTC0 interrupt (see
+# main.c), not an RTOS task -- a hardware IRQ preempts net/FIO/USB so audio never
+# starves, without touching the raw-API lwIP net stack.
 plat = client.create_platform_component(
     name="nova_fio_plat", hw_design=XSA, os="standalone", cpu="ps7_cortexa9_0")
 

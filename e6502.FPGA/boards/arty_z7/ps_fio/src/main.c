@@ -15,6 +15,9 @@
 #include <string.h>
 #include "xil_io.h"
 #include "xil_cache.h"
+#include "xttcps.h"             // TTC0 -> 1 kHz high-priority audio interrupt
+#include "xinterrupt_wrap.h"   // XSetupInterruptSystem -- same shared GIC the lwIP
+                               // adapter uses (handles the SDT-encoded IntrId)
 #include "xil_printf.h"
 #include "ff.h"
 #include "xuartps_hw.h"
@@ -778,6 +781,51 @@ static void list_dir(const char *path) {
     f_closedir(&d);
 }
 
+// Audio is driven by a high-priority TTC0 interrupt (1 kHz) rather than the
+// cooperative main loop, so it preempts net/FIO/USB/file-I/O -- the HDMI FIFO
+// can't underrun no matter what the PS is busy with. A hardware IRQ is higher
+// priority than any task could be.
+static XTtcPs g_ttc;
+
+// Driver status callback: the TTC driver's interrupt handler reads+clears the
+// status (the correct, race-free clear) and calls this with the event bits.
+static void audio_tick_cb(void *ref, u32 status) {
+    (void)ref;
+    if (status & XTTCPS_IXR_INTERVAL_MASK) audio_service();
+}
+
+// Set up TTC0 as a 1 kHz interval timer whose ISR feeds the audio FIFO. Call
+// AFTER net_init() -- the lwIP adapter initializes the shared GIC + enables IRQs.
+static void audio_timer_init(void) {
+    XTtcPs_Config *cfg = XTtcPs_LookupConfig(XPAR_XTTCPS_0_BASEADDR);
+    if (!cfg || XTtcPs_CfgInitialize(&g_ttc, cfg, cfg->BaseAddress) != XST_SUCCESS) {
+        xil_printf("[audio] TTC0 init FAILED -- audio IRQ disabled\r\n");
+        return;
+    }
+    XTtcPs_Stop(&g_ttc);
+    XTtcPs_SetOptions(&g_ttc, XTTCPS_OPTION_INTERVAL_MODE | XTTCPS_OPTION_WAVE_DISABLE);
+    XInterval interval = 0; u8 prescaler = 0;
+    XTtcPs_CalcIntervalFromFreq(&g_ttc, 1000, &interval, &prescaler);   // 1 kHz
+    xil_printf("[audio] TTC0 interval=%u prescaler=%u id=%u\r\n",
+               (unsigned)interval, (unsigned)prescaler, (unsigned)cfg->IntrId[0]);
+    if (interval == 0) { xil_printf("[audio] TTC0 bad interval -- audio IRQ off\r\n"); return; }
+    XTtcPs_SetInterval(&g_ttc, interval);
+    XTtcPs_SetPrescaler(&g_ttc, prescaler);
+    // Driver handler clears the status race-free; our callback does the work.
+    XTtcPs_SetStatusHandler(&g_ttc, &g_ttc, (XTtcPs_StatusHandler)audio_tick_cb);
+    // Use the SDT interrupt wrapper (same shared GIC the lwIP adapter set up; it
+    // decodes cfg->IntrId[0] and connects/enables the TTC0 interrupt for us).
+    if (XSetupInterruptSystem(&g_ttc, (void *)XTtcPs_InterruptHandler,
+                              cfg->IntrId[0], cfg->IntrParent,
+                              XINTERRUPT_DEFAULT_PRIORITY) != XST_SUCCESS) {
+        xil_printf("[audio] TTC0 XSetupInterruptSystem FAILED -- audio IRQ off\r\n");
+        return;
+    }
+    XTtcPs_EnableInterrupts(&g_ttc, XTTCPS_IXR_INTERVAL_MASK);
+    XTtcPs_Start(&g_ttc);
+    xil_printf("[audio] TTC0 1kHz audio IRQ started\r\n");
+}
+
 int main(void) {
     static FATFS fs;
     Xil_DCacheEnable();
@@ -821,6 +869,8 @@ int main(void) {
     mgmt_init();                                // NovaHost 6504 management server (after lwip_init)
     debug_init();                               // NovaHost 6503 debug server (after lwip_init)
     usb_init();                                 // bring up PS USB host (HID keyboard)
+
+    audio_timer_init();                         // start the 1 kHz audio IRQ (after the GIC is up)
 
     for (;;) {
         // --- FIO host service ---
@@ -878,8 +928,7 @@ int main(void) {
         net_poll();
         // --- PS USB host: detect/poll the HID keyboard ---
         usb_poll();
-        // --- audio: render the SF2/MIDI (or SID) mix into the HDMI audio FIFO ---
-        audio_service();
+        // (audio is serviced by the high-priority TTC0 audio_isr, which preempts
+        //  this loop ~1000x/s — nothing to do for audio here)
     }
-    return 0;
 }

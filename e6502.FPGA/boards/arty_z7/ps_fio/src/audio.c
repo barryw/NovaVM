@@ -10,6 +10,8 @@
 #include <string.h>
 #include <math.h>
 #include "xil_printf.h"
+#include "xil_exception.h"   // Xil_ExceptionDisable/Enable -- guard engine swaps
+                             // against the high-priority audio TTC0 ISR
 
 // The ps_fio app is built -O0 (-g3); TSF's per-sample float synthesis is far too
 // slow unoptimized and the HDMI FIFO underruns (scratchy, lurching playback).
@@ -107,57 +109,78 @@ static void *slurp(const char *path, UINT *len_out) {
 }
 
 int audio_load_soundfont(const char *sd_path) {
-    if (g_tsf) { tsf_close(g_tsf); g_tsf = 0; }
     UINT len = 0;
-    void *buf = slurp(sd_path, &len);
+    void *buf = slurp(sd_path, &len);     // file I/O runs lock-free (audio keeps playing)
     if (!buf) { xil_printf("[audio] SF2 read failed: %s\r\n", sd_path); return -1; }
-    g_tsf = tsf_load_memory(buf, (int)len);
+    tsf *nt = tsf_load_memory(buf, (int)len);
     free(buf);                            // TSF keeps its own copy of what it needs
-    if (!g_tsf) { xil_printf("[audio] tsf_load_memory failed\r\n"); return -2; }
-    tsf_channel_set_bank_preset(g_tsf, 9, 128, 0);          // GM drum kit on ch 10
+    if (!nt) { xil_printf("[audio] tsf_load_memory failed\r\n"); return -2; }
+    tsf_channel_set_bank_preset(nt, 9, 128, 0);          // GM drum kit on ch 10
     // Render at unity into float; master gain + limiter are applied per-block in
     // render_limit (so we can run hot for loudness without internal clipping).
-    tsf_set_output(g_tsf, TSF_STEREO_INTERLEAVED, SAMPLE_RATE, 0.0f);
-    g_lim = 1.0f;
+    tsf_set_output(nt, TSF_STEREO_INTERLEAVED, SAMPLE_RATE, 0.0f);
+    // Preallocate the voice pool so note-on (in the audio ISR) never reallocs at
+    // render time -- keeps the ISR free of newlib malloc() (the main loop also
+    // uses newlib malloc for loads, so they must never overlap).
+    tsf_set_max_voices(nt, 128);
+    // Swap in atomically w.r.t. the audio ISR (IRQs off for the brief swap).
+    Xil_ExceptionDisable();
+    tsf *old = g_tsf; g_tsf = nt; g_lim = 1.0f;
+    Xil_ExceptionEnable();
+    if (old) tsf_close(old);
     xil_printf("[audio] SF2 loaded: %d presets (%u bytes)\r\n",
-               tsf_get_presetcount(g_tsf), (unsigned)len);
+               tsf_get_presetcount(nt), (unsigned)len);
     return 0;
 }
 
 int audio_play_midi(const char *sd_path) {
     if (!g_tsf) { xil_printf("[audio] no soundfont loaded\r\n"); return -1; }
-    if (g_head) { tml_free(g_head); g_head = 0; }
     UINT len = 0;
-    void *buf = slurp(sd_path, &len);
+    void *buf = slurp(sd_path, &len);     // lock-free file I/O
     if (!buf) { xil_printf("[audio] MIDI read failed: %s\r\n", sd_path); return -2; }
-    g_head = tml_load_memory(buf, (int)len);
+    tml_message *nh = tml_load_memory(buf, (int)len);
     free(buf);
-    if (!g_head) { xil_printf("[audio] tml_load_memory failed\r\n"); return -3; }
+    if (!nh) { xil_printf("[audio] tml_load_memory failed\r\n"); return -3; }
     unsigned int len_ms = 0;
-    tml_get_info(g_head, 0, 0, 0, 0, &len_ms);
+    tml_get_info(nh, 0, 0, 0, 0, &len_ms);
+    // Switch playback to the new song atomically w.r.t. the audio ISR.
+    Xil_ExceptionDisable();
+    tml_message *old = g_head;
+    g_head = nh; g_cur = nh; g_msec = 0.0;
     g_total_frames = (unsigned)(len_ms / 16.6667);
     for (int i = 0; i < 128; i++) g_note_active[i] = 0;
     tsf_reset(g_tsf);
-    g_cur = g_head; g_msec = 0.0; g_testtone = 0; g_playing = 1;
+    g_testtone = 0; g_playing = 1;
+    Xil_ExceptionEnable();
+    if (old) tml_free(old);
     xil_printf("[audio] MIDI playing: %s\r\n", sd_path);
     return 0;
 }
 
 void audio_stop(void) {
+    Xil_ExceptionDisable();
     g_playing = 0; g_testtone = 0;
     if (g_tsf) tsf_reset(g_tsf);
     for (int i = 0; i < 128; i++) g_note_active[i] = 0;
+    Xil_ExceptionEnable();
     audio_publish_status();
 }
 
 int audio_is_playing(void) { return g_playing || g_testtone; }
 
 void audio_test_tone(int on) {
+    Xil_ExceptionDisable();
     g_testtone = on ? 1 : 0;
     g_playing  = 0;
     g_tone_phase = 0;
+    Xil_ExceptionEnable();
     xil_printf("[audio] test tone %s\r\n", on ? "ON" : "OFF");
 }
+
+// Max stereo blocks rendered per audio_service() call. This runs in the 1 kHz
+// TTC0 ISR, so it must be short: 2 blocks = ~10 ms of audio per tick, far more
+// than the ~1 ms drained, while keeping worst-case ISR time ~1 ms.
+#define ISR_MAX_BLOCKS 2
 
 // Fire all MIDI events due by 'msec' into TSF.
 static void fire_events(double msec) {
@@ -212,8 +235,8 @@ void audio_service(void) {
 
     int guard = 0;
     for (;;) {
-        if ((audio_fifo_space() >> 2) < BLOCK_FRAMES) break;   // wait for FIFO room
-        if (++guard > 64) break;                               // don't hog the loop
+        if ((audio_fifo_space() >> 2) < BLOCK_FRAMES) break;   // FIFO full enough
+        if (++guard > ISR_MAX_BLOCKS) break;                   // keep the ISR short
 
         if (g_testtone) {
             render_test_tone(g_block, BLOCK_FRAMES);
