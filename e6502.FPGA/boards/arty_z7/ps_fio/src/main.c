@@ -284,7 +284,22 @@ static int img_find(ndi_t *img, const char *name) {
 
 // ---- low-level file handles (FOPEN/FREAD/FSEEK on the mounted image) --------
 #define FH_MAX 8
-static struct { int used; int idx; uint32_t pos; uint32_t size; } g_fh[FH_MAX];
+static struct {
+    int      used;
+    int      idx;            // NDI dir index (read handles)
+    uint32_t pos;
+    uint32_t size;
+    int      writing;        // FCREATE write handle: staged in g_wbuf, committed on FCLOSE
+    uint8_t  wtype;          // NDI file type for the committed entry
+    uint16_t wparent;        // NDI parent index for the committed entry
+    char     wname[34];      // committed entry name
+} g_fh[FH_MAX];
+
+// Save staging: FWRITE accumulates into g_wbuf; FCLOSE creates the NDI entry and
+// streams it in. One writer at a time (the Z-machine save path uses one handle).
+#define WBUF_BYTES (256 * 1024)
+static unsigned char g_wbuf[WBUF_BYTES];
+static int g_wbuf_handle = -1;
 
 static void fio_ok(void)        { poke(FIO_ERRCODE, 0);    poke(FIO_STATUS, FIO_OK);  poke(FIO_CMD, 0); }
 static void fio_fail(int code)  { poke(FIO_ERRCODE, code); poke(FIO_STATUS, FIO_ERR); poke(FIO_CMD, 0); }
@@ -569,9 +584,95 @@ static int fh_from_regs(void) {
     return h;
 }
 
+static uint8_t fio_name_type(const char *name) {
+    const char *d = strrchr(name, '.');
+    if (!d) return DT_BIN;
+    if (!strncasecmp(d, ".bas", 5)) return DT_BAS;
+    if (!strncasecmp(d, ".sid", 5)) return DT_SID;
+    if (!strncasecmp(d, ".mid", 5)) return DT_MID;
+    if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
+    if (!strncasecmp(d, ".4th", 5)) return DT_FORTH;
+    return DT_BIN;
+}
+
+// FCREATE: open a write handle. Data is staged in g_wbuf during FWRITE and the
+// NDI entry is created + filled on FCLOSE (the final size isn't known up front).
+static void fio_fcreate(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_t *img = boot_image();
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    if (g_wbuf_handle >= 0) { fio_fail(FIO_ERR_IO); return; }   // one writer at a time
+    int h = -1;
+    for (int i = 0; i < FH_MAX; i++) if (!g_fh[i].used) { h = i; break; }
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    g_fh[h].used = 1; g_fh[h].idx = -1; g_fh[h].pos = 0; g_fh[h].size = 0;
+    g_fh[h].writing = 1; g_fh[h].wtype = fio_name_type(name); g_fh[h].wparent = NDI_ROOT;
+    strncpy(g_fh[h].wname, name, sizeof g_fh[h].wname - 1);
+    g_fh[h].wname[sizeof g_fh[h].wname - 1] = 0;
+    g_wbuf_handle = h;
+    poke(FIO_SRC_LO, (h + 1) & 0xFF); poke(FIO_SRC_HI, 0);      // handle = slot+1
+    poke(FIO_SIZE_LO, 0); poke(FIO_SIZE_HI, 0); poke(FIO_SIZE2, 0);
+    xil_printf("[fio] FCREATE %s -> h%d (write)\r\n", name, h + 1);
+    fio_ok();
+}
+
+// FWRITE: append FIO_GLEN bytes from CPU RAM (FIO_END) or XRAM (FIO_GADDR/GSPACE)
+// to the write handle's staging buffer.
+static void fio_fwrite(void) {
+    int h = fh_from_regs();
+    if (h < 0 || !g_fh[h].writing) { fio_fail(FIO_ERR_IO); return; }
+    unsigned len = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
+    if (len == 0) { poke(FIO_SIZE_LO, 0); poke(FIO_SIZE_HI, 0); poke(FIO_SIZE2, 0); fio_ok(); return; }
+    if (g_fh[h].pos > WBUF_BYTES || len > WBUF_BYTES - g_fh[h].pos) { fio_fail(FIO_ERR_IO); return; }
+    unsigned char target = peek(FIO_DIRTYPE);
+    if ((target & FIO_TARGET_MASK) == FIO_TARGET_XRAM) {
+        unsigned xaddr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
+        UINTPTR ddr = XRAM_DDR_BASE + xaddr;
+        Xil_DCacheInvalidateRange(ddr, len);                   // fetch fresh PL-written XRAM
+        memcpy(g_wbuf + g_fh[h].pos, (void *)ddr, len);
+    } else {
+        unsigned src = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
+        for (unsigned i = 0; i < len; i++) g_wbuf[g_fh[h].pos + i] = peek((src + i) & 0xFFFF);
+    }
+    g_fh[h].pos += len;
+    if (g_fh[h].pos > g_fh[h].size) g_fh[h].size = g_fh[h].pos;
+    poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF); poke(FIO_SIZE2, (len >> 16) & 0xFF);
+    fio_ok();
+}
+
+// Commit a write handle's staged bytes into the mounted .ndi (replace if the
+// name already exists). Returns 0 on success.
+static int fio_commit_write(int h) {
+    ndi_t *img = boot_image();
+    if (!img) return -1;
+    uint32_t total = g_fh[h].size;
+    ndi_delete(img, g_fh[h].wname, g_fh[h].wparent);           // overwrite existing slot
+    int idx = ndi_create(img, g_fh[h].wname, g_fh[h].wtype, g_fh[h].wparent, total ? total : 1);
+    if (idx < 0) return -1;
+    uint32_t off = 0;
+    while (off < total) {
+        uint32_t chunk = total - off; if (chunk > 16384) chunk = 16384;
+        if (ndi_write(img, idx, off, g_wbuf + off, chunk) != 0) {
+            ndi_delete(img, g_fh[h].wname, g_fh[h].wparent); return -1;
+        }
+        off += chunk;
+    }
+    ndi_zero_tail(img, idx);
+    ndi_flush(img);
+    return 0;
+}
+
 static void fio_fclose(void) {
     int h = fh_from_regs();
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    if (g_fh[h].writing) {
+        int rc = fio_commit_write(h);
+        g_fh[h].used = 0; g_fh[h].writing = 0; g_wbuf_handle = -1;
+        if (rc == 0) { xil_printf("[fio] FCLOSE(save) %s (%u bytes)\r\n", g_fh[h].wname, (unsigned)g_fh[h].size); fio_ok(); }
+        else         { xil_printf("[fio] FCLOSE(save) %s FAILED\r\n", g_fh[h].wname); fio_fail(FIO_ERR_IO); }
+        return;
+    }
     g_fh[h].used = 0;
     fio_ok();
 }
@@ -697,6 +798,8 @@ int main(void) {
             else if (cmd == FIO_CMD_XPAGE)   fio_xpage();
             else if (cmd == FIO_CMD_LOADRUNTIME) fio_load_runtime();
             else if (cmd == FIO_CMD_FOPEN)   fio_fopen();
+            else if (cmd == FIO_CMD_FCREATE) fio_fcreate();
+            else if (cmd == FIO_CMD_FWRITE)  fio_fwrite();
             else if (cmd == FIO_CMD_FCLOSE)  fio_fclose();
             else if (cmd == FIO_CMD_FREAD)   fio_fread();
             else if (cmd == FIO_CMD_FSEEK)   fio_fseek();

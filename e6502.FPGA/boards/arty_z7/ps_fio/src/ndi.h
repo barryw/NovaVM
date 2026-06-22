@@ -37,6 +37,19 @@ int  ndi_get(ndi_t *img, int index, ndi_entry_t *out);          // 0 ok, <0 erro
 int  ndi_list(ndi_t *img, uint16_t parent, ndi_entry_t *out, int max); // count
 int  ndi_read(ndi_t *img, int index, uint32_t file_offset, void *buf, uint32_t len);
 
+// ---- write (save support) -------------------------------------------------
+// Create a new file entry sized `size` (allocates contiguous data sectors +
+// a directory slot). Returns the new entry's index, or <0 on error.
+int  ndi_create(ndi_t *img, const char *name, uint8_t type, uint16_t parent, uint32_t size);
+// Write a slice of a created file by index. 0 ok, <0 error.
+int  ndi_write(ndi_t *img, int index, uint32_t file_offset, const void *buf, uint32_t len);
+// Zero the unused tail of the final allocated sector of a created file.
+int  ndi_zero_tail(ndi_t *img, int index);
+// Delete a file by name under `parent`. 0 ok, <0 if missing/dir.
+int  ndi_delete(ndi_t *img, const char *name, uint16_t parent);
+// Flush the backing stream to the SD card (persist metadata + data).
+void ndi_flush(ndi_t *img);
+
 #ifdef __cplusplus
 }
 #endif

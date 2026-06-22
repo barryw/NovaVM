@@ -23,7 +23,10 @@ public:
 
     bool open_path(const char *path) {
         if (is_open) { f_close(&f); is_open = false; }
-        if (f_open(&f, path, FA_READ) != FR_OK) return false;
+        // Read-write: saves (FCREATE/FWRITE) write entries back into the .ndi.
+        // Fall back to read-only if the image is on read-only media.
+        if (f_open(&f, path, FA_READ | FA_WRITE) != FR_OK &&
+            f_open(&f, path, FA_READ) != FR_OK) return false;
         is_open = true;
         return true;
     }
@@ -109,6 +112,31 @@ int ndi_list(ndi_t *img, uint16_t parent, ndi_entry_t *out, int max) {
 int ndi_read(ndi_t *img, int index, uint32_t file_offset, void *buf, uint32_t len) {
     (void)img;
     return g_image.read_file_chunk_by_index(index, file_offset, (uint8_t *)buf, len);
+}
+
+int ndi_create(ndi_t *img, const char *name, uint8_t type, uint16_t parent, uint32_t size) {
+    (void)img;
+    return g_image.create_file(name, (ndi::FileType)type, parent, size);
+}
+
+int ndi_write(ndi_t *img, int index, uint32_t file_offset, const void *buf, uint32_t len) {
+    (void)img;
+    return g_image.write_file_chunk_by_index(index, file_offset, (const uint8_t *)buf, len) ? 0 : -1;
+}
+
+int ndi_zero_tail(ndi_t *img, int index) {
+    (void)img;
+    return g_image.zero_file_tail_by_index(index) ? 0 : -1;
+}
+
+int ndi_delete(ndi_t *img, const char *name, uint16_t parent) {
+    (void)img;
+    return g_image.delete_file(name, parent) ? 0 : -1;
+}
+
+void ndi_flush(ndi_t *img) {
+    (void)img;
+    g_stream.flush();
 }
 
 }  // extern "C"
