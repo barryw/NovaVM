@@ -343,6 +343,19 @@ static void do_audio_mix(struct tcp_pcb *pcb, const char *s) {
     char b[64]; snprintf(b, sizeof b, "{\"ok\":true,\"sid1\":%d,\"sid2\":%d,\"wts\":%d}", s1, s2, w);
     respond(pcb, b);
 }
+static void do_audio_sidvol(struct tcp_pcb *pcb, const char *s) {
+    int v = json_int(s, "vol", 64);                // 32 = x1, 64 = x2 (default), 0..255
+    if (v < 0) v = 0; if (v > 255) v = 255;
+    audio_set_sid_vol((unsigned)v);
+    char b[48]; snprintf(b, sizeof b, "{\"ok\":true,\"vol\":%d}", v);
+    respond(pcb, b);
+}
+static void do_audio_sidstereo(struct tcp_pcb *pcb, const char *s) {
+    int on = json_int(s, "on", 1);                 // 1 = SID1->L / SID2->R, 0 = mono
+    audio_set_sid_stereo(on);
+    char b[40]; snprintf(b, sizeof b, "{\"ok\":true,\"stereo\":%d}", on ? 1 : 0);
+    respond(pcb, b);
+}
 static void do_audio_sidfile(struct tcp_pcb *pcb, const char *s) {
     char path[128];
     if (json_str(s, "path", path, sizeof path) <= 0) { respond_err(pcb, "Missing 'path'"); return; }
@@ -375,6 +388,8 @@ static void dispatch(struct tcp_pcb *pcb, const char *line) {
     else if (!strcmp(cmd, "audio_gain"))  do_audio_gain(pcb, line);
     else if (!strcmp(cmd, "audio_mix"))   do_audio_mix(pcb, line);
     else if (!strcmp(cmd, "audio_sidfile")) do_audio_sidfile(pcb, line);
+    else if (!strcmp(cmd, "audio_sidvol")) do_audio_sidvol(pcb, line);
+    else if (!strcmp(cmd, "audio_sidstereo")) do_audio_sidstereo(pcb, line);
     else if (!strcmp(cmd, "wait_ready"))  respond_ok(pcb);   // not pollable; best-effort
     else if (!strcmp(cmd, "fill_vram"))   respond_err(pcb, "fill_vram not supported on this host");
     else if (!strcmp(cmd, "run_cycles"))  respond_err(pcb, "run_cycles not supported (free-running CPU)");

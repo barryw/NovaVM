@@ -78,7 +78,9 @@ module fio_bridge (
     // {valid, index[7:0], data[7:0]} and pops one entry.
     output reg         audio_evt_rd,    // 1-cycle pop pulse
     input  wire [15:0] audio_evt_data,  // {index[7:0], data[7:0]} at FIFO head
-    input  wire        audio_evt_empty
+    input  wire        audio_evt_empty,
+    output reg  [7:0]  sid_vol,         // R_SID_VOL[7:0] (0x3C): reDIP-SID mix level
+    output reg         sid_stereo       // R_SID_VOL[8]: 1 = SID1->L / SID2->R, 0 = mono
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
     assign dbg_vmem_re = 1'b1;   // continuously read the latched vmem addr/space
@@ -97,6 +99,8 @@ module fio_bridge (
             dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
             audio_we <= 1'b0; audio_data <= 8'd0;
             audio_evt_rd <= 1'b0;
+            sid_vol <= 8'd64;                // default reDIP-SID level (x2 in the mix)
+            sid_stereo <= 1'b0;              // default mono (both SIDs -> L+R)
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
@@ -130,6 +134,7 @@ module fio_bridge (
                         dbg_vmem_space <= s_wdata[19:17];
                     end
                     4'hC: begin audio_we <= 1'b1; audio_data <= s_wdata[7:0]; end // AUDIO (0x30)
+                    4'hF: begin sid_vol <= s_wdata[7:0]; sid_stereo <= s_wdata[8]; end // SID_VOL/STEREO (0x3C)
                     default: ;
                 endcase
                 s_bvalid <= 1'b1;

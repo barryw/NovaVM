@@ -6,6 +6,7 @@
 #include "xil_printf.h"
 
 extern "C" void audio_sid_reg_write(int chip, int reg, unsigned char val);
+extern "C" void audio_set_sid_stereo(int on);
 
 using namespace nova_sid;
 
@@ -48,6 +49,9 @@ extern "C" int sidplay_load(const unsigned char *buf, int len, int song) {
     if (g_period < 1) g_period = 960;
     g_acc = 0;
     g_active = true;
+    // PSID v3+ secondSIDAddress (header $7A): nonzero => 2SID tune => pan SID1->L /
+    // SID2->R. Single-SID tunes stay mono (centered).
+    audio_set_sid_stereo((len > 0x7B && buf[0x7A] != 0) ? 1 : 0);
     xil_printf("[sid] play load=%04X init=%04X play=%04X song=%d period=%u (init:%s)\r\n",
                info.loadAddress, info.initAddress, info.playAddress, s, g_period,
                run_status_name(r.status));

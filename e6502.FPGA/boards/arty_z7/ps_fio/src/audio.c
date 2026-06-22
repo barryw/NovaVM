@@ -103,10 +103,12 @@ static void wts_apply(int off, unsigned char data) {
 
 static void *slurp(const char *path, UINT *len_out);   // defined below
 
-// Sink for SID register writes from the .sid player (sidplay.cpp). Routes to the
-// same two software SIDs that the live 6502 capture drives.
+// Sink for SID register writes from the .sid player (sidplay.cpp). Pokes the real
+// reDIP-SID in the fabric ($D400/$D420) via the bridge -> faithful, VICE-grade
+// audio mixed in the PL. (The live 6502's own $D400 writes reach the RTL SID
+// directly; only the sandboxed .sid emulator needs this sink.)
 void audio_sid_reg_write(int chip, int reg, unsigned char val) {
-    sid_write(chip ? &g_sid2 : &g_sid1, reg, val);
+    audio_mmio_poke((chip ? 0xD420u : 0xD400u) + (unsigned)(reg & 0x1F), val);
     g_regs_active = 1;
 }
 
@@ -129,10 +131,9 @@ static void audio_drain_events(void) {
         if (!(e & 0x10000)) break;         // bit16 = valid; empty -> done
         int idx = (e >> 8) & 0xFF;
         unsigned char data = e & 0xFF;
-        if      (idx < 32)  { sid_write(&g_sid1, idx, data); }
-        else if (idx < 64)  { sid_write(&g_sid2, idx - 32, data); }
-        else                { wts_apply(idx - 64, data); }
-        g_regs_active = 1;
+        // SID writes (idx<64) go straight to the real reDIP-SID in the fabric;
+        // only the wavetable ($A140, idx>=64) is applied here (-> TSF).
+        if (idx >= 64) { wts_apply(idx - 64, data); g_regs_active = 1; }
     }
 }
 
@@ -253,6 +254,8 @@ int audio_play_midi(const char *sd_path) {
 void audio_stop(void) {
     Xil_ExceptionDisable();
     g_playing = 0; g_testtone = 0;
+    sidplay_stop();        // stop the sandboxed .sid -- it kept bridge-poking $D4xx
+    g_regs_active = 0;     // every tick, which blocked/overwrote live 6502 writes
     if (g_tsf) tsf_reset(g_tsf);
     for (int i = 0; i < 128; i++) g_note_active[i] = 0;
     Xil_ExceptionEnable();
@@ -349,19 +352,10 @@ void audio_service(void) {
         if (g_tsf) tsf_render_float(g_tsf, g_fblock, BLOCK_FRAMES, 0);
         else       memset(g_fblock, 0, sizeof g_fblock);
 
-        // Mix SID1 (apply WTS volume to the TSF buffer at the same time).
-        sid_render(&g_sid1, g_sidbuf, BLOCK_FRAMES);
-        for (int i = 0; i < BLOCK_FRAMES; i++) {
-            float s = g_sidbuf[i] * g_vol_sid1;
-            g_fblock[2 * i]     = g_fblock[2 * i]     * g_vol_wts + s;
-            g_fblock[2 * i + 1] = g_fblock[2 * i + 1] * g_vol_wts + s;
-        }
-        // Mix SID2.
-        sid_render(&g_sid2, g_sidbuf, BLOCK_FRAMES);
-        for (int i = 0; i < BLOCK_FRAMES; i++) {
-            float s = g_sidbuf[i] * g_vol_sid2;
-            g_fblock[2 * i] += s; g_fblock[2 * i + 1] += s;
-        }
+        // SID audio is produced by the real reDIP-SID in the PL and mixed into the
+        // HDMI stream there; here we only render the wavetable/MIDI. Apply WTS vol.
+        if (g_vol_wts != 1.0f)
+            for (int i = 0; i < BLOCK_FRAMES * 2; i++) g_fblock[i] *= g_vol_wts;
 
         render_limit(g_fblock, g_block, BLOCK_FRAMES);   // master gain + peak limiter -> int16
         audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);

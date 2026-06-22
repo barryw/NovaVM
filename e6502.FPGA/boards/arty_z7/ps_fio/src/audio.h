@@ -28,6 +28,8 @@ void audio_fifo_write(const unsigned char *buf, int n);   // push PCM bytes to R
 int  audio_fifo_space(void);                              // free bytes in the HDMI FIFO
 void audio_mmio_poke(unsigned addr, unsigned char v);    // write a byte into 6502 MMIO ($BA50 status)
 unsigned audio_evt_read(void);                           // pop a captured SID/WTS reg-write event
+void audio_set_sid_vol(unsigned v);                      // reDIP-SID mix level into HDMI (32=x1, 64=x2)
+void audio_set_sid_stereo(int on);                       // 1 = SID1->L / SID2->R (2SID), 0 = mono
 
 #ifdef __cplusplus
 }

@@ -121,6 +121,8 @@ module arty_z7_full (
     wire [15:0]  cpu_mon_addr;   // 6502 bus write monitor (audio-register capture)
     wire [7:0]   cpu_mon_wdata;
     wire         cpu_mon_we;
+    wire signed [17:0] sid1_audio_w;      // raw per-chip reDIP-SID audio from core
+    wire signed [17:0] sid2_audio_w;
 
     top core (
         .clk(clk_pixel), .rst(reset),
@@ -162,7 +164,8 @@ module arty_z7_full (
         .sdram_stream_dout(xa_sdout), .sdram_stream_valid(xa_svalid),
         .sdram_stream_busy(xa_sbusy), .sdram_stream_done(xa_sdone),
         .fio_event(fio_event), .nic_event(),
-        .cpu_mon_addr(cpu_mon_addr), .cpu_mon_wdata(cpu_mon_wdata), .cpu_mon_we(cpu_mon_we)
+        .cpu_mon_addr(cpu_mon_addr), .cpu_mon_wdata(cpu_mon_wdata), .cpu_mon_we(cpu_mon_we),
+        .sid1_audio_out(sid1_audio_w), .sid2_audio_out(sid2_audio_w)
     );
 
     // ---- Audio-register capture FIFO -------------------------------------------
@@ -301,6 +304,35 @@ module arty_z7_full (
         .byte_space(fb_audio_space), .underrun_count()
     );
 
+    // Pan: stereo -> SID1=L, SID2=R; mono -> both SIDs summed to L+R. Then DC-block
+    // + PCM-condition each channel exactly like the ULX3S (rtl/sid_hdmi_audio.sv):
+    // HDMI PCM carries the SID's large DC bias directly, which makes notes with big
+    // DC components clip asymmetrically and buzz. Scale by the runtime SID volume
+    // (R_SID_VOL, default 64 -> x1) and add to the PS/TSF FIFO sample, clip to 16.
+    wire [7:0] fb_sid_vol;
+    wire       fb_sid_stereo;
+    wire signed [18:0] sid_mono19 = {sid1_audio_w[17], sid1_audio_w} +
+                                    {sid2_audio_w[17], sid2_audio_w};
+    wire signed [17:0] sid_mono = (sid_mono19 >  19'sd131071) ?  18'sd131071 :
+                                  (sid_mono19 < -19'sd131072) ? -18'sd131072 : sid_mono19[17:0];
+    wire signed [17:0] sid_l_src = fb_sid_stereo ? sid1_audio_w : sid_mono;
+    wire signed [17:0] sid_r_src = fb_sid_stereo ? sid2_audio_w : sid_mono;
+    wire [1:0][15:0] sid_pcm;
+    sid_hdmi_audio sid_cond (
+        .clk(clk_pixel), .rst(reset), .sample_en(audio_sample_strobe),
+        .sid_audio_l(sid_l_src), .sid_audio_r(sid_r_src),
+        .audio_sample_word(sid_pcm)
+    );
+    wire signed [24:0] sid_l = ($signed(sid_pcm[0]) * $signed({1'b0, fb_sid_vol})) >>> 6;
+    wire signed [24:0] sid_r = ($signed(sid_pcm[1]) * $signed({1'b0, fb_sid_vol})) >>> 6;
+    wire signed [24:0] sid_sumL = $signed(hdmi_audio_word[0]) + sid_l;
+    wire signed [24:0] sid_sumR = $signed(hdmi_audio_word[1]) + sid_r;
+    wire [1:0][15:0] hdmi_audio_mixed;
+    assign hdmi_audio_mixed[0] = (sid_sumL >  25'sd32767)  ? 16'h7FFF :
+                                 (sid_sumL < -25'sd32768)  ? 16'h8000 : sid_sumL[15:0];
+    assign hdmi_audio_mixed[1] = (sid_sumR >  25'sd32767)  ? 16'h7FFF :
+                                 (sid_sumR < -25'sd32768)  ? 16'h8000 : sid_sumR[15:0];
+
     // hdmi is provided as an out-of-context checkpoint (build/hdmi_ooc.dcp) with
     // these generics baked in (VIDEO_ID_CODE=2, DVI_OUTPUT=0, IT_CONTENT=1,
     // VIDEO_REFRESH_RATE_MILLIHZ=59940, START_X=855, START_Y=524, AUDIO_RATE=48000,
@@ -309,7 +341,7 @@ module arty_z7_full (
     // fio_bridge is present). Instantiated with NO params so it links the dcp.
     hdmi hdmi_inst (
         .clk_pixel_x5(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio),
-        .reset(reset), .rgb(hdmi_rgb), .audio_sample_word(hdmi_audio_word),
+        .reset(reset), .rgb(hdmi_rgb), .audio_sample_word(hdmi_audio_mixed),
         .tmds(tmds), .tmds_clock(tmds_clock),
         .cx(cx), .cy(cy), .frame_width(fw), .frame_height(fh),
         .screen_width(sw), .screen_height(sh)
@@ -344,7 +376,8 @@ module arty_z7_full (
                   xa_sdone, xa_svalid, xa_sbusy, d_rdy}),
         .dbg_aux({xa_swords, xa_sleft}),
         .audio_we(fb_audio_we), .audio_data(fb_audio_data), .audio_space(fb_audio_space),
-        .audio_evt_rd(aevt_rd), .audio_evt_data(aevt_data), .audio_evt_empty(aevt_empty)
+        .audio_evt_rd(aevt_rd), .audio_evt_data(aevt_data), .audio_evt_empty(aevt_empty),
+        .sid_vol(fb_sid_vol), .sid_stereo(fb_sid_stereo)
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)

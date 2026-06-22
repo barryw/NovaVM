@@ -54,6 +54,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define R_AUDIO      (FIO_BASE + 0x30)   // W [7:0] -> push 1 PCM byte to the HDMI audio FIFO
 #define R_AUDIO_SPACE (FIO_BASE + 0x34)  // R [15:0] -> free bytes in the HDMI audio FIFO
 #define R_AUDIO_EVT  (FIO_BASE + 0x38)   // R {valid@16, index[15:8], data[7:0]} -> pop a SID/WTS reg-write event
+#define R_SID_VOL    (FIO_BASE + 0x3C)   // W [7:0] -> reDIP-SID mix level into HDMI (32=x1, 64=x2 default)
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -149,6 +150,14 @@ int audio_fifo_space(void) { return (int)(Xil_In32(R_AUDIO_SPACE) & 0xFFFFu); }
 // Pop one captured 6502 SID/WTS register-write event. Returns the raw word:
 // bit16 = valid, [15:8] = index (SID1 0-31, SID2 32-63, WTS 64-223), [7:0] = data.
 unsigned audio_evt_read(void) { return Xil_In32(R_AUDIO_EVT); }
+// reDIP-SID mix control (R_SID_VOL): [7:0] = level (32=x1, 64=x2), [8] = stereo
+// (1 = SID1->L / SID2->R for 2SID tunes, 0 = both SIDs summed to mono).
+static unsigned g_sid_lvl = 64, g_sid_stereo = 0;
+static void sid_vol_write(void) {
+    Xil_Out32(R_SID_VOL, ((g_sid_stereo & 1u) << 8) | (g_sid_lvl & 0xFFu));
+}
+void audio_set_sid_vol(unsigned v)   { g_sid_lvl = v & 0xFFu; sid_vol_write(); }
+void audio_set_sid_stereo(int on)    { g_sid_stereo = on ? 1u : 0u; sid_vol_write(); }
 // audio.c publishes per-voice notes + playback state into the $BA50 music-status
 // block (the keyboard visualizer reads it). poke() reaches the PL music_regs RAM.
 void audio_mmio_poke(unsigned addr, unsigned char v) { poke(addr, v); }
@@ -851,6 +860,22 @@ int main(void) {
         xil_printf("[fio] microSD mounted\r\n");
         mgmt_set_sd(1);
         drives_load();                          // restore mounted .ndi slots
+    }
+
+    // Stream the 6581 filter curve into XRAM $080000 (DDR) for the reDIP-SID
+    // sid_curve_reader, exactly as NovaHost does on the ULX3S. 4096x16 = 8 KB.
+    // (8580's filter is linear -- no curve. Non-fatal if missing.)
+    {
+        FIL cf;
+        if (f_open(&cf, "0:/F6581.BIN", FA_READ) == FR_OK) {
+            UINT br = 0;
+            f_read(&cf, (void *)(XRAM_DDR_BASE + 0x80000u), 8192, &br);
+            f_close(&cf);
+            Xil_DCacheFlushRange(XRAM_DDR_BASE + 0x80000u, 8192);
+            xil_printf("[sid] 6581 filter curve loaded (%u bytes)\r\n", (unsigned)br);
+        } else {
+            xil_printf("[sid] F6581.BIN not found -- 6581 filter inaccurate\r\n");
+        }
     }
 
     // Stage the resident lib_call loader into CPU RAM $0320.

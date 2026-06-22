@@ -146,7 +146,12 @@ module top (
     // these unconnected.
     output logic [15:0] cpu_mon_addr,
     output logic [7:0]  cpu_mon_wdata,
-    output logic        cpu_mon_we
+    output logic        cpu_mon_we,
+    // Per-chip SID audio (signed 18-bit, raw). A board wrapper mixes these -- the
+    // Arty pans SID1->L / SID2->R for stereo 2SID tunes (or sums for mono) and adds
+    // to the PS/TSF HDMI stream. ULX3S leaves these unconnected (uses audio_l/r).
+    output logic signed [17:0] sid1_audio_out,
+    output logic signed [17:0] sid2_audio_out
 `ifndef SYNTHESIS
     ,
     // Simulation-only VRAM peek path. Excluded from synthesis so the
@@ -1876,6 +1881,8 @@ module top (
     wire signed [18:0] sid_audio_sum = {sid1_audio_mono[17], sid1_audio_mono} +
                                        {sid2_audio_mono[17], sid2_audio_mono};
     wire signed [17:0] sid_audio_mix = clip_sid_mix(sid_audio_sum);
+    assign sid1_audio_out = sid1_audio_mono;   // raw per-chip SID audio for the
+    assign sid2_audio_out = sid2_audio_mono;   // board wrapper to pan/mix (stereo)
     wire signed [18:0] music_audio_sum_l = {sid_audio_mix[17], sid_audio_mix} +
                                            {wts_audio_l[17], wts_audio_l};
     wire signed [18:0] music_audio_sum_r = {sid_audio_mix[17], sid_audio_mix} +
