@@ -23,6 +23,7 @@
 #include "ehbasic_rom.h"        // EHBASIC_ROM[16384] -> basic_rom (idx=0) at boot
 #include "ndi.h"                // read-only .ndi image reader
 #include "drives.h"             // drive-slot mount table
+#include "audio.h"              // TSF + TinyMIDI -> HDMI audio FIFO
 
 void net_init(void);            // net.c — PS Ethernet (lwIP + DHCP + TCP upload)
 void net_poll(void);
@@ -47,6 +48,8 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define R_ROMW       (FIO_BASE + 0x24)   // W {idx@22, addr[13:0]@8, data[7:0]} -> bank ROM write
 #define R_VMEM_ADDR  (FIO_BASE + 0x28)   // W {space[2:0]@17, addr[16:0]} -> latch VGC vmem read addr
 #define R_VMEM_DATA  (FIO_BASE + 0x2C)   // R {24'b0, data[7:0]} from VGC vmem (char/color/gfx/spr)
+#define R_AUDIO      (FIO_BASE + 0x30)   // W [7:0] -> push 1 PCM byte to the HDMI audio FIFO
+#define R_AUDIO_SPACE (FIO_BASE + 0x34)  // R [15:0] -> free bytes in the HDMI audio FIFO
 
 // ---- 6502 FIO register bank ($B9A0) ----------------------------------------
 #define FIO_CMD      0xB9A0
@@ -129,6 +132,12 @@ static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
 static inline void     key_send(unsigned char k){ Xil_Out32(R_KEY, k); }
 void kb_emit(unsigned char c){ Xil_Out32(R_KEY, c); }   // usb.c HID -> VGC key queue
+
+// HDMI audio FIFO (used by audio.c). The PL embeds this stream into HDMI audio.
+void audio_fifo_write(const unsigned char *buf, int n) {
+    for (int i = 0; i < n; i++) Xil_Out32(R_AUDIO, buf[i]);
+}
+int audio_fifo_space(void) { return (int)(Xil_In32(R_AUDIO_SPACE) & 0xFFFFu); }
 
 // Non-static wrappers so mgmt.c / debug.c can reach the AXI bridge primitives.
 unsigned char dbg_peek(unsigned a){ return peek(a); }
@@ -834,6 +843,8 @@ int main(void) {
         net_poll();
         // --- PS USB host: detect/poll the HID keyboard ---
         usb_poll();
+        // --- audio: render the SF2/MIDI (or SID) mix into the HDMI audio FIFO ---
+        audio_service();
     }
     return 0;
 }

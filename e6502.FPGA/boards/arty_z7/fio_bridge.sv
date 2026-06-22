@@ -66,7 +66,14 @@ module fio_bridge (
     output wire        dbg_vmem_re,
     output reg  [2:0]  dbg_vmem_space,
     output reg  [16:0] dbg_vmem_addr,
-    input  wire [7:0]  dbg_vmem_rdata
+    input  wire [7:0]  dbg_vmem_rdata,
+    // host audio: the PS streams 48 kHz / 16-bit stereo L-PCM into the HDMI audio
+    // FIFO. R_AUDIO (0x30 W) pushes one PCM byte; R_AUDIO_SPACE (0x34 R) returns
+    // the FIFO's free byte count so the PS can pace its writes and never overflow
+    // (an overflowing write silently drops the sample).
+    output reg         audio_we,        // 1-cycle pulse
+    output reg  [7:0]  audio_data,
+    input  wire [15:0] audio_space
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
     assign dbg_vmem_re = 1'b1;   // continuously read the latched vmem addr/space
@@ -83,10 +90,12 @@ module fio_bridge (
             fio_event_sticky <= 1'b0;
             dbg_rom_we <= 1'b0; dbg_rom_idx <= 1'b0; dbg_rom_addr <= 14'd0; dbg_rom_data <= 8'd0;
             dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
+            audio_we <= 1'b0; audio_data <= 8'd0;
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
             dbg_rom_we  <= 1'b0;
+            audio_we    <= 1'b0;
             if (fio_event) fio_event_sticky <= 1'b1;
 
             // ---- write channel (single outstanding) ----
@@ -113,6 +122,7 @@ module fio_bridge (
                         dbg_vmem_addr  <= s_wdata[16:0];
                         dbg_vmem_space <= s_wdata[19:17];
                     end
+                    4'hC: begin audio_we <= 1'b1; audio_data <= s_wdata[7:0]; end // AUDIO (0x30)
                     default: ;
                 endcase
                 s_bvalid <= 1'b1;
@@ -134,6 +144,7 @@ module fio_bridge (
                     4'h7: s_rdata <= {16'd0, dbg_bus};                  // DBG (0x1C)
                     4'h8: s_rdata <= {4'd0, dbg_aux};                   // AUX (0x20) sleft/swords
                     4'hB: s_rdata <= {24'd0, dbg_vmem_rdata};           // VMEM_DATA (0x2C)
+                    4'hD: s_rdata <= {16'd0, audio_space};              // AUDIO_SPACE (0x34)
                     default: s_rdata <= 32'hDEAD_0000;
                 endcase
                 s_rvalid <= 1'b1;

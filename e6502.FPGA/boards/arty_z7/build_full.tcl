@@ -21,6 +21,7 @@ add_files -norecurse [list \
     "$rtl/blitter.sv" "$rtl/dma.sv" \
     "$rtl/page_in_ctrl.sv" "$rtl/page_dma.sv" "$rtl/fio.sv" \
     "$rtl/rom_load_cdc_fifo.sv" "$rtl/math_copro.sv" "$rtl/wts_chip.sv" "$rtl/nic.sv" \
+    "$rtl/audio_pcm_fifo.sv" \
     "$rtl/sdram/xram_sdram.sv" "$rtl/sdram/debug_sdram_port_b_cdc.sv" \
     "$rtl/top.sv" \
     "$rtl/arlet_6502/cpu.v" "$rtl/arlet_6502/ALU.v" "$rtl/thirdparty/sfifo.v" \

@@ -236,15 +236,54 @@ module arty_z7_full (
     localparam int HDMI_START_Y = 525 - 1;
     wire [2:0] tmds; wire tmds_clock;
     logic [9:0] cx, cy, fw, fh, sw, sh;
+
+    // ---- HDMI audio sample clock -------------------------------------------
+    // hdl-util/hdmi samples audio on a separate sample-rate clock. Generate
+    // 48 kHz from the ~27 MHz CEA pixel clock by alternating 281/282-cycle half
+    // periods (27 MHz / (2*281.25) = 48 kHz). Mirrors the ULX3S audio path.
+    logic       clk_audio = 1'b0;
+    logic [8:0] clk_audio_div = 9'd280;
+    logic [1:0] clk_audio_phase = 2'd0;
+    always_ff @(posedge clk_pixel) begin
+        if (reset) begin
+            clk_audio <= 1'b0; clk_audio_div <= 9'd280; clk_audio_phase <= 2'd0;
+        end else if (clk_audio_div == 9'd0) begin
+            clk_audio       <= ~clk_audio;
+            clk_audio_div   <= (clk_audio_phase == 2'd3) ? 9'd281 : 9'd280;
+            clk_audio_phase <= clk_audio_phase + 2'd1;
+        end else begin
+            clk_audio_div <= clk_audio_div - 9'd1;
+        end
+    end
+    wire audio_sample_strobe = !reset && !clk_audio && (clk_audio_div == 9'd1);
+
+    // ---- HDMI audio source: PS-rendered PCM via the host audio FIFO --------
+    // The PS streams the SID + wavetable software mix (48 kHz / 16-bit stereo
+    // L-PCM) into this FIFO through the fio_bridge R_AUDIO port; one stereo frame
+    // drains per audio_sample_strobe into the hdl-util/hdmi audio islands.
+    // sample_word is registered/held (silence on underrun), so it feeds hdmi
+    // directly. Mixing + per-source volumes all happen in PS software.
+    wire        fb_audio_we;
+    wire [7:0]  fb_audio_data;
+    wire [15:0] fb_audio_space;
+    wire [1:0][15:0] hdmi_audio_word;
+    audio_pcm_fifo #(.FRAME_ADDR_WIDTH(13)) host_audio_fifo (
+        .clk(clk_pixel), .rst(reset),
+        .byte_we(fb_audio_we), .byte_data(fb_audio_data), .byte_ready(),
+        .sample_en(audio_sample_strobe),
+        .sample_word(hdmi_audio_word), .sample_valid(),
+        .byte_space(fb_audio_space), .underrun_count()
+    );
+
     // hdmi is provided as an out-of-context checkpoint (build/hdmi_ooc.dcp) with
-    // these generics baked in (VIDEO_ID_CODE=2, DVI_OUTPUT=1, IT_CONTENT=1,
-    // VIDEO_REFRESH_RATE_MILLIHZ=59940, START_X=855, START_Y=524). OOC isolates
-    // hdmi/tmds_channel synth from the full design, which otherwise crashes
-    // Vivado synth on tmds_channel once fio_bridge is present. Instantiated with
-    // NO params so it links the dcp. (HDMI_START_X/Y above == 855/524.)
+    // these generics baked in (VIDEO_ID_CODE=2, DVI_OUTPUT=0, IT_CONTENT=1,
+    // VIDEO_REFRESH_RATE_MILLIHZ=59940, START_X=855, START_Y=524, AUDIO_RATE=48000,
+    // AUDIO_BIT_WIDTH=16). OOC isolates hdmi/tmds_channel synth from the full
+    // design (which otherwise crashes Vivado synth on tmds_channel once
+    // fio_bridge is present). Instantiated with NO params so it links the dcp.
     hdmi hdmi_inst (
-        .clk_pixel_x5(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(1'b0),
-        .reset(reset), .rgb(hdmi_rgb), .audio_sample_word('0),
+        .clk_pixel_x5(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio),
+        .reset(reset), .rgb(hdmi_rgb), .audio_sample_word(hdmi_audio_word),
         .tmds(tmds), .tmds_clock(tmds_clock),
         .cx(cx), .cy(cy), .frame_width(fw), .frame_height(fh),
         .screen_width(sw), .screen_height(sh)
@@ -277,8 +316,8 @@ module arty_z7_full (
         //          [4]=arvalid [5]=arready [6]=rvalid [7]=rready [11:8]=axi state
         .dbg_bus({4'd0, xa_dbg_state, x_rready, x_rvalid, x_arready, x_arvalid,
                   xa_sdone, xa_svalid, xa_sbusy, d_rdy}),
-        .dbg_aux({xa_swords, xa_sleft})
-
+        .dbg_aux({xa_swords, xa_sleft}),
+        .audio_we(fb_audio_we), .audio_data(fb_audio_data), .audio_space(fb_audio_space)
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)

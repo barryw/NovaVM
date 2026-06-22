@@ -135,8 +135,13 @@ app = client.create_app_component(
     name="ps_fio", platform=xpfm, domain=DOMAIN, template="empty_application")
 
 # Import our sources into the app's src/.
-for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
+for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "audio.c", "audio.h", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
     app.import_files(from_loc=SRC, files=[f], dest_dir_in_cmp="src")
+
+# TinySoundFont (SF2 synth) + TinyMIDILoader, single-header libs (audio.c
+# instantiates them). Kept under src/thirdparty/.
+for f in ("tsf.h", "tml.h"):
+    app.import_files(from_loc=os.path.join(SRC, "thirdparty"), files=[f], dest_dir_in_cmp="src/thirdparty")
 
 # Reuse the cross-platform NDI parser straight from the ESP32 NovaHost tree
 # (single source of truth — compiled here unchanged, NOT duplicated). ndi_shim.cpp
@@ -144,6 +149,21 @@ for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h
 NOVAHOST = os.path.abspath(os.path.join(HERE, "..", "..", "..", "..", "e6502.ESP32", "novahost"))
 for f in ("ndi_image.cpp", "ndi_image.h"):
     app.import_files(from_loc=NOVAHOST, files=[f], dest_dir_in_cmp="src")
+
+# TSF loads a ~30 MB SF2 and converts its samples to float -> bump the bare-metal
+# heap from the 8 KB default to 128 MB. DDR is 512 MB and the app + heap live
+# below XRAM (0x10000000 = 256 MB), so 128 MB fits. _HEAP_SIZE is overridable in
+# the generated lscript.ld (DEFINED(_HEAP_SIZE) ? ... : 0x2000).
+_bumped = False
+for _ld in glob.glob(f"{WS}/**/lscript.ld", recursive=True):
+    _t = open(_ld).read()
+    _t2 = _re.sub(r'(_HEAP_SIZE\s*=\s*DEFINED\(_HEAP_SIZE\)\s*\?\s*_HEAP_SIZE\s*:\s*)0x[0-9A-Fa-f]+',
+                  r'\g<1>0x8000000', _t)
+    if _t2 != _t:
+        open(_ld, "w").write(_t2); _bumped = True
+        print("bumped _HEAP_SIZE -> 0x8000000 in", _ld)
+if not _bumped:
+    print("WARNING: no lscript.ld _HEAP_SIZE bumped -- SF2 malloc may fail")
 
 app.build()
 print("ELF:", glob.glob(f"{WS}/ps_fio/build/*.elf"))

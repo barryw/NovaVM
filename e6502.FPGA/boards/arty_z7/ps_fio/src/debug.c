@@ -21,6 +21,7 @@
 #include "lwip/tcp.h"
 #include "lwip/pbuf.h"
 #include "xil_printf.h"
+#include "audio.h"
 
 unsigned char dbg_peek(unsigned a);                 // main.c — AXI bridge primitives
 void          dbg_poke(unsigned a, unsigned char d);
@@ -308,6 +309,35 @@ static void do_reset(struct tcp_pcb *pcb, const char *s, int cold) {
     respond(pcb, b);
 }
 
+// ---- audio (TSF + TinyMIDI -> HDMI) -----------------------------------------
+static void do_audio_tone(struct tcp_pcb *pcb, const char *s) {
+    audio_test_tone(json_int(s, "on", 1));
+    respond(pcb, "{\"ok\":true}");
+}
+static void do_audio_sf(struct tcp_pcb *pcb, const char *s) {
+    char path[128];
+    if (json_str(s, "path", path, sizeof path) <= 0) { respond_err(pcb, "Missing 'path'"); return; }
+    int rc = audio_load_soundfont(path);
+    char b[96]; snprintf(b, sizeof b, "{\"ok\":%s,\"rc\":%d}", rc == 0 ? "true" : "false", rc);
+    respond(pcb, b);
+}
+static void do_audio_midi(struct tcp_pcb *pcb, const char *s) {
+    char path[128];
+    if (json_str(s, "path", path, sizeof path) <= 0) { respond_err(pcb, "Missing 'path'"); return; }
+    int rc = audio_play_midi(path);
+    char b[96]; snprintf(b, sizeof b, "{\"ok\":%s,\"rc\":%d}", rc == 0 ? "true" : "false", rc);
+    respond(pcb, b);
+}
+static void do_audio_stop(struct tcp_pcb *pcb, const char *s) {
+    (void)s; audio_stop(); respond(pcb, "{\"ok\":true}");
+}
+static void do_audio_gain(struct tcp_pcb *pcb, const char *s) {
+    int pct = json_int(s, "gain", 100);           // percent: 100 = unity, 200 = 2x
+    audio_set_gain((float)pct / 100.0f);
+    char b[48]; snprintf(b, sizeof b, "{\"ok\":true,\"gain\":%d}", pct);
+    respond(pcb, b);
+}
+
 // ---- dispatch ---------------------------------------------------------------
 static void dispatch(struct tcp_pcb *pcb, const char *line) {
     char cmd[32];
@@ -325,6 +355,11 @@ static void dispatch(struct tcp_pcb *pcb, const char *line) {
     else if (!strcmp(cmd, "get_cursor"))  do_get_cursor(pcb);
     else if (!strcmp(cmd, "vm_reset"))    do_reset(pcb, line, 0);
     else if (!strcmp(cmd, "cold_start"))  do_reset(pcb, line, 1);
+    else if (!strcmp(cmd, "audio_tone"))  do_audio_tone(pcb, line);
+    else if (!strcmp(cmd, "audio_sf"))    do_audio_sf(pcb, line);
+    else if (!strcmp(cmd, "audio_midi"))  do_audio_midi(pcb, line);
+    else if (!strcmp(cmd, "audio_stop"))  do_audio_stop(pcb, line);
+    else if (!strcmp(cmd, "audio_gain"))  do_audio_gain(pcb, line);
     else if (!strcmp(cmd, "wait_ready"))  respond_ok(pcb);   // not pollable; best-effort
     else if (!strcmp(cmd, "fill_vram"))   respond_err(pcb, "fill_vram not supported on this host");
     else if (!strcmp(cmd, "run_cycles"))  respond_err(pcb, "run_cycles not supported (free-running CPU)");
