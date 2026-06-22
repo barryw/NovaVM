@@ -148,4 +148,53 @@ public class ArtyNovaHostRegressionTests
         Assert.IsFalse(File.Exists(ArtySrc("ndi.c")),
             "the duplicate ndi.c parser must stay deleted (reuse ndi_image.cpp instead).");
     }
+
+    // Z-machine V6 SAVE (SAVLOAD.OVL: create_file -> write chunks -> close) needs
+    // the FIO host to dispatch FCREATE (0x2E) + FWRITE (0x31). These were missing
+    // -> novaz's create_file fell through to the error branch -> "SAVE failed!"
+    // before any file op. Verified on HW: SAVE00.NZS (48851 bytes) written, then
+    // RESTORE read it back. Guard the dispatch + handlers so save can't regress.
+    [TestMethod]
+    public void MainC_HandlesSaveWriteFioCommands()
+    {
+        string src = File.ReadAllText(ArtySrc("main.c"));
+        StringAssert.Contains(src, "FIO_CMD_FCREATE) fio_fcreate",
+            "main.c must dispatch FCREATE (0x2E) -> fio_fcreate for save file creation.");
+        StringAssert.Contains(src, "FIO_CMD_FWRITE)  fio_fwrite",
+            "main.c must dispatch FWRITE (0x31) -> fio_fwrite for save data.");
+        foreach (string h in new[] { "fio_fcreate", "fio_fwrite", "fio_commit_write" })
+        {
+            StringAssert.Contains(src, h,
+                $"main.c must implement the {h} save-write handler.");
+        }
+    }
+
+    // FCLOSE on a write handle commits the staged save into the mounted .ndi via
+    // the shared ndi_image writer. The shim must open the image read-write and
+    // expose the write API (create_file + chunked writes + zero-tail + delete).
+    [TestMethod]
+    public void NdiShim_ExposesWritePath()
+    {
+        string shim = File.ReadAllText(ArtySrc("ndi_shim.cpp"));
+        StringAssert.Contains(shim, "FA_READ | FA_WRITE",
+            "ndi_shim must open the .ndi read-write so saves persist to the image.");
+        foreach (string fn in new[] { "ndi_create", "ndi_write", "ndi_zero_tail", "ndi_delete" })
+        {
+            StringAssert.Contains(shim, fn,
+                $"ndi_shim must expose {fn} over the shared ndi::NdiImage write API.");
+        }
+        StringAssert.Contains(shim, "write_file_chunk_by_index",
+            "ndi_shim must stream save data via the shared write_file_chunk_by_index (no fork).");
+    }
+
+    // The V6 save UI lives in SAVLOAD.OVL, loaded by overlay_load_fixed from the
+    // mounted image. The .ndi MUST bundle it or the overlay load fails and SAVE
+    // returns "SAVE failed!" before any file op (root cause #2 of save-broken).
+    [TestMethod]
+    public void NovazPack_BundlesSaveLoadOverlay()
+    {
+        string mk = File.ReadAllText(RepoPath("examples", "novaz", "Makefile"));
+        StringAssert.Contains(mk, "SAVLOAD.OVL",
+            "novaz PACK_ARGS must bundle SAVLOAD.OVL into the .ndi for V6 save/restore.");
+    }
 }

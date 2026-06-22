@@ -333,6 +333,65 @@ static void test_mkdir_rmdir() {
     unlink(path);
 }
 
+// Mirrors the Arty FCLOSE save-commit path (ps_fio fio_commit_write): the V6
+// SAVE writes a save file into the mounted .ndi via create_file(sized) +
+// write_file_chunk_by_index streamed in 256-byte chunks + zero_file_tail. This
+// guards that streaming write path (distinct from the all-at-once write_file
+// covered above) round-trips. Portable: formats via the CLI on a relative path.
+static void test_create_file_chunked_roundtrip() {
+    printf("\nTest: create_file + chunked write_file_chunk_by_index -> reopen -> read\n");
+    char path[] = "/tmp/ndi_chunk_XXXXXX.ndi";
+    int fd = mkstemps(path, 4);
+    if (fd < 0) { perror("mkstemps"); return; }
+    close(fd);
+
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd),
+        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label CHUNK > /dev/null 2>&1",
+        path);
+    if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
+
+    const uint32_t SIZE = 600;                 // spans 3 sectors; partial last
+    uint8_t payload[SIZE];
+    for (uint32_t i = 0; i < SIZE; i++) payload[i] = (uint8_t)(i * 7 + 3);
+
+    {
+        FILE* f = fopen(path, "rb+");
+        FileStream stream(f);
+        ndi::NdiImage img;
+        check("open formatted image", img.open(&stream));
+
+        int idx = img.create_file("save00.nzs", ndi::FT_BIN, ndi::ROOT_PARENT, SIZE);
+        check("create_file slot >= 0", idx >= 0);
+
+        bool wrote_ok = (idx >= 0);
+        for (uint32_t off = 0; off < SIZE; off += 256) {
+            uint32_t chunk = SIZE - off; if (chunk > 256) chunk = 256;
+            if (!img.write_file_chunk_by_index(idx, off, payload + off, chunk)) wrote_ok = false;
+        }
+        check("write_file_chunk_by_index all chunks", wrote_ok);
+        check("zero_file_tail_by_index", idx >= 0 && img.zero_file_tail_by_index(idx));
+    }
+
+    {
+        FILE* f = fopen(path, "rb+");
+        FileStream stream(f);
+        ndi::NdiImage img;
+        check("reopen image", img.open(&stream));
+
+        int ridx = img.find_entry("save00.nzs", ndi::ROOT_PARENT);
+        check("find save00.nzs after reopen", ridx >= 0);
+
+        uint8_t buf[SIZE + 16];
+        memset(buf, 0, sizeof(buf));
+        int got = img.read_file_by_index(ridx, buf, sizeof(buf));
+        check_eq_int("read returns SIZE bytes", got, (long)SIZE);
+        check("chunked content round-trips", memcmp(buf, payload, SIZE) == 0);
+    }
+
+    unlink(path);
+}
+
 // ---------------------------------------------------------------------------
 int main() {
     printf("=== ndi_image host tests ===\n");
@@ -344,6 +403,7 @@ int main() {
     test_write_read_roundtrip();
     test_delete_roundtrip();
     test_mkdir_rmdir();
+    test_create_file_chunked_roundtrip();
 
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
