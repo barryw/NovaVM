@@ -93,6 +93,10 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define FIO_CMD_FSEEK    0x32
 #define FIO_CMD_FTELL    0x33
 #define FIO_CMD_FSIZE    0x34
+#define FIO_CMD_VOLUME   0x0C      // set audio master gain (FIO_SRC_LO 0-255)
+#define FIO_CMD_MIDPLAY  0x13      // play a raw .mid from SD through the wavetable
+#define FIO_CMD_MIDSTOP  0x14
+#define FIO_CMD_SFLOAD   0x15      // load a raw .sf2 soundfont from SD
 #define FIO_TARGET_MASK  0x30      // FIO_DIRTYPE high bits: FREAD/FWRITE target
 #define FIO_TARGET_XRAM  0x10      // 0x00 = CPU RAM (FIO_END addr), 0x10 = XRAM (FIO_GSPACE/GADDR)
 #define FIO_ERR_NOTFOUND 1
@@ -138,6 +142,9 @@ void audio_fifo_write(const unsigned char *buf, int n) {
     for (int i = 0; i < n; i++) Xil_Out32(R_AUDIO, buf[i]);
 }
 int audio_fifo_space(void) { return (int)(Xil_In32(R_AUDIO_SPACE) & 0xFFFFu); }
+// audio.c publishes per-voice notes + playback state into the $BA50 music-status
+// block (the keyboard visualizer reads it). poke() reaches the PL music_regs RAM.
+void audio_mmio_poke(unsigned addr, unsigned char v) { poke(addr, v); }
 
 // Non-static wrappers so mgmt.c / debug.c can reach the AXI bridge primitives.
 unsigned char dbg_peek(unsigned a){ return peek(a); }
@@ -735,6 +742,30 @@ static void fio_fsize(void) {
     fio_ok();
 }
 
+// ---- audio FIO commands (6502 drives the PS wavetable engine) ---------------
+// Build "0:/<name>" from the FIO name buffer, appending ext if the name has none.
+static void audio_sd_path(const char *name, const char *ext, char *path, int sz) {
+    if (strrchr(name, '.')) snprintf(path, sz, "0:/%s", name);
+    else                    snprintf(path, sz, "0:/%s.%s", name, ext);
+}
+static void fio_midplay(void) {
+    char name[80], path[96];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    audio_sd_path(name, "MID", path, sizeof path);
+    if (audio_play_midi(path) == 0) fio_ok(); else fio_fail(FIO_ERR_NOTFOUND);
+}
+static void fio_sfload(void) {
+    char name[80], path[96];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    audio_sd_path(name, "SF2", path, sizeof path);
+    if (audio_load_soundfont(path) == 0) fio_ok(); else fio_fail(FIO_ERR_IO);
+}
+static void fio_volume(void) {
+    unsigned v = peek(FIO_SRC_LO);                 // 0-255 -> 0.0..4.0 linear gain
+    audio_set_gain((float)v * 4.0f / 255.0f);
+    fio_ok();
+}
+
 static void list_dir(const char *path) {
     DIR d; FILINFO fno;
     xil_printf("[fio] dir %s:\r\n", path);
@@ -814,6 +845,10 @@ int main(void) {
             else if (cmd == FIO_CMD_FSEEK)   fio_fseek();
             else if (cmd == FIO_CMD_FTELL)   fio_ftell();
             else if (cmd == FIO_CMD_FSIZE)   fio_fsize();
+            else if (cmd == FIO_CMD_MIDPLAY) fio_midplay();
+            else if (cmd == FIO_CMD_MIDSTOP) { audio_stop(); fio_ok(); }
+            else if (cmd == FIO_CMD_SFLOAD)  fio_sfload();
+            else if (cmd == FIO_CMD_VOLUME)  fio_volume();
             else if (cmd == FIO_CMD_LOAD_MODULE) {
                 int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
                 if (load_module(id, slot) == 0) {

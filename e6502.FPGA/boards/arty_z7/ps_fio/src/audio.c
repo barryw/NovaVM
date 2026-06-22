@@ -38,6 +38,29 @@ static float        g_gain = 2.5f;       // runtime linear master gain (pre-limi
 static float        g_lim  = 1.0f;        // limiter gain-reduction envelope
 static short        g_block[BLOCK_FRAMES * 2];
 static float        g_fblock[BLOCK_FRAMES * 2];
+static unsigned char g_note_active[128];  // count of sounding voices per MIDI note
+static unsigned     g_total_frames = 0;   // song length in 60 Hz frames
+
+// $BA50 music-status block (the keyboard visualizer reads it).
+#define MUSIC_STATUS   0xBA50            // bit1=music, bit3=WTS, bit4=loading
+#define MUSIC_NOTE1    0xBA51            // 14 per-voice current-note bytes (0=silent)
+#define MUSIC_ELAPSEDL 0xBA5F
+#define MUSIC_TOTALL   0xBA61
+
+// Publish playback state + up to 14 active notes into the $BA50 block so the
+// 6502 keyboard visualizer lights up to the live MIDI.
+static void audio_publish_status(void) {
+    audio_mmio_poke(MUSIC_STATUS, g_playing ? (0x02 | 0x08) : 0x00);
+    int slot = 0;
+    for (int n = 0; n < 128 && slot < 14; n++)
+        if (g_note_active[n]) audio_mmio_poke(MUSIC_NOTE1 + slot++, (unsigned char)n);
+    while (slot < 14) audio_mmio_poke(MUSIC_NOTE1 + slot++, 0);
+    unsigned el = (unsigned)(g_msec / 16.6667);
+    audio_mmio_poke(MUSIC_ELAPSEDL,     el & 0xFF);
+    audio_mmio_poke(MUSIC_ELAPSEDL + 1, (el >> 8) & 0xFF);
+    audio_mmio_poke(MUSIC_TOTALL,       g_total_frames & 0xFF);
+    audio_mmio_poke(MUSIC_TOTALL + 1,   (g_total_frames >> 8) & 0xFF);
+}
 
 void audio_set_gain(float g) {
     g_gain = g;                           // applied pre-limiter (see render_limit)
@@ -110,6 +133,10 @@ int audio_play_midi(const char *sd_path) {
     g_head = tml_load_memory(buf, (int)len);
     free(buf);
     if (!g_head) { xil_printf("[audio] tml_load_memory failed\r\n"); return -3; }
+    unsigned int len_ms = 0;
+    tml_get_info(g_head, 0, 0, 0, 0, &len_ms);
+    g_total_frames = (unsigned)(len_ms / 16.6667);
+    for (int i = 0; i < 128; i++) g_note_active[i] = 0;
     tsf_reset(g_tsf);
     g_cur = g_head; g_msec = 0.0; g_testtone = 0; g_playing = 1;
     xil_printf("[audio] MIDI playing: %s\r\n", sd_path);
@@ -119,6 +146,8 @@ int audio_play_midi(const char *sd_path) {
 void audio_stop(void) {
     g_playing = 0; g_testtone = 0;
     if (g_tsf) tsf_reset(g_tsf);
+    for (int i = 0; i < 128; i++) g_note_active[i] = 0;
+    audio_publish_status();
 }
 
 int audio_is_playing(void) { return g_playing || g_testtone; }
@@ -139,14 +168,20 @@ static void fire_events(double msec) {
             tsf_channel_set_presetnumber(g_tsf, ch, (unsigned char)g_cur->program, (ch == 9));
             break;
         case TML_NOTE_ON:
-            if ((unsigned char)g_cur->velocity)
+            if ((unsigned char)g_cur->velocity) {
                 tsf_channel_note_on(g_tsf, ch, (unsigned char)g_cur->key,
                                     (unsigned char)g_cur->velocity / 127.0f);
-            else
-                tsf_channel_note_off(g_tsf, ch, (unsigned char)g_cur->key);   // vel 0 = note off
+                if ((unsigned char)g_cur->key < 128) g_note_active[(unsigned char)g_cur->key]++;
+            } else {
+                tsf_channel_note_off(g_tsf, ch, (unsigned char)g_cur->key);    // vel 0 = note off
+                if ((unsigned char)g_cur->key < 128 && g_note_active[(unsigned char)g_cur->key])
+                    g_note_active[(unsigned char)g_cur->key]--;
+            }
             break;
         case TML_NOTE_OFF:
             tsf_channel_note_off(g_tsf, ch, (unsigned char)g_cur->key);
+            if ((unsigned char)g_cur->key < 128 && g_note_active[(unsigned char)g_cur->key])
+                g_note_active[(unsigned char)g_cur->key]--;
             break;
         case TML_PITCH_BEND:
             tsf_channel_set_pitchwheel(g_tsf, ch, g_cur->pitch_bend);
@@ -190,10 +225,13 @@ void audio_service(void) {
             if (!g_cur && tsf_active_voice_count(g_tsf) == 0) {  // song + tails done
                 audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
                 g_playing = 0;
+                for (int i = 0; i < 128; i++) g_note_active[i] = 0;
+                audio_publish_status();
                 xil_printf("[audio] MIDI playback complete\r\n");
                 break;
             }
         }
         audio_fifo_write((const unsigned char *)g_block, BLOCK_FRAMES * 4);
     }
+    if (g_playing) audio_publish_status();   // live notes + elapsed for the visualizer
 }

@@ -18,5 +18,6 @@ void audio_set_gain(float g);                      // runtime linear master gain
 // Implemented in main.c (owns the fio_bridge register base):
 void audio_fifo_write(const unsigned char *buf, int n);   // push PCM bytes to R_AUDIO
 int  audio_fifo_space(void);                              // free bytes in the HDMI FIFO
+void audio_mmio_poke(unsigned addr, unsigned char v);    // write a byte into 6502 MMIO ($BA50 status)
 
 #endif
