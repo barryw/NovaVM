@@ -187,8 +187,10 @@ module vgc (
     localparam TXF_REVERSE = 8'h01;
     localparam TXF_REVEX   = 8'h02;
     localparam TXF_FLASH   = 8'h04;
+    localparam TXF_BOLD    = 8'h08;
     localparam TATTR_FLASH = 8'h01;
     localparam TATTR_REVERSE = 8'h02;
+    localparam TATTR_BOLD  = 8'h04;
 
     // Drawing commands
     localparam CMD_PLOT    = 8'h01;
@@ -201,6 +203,7 @@ module vgc (
     localparam CMD_GCOLOR  = 8'h08;
     localparam CMD_PAINT   = 8'h09;
     localparam CMD_GTEXT   = 8'h0A;
+    localparam CMD_SCROLLMIXED = 8'h23;
 
     // Sprite commands
     localparam CMD_SPRDEF  = 8'h10;
@@ -222,6 +225,16 @@ module vgc (
 
     // Internal ops
     localparam CMD_TXTCLS  = 8'hF0;
+
+    localparam SMIX_WAIT_VBLANK = 4'd0;
+    localparam SMIX_GFX_READ    = 4'd1;
+    localparam SMIX_GFX_WAIT    = 4'd2;
+    localparam SMIX_GFX_WRITE   = 4'd3;
+    localparam SMIX_GFX_FILL    = 4'd4;
+    localparam SMIX_TEXT_READ   = 4'd5;
+    localparam SMIX_TEXT_WAIT   = 4'd6;
+    localparam SMIX_TEXT_WRITE  = 4'd7;
+    localparam SMIX_TEXT_FILL   = 4'd8;
 
     // Reset scrubber phases. BRAM contents do not clear from an FPGA reset,
     // so reset must serialize writes through the normal memory ports.
@@ -586,6 +599,7 @@ module vgc (
         .gt_char_len(fio_name_len),
         .gt_scale_in(regs[22]),
         .gt_reverse(gtext_reverse),
+        .gt_bold((text_flags & TXF_BOLD) != 0),
         .gt_reverse_fg(gtext_reverse_fg),
         .gt_reverse_bg(gtext_reverse_bg)
     );
@@ -987,6 +1001,27 @@ module vgc (
     logic [7:0]  sprcopy_data;
     // sprdef_wait is declared with the frame-publish gating wires above.
 
+    // Mixed scroll command state (VCMD_SCROLLMIXED / $23).
+    logic [3:0]  smix_phase;
+    logic        smix_do_text;
+    logic        smix_do_gfx;
+    logic [6:0]  smix_text_left;
+    logic [5:0]  smix_text_top;
+    logic [6:0]  smix_text_width;
+    logic [5:0]  smix_text_height;
+    logic [5:0]  smix_text_rows;
+    logic [8:0]  smix_gfx_left;
+    logic [7:0]  smix_gfx_top;
+    logic [8:0]  smix_gfx_width;
+    logic [7:0]  smix_gfx_height;
+    logic [7:0]  smix_gfx_rows;
+    logic [3:0]  smix_gfx_fill;
+    logic [7:0]  smix_text_fill_color;
+    logic [7:0]  smix_text_fill_attr;
+
+    wire [5:0] smix_text_copy_rows = smix_text_height - smix_text_rows;
+    wire [7:0] smix_gfx_copy_rows = smix_gfx_height - smix_gfx_rows;
+
     // MemRead latency state — 2-bit counter: 2 = just dispatched, 1 = dpram
     // now valid to capture, 0 = idle. The original 1-bit flag captured
     // *_a_dout the same cycle the read address took effect (stale read).
@@ -1050,6 +1085,10 @@ module vgc (
         sprrow_count = 0; sprrow_spr = 0; sprrow_row = 0;
         for (int i = 0; i < 8; i++) sprrow_data[i] = 0;
         sprcopy_phase = 0; sprcopy_data = 0; sprdef_wait = 0;
+        smix_phase = SMIX_WAIT_VBLANK; smix_do_text = 0; smix_do_gfx = 0;
+        smix_text_left = 0; smix_text_top = 0; smix_text_width = 0; smix_text_height = 0; smix_text_rows = 0;
+        smix_gfx_left = 0; smix_gfx_top = 0; smix_gfx_width = 0; smix_gfx_height = 0; smix_gfx_rows = 0;
+        smix_gfx_fill = 0; smix_text_fill_color = 0; smix_text_fill_attr = 0;
         memread_pending = 2'd0; memread_space = SPACE_CHAR;
         memcmd_pending = 1'b0; memcmd_code = 0; memcmd_delay = 0;
         cmd_x = 0; cmd_y = 0; cmd_x2 = 0; cmd_y2 = 0; cmd_cx = 0; cmd_cy = 0;
@@ -1081,7 +1120,26 @@ module vgc (
     endfunction
 
     function automatic logic [7:0] active_text_style_attr(input logic [7:0] flags);
-        active_text_style_attr = ((flags & TXF_FLASH) != 0) ? TATTR_FLASH : 8'h00;
+        active_text_style_attr =
+            (((flags & TXF_FLASH) != 0) ? TATTR_FLASH : 8'h00) |
+            (((flags & TXF_BOLD) != 0) ? TATTR_BOLD : 8'h00);
+    endfunction
+
+    function automatic logic text_glyph_pixel(
+        input logic [7:0] bits,
+        input logic [2:0] px,
+        input logic bold
+    );
+        unique case (px)
+            3'd0: text_glyph_pixel = bits[7];
+            3'd1: text_glyph_pixel = bits[6] || (bold && bits[7]);
+            3'd2: text_glyph_pixel = bits[5] || (bold && bits[6]);
+            3'd3: text_glyph_pixel = bits[4] || (bold && bits[5]);
+            3'd4: text_glyph_pixel = bits[3] || (bold && bits[4]);
+            3'd5: text_glyph_pixel = bits[2] || (bold && bits[3]);
+            3'd6: text_glyph_pixel = bits[1] || (bold && bits[2]);
+            3'd7: text_glyph_pixel = bits[0] || (bold && bits[1]);
+        endcase
     endfunction
 
     // Keyboard input is handled inside the main always_ff block below
@@ -1206,6 +1264,42 @@ module vgc (
         rr_sum = {1'b0, row} + {1'b0, scroll_offset};
         rr = (rr_sum >= 7'(ROWS)) ? rr_sum[5:0] - 6'(ROWS) : rr_sum[5:0];
         screen_addr = text_linear_addr(rr, col);
+    endfunction
+
+    function automatic logic valid_text_scroll_rect(
+        input logic [7:0] left,
+        input logic [7:0] top,
+        input logic [7:0] width,
+        input logic [7:0] height,
+        input logic [7:0] rows
+    );
+        logic [8:0] right;
+        logic [8:0] bottom;
+        begin
+            right = {1'b0, left} + {1'b0, width};
+            bottom = {1'b0, top} + {1'b0, height};
+            valid_text_scroll_rect = rows != 0 && width != 0 && height != 0 &&
+                                     left < COLS && top < ROWS &&
+                                     right <= COLS && bottom <= ROWS;
+        end
+    endfunction
+
+    function automatic logic valid_gfx_scroll_rect(
+        input logic [8:0] left,
+        input logic [7:0] top,
+        input logic [8:0] width,
+        input logic [7:0] height,
+        input logic [7:0] rows
+    );
+        logic [9:0] right;
+        logic [8:0] bottom;
+        begin
+            right = {1'b0, left} + {1'b0, width};
+            bottom = {1'b0, top} + {1'b0, height};
+            valid_gfx_scroll_rect = rows != 0 && width != 0 && height != 0 &&
+                                    left < GFX_W && top < GFX_H &&
+                                    right <= GFX_W && bottom <= GFX_H;
+        end
     endfunction
 
     function automatic logic [16:0] gfx_addr_xy(input logic [8:0] x, input logic [7:0] y);
@@ -1531,6 +1625,22 @@ module vgc (
             copper_list_wr_we <= 1'b0;
             sprrow_count <= 0; sprrow_spr <= 0; sprrow_row <= 0;
             sprcopy_phase <= 0; sprcopy_data <= 0; sprdef_wait <= 0;
+            smix_phase <= SMIX_WAIT_VBLANK;
+            smix_do_text <= 1'b0;
+            smix_do_gfx <= 1'b0;
+            smix_text_left <= 7'd0;
+            smix_text_top <= 6'd0;
+            smix_text_width <= 7'd0;
+            smix_text_height <= 6'd0;
+            smix_text_rows <= 6'd0;
+            smix_gfx_left <= 9'd0;
+            smix_gfx_top <= 8'd0;
+            smix_gfx_width <= 9'd0;
+            smix_gfx_height <= 8'd0;
+            smix_gfx_rows <= 8'd0;
+            smix_gfx_fill <= 4'h0;
+            smix_text_fill_color <= 8'h00;
+            smix_text_fill_attr <= 8'h00;
             memread_pending <= 2'd0;
             memread_space <= SPACE_CHAR;
             memcmd_pending <= 1'b0;
@@ -1814,6 +1924,174 @@ module vgc (
             // Drawing command state machine (non-drawing ops remain here)
             if (cmd_busy) begin
                 case (cmd_op)
+                    CMD_SCROLLMIXED: begin
+                        unique case (smix_phase)
+                            SMIX_WAIT_VBLANK: begin
+                                if (vblank_start) begin
+                                    cmd_cx <= 0;
+                                    cmd_cy <= 0;
+                                    if (smix_do_gfx)
+                                        smix_phase <= (smix_gfx_rows < smix_gfx_height)
+                                            ? SMIX_GFX_READ
+                                            : SMIX_GFX_FILL;
+                                    else if (smix_do_text)
+                                        smix_phase <= (smix_text_rows < smix_text_height)
+                                            ? SMIX_TEXT_READ
+                                            : SMIX_TEXT_FILL;
+                                    else
+                                        cmd_busy <= 0;
+                                end
+                            end
+
+                            SMIX_GFX_READ: begin
+                                cmd_gfx_addr <= gfx_addr_xy(
+                                    9'(smix_gfx_left + cmd_cx),
+                                    8'(smix_gfx_top + smix_gfx_rows + cmd_cy)
+                                );
+                                cmd_gfx_re <= 1;
+                                smix_phase <= SMIX_GFX_WAIT;
+                            end
+
+                            SMIX_GFX_WAIT: begin
+                                cmd_gfx_re <= 1;
+                                smix_phase <= SMIX_GFX_WRITE;
+                            end
+
+                            SMIX_GFX_WRITE: begin
+                                cmd_gfx_addr <= gfx_addr_xy(
+                                    9'(smix_gfx_left + cmd_cx),
+                                    8'(smix_gfx_top + cmd_cy)
+                                );
+                                cmd_gfx_din <= gfx_a_dout;
+                                cmd_gfx_we <= 1;
+                                if (cmd_cx == smix_gfx_width - 1) begin
+                                    cmd_cx <= 0;
+                                    if (cmd_cy == smix_gfx_copy_rows - 1) begin
+                                        cmd_cy <= 0;
+                                        smix_phase <= SMIX_GFX_FILL;
+                                    end else begin
+                                        cmd_cy <= cmd_cy + 1;
+                                        smix_phase <= SMIX_GFX_READ;
+                                    end
+                                end else begin
+                                    cmd_cx <= cmd_cx + 1;
+                                    smix_phase <= SMIX_GFX_READ;
+                                end
+                            end
+
+                            SMIX_GFX_FILL: begin
+                                cmd_gfx_addr <= gfx_addr_xy(
+                                    9'(smix_gfx_left + cmd_cx),
+                                    8'(smix_gfx_top + smix_gfx_copy_rows + cmd_cy)
+                                );
+                                cmd_gfx_din <= smix_gfx_fill;
+                                cmd_gfx_we <= 1;
+                                if (cmd_cx == smix_gfx_width - 1) begin
+                                    cmd_cx <= 0;
+                                    if (cmd_cy == smix_gfx_rows - 1) begin
+                                        cmd_cy <= 0;
+                                        if (smix_do_text)
+                                            smix_phase <= (smix_text_rows < smix_text_height)
+                                                ? SMIX_TEXT_READ
+                                                : SMIX_TEXT_FILL;
+                                        else
+                                            cmd_busy <= 0;
+                                    end else begin
+                                        cmd_cy <= cmd_cy + 1;
+                                    end
+                                end else begin
+                                    cmd_cx <= cmd_cx + 1;
+                                end
+                            end
+
+                            SMIX_TEXT_READ: begin
+                                cmd_char_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_color_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_attr_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                smix_phase <= SMIX_TEXT_WAIT;
+                            end
+
+                            SMIX_TEXT_WAIT: begin
+                                smix_phase <= SMIX_TEXT_WRITE;
+                            end
+
+                            SMIX_TEXT_WRITE: begin
+                                cmd_char_addr <= text_linear_addr(
+                                    6'(smix_text_top + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_char_din <= char_a_dout;
+                                cmd_char_we <= 1;
+                                cmd_color_addr <= text_linear_addr(
+                                    6'(smix_text_top + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_color_din <= color_a_dout;
+                                cmd_color_we <= 1;
+                                cmd_attr_addr <= text_linear_addr(
+                                    6'(smix_text_top + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_attr_din <= attr_a_dout;
+                                cmd_attr_we <= 1;
+                                if (cmd_cx == smix_text_width - 1) begin
+                                    cmd_cx <= 0;
+                                    if (cmd_cy == smix_text_copy_rows - 1) begin
+                                        cmd_cy <= 0;
+                                        smix_phase <= SMIX_TEXT_FILL;
+                                    end else begin
+                                        cmd_cy <= cmd_cy + 1;
+                                        smix_phase <= SMIX_TEXT_READ;
+                                    end
+                                end else begin
+                                    cmd_cx <= cmd_cx + 1;
+                                    smix_phase <= SMIX_TEXT_READ;
+                                end
+                            end
+
+                            SMIX_TEXT_FILL: begin
+                                cmd_char_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_copy_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_char_din <= 8'h20;
+                                cmd_char_we <= 1;
+                                cmd_color_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_copy_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_color_din <= smix_text_fill_color;
+                                cmd_color_we <= 1;
+                                cmd_attr_addr <= text_linear_addr(
+                                    6'(smix_text_top + smix_text_copy_rows + cmd_cy[5:0]),
+                                    7'(smix_text_left + cmd_cx[6:0])
+                                );
+                                cmd_attr_din <= smix_text_fill_attr;
+                                cmd_attr_we <= 1;
+                                if (cmd_cx == smix_text_width - 1) begin
+                                    cmd_cx <= 0;
+                                    if (cmd_cy == smix_text_rows - 1)
+                                        cmd_busy <= 0;
+                                    else
+                                        cmd_cy <= cmd_cy + 1;
+                                end else begin
+                                    cmd_cx <= cmd_cx + 1;
+                                end
+                            end
+
+                            default: cmd_busy <= 0;
+                        endcase
+                    end
+
                     CMD_SPRCLR: begin
                         cmd_spr_addr <= {cmd_x[4:1], cmd_cy[3:0], cmd_cx[2:0]};
                         cmd_spr_din <= 8'h00;
@@ -2169,6 +2447,37 @@ module vgc (
                                         // output blank until BRAM scrubbers complete.
                                         vgc_cmd_reset_req <= 1'b1;
                                         sys_reset_req <= 1'b1;
+                                    end
+                                    CMD_SCROLLMIXED: begin
+                                        if (valid_text_scroll_rect(regs[17], regs[18], regs[19], regs[20], regs[21]) ||
+                                            valid_gfx_scroll_rect({regs[24][0], regs[23]}, regs[25],
+                                                                  {regs[27][0], regs[26]}, regs[28], regs[29])) begin
+                                            smix_do_text <= valid_text_scroll_rect(regs[17], regs[18], regs[19], regs[20], regs[21]);
+                                            smix_do_gfx <= valid_gfx_scroll_rect({regs[24][0], regs[23]}, regs[25],
+                                                                                {regs[27][0], regs[26]}, regs[28], regs[29]);
+                                            smix_text_left <= regs[17][6:0];
+                                            smix_text_top <= regs[18][5:0];
+                                            smix_text_width <= regs[19][6:0];
+                                            smix_text_height <= regs[20][5:0];
+                                            smix_text_rows <= (regs[21] >= regs[20])
+                                                ? regs[20][5:0]
+                                                : regs[21][5:0];
+                                            smix_gfx_fill <= regs[22][3:0];
+                                            smix_gfx_left <= {regs[24][0], regs[23]};
+                                            smix_gfx_top <= regs[25];
+                                            smix_gfx_width <= {regs[27][0], regs[26]};
+                                            smix_gfx_height <= regs[28];
+                                            smix_gfx_rows <= (regs[29] >= regs[28])
+                                                ? regs[28]
+                                                : regs[29];
+                                            smix_text_fill_color <= regs[30];
+                                            smix_text_fill_attr <= regs[31];
+                                            cmd_cx <= 0;
+                                            cmd_cy <= 0;
+                                            smix_phase <= SMIX_WAIT_VBLANK;
+                                            cmd_busy <= 1;
+                                            cmd_op <= CMD_SCROLLMIXED;
+                                        end
                                     end
                                     8'h1B: begin // CmdCopperAdd
                                         if (copper_list_count[copper_target_list] < COPPER_MAX) begin
@@ -2922,6 +3231,7 @@ module vgc (
     logic        pixel_on_d2;
     logic        text_flash_hidden_d2;
     logic        text_reverse_d2;
+    logic        text_bold_d2;
     logic        cursor_active_d2;
     logic [3:0]  text_pixel_idx_d2;
     logic [3:0]  pixel_color_idx;
@@ -2950,10 +3260,11 @@ module vgc (
 
     always_comb begin
         text_reverse_d2 = attr_b_dout[1];
+        text_bold_d2 = attr_b_dout[2];
         cur_fg_d2     = text_reverse_d2 ? color_b_dout[7:4] : color_b_dout[3:0];
         cur_bg_d2     = text_reverse_d2 ? color_b_dout[3:0] : color_b_dout[7:4];
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
-        pixel_on_d2   = font_b_dout[3'd7 - font_pixel_d2] && !text_flash_hidden_d2;
+        pixel_on_d2   = text_glyph_pixel(font_b_dout, font_pixel_d2, text_bold_d2) && !text_flash_hidden_d2;
         cursor_active_d2 = cursor_here && cursor_blink;
         text_pixel_idx_d2 = pixel_on_d2 ? cur_fg_d2 : cur_bg_d2;
         if (cursor_active_d2)

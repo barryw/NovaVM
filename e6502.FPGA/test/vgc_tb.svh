@@ -45,6 +45,7 @@ localparam logic [7:0]  VPLANE_COLOR_A  = 8'h02;
 localparam logic [7:0]  VPLANE_GFX_A    = 8'h03;
 localparam logic [7:0]  VPLANE_SPRITE_A = 8'h04;
 localparam logic [7:0]  VPLANE_TEXTATTR_A = 8'h07;
+localparam logic [7:0]  CMD_SCROLLMIXED_A = 8'h23;
 
 localparam int COLS_TB = 80;
 localparam int ROWS_TB = 50;

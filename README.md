@@ -64,10 +64,10 @@ The main work is hardware parity and system integration:
 - stabilize the ULX3S video, reset, timing, sprite, DMA, and XRAM paths,
 - make ESP32 NovaHost the owner of SD-card files, ROM loading, boot assets,
   NDI disk images, and debug transport,
-- standardize flat 24-bit XRAM access for BASIC, assembly, and future
+- standardize flat 24-bit XRAM access for BASIC, assembly, and the other
   language runtimes,
-- keep NovaBASIC useful as the default runtime while leaving room for other
-  runtime/personality ROM work later.
+- keep NovaBASIC as the default runtime while growing the alternate
+  language runtimes (NovaLogo, NovaForth, NovaZ) that take over the ROM slot.
 
 Polished demos are intentionally secondary until the VM is stable. The README
 should describe the machine we are building, not hide the hardware bring-up
@@ -98,6 +98,23 @@ The important design rule is that custom hardware is not an emulator trick.
 Whenever possible, the same register model and memory behavior should exist in
 Avalonia, Verilator, and FPGA.
 
+## Languages and Runtimes
+
+Nova is no longer a BASIC-only machine. Several language runtimes now exist.
+A non-BASIC runtime takes over the ROM slot entirely — it is loaded in place
+of NovaBASIC, not alongside it.
+
+| Runtime | Status | Notes |
+|---|---|---|
+| **NovaBASIC** | Stable — default runtime | EhBASIC 2.22 extended with Nova hardware commands. Runs on Avalonia and FPGA. The most complete runtime. |
+| **NovaLogo** (`novalogo/`) | Usable — v1.0 | Logo interpreter: turtle graphics, procedures, recursion, lists, and garbage collection. Builds a 16 KB ROM image loaded in place of NovaBASIC. |
+| **NovaForth** (`novaforth/`) | Early — v0.1 | Nova-native threaded Forth with an interactive REPL and dictionary. Builds a 16 KB ROM image. Experimental. |
+| **NovaZ** (`examples/novaz/`) | Playable — Z-machine V3–V6 | Z-machine interpreter for Infocom interactive fiction. Ships as bootable NDI disk images with XRAM-backed story memory. 16 story projects are packaged (Zork I–III, HHGG, Trinity, Beyond Zork, Zork Zero, and more); the V6 path is actively stabilizing. |
+
+NovaBASIC is the only runtime currently verified on FPGA hardware. NovaLogo,
+NovaForth, and NovaZ are 65C02 code and are developed against the Avalonia and
+Verilator targets.
+
 ## NovaBASIC and Assembly
 
 NovaBASIC is EhBASIC 2.22 extended with machine-specific commands for the
@@ -121,6 +138,13 @@ Shared text-region helpers live in `runtime/asm/vtext.inc` and
 `runtime/asm/vtext.s`. They provide reusable VGC text/color/attribute region
 clear, output, and scroll primitives for assembly programs and language
 runtimes.
+
+The **Nova Developer Kit (NDK)** in `ndk/` packages this developer surface for
+writing Nova software outside the BASIC ROM tree: the shared `runtime/asm/`
+libraries, generated hardware constants, assembly documentation, and standalone
+example programs collected into one distributable directory. Standalone 65C02
+applications and demos live in `assembly/`, and loadable runtime modules
+(paged NMOD binaries staged in XRAM) live in `modules/`.
 
 ## FPGA and NovaHost
 
@@ -198,15 +222,30 @@ ESP32 NovaHost builds use the Arduino ESP32 toolchain.
 | `e6502/` | Core 6502/65C02 CPU emulator library |
 | `e6502.Avalonia/` | Desktop reference machine, VGC/audio/storage/network devices, editors, TCP bridge |
 | `e6502.Browser/` | Browser/WebAssembly host experiment sharing Avalonia hardware/rendering code |
+| `e6502.Browser.RustCore/` | Rust `no_std` WebAssembly core (CPU/RAM/ROM/VGC) powering the browser emulator |
 | `e6502.CLI/` | Terminal-hosted NovaBASIC runner |
 | `e6502.MCP/` | MCP server for external control of the Avalonia host |
 | `e6502.Nova/` | Nova command-line tooling for NDI images and NovaHost assets |
+| `e6502.NovaHost/` | Shared TCP client library for NovaHost management (6504) and debug (6503) ports |
+| `e6502.NovaPanel/` | Avalonia remote-control app for Nova hardware (on-screen keyboard, web-admin parity) |
+| `e6502.NovaPanel.Tests/` | Headless Avalonia tests for NovaPanel |
+| `e6502.GameServer/` | TCP game server (chess, echo) speaking the Nova NIC message framing |
 | `e6502.Storage/` | NDI and host-directory storage abstractions |
 | `e6502.Tools/` | Host-side utilities such as SID relocation/conversion helpers |
 | `e6502Debugger/` | Windows Forms debugger project |
 | `e6502.FPGA/` | SystemVerilog RTL, Verilator simulation, ULX3S build flow, FPGA tests |
 | `e6502.ESP32/novahost/` | ESP32 companion firmware for SD, debug, ROM loading, and host services |
 | `ehbasic/` | NovaBASIC/EhBASIC source, extension ROM, XRAM runtime, token definitions |
+| `novalogo/` | NovaLogo interpreter ROM source |
+| `novaforth/` | NovaForth runtime ROM source |
+| `examples/novaz/` | NovaZ Z-machine runtime, packaged stories, and NDI image build |
+| `ndk/` | Nova Developer Kit: packaged assembly libraries, constants, docs, examples |
+| `runtime/` | Shared 65C02 assembly libraries (XRAM, vtext, NDK primitives) |
+| `modules/` | Loadable runtime modules (paged NMOD binaries staged in XRAM) |
+| `assembly/` | Standalone 65C02 applications and demos |
+| `NovaDraw/` | macOS pixel-art editor for Nova sprites/tiles/graphics (with MCP server) |
+| `website/` | Static project site (PDFs, browser emulator, showcase images) |
+| `docker/` | CI build container images |
 | `docs/books/` | PDF book source trees and build entry point |
 | `docs/help/` | User-facing NovaBASIC help content and command reference |
 | `docs/plans/` | Architecture, bring-up, and future feature planning docs |
@@ -221,10 +260,16 @@ The best current technical references are:
 - `docs/help/guides/assembly.md`
 - `docs/help/guides/expansion-memory.md`
 - `docs/help/guides/dma-and-blitter.md`
-- `docs/books/nova-cli-guide/`
 - `docs/fpga-debugging-workflow.md`
-- `docs/books/`
 - `docs/plans/`
+
+PDF book source trees in `docs/books/`:
+
+- `basic-user-guide/` — NovaBASIC user guide
+- `mapping-the-novavm/` — hardware/architecture reference
+- `ndk-reference/` — Nova Developer Kit reference
+- `nova-cli-guide/` — `nova` CLI and NDI disk-image format
+- `nova-fun-n-games/` — programming examples and games
 
 The docs are evolving along with the hardware. Recent planning documents are
 often more accurate than old screenshots or demo programs.

@@ -48,6 +48,8 @@ internal static class TextPixelRenderer
         int glyphX = srcPx % BitmapFont.GlyphWidth;
         int glyphY = srcPy % BitmapFont.GlyphHeight;
         byte rowBits = font.GetRow(fontIndex, ch, glyphY);
+        if ((textAttr & VgcConstants.TextAttrBold) != 0)
+            rowBits = (byte)(rowBits | (rowBits >> 1));
         bool set = (rowBits & (0x80 >> glyphX)) != 0;
         if ((textAttr & VgcConstants.TextAttrFlash) != 0 && !flashVisible)
             set = false;

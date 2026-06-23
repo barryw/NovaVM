@@ -12,7 +12,8 @@ NovaVM's text layer is an 80$\times$50 display. Character RAM, Color RAM,
 and Text Attribute RAM are each 4000 bytes: one byte per visible cell.
 Character RAM holds the character code. Color RAM holds a packed colour
 attribute: the low nibble is foreground and the high nibble is background.
-Text Attribute RAM holds per-cell style flags such as flash.
+Text Attribute RAM holds per-cell style flags: bit~0 is flash, bit~1 is
+reverse, and bit~2 is bold.
 
 These memories are no longer mapped directly into the 6502 address space.
 The old \$AA00 and \$B1D0 windows are ordinary RAM now. All CPU access to

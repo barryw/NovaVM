@@ -219,10 +219,13 @@ public sealed class NovaZRuntimeLayoutTests
         StringAssert.Contains(clearTop, "LDA #NZ6_COLOR_DEFAULT");
         StringAssert.Contains(clearTop, "JSR vtext_clear_region");
 
+        // The composite scroll now builds the exact gfx pixel window into the
+        // VTEXT_GFX_* registers, then issues one vblank-aligned hardware
+        // transaction (vtext_scroll_composite_up -> VCMD_SCROLLMIXED) that scrolls
+        // the gfx, character, colour, and attribute planes together. This replaces
+        // the old two-pass software scroll and removes the tear between planes.
         StringAssert.Contains(rows, "JSR nz6_build_gfx_region_tmp_win");
-        StringAssert.Contains(rows, "JSR vtext_scroll_gfx_pixels_up");
-        StringAssert.Contains(rows, "JSR vtext_scroll_up");
-        StringAssert.Contains(rows, "JMP vtext_clear_region");
+        StringAssert.Contains(rows, "JMP vtext_scroll_composite_up");
         Assert.IsFalse(rows.Contains("vtext_scroll_mixed_up", StringComparison.Ordinal),
             "Z6 composite scroll must not derive the gfx rectangle from the snapped VTEXT cell rectangle.");
     }

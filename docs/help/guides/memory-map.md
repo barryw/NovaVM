@@ -227,7 +227,7 @@ The VGC IRQ block lives at A0F0--A0FF.
 
 | **Address** | **Name** | **Access** | **Description** |
 | --- | --- | --- | --- |
-| $A0E6 | RegTextFlags | R/W | Text output flags: bit 0=reverse, bit 1=use explicit reverse attribute, bit 2=flash. |
+| $A0E6 | RegTextFlags | R/W | Text output flags: bit 0=reverse, bit 1=use explicit reverse attribute, bit 2=flash, bit 3=bold. |
 | $A0E7 | RegTextReverseAttr | R/W | Packed reverse color attribute used when bit 1 is set: high nibble=background, low nibble=foreground. |
 | $A0E8 | RegGfxTransparentColor | R/W | Graphics-plane transparent color index; reset value is 0. Values 0--15 key that color transparent; values above 15 disable graphics transparency. |
 | $A0E9 | RegPaletteMode | R/W | Legacy compatibility register. Current VGC hardware ignores writes and reads back 0; use RegPaletteIndex/RegPaletteData or NDK helpers for palette changes. Machine reset reloads the default Nova/C64 active palette. |
@@ -323,7 +323,8 @@ or sprite commands rather than a direct CPU memory window.
 
 Memory spaces match the VDC-style VRAM port and DMA/blitter IDs:
 1=character RAM (4000 B), 2=color RAM (4000 B), 3=graphics bitmap
-(64000 B), 4=sprite shape RAM (32768 B; 256 slots), 7=text attribute RAM.
+(64000 B), 4=sprite shape RAM (32768 B; 256 slots), 7=text attribute RAM
+(bit 0=flash, bit 1=reverse, bit 2=bold).
 Auto-increment advances the address after each read or write.
 
 ### Copper Commands (1B--1E, 20--22)
@@ -348,6 +349,12 @@ compatibility. Active-list swaps take effect at vblank.
 | **Code** | **Name** | **Parameters and behavior** |
 | --- | --- | --- |
 | $1F | CmdSysReset | No parameters. Performs a full machine reset: CPU reset plus all custom-chip state, including VGC registers/video memory, sprites, DMA, blitter, SID chips, and host-facing devices. This is the command invoked by the BASIC `RESET` statement. |
+
+### Mixed Scroll Command ($23)
+
+| **Code** | **Name** | **Parameters and behavior** |
+| --- | --- | --- |
+| $23 | CmdScrollMixed | Transactionally scrolls text, color, text attribute, and graphics rectangles upward at vblank. P0=text left, P1=text top, P2=text width, P3=text height, P4=text rows up, P5=graphics fill color, P6/P7=graphics left, P8=graphics top, P9/P10=graphics width, P11=graphics height, P12=graphics rows up, P13=text fill color, P14=text fill attr. |
 
 Copper-writable registers: RegMode (A000), RegBgCol (A001),
 RegScrollX (A005), RegScrollY (A006), RegScrollCtl (A0EA), and sprite registers

@@ -4791,6 +4791,32 @@ Requires:
 - `VTEXT_CURX`
 - `VTEXT_CURY`
 
+## VTEXT.SCROLL_COMPOSITE_UP
+
+Transactionally scroll current VTEXT planes and configured gfx rectangle up by A text rows.
+
+- Kind: `routine`
+- Symbol: `vtext_scroll_composite_up`
+
+Inputs:
+- `A`: Number of text rows to scroll upward. The gfx rectangle scrolls by A*4 pixel rows.
+- `X`: Gfx-plane fill colour for the newly exposed bottom strip.
+
+Outputs:
+- `A`: 0 on success, 1 on invalid geometry.
+
+Requires:
+- `VTEXT_LEFT`
+- `VTEXT_TOP`
+- `VTEXT_WIDTH`
+- `VTEXT_HEIGHT`
+- `VTEXT_COLOR`
+- `VTEXT_ATTR`
+- `VTEXT_GFX_LEFTL/H`
+- `VTEXT_GFX_TOP`
+- `VTEXT_GFX_WIDTHL/H`
+- `VTEXT_GFX_HEIGHT`
+
 ## VTEXT.SCROLL_GFX_PIXELS_UP
 
 Scroll an arbitrary VGC gfx pixel rectangle up by A pixel rows.

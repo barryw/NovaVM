@@ -55,6 +55,23 @@ public class NovaForthTests
     }
 
     [TestMethod]
+    public void ColonDefinitionDoesNotOverwriteSourceLineBeingCompiled()
+    {
+        // Regression: the dictionary base (HERE) must sit above the REPL line
+        // buffer (input_buf). When the shared REPL reader moved from an inline
+        // include into nova.lib, input_buf was linked to the very top of BSS and
+        // collided with the dictionary base, so every new word header was written
+        // straight over the source line still being parsed — corrupting the rest
+        // of the definition (e.g. CREATE read back as "1 EATE"). Define and use a
+        // word on a SINGLE input line so a regressed layout would eat the trailing
+        // tokens after the new header is laid down.
+        string screen = RunForthLines(": DOUBLER DUP + ; 21 DOUBLER .");
+
+        Assert.IsTrue(screen.Contains("42 ", StringComparison.Ordinal), screen);
+        Assert.IsFalse(screen.Contains("UNKNOWN WORD", StringComparison.Ordinal), screen);
+    }
+
+    [TestMethod]
     public void ConstantsVariablesHexAndSignedNumbersWork()
     {
         string screen = RunForthLines(

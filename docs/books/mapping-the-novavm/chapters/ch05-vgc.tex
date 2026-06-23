@@ -296,9 +296,11 @@ attribute and text style flags beside the character cell.
 
 \mementry{A0E6}{RegTextFlags}{R/W}{0}
 
-Text output flags used by \addr{A00E} and BASIC \texttt{PRINT}. Bit~0 enables
-reverse text. Bit~1 makes reverse text use \addr{A0E7} instead of the default
-foreground/background swap. Bit~2 marks newly printed cells as flashing.
+Text output flags used by \addr{A00E}, \texttt{GTEXT}, and BASIC
+\texttt{PRINT}. Bit~0 enables reverse text. Bit~1 makes reverse text use
+\addr{A0E7} instead of the default foreground/background swap. Bit~2 marks
+newly printed cells as flashing. Bit~3 marks newly printed cells and
+\texttt{GTEXT} output as bold.
 
 \begin{lstlisting}
 POKE $A0E6,1 : REM reverse output

@@ -88,10 +88,57 @@ module test_vgc_text;
         type_char(8'h44);
         check_eq("flash attr recorded", peek_text_attr(3), 8'h01);
 
-        bus_write(REG_TEXTFLAGS_A, 8'h00);
+        bus_write(REG_TEXTFLAGS_A, 8'h08);
         step(2);
         type_char(8'h45);
-        check_eq("flashoff clears future attrs", peek_text_attr(4), 8'h00);
+        check_eq("bold attr recorded", peek_text_attr(4), 8'h04);
+
+        bus_write(REG_TEXTFLAGS_A, 8'h00);
+        step(2);
+        type_char(8'h46);
+        check_eq("style flags off clears future attrs", peek_text_attr(5), 8'h00);
+    endtask
+
+    task automatic test_scrollmixed_command_scrolls_all_planes();
+        $display("");
+        $display("Test: VCMD_SCROLLMIXED scrolls text/color/attr/gfx together");
+
+        dut.text_inst.char_mem.mem[2 * COLS_TB + 1] = 8'h41;
+        dut.text_inst.color_mem.mem[2 * COLS_TB + 1] = 8'h12;
+        dut.text_inst.attr_mem.mem[2 * COLS_TB + 1] = 8'h01;
+        dut.text_inst.char_mem.mem[3 * COLS_TB + 1] = 8'h42;
+        dut.text_inst.color_mem.mem[3 * COLS_TB + 1] = 8'h34;
+        dut.text_inst.attr_mem.mem[3 * COLS_TB + 1] = 8'h04;
+        dut.gfx_inst.gfx_mem.mem[5 * 320 + 4] = 4'hA;
+        dut.gfx_inst.gfx_mem.mem[6 * 320 + 4] = 4'hB;
+        step(2);
+
+        write_param(0, 8'd1);  // text left
+        write_param(1, 8'd2);  // text top
+        write_param(2, 8'd2);  // text width
+        write_param(3, 8'd2);  // text height
+        write_param(4, 8'd1);  // text rows
+        write_param(5, 8'd7);  // gfx fill
+        write_param(6, 8'd4);  // gfx left low
+        write_param(7, 8'd0);  // gfx left high
+        write_param(8, 8'd5);  // gfx top
+        write_param(9, 8'd2);  // gfx width low
+        write_param(10, 8'd0); // gfx width high
+        write_param(11, 8'd2); // gfx height
+        write_param(12, 8'd1); // gfx rows
+        write_param(13, 8'hE1);
+        write_param(14, 8'h01);
+        write_cmd(CMD_SCROLLMIXED_A);
+        wait_cmd_done();
+
+        check_eq("text char moved from row 3 to row 2", peek_char_cell(1, 2), 8'h42);
+        check_eq("text color moved with char", peek_color(2 * COLS_TB + 1), 8'h34);
+        check_eq("text attr moved with char", peek_text_attr(2 * COLS_TB + 1), 8'h04);
+        check_eq("vacated text char cleared", peek_char_cell(1, 3), 8'h20);
+        check_eq("vacated text color filled", peek_color(3 * COLS_TB + 1), 8'hE1);
+        check_eq("vacated text attr filled", peek_text_attr(3 * COLS_TB + 1), 8'h01);
+        check_eq("gfx pixel moved upward", peek_gfx(4, 5), 4'hB);
+        check_eq("vacated gfx pixel filled", peek_gfx(4, 6), 4'h7);
     endtask
 
     // T3: typing a full row advances cursor_y to the next row and the next
@@ -388,6 +435,7 @@ module test_vgc_text;
         test_char_ram_roundtrip();
         test_regcharout_basic();
         test_regcharout_text_attributes();
+        test_scrollmixed_command_scrolls_all_planes();
         test_row_wrap();
         test_newline_no_scroll();
         test_newline_at_bottom_scrolls();

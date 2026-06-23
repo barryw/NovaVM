@@ -1038,6 +1038,8 @@ public class VirtualGraphicsController : IBusDevice
             ExecuteCopperCommand(cmd);
         else if (cmd >= VgcConstants.CmdCopperList && cmd <= VgcConstants.CmdCopperListEnd)
             ExecuteCopperCommand(cmd);
+        else if (cmd == VgcConstants.CmdScrollMixed)
+            ExecuteScrollMixedCommand();
         else if (cmd >= VgcConstants.CmdPlot && cmd <= VgcConstants.CmdGtext)
             ExecuteGfxCommand(cmd);
         else if (cmd == VgcConstants.CmdSysReset)
@@ -1126,14 +1128,91 @@ public class VirtualGraphicsController : IBusDevice
                     int nameLen = _busMemory[VgcConstants.FioNameLen];
                     var chars = new byte[nameLen];
                     Array.Copy(_busMemory, VgcConstants.FioName, chars, 0, nameLen);
+                    bool bold = (_textFlags & VgcConstants.TextFlagBold) != 0;
                     if (TryGetReverseGtextColors(color, out byte fg, out byte bg))
-                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, fg, bg);
+                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, fg, bg, bold);
                     else
-                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, color);
+                        BlockGraphics.Text(_gfxBitmap, p0, p1, scale, _bitmapFont, fontSlot, chars, nameLen, color, null, bold);
                 }
                 break;
         }
     }
+
+    private void ExecuteScrollMixedCommand()
+    {
+        int textLeft = _cmdRegs[1];
+        int textTop = _cmdRegs[2];
+        int textWidth = _cmdRegs[3];
+        int textHeight = _cmdRegs[4];
+        int textRows = _cmdRegs[5];
+        byte gfxFill = (byte)(_cmdRegs[6] & 0x0F);
+        int gfxLeft = _cmdRegs[7] | ((_cmdRegs[8] & 0x01) << 8);
+        int gfxTop = _cmdRegs[9];
+        int gfxWidth = _cmdRegs[10] | ((_cmdRegs[11] & 0x01) << 8);
+        int gfxHeight = _cmdRegs[12];
+        int gfxRows = _cmdRegs[13];
+        byte textFillColor = _cmdRegs[14];
+        byte textFillAttr = _cmdRegs[15];
+
+        ScrollGfxRectUp(gfxLeft, gfxTop, gfxWidth, gfxHeight, gfxRows, gfxFill);
+        ScrollTextRectUp(textLeft, textTop, textWidth, textHeight, textRows, textFillColor, textFillAttr);
+    }
+
+    private void ScrollGfxRectUp(int left, int top, int width, int height, int rows, byte fill)
+    {
+        if (rows <= 0 || !IsValidGfxRect(left, top, width, height))
+            return;
+
+        rows = Math.Min(rows, height);
+        int copyRows = height - rows;
+        for (int y = 0; y < copyRows; y++)
+        {
+            int src = (top + rows + y) * VgcConstants.GfxWidth + left;
+            int dst = (top + y) * VgcConstants.GfxWidth + left;
+            Array.Copy(_gfxBitmap, src, _gfxBitmap, dst, width);
+        }
+
+        for (int y = copyRows; y < height; y++)
+        {
+            int dst = (top + y) * VgcConstants.GfxWidth + left;
+            Array.Fill(_gfxBitmap, fill, dst, width);
+        }
+    }
+
+    private void ScrollTextRectUp(int left, int top, int width, int height, int rows, byte fillColor, byte fillAttr)
+    {
+        if (rows <= 0 || !IsValidTextRect(left, top, width, height))
+            return;
+
+        rows = Math.Min(rows, height);
+        int copyRows = height - rows;
+        for (int y = 0; y < copyRows; y++)
+        {
+            int src = (top + rows + y) * VgcConstants.ScreenCols + left;
+            int dst = (top + y) * VgcConstants.ScreenCols + left;
+            Array.Copy(_screenRam, src, _screenRam, dst, width);
+            Array.Copy(_colorRam, src, _colorRam, dst, width);
+            Array.Copy(_textAttrRam, src, _textAttrRam, dst, width);
+        }
+
+        for (int y = copyRows; y < height; y++)
+        {
+            int dst = (top + y) * VgcConstants.ScreenCols + left;
+            Array.Fill(_screenRam, (byte)0x20, dst, width);
+            Array.Fill(_colorRam, fillColor, dst, width);
+            Array.Fill(_textAttrRam, fillAttr, dst, width);
+        }
+    }
+
+    private static bool IsValidTextRect(int left, int top, int width, int height) =>
+        left >= 0 && top >= 0 && width > 0 && height > 0 &&
+        left + width <= VgcConstants.ScreenCols &&
+        top + height <= VgcConstants.ScreenRows;
+
+    private static bool IsValidGfxRect(int left, int top, int width, int height) =>
+        left >= 0 && top >= 0 && width > 0 && height > 0 &&
+        left + width <= VgcConstants.GfxWidth &&
+        top + height <= VgcConstants.GfxHeight;
 
     // -------------------------------------------------------------------------
     // Sprite commands
@@ -1481,6 +1560,8 @@ public class VirtualGraphicsController : IBusDevice
         byte attr = 0;
         if ((_textFlags & VgcConstants.TextFlagFlash) != 0)
             attr |= VgcConstants.TextAttrFlash;
+        if ((_textFlags & VgcConstants.TextFlagBold) != 0)
+            attr |= VgcConstants.TextAttrBold;
         return attr;
     }
 

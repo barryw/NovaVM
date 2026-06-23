@@ -202,6 +202,72 @@ public class AvaloniaVgcTests
         Assert.AreEqual(5, _vgc.GetGfxPixelColor(10, 5));
     }
 
+    [TestMethod]
+    public void ScrollMixedCommand_ScrollsTextColorAttrAndGfxTransactionally()
+    {
+        WriteTextCell(1, 2, (byte)'A', 0x12, 0x01);
+        WriteTextCell(1, 3, (byte)'B', 0x34, VgcConstants.TextAttrBold);
+        Assert.IsTrue(_vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, 4 + 5 * VgcConstants.GfxWidth, 0x0A));
+        Assert.IsTrue(_vgc.TryWriteMemorySpace(VgcConstants.MemSpaceGfx, 4 + 6 * VgcConstants.GfxWidth, 0x0B));
+
+        _vgc.Write(VgcConstants.RegP0, 1);  // text left
+        _vgc.Write(VgcConstants.RegP1, 2);  // text top
+        _vgc.Write(VgcConstants.RegP2, 2);  // text width
+        _vgc.Write(VgcConstants.RegP3, 2);  // text height
+        _vgc.Write(VgcConstants.RegP4, 1);  // text rows
+        _vgc.Write(VgcConstants.RegP5, 7);  // gfx fill
+        _vgc.Write(VgcConstants.RegP6, 4);  // gfx left low
+        _vgc.Write(VgcConstants.RegP7, 0);  // gfx left high
+        _vgc.Write(VgcConstants.RegP8, 5);  // gfx top
+        _vgc.Write(VgcConstants.RegP9, 2);  // gfx width low
+        _vgc.Write(VgcConstants.RegP10, 0); // gfx width high
+        _vgc.Write(VgcConstants.RegP11, 2); // gfx height
+        _vgc.Write(VgcConstants.RegP12, 1); // gfx rows
+        _vgc.Write(VgcConstants.RegP13, 0xE1);
+        _vgc.Write(VgcConstants.RegP14, VgcConstants.TextAttrFlash);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdScrollMixed);
+
+        Assert.AreEqual((byte)'B', _vgc.GetScreenChar(1, 2));
+        Assert.AreEqual(0x34, _vgc.GetScreenColor(1, 2));
+        Assert.AreEqual(VgcConstants.TextAttrBold, _vgc.GetScreenTextAttr(1, 2));
+        Assert.AreEqual(0x20, _vgc.GetScreenChar(1, 3));
+        Assert.AreEqual(0xE1, _vgc.GetScreenColor(1, 3));
+        Assert.AreEqual(VgcConstants.TextAttrFlash, _vgc.GetScreenTextAttr(1, 3));
+
+        Assert.IsTrue(_vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, 4 + 5 * VgcConstants.GfxWidth, out byte moved));
+        Assert.AreEqual(0x0B, moved);
+        Assert.IsTrue(_vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, 4 + 6 * VgcConstants.GfxWidth, out byte filled));
+        Assert.AreEqual(7, filled);
+    }
+
+    [TestMethod]
+    public void Gtext_UsesTextFlagBoldWithoutChangingFont()
+    {
+        var fontData = new byte[BitmapFont.FontDataSize];
+        fontData[(byte)'A' * BitmapFont.GlyphHeight] = 0x80;
+        _vgc.SetFont(new BitmapFont(fontData));
+        var busMemory = new byte[65536];
+        busMemory[VgcConstants.FioNameLen] = 1;
+        busMemory[VgcConstants.FioName] = (byte)'A';
+        _vgc.SetBusMemory(busMemory);
+
+        _vgc.Write(VgcConstants.RegTextFlags, VgcConstants.TextFlagBold);
+        _vgc.Write(VgcConstants.RegP0, 3);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGcolor);
+        _vgc.Write(VgcConstants.RegP0, 0);
+        _vgc.Write(VgcConstants.RegP1, 0);
+        _vgc.Write(VgcConstants.RegP2, 0);
+        _vgc.Write(VgcConstants.RegP3, 0);
+        _vgc.Write(VgcConstants.RegP4, 0);
+        _vgc.Write(VgcConstants.RegP5, 1);
+        _vgc.Write(VgcConstants.RegCmd, VgcConstants.CmdGtext);
+
+        Assert.IsTrue(_vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, 0, out byte original));
+        Assert.AreEqual(3, original);
+        Assert.IsTrue(_vgc.TryReadMemorySpace(VgcConstants.MemSpaceGfx, 1, out byte extended));
+        Assert.AreEqual(3, extended, "Bold GTEXT should thicken the glyph instead of selecting another font slot.");
+    }
+
     // -- Sprite commands ------------------------------------------------------
 
     [TestMethod]
@@ -217,6 +283,14 @@ public class AvaloniaVgcTests
         var shape = _vgc.GetSpriteShape(0);
         // Row 0, pixel 8 -> byte 4 (8/2), high nibble (8 is even)
         Assert.AreEqual(0x50, shape[4]); // color 5 in high nibble
+    }
+
+    private void WriteTextCell(int col, int row, byte ch, byte color, byte attr)
+    {
+        int offset = row * VgcConstants.ScreenCols + col;
+        Assert.IsTrue(_vgc.TryWriteMemorySpace(VgcConstants.MemSpaceScreen, offset, ch));
+        Assert.IsTrue(_vgc.TryWriteMemorySpace(VgcConstants.MemSpaceColor, offset, color));
+        Assert.IsTrue(_vgc.TryWriteMemorySpace(VgcConstants.MemSpaceTextAttr, offset, attr));
     }
 
     [TestMethod]

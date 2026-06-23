@@ -1574,23 +1574,28 @@ nz6_op_text_style:
         STA zvm_text_style
         ; FALL THROUGH to nz6_apply_colour_style
 
-; VTEXT_COLOR := nz6_colour. VTEXT_ATTR gets VTXT_ATTR_REV for bit 0 reverse.
-; Bold/italic/fixed accumulate in zvm_text_style but render as roman until the
-; platform has real font/style support for them.
+; VTEXT_COLOR := nz6_colour. VTEXT_ATTR gets hardware style bits for reverse
+; and bold. Italic/fixed accumulate in zvm_text_style but render as roman.
 nz6_apply_colour_style:
         LDA nz6_colour
         STA nz6_clr_tmp
+        LDA VTEXT_ATTR
+        AND #$F9
+        STA VTEXT_ATTR
         LDA zvm_text_style
         AND #$01
         BEQ @reverse_off
         LDA VTEXT_ATTR
         ORA #VTXT_ATTR_REV
-        BRA @attr_ready
-@reverse_off:
-        LDA VTEXT_ATTR
-        AND #$FD
-@attr_ready:
         STA VTEXT_ATTR
+@reverse_off:
+        LDA zvm_text_style
+        AND #$02
+        BEQ @bold_off
+        LDA VTEXT_ATTR
+        ORA #VTXT_ATTR_BOLD
+        STA VTEXT_ATTR
+@bold_off:
 @store:
         LDA nz6_clr_tmp
         STA VTEXT_COLOR
@@ -1719,30 +1724,7 @@ nz6_scroll_live_rows_composite:
         LSR A
         TAX
         LDA nz6_tmp_lines
-        ASL A
-        ASL A
-        JSR vtext_scroll_gfx_pixels_up
-        BNE @done
-        LDA nz6_tmp_lines
-        BEQ @ok
-        CMP VTEXT_HEIGHT
-        BCC @scroll_text
-        JMP vtext_clear_region
-@scroll_text:
-        LDX nz6_tmp_lines
-@loop:
-        PHX
-        JSR vtext_scroll_up
-        TAY
-        PLX
-        TYA
-        BNE @done
-        DEX
-        BNE @loop
-@ok:
-        LDA #0
-@done:
-        RTS
+        JMP vtext_scroll_composite_up
 
 ; ROM newline hook (NZ6_OP_NEWLINE): the V6 carriage-return interrupt
 ; (YZIP "CRCNT/CRFUNC", window props 9/8). A non-zero countdown decrements

@@ -198,6 +198,9 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
+        // NIC dependency is declared through the header for linker resolution from
+        // nova.lib (the feature-group archive), not inlined via .include "nic.s".
+        StringAssert.Contains(inc, ".include \"nic.inc\"");
     }
 
     [TestMethod]
@@ -500,12 +503,19 @@ public class RuntimeLibraryAbiTests
         StringAssert.Contains(routine, "JSR   vtext_mixed_wait_frame");
         StringAssert.Contains(routine, "JSR   vtext_gfx_pixels_up");
 
+        // The cell-rectangle -> 4px-per-cell gfx-rectangle conversion now lives in
+        // the shared vtext_mixed_cell_to_gfx_region helper (reused by the fill and
+        // composite-scroll paths). Verify the conversion is present there and that
+        // the fill routine drives it before filling.
+        string cellToGfx = Slice(mixed, "vtext_mixed_cell_to_gfx_region:", "; @label VTEXT.SCROLL_MIXED_UP");
+        StringAssert.Contains(cellToGfx, "STA   VTEXT_GFX_LEFTL");
+        StringAssert.Contains(cellToGfx, "STA   VTEXT_GFX_TOP");
+        StringAssert.Contains(cellToGfx, "STA   VTEXT_GFX_WIDTHL");
+        StringAssert.Contains(cellToGfx, "STA   VTEXT_GFX_HEIGHT");
+
         string fillRoutine = Slice(mixed, "vtext_fill_gfx_region:", "; @label VTEXT.SCROLL_GFX_PIXELS_UP");
         StringAssert.Contains(fillRoutine, "JSR   vtext_mixed_validate_region");
-        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_LEFTL");
-        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_TOP");
-        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_WIDTHL");
-        StringAssert.Contains(fillRoutine, "STA   VTEXT_GFX_HEIGHT");
+        StringAssert.Contains(fillRoutine, "JSR   vtext_mixed_cell_to_gfx_region");
         StringAssert.Contains(fillRoutine, "JMP   vtext_gfx_fill");
 
         string implementation = Slice(mixed, "vtext_gfx_pixels_up:", "vtext_mixed_gfx_up:");
@@ -652,6 +662,9 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
+        // Pager dependency (which transitively pulls fio.inc) is declared through
+        // the header for linker resolution from nova.lib, not inlined via .include.
+        StringAssert.Contains(inc, ".include \"pager.inc\"");
         StringAssert.Contains(impl, "PAGER_TARGET_RAM");
     }
 
@@ -802,6 +815,9 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
+        // Sprite dependency is declared through the header for linker resolution
+        // from nova.lib, not inlined via .include "sprite.s".
+        StringAssert.Contains(inc, ".include \"sprite.inc\"");
     }
 
     [TestMethod]
@@ -872,6 +888,11 @@ public class RuntimeLibraryAbiTests
         }
 
         StringAssert.Contains(impl, ".segment \"BSS\"");
+        // Dependencies (dma, msprite, pager→fio) are declared through the header for
+        // linker resolution from nova.lib, not inlined via .include "*.s".
+        StringAssert.Contains(inc, ".include \"dma.inc\"");
+        StringAssert.Contains(inc, ".include \"msprite.inc\"");
+        StringAssert.Contains(inc, ".include \"pager.inc\"");
         StringAssert.Contains(impl, "DMA_SPACE_XRAM");
         StringAssert.Contains(impl, "DMA_SPACE_VGC_SPRITE");
         StringAssert.Contains(impl, "PAGER_TARGET_VGC");

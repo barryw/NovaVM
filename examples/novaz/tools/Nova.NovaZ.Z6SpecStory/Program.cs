@@ -271,8 +271,8 @@ static void EmitMainReturnsProgram(ZCode z)
 }
 
 // V6 colour fixture (M3 Task 2): set_colour drives the live text colour
-// through the segment's Z->EGA mapping, set_text_style derives bold from the
-// current colour pair and reverse from the text-attr plane. The V6 boot
+// through the segment's Z->EGA mapping, set_text_style preserves the colour
+// pair and derives reverse/bold from the text-attr plane. The V6 boot
 // default is EGA white-on-black ($0F). Asserted by test-z6-colours via
 // --expect-text-color/--expect-text-attr (palette-mode independent).
 static void EmitColoursProgram(ZCode z)
@@ -296,8 +296,8 @@ static void EmitColoursProgram(ZCode z)
     z.VarOp(17, Operand.Small(0));
     z.Print("egaroman");                                      // -> F0
     z.NewLine();
-    z.VarOp(17, Operand.Small(2));                            // bold: fg|8
-    z.Print("egabold");                                       // -> F8
+    z.VarOp(17, Operand.Small(2));                            // bold attr
+    z.Print("egabold");                                       // colour F0, attr 04
     z.NewLine();
     z.VarOp(17, Operand.Small(0));
     z.TwoOp(27, Operand.Small(0), Operand.Small(0));          // 0,0 = keep

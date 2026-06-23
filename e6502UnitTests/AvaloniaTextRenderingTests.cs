@@ -77,6 +77,20 @@ public class AvaloniaTextRenderingTests
     }
 
     [TestMethod]
+    public void TextPixelRenderer_BoldExtendsSetGlyphPixelsRight()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x42, textAttr: VgcConstants.TextAttrBold);
+
+        Assert.IsTrue(TrySample(vgc, font, x: 0, y: 0, flashVisible: true, out byte original));
+        Assert.AreEqual(2, original);
+
+        Assert.IsTrue(TrySample(vgc, font, x: 1, y: 0, flashVisible: true, out byte extended));
+        Assert.AreEqual(2, extended, "Bold attr should make hardware render a one-pixel right extension.");
+    }
+
+    [TestMethod]
     public void TextPixelRenderer_Mode2TreatsMatchingCellBackgroundAsTransparent()
     {
         var vgc = new VirtualGraphicsController();

@@ -38,6 +38,7 @@ VTEXT_GFX_CALC_ROWS: .res 1
       .segment "CODE"
 
       .export vtext_scroll_mixed_up
+      .export vtext_scroll_composite_up
       .export vtext_fill_gfx_region
       .export vtext_scroll_gfx_pixels_up
 
@@ -49,70 +50,7 @@ vtext_mixed_err:
       LDA   #VTEXT_ERR
       RTS
 
-; @label VTEXT.SCROLL_MIXED_UP
-; @kind routine
-; @symbol vtext_scroll_mixed_up
-; @summary Scroll the current VTEXT rectangle and matching gfx rectangle up by A text rows.
-; @in A: Number of text rows to scroll upward.
-; @in X: Gfx-plane fill colour for the newly exposed bottom strip.
-; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_COLOR VTEXT_ATTR
-; @out A: 0 on success, 1 on error.
-; @details This is the software transactional scroll used by mixed
-;          text/graphics runtimes. It treats the VTEXT cell rectangle as a
-;          4px-per-cell gfx rectangle, waits for a frame boundary, scrolls the
-;          gfx plane once, then scrolls the text color/attribute/character
-;          planes by the same row count. It matches framebuffer interpreters
-;          such as Frotz, where text and graphics are already one pixel surface.
-vtext_scroll_mixed_up:
-      STA   VTEXT_MIXED_ROWS
-      STX   VTEXT_MIXED_FILL
-      JSR   vtext_mixed_validate_region
-      BNE   @done
-      LDA   VTEXT_MIXED_ROWS
-      BEQ   @ok
-
-      JSR   vtext_mixed_wait_frame
-      JSR   vtext_mixed_gfx_up
-      BNE   @done
-
-      LDA   VTEXT_MIXED_ROWS
-      CMP   VTEXT_HEIGHT
-      BCC   @scroll_text
-      JMP   vtext_clear_region
-
-@scroll_text:
-      LDX   VTEXT_MIXED_ROWS
-@loop:
-      PHX
-      JSR   vtext_scroll_up
-      TAY
-      PLX
-      TYA
-      BNE   @done
-      DEX
-      BNE   @loop
-@ok:
-      JMP   vtext_mixed_ok
-@done:
-      RTS
-
-; @label VTEXT.FILL_GFX_REGION
-; @kind routine
-; @symbol vtext_fill_gfx_region
-; @summary Fill the graphics pixels under the current VTEXT cell rectangle.
-; @in X: Gfx-plane fill colour.
-; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT
-; @out A: 0 on success, 1 on error.
-; @details This is the graphics-plane half of making a mixed text/gfx cell
-;          rectangle look like solid background again. It fills
-;          left/top/width/height converted from 4px VTEXT cells to gfx pixels;
-;          callers can then restyle text spaces opaque or transparent as their
-;          compositor requires.
-vtext_fill_gfx_region:
-      STX   VTEXT_GFX_FILL
-      JSR   vtext_mixed_validate_region
-      BNE   @done
-
+vtext_mixed_cell_to_gfx_region:
       LDA   VTEXT_LEFT
       STA   VTEXT_GFX_LEFTL
       STZ   VTEXT_GFX_LEFTH
@@ -138,6 +76,121 @@ vtext_fill_gfx_region:
       ASL   A
       ASL   A
       STA   VTEXT_GFX_HEIGHT
+      RTS
+
+; @label VTEXT.SCROLL_MIXED_UP
+; @kind routine
+; @symbol vtext_scroll_mixed_up
+; @summary Scroll the current VTEXT rectangle and matching gfx rectangle up by A text rows.
+; @in A: Number of text rows to scroll upward.
+; @in X: Gfx-plane fill colour for the newly exposed bottom strip.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_COLOR VTEXT_ATTR
+; @out A: 0 on success, 1 on error.
+; @details Treats the VTEXT cell rectangle as a 4px-per-cell gfx rectangle,
+;          then issues VCMD_SCROLLMIXED so hardware scrolls graphics, color,
+;          text attributes, and characters as one vblank-aligned transaction.
+;          It matches framebuffer interpreters such as Frotz, where text and
+;          graphics are already one pixel surface.
+vtext_scroll_mixed_up:
+      STA   VTEXT_MIXED_ROWS
+      STX   VTEXT_MIXED_FILL
+      JSR   vtext_mixed_validate_region
+      BNE   @done
+      LDA   VTEXT_MIXED_ROWS
+      BEQ   @ok
+
+      JSR   vtext_mixed_cell_to_gfx_region
+      LDA   VTEXT_MIXED_ROWS
+      LDX   VTEXT_MIXED_FILL
+      JMP   vtext_scroll_composite_up
+@ok:
+      JMP   vtext_mixed_ok
+@done:
+      RTS
+
+; @label VTEXT.SCROLL_COMPOSITE_UP
+; @kind routine
+; @symbol vtext_scroll_composite_up
+; @summary Transactionally scroll current VTEXT planes and configured gfx rectangle up by A text rows.
+; @in A: Number of text rows to scroll upward. The gfx rectangle scrolls by A*4 pixel rows.
+; @in X: Gfx-plane fill colour for the newly exposed bottom strip.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_COLOR VTEXT_ATTR
+; @requires VTEXT_GFX_LEFTL/H VTEXT_GFX_TOP VTEXT_GFX_WIDTHL/H VTEXT_GFX_HEIGHT
+; @out A: 0 on success, 1 on invalid geometry.
+; @details Issues VCMD_SCROLLMIXED so hardware scrolls graphics, character,
+;          colour, and text-attribute planes as one command.
+vtext_scroll_composite_up:
+      STA   VTEXT_MIXED_ROWS
+      STX   VTEXT_MIXED_FILL
+      JSR   vtext_mixed_validate_region
+      BNE   @done
+      JSR   vtext_gfx_validate_region
+      BNE   @done
+      LDA   VTEXT_MIXED_ROWS
+      BEQ   @ok
+      ASL   A
+      ASL   A
+      STA   VTEXT_GFX_SCROLL_ROWS
+
+      LDA   VTEXT_LEFT
+      STA   VGC_P0
+      LDA   VTEXT_TOP
+      STA   VGC_P1
+      LDA   VTEXT_WIDTH
+      STA   VGC_P2
+      LDA   VTEXT_HEIGHT
+      STA   VGC_P3
+      LDA   VTEXT_MIXED_ROWS
+      STA   VGC_P4
+      LDA   VTEXT_MIXED_FILL
+      STA   VGC_P5
+      LDA   VTEXT_GFX_LEFTL
+      STA   VGC_P6
+      LDA   VTEXT_GFX_LEFTH
+      STA   VGC_P7
+      LDA   VTEXT_GFX_TOP
+      STA   VGC_P8
+      LDA   VTEXT_GFX_WIDTHL
+      STA   VGC_P9
+      LDA   VTEXT_GFX_WIDTHH
+      STA   VGC_P10
+      LDA   VTEXT_GFX_HEIGHT
+      STA   VGC_P11
+      LDA   VTEXT_GFX_SCROLL_ROWS
+      STA   VGC_P12
+      LDA   VTEXT_COLOR
+      STA   VGC_P13
+      LDA   VTEXT_ATTR
+      STA   VGC_P14
+      LDA   #VCMD_SCROLLMIXED
+      STA   VGC_CMD
+@wait:
+      LDA   VGC_CMD
+      AND   #$01
+      BNE   @wait
+@ok:
+      JMP   vtext_mixed_ok
+@done:
+      RTS
+
+; @label VTEXT.FILL_GFX_REGION
+; @kind routine
+; @symbol vtext_fill_gfx_region
+; @summary Fill the graphics pixels under the current VTEXT cell rectangle.
+; @in X: Gfx-plane fill colour.
+; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT
+; @out A: 0 on success, 1 on error.
+; @details This is the graphics-plane half of making a mixed text/gfx cell
+;          rectangle look like solid background again. It fills
+;          left/top/width/height converted from 4px VTEXT cells to gfx pixels;
+;          callers can then restyle text spaces opaque or transparent as their
+;          compositor requires.
+vtext_fill_gfx_region:
+      STX   VTEXT_GFX_FILL
+      JSR   vtext_mixed_validate_region
+      BNE   @done
+
+      JSR   vtext_mixed_cell_to_gfx_region
       JSR   vtext_gfx_validate_region
       BNE   @done
       JSR   vtext_gfx_calc_addr
