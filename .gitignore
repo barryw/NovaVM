@@ -359,3 +359,7 @@ e6502.FPGA/rom/ehbasic.bin
 e6502.FPGA/rom/extension.bin
 e6502.Browser/wwwroot/rust/*.bin
 website/emulator/rust/*.bin
+
+# MemPalace per-project files (issue #185)
+mempalace.yaml
+entities.json
