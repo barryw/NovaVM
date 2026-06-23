@@ -118,6 +118,7 @@ module arty_z7_full (
     wire         fb_cpu_reset;
     wire         fb_rom_we, fb_rom_idx; wire [13:0] fb_rom_addr; wire [7:0] fb_rom_data;
     wire         fb_vmem_re; wire [2:0] fb_vmem_space; wire [16:0] fb_vmem_addr; wire [7:0] fb_vmem_rdata;
+    wire         fb_vmem_we; wire [7:0] fb_vmem_wdata;   // PS -> VGC memory write (boot splash); mirrors ULX3S debug_bridge
     wire [15:0]  cpu_mon_addr;   // 6502 bus write monitor (audio-register capture)
     wire [7:0]   cpu_mon_wdata;
     wire         cpu_mon_we;
@@ -141,8 +142,8 @@ module arty_z7_full (
         .dbg_pause(1'b0),
         .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
         .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
-        .dbg_vmem_we(1'b0), .dbg_vmem_re(fb_vmem_re), .dbg_vmem_space(fb_vmem_space),
-        .dbg_vmem_addr(fb_vmem_addr), .dbg_vmem_data(8'd0), .dbg_vmem_rdata(fb_vmem_rdata),
+        .dbg_vmem_we(fb_vmem_we), .dbg_vmem_re(fb_vmem_re), .dbg_vmem_space(fb_vmem_space),
+        .dbg_vmem_addr(fb_vmem_addr), .dbg_vmem_data(fb_vmem_wdata), .dbg_vmem_rdata(fb_vmem_rdata),
         .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
         .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
         .dbg_cpu_reset(fb_cpu_reset), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
@@ -371,7 +372,8 @@ module arty_z7_full (
         .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
         .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
         .dbg_cpu_reset(fb_cpu_reset),
-        .dbg_vmem_re(fb_vmem_re), .dbg_vmem_space(fb_vmem_space),
+        .dbg_vmem_re(fb_vmem_re), .dbg_vmem_we(fb_vmem_we), .dbg_vmem_wdata(fb_vmem_wdata),
+        .dbg_vmem_space(fb_vmem_space),
         .dbg_vmem_addr(fb_vmem_addr), .dbg_vmem_rdata(fb_vmem_rdata),
         .fio_event(fio_event), .dbg_cpu_pc(d_pc),
         // dbg_bus: [0]=cpu_rdy [1]=stream_busy [2]=stream_valid [3]=stream_done

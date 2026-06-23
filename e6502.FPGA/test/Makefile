@@ -99,6 +99,9 @@ test_vgc_sprites: test_vgc_sprites.sv vgc_tb.svh $(VGC)
 test_vgc_regs: test_vgc_regs.sv vgc_tb.svh $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_regs.sv && $(RUN) test/$(BD)/$@/$@
 
+test_vgc_dbg_gfx_write: test_vgc_dbg_gfx_write.sv vgc_tb.svh $(VGC)
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_dbg_gfx_write.sv && $(RUN) test/$(BD)/$@/$@
+
 test_vgc_top_row: test_vgc_top_row.sv vgc_tb.svh $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) test_vgc_top_row.sv && $(RUN) test/$(BD)/$@/$@
 

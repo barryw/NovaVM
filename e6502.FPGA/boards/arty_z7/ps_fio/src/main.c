@@ -51,6 +51,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define R_ROMW       (FIO_BASE + 0x24)   // W {idx@22, addr[13:0]@8, data[7:0]} -> bank ROM write
 #define R_VMEM_ADDR  (FIO_BASE + 0x28)   // W {space[2:0]@17, addr[16:0]} -> latch VGC vmem read addr
 #define R_VMEM_DATA  (FIO_BASE + 0x2C)   // R {24'b0, data[7:0]} from VGC vmem (char/color/gfx/spr)
+#define R_VMEM_WRITE (FIO_BASE + 0x2C)   // W {space[2:0]@25, addr[16:0]@8, data[7:0]} -> write VGC vmem
 #define R_AUDIO      (FIO_BASE + 0x30)   // W [7:0] -> push 1 PCM byte to the HDMI audio FIFO
 #define R_AUDIO_SPACE (FIO_BASE + 0x34)  // R [15:0] -> free bytes in the HDMI audio FIFO
 #define R_AUDIO_EVT  (FIO_BASE + 0x38)   // R {valid@16, index[15:8], data[7:0]} -> pop a SID/WTS reg-write event
@@ -842,25 +843,19 @@ static void audio_timer_init(void) {
 // ---- Boot splash (ports ESP NovaHost showBootSplash to the Arty PS) ---------
 // Draws /assets/boot/novavm_logo.nvg (NVG2: 320x200, 4-bit packed + 16-colour
 // palette) onto the VGC gfx plane while the 6502 is held in reset, then holds it
-// on screen briefly before the CPU is released to NovaBASIC. The Arty bridge has
-// no VGC write port, so we drive the VGC command interface on the 6502 bus via
-// poke(): VCMD_MEMWRITE ($1A) with auto-increment (P4 bit0) streams the unpacked
-// pixels into gfx space 3. The 6502 is held, so there is no bus contention.
+// on screen briefly before the CPU is released to NovaBASIC. VGC registers
+// (mode/dim/palette) are set with poke() -- top.sv's dbg_poke_vgc writes those
+// straight into the VGC register file. The gfx pixels stream through the
+// dbg_vmem write port (R_VMEM_WRITE), the same path the ULX3S debug_bridge uses
+// for boot graphics. The 6502 is held, so there is no bus contention.
 #define VGCR_MODE     0xA000u
 #define VGCR_BGCOL    0xA001u
 #define VGCR_CURSEN   0xA00Au
 #define VGCR_BORDER   0xA00Du
-#define VGCR_CMD      0xA010u
-#define VGCR_P0       0xA011u
-#define VGCR_P1       0xA012u
-#define VGCR_P2       0xA013u
-#define VGCR_P3       0xA014u
-#define VGCR_P4       0xA015u
 #define VGCR_DIM      0xA0E5u
 #define VGCR_PALIDX   0xA0F4u
 #define VGCR_PALDAT   0xA0F5u
 #define VGC_MODE_GFX_ONLY 0x03u
-#define VCMD_MEMWRITE     0x1Au
 #define VGC_SPACE_GFX     3u
 
 static void boot_splash(void) {
@@ -898,26 +893,37 @@ static void boot_splash(void) {
         }
     }
 
-    // MEMWRITE target: gfx space, address 0, auto-increment after each byte.
-    poke(VGCR_P0, VGC_SPACE_GFX);
-    poke(VGCR_P1, 0x00);
-    poke(VGCR_P2, 0x00);
-    poke(VGCR_P4, 0x01);
+    // Self-check: prove the dbg_vmem gfx write round-trips before the full render.
+    Xil_Out32(R_VMEM_WRITE, ((unsigned)VGC_SPACE_GFX << 25) | (0u << 8) | 0x0Au);
+    {
+        unsigned char rb = vmem_read(VGC_SPACE_GFX, 0);
+        xil_printf("[splash] selfcheck gfx[0]: wrote 0A, read %02X\r\n", rb);
+    }
+
+    // Stream the unpacked pixels straight into VGC gfx memory through the dbg_vmem
+    // write port -- one 32-bit write per pixel: {space[2:0], addr[16:0], data[7:0]}.
     unsigned char row[160];                // 320 px / 2 px-per-byte
     for (unsigned y = 0; y < 200; y++) {
         if (f_read(&f, row, sizeof row, &br) != FR_OK || br != sizeof row) break;
+        unsigned base = y * 320u;
         for (unsigned x = 0; x < 320; x++) {
+            unsigned addr = base + x;
             unsigned char px = (x & 1u) ? (unsigned char)(row[x >> 1] & 0x0F)
                                         : (unsigned char)(row[x >> 1] >> 4);
-            poke(VGCR_P3, px);
-            poke(VGCR_CMD, VCMD_MEMWRITE);
+            Xil_Out32(R_VMEM_WRITE, ((unsigned)VGC_SPACE_GFX << 25) | (addr << 8) | px);
         }
     }
     f_close(&f);
     xil_printf("[splash] novavm_logo.nvg drawn to gfx plane\r\n");
 
     for (volatile unsigned long i = 0; i < 400000000UL; i++) { }  // ~hold a few seconds
-    // Leave the gfx plane intact; NovaBASIC's cold-start sets text mode (hiding it).
+
+    // Restore the power-on text state so NovaBASIC starts from a clean VGC: text
+    // mode, cursor on, and the dbg_vmem read target back at char[0] (its reset
+    // default). The gfx plane stays resident but hidden in text mode.
+    poke(VGCR_MODE, 0x00);
+    poke(VGCR_CURSEN, 0x01);
+    Xil_Out32(R_VMEM_ADDR, (1u << 17) | 0u);   // space=char, addr=0 (fio_bridge default)
 }
 
 int main(void) {

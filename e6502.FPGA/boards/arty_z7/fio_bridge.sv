@@ -67,6 +67,10 @@ module fio_bridge (
     output reg  [2:0]  dbg_vmem_space,
     output reg  [16:0] dbg_vmem_addr,
     input  wire [7:0]  dbg_vmem_rdata,
+    // VGC vmem debug WRITE: the PS streams bytes straight into VGC memory
+    // (gfx/char/color/...) without the 6502 running -- used by the boot splash.
+    output reg         dbg_vmem_we,     // 1-cycle write pulse
+    output reg  [7:0]  dbg_vmem_wdata,
     // host audio: the PS streams 48 kHz / 16-bit stereo L-PCM into the HDMI audio
     // FIFO. R_AUDIO (0x30 W) pushes one PCM byte; R_AUDIO_SPACE (0x34 R) returns
     // the FIFO's free byte count so the PS can pace its writes and never overflow
@@ -97,6 +101,7 @@ module fio_bridge (
             fio_event_sticky <= 1'b0;
             dbg_rom_we <= 1'b0; dbg_rom_idx <= 1'b0; dbg_rom_addr <= 14'd0; dbg_rom_data <= 8'd0;
             dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
+            dbg_vmem_we <= 1'b0; dbg_vmem_wdata <= 8'd0;
             audio_we <= 1'b0; audio_data <= 8'd0;
             audio_evt_rd <= 1'b0;
             sid_vol <= 8'd128;               // default reDIP-SID level (x2 with PCM_GAIN=1)
@@ -106,6 +111,7 @@ module fio_bridge (
             key_valid   <= 1'b0;
             dbg_rom_we  <= 1'b0;
             audio_we    <= 1'b0;
+            dbg_vmem_we <= 1'b0;
             audio_evt_rd <= 1'b0;
             if (fio_event) fio_event_sticky <= 1'b1;
 
@@ -132,6 +138,12 @@ module fio_bridge (
                     4'hA: begin                                    // VMEM_ADDR (0x28)
                         dbg_vmem_addr  <= s_wdata[16:0];
                         dbg_vmem_space <= s_wdata[19:17];
+                    end
+                    4'hB: begin                                    // VMEM_WRITE (0x2C): {space[2:0],addr[16:0],data[7:0]}
+                        dbg_vmem_we    <= 1'b1;                     // 1-cycle write straight into VGC memory
+                        dbg_vmem_wdata <= s_wdata[7:0];
+                        dbg_vmem_addr  <= s_wdata[24:8];
+                        dbg_vmem_space <= s_wdata[27:25];
                     end
                     4'hC: begin audio_we <= 1'b1; audio_data <= s_wdata[7:0]; end // AUDIO (0x30)
                     4'hF: begin sid_vol <= s_wdata[7:0]; sid_stereo <= s_wdata[8]; end // SID_VOL/STEREO (0x3C)
