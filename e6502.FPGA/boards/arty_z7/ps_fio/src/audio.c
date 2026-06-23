@@ -146,12 +146,15 @@ static void audio_drain_events(void) {
 // Publish playback state + up to 14 active notes into the $BA50 block so the
 // 6502 keyboard visualizer lights up to the live MIDI.
 static void audio_publish_status(void) {
-    audio_mmio_poke(MUSIC_STATUS, g_playing ? (0x02 | 0x08) : 0x00);
+    audio_mmio_poke(MUSIC_STATUS, g_playing ? (0x02 | 0x08) : 0x00);  // MUSIC | WTS
+    // SID or MIDI plays alone; the visualizer reads MIDI on voices 0-7. Publish the
+    // active MIDI notes into slots 0-7.
     int slot = 0;
-    for (int n = 0; n < 128 && slot < 14; n++)
+    for (int n = 0; n < 128 && slot < 8; n++)
         if (g_note_active[n]) audio_mmio_poke(MUSIC_NOTE1 + slot++, (unsigned char)n);
     while (slot < 14) audio_mmio_poke(MUSIC_NOTE1 + slot++, 0);
     unsigned el = (unsigned)(g_msec / 16.6667);
+    if (el > g_total_frames) el = g_total_frames;   // never report past the end
     audio_mmio_poke(MUSIC_ELAPSEDL,     el & 0xFF);
     audio_mmio_poke(MUSIC_ELAPSEDL + 1, (el >> 8) & 0xFF);
     audio_mmio_poke(MUSIC_TOTALL,       g_total_frames & 0xFF);
@@ -227,27 +230,73 @@ int audio_load_soundfont(const char *sd_path) {
     return 0;
 }
 
+// Scan a MIDI file for a meta event (FF <type> <len> <text>) and copy its text to
+// dst (zero-filled, 33B). Heuristic + bounded: meta events sit near the track heads,
+// and we require printable ASCII to reject false hits inside VLQ delta-times.
+static void midi_find_meta(const unsigned char *buf, unsigned len, unsigned char type,
+                           char *dst, int dstn) {
+    unsigned scan = (len < 8192) ? len : 8192;
+    for (unsigned i = 0; i + 3 < scan; i++) {
+        if (buf[i] != 0xFF || buf[i + 1] != type) continue;
+        unsigned n = buf[i + 2];
+        if (n == 0 || n > 64 || i + 3 + n > len) continue;
+        int ok = 1;
+        for (unsigned j = 0; j < n; j++) {
+            unsigned char c = buf[i + 3 + j];
+            if (c < 0x20 || c > 0x7E) { ok = 0; break; }
+        }
+        if (!ok) continue;
+        int k = 0;
+        for (unsigned j = 0; j < n && k < dstn - 1; j++) dst[k++] = (char)buf[i + 3 + j];
+        return;                                // dst is pre-zeroed
+    }
+}
+
 int audio_play_midi(const char *sd_path) {
     if (!g_tsf) { xil_printf("[audio] no soundfont loaded\r\n"); return -1; }
     UINT len = 0;
     void *buf = slurp(sd_path, &len);     // lock-free file I/O
     if (!buf) { xil_printf("[audio] MIDI read failed: %s\r\n", sd_path); return -2; }
     tml_message *nh = tml_load_memory(buf, (int)len);
+    if (!nh) { free(buf); xil_printf("[audio] tml_load_memory failed\r\n"); return -3; }
+    // Metadata from the MIDI meta events (FF 03 sequence/track name = title, FF 01
+    // text, FF 02 copyright). Parse before freeing buf; fall back to the filename.
+    char title[33] = {0}, author[33] = {0}, copyr[33] = {0};
+    midi_find_meta((const unsigned char *)buf, len, 0x03, title,  sizeof title);
+    midi_find_meta((const unsigned char *)buf, len, 0x01, author, sizeof author);
+    midi_find_meta((const unsigned char *)buf, len, 0x02, copyr,  sizeof copyr);
     free(buf);
-    if (!nh) { xil_printf("[audio] tml_load_memory failed\r\n"); return -3; }
+    if (!title[0]) {                       // no embedded name -> use the filename
+        const char *base = sd_path;
+        for (const char *p = sd_path; *p; p++) if (*p == '/' || *p == ':') base = p + 1;
+        int k = 0; while (base[k] && k < 32) { title[k] = base[k]; k++; }
+    }
     unsigned int len_ms = 0;
     tml_get_info(nh, 0, 0, 0, 0, &len_ms);
+    // tml_get_info reports the last NOTE time, but playback runs to the last EVENT
+    // (trailing note-offs / end-of-track). Use the last event time so the
+    // visualizer's total matches actual play length.
+    unsigned int end_ms = len_ms;
+    for (tml_message *m = nh; m; m = m->next) if (m->time > end_ms) end_ms = m->time;
     // Switch playback to the new song atomically w.r.t. the audio ISR.
     Xil_ExceptionDisable();
     tml_message *old = g_head;
     g_head = nh; g_cur = nh; g_msec = 0.0;
-    g_total_frames = (unsigned)(len_ms / 16.6667);
+    g_total_frames = (unsigned)(end_ms / 16.6667);
     for (int i = 0; i < 128; i++) g_note_active[i] = 0;
     tsf_reset(g_tsf);
     g_testtone = 0; g_playing = 1;
     Xil_ExceptionEnable();
     if (old) tml_free(old);
-    xil_printf("[audio] MIDI playing: %s\r\n", sd_path);
+    // Publish music-block metadata for the visualizer header.
+    audio_mmio_poke(0xBAB0, 0x03);             // AUDIO_META_TYPE = MIDI
+    for (int i = 0; i < 32; i++) {
+        audio_mmio_poke(0xBAB3 + i, (unsigned char)title[i]);   // AUDIO_META_TITLE
+        audio_mmio_poke(0xBAD3 + i, (unsigned char)author[i]);  // AUDIO_META_AUTHOR
+        audio_mmio_poke(0xBAF3 + i, (unsigned char)copyr[i]);   // AUDIO_META_COPYRIGHT
+    }
+    audio_mmio_poke(0xBB1C, 0);                // AUDIO_META_FLAGS (no SID flags)
+    xil_printf("[audio] MIDI playing: %s (\"%s\")\r\n", sd_path, title);
     return 0;
 }
 
@@ -348,7 +397,16 @@ void audio_service(void) {
         if (sidplay_active()) sidplay_advance(BLOCK_FRAMES);
 
         // Wavetable + MIDI file -> g_fblock (stereo). g_tsf may be null (SID-only).
-        if (g_playing) { g_msec += (double)BLOCK_FRAMES * 1000.0 / (double)SAMPLE_RATE; fire_events(g_msec); }
+        if (g_playing) {
+            g_msec += (double)BLOCK_FRAMES * 1000.0 / (double)SAMPLE_RATE;
+            fire_events(g_msec);
+            if (!g_cur) {                  // song finished -> stop now so the visualizer exits
+                g_playing = 0;
+                for (int i = 0; i < 128; i++) g_note_active[i] = 0;
+                if (g_tsf) tsf_reset(g_tsf);
+                audio_publish_status();    // status -> 0 (cleared) for the visualizer
+            }
+        }
         if (g_tsf) tsf_render_float(g_tsf, g_fblock, BLOCK_FRAMES, 0);
         else       memset(g_fblock, 0, sizeof g_fblock);
 

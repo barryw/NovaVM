@@ -4,6 +4,7 @@
 #include "sidplay.h"
 #include "sid_vm.h"
 #include "xil_printf.h"
+#include <math.h>
 
 extern "C" void audio_sid_reg_write(int chip, int reg, unsigned char val);
 extern "C" void audio_set_sid_stereo(int on);
@@ -55,6 +56,24 @@ extern "C" int sidplay_load(const unsigned char *buf, int len, int song) {
         if (model == 2) cfg |= 0x05;     // 8580 on both SID1 ($D440.0) and SID2 ($D440.2)
         if (clk   == 2) cfg |= 0x02;     // NTSC clock
         audio_mmio_poke(0xD440, cfg);
+        // Music-block metadata for the keyboard visualizer (source + legend):
+        // AUDIO_META_TYPE ($BAB0)=SID, AUDIO_META_FLAGS ($BB1C)=model/stereo/clock.
+        uint8_t meta = (model == 2) ? 0x02 : 0x01;          // 8580 : 6581
+        if (len > 0x7B && buf[0x7A]) meta |= 0x04;          // stereo (2SID)
+        if (clk == 2)                meta |= 0x08;          // NTSC
+        audio_mmio_poke(0xBB1C, meta);                      // AUDIO_META_FLAGS
+        audio_mmio_poke(0xBAB0, 0x01);                      // AUDIO_META_TYPE = SID
+        // Song name / artist / released for the visualizer header. PSID stores these
+        // as 32-byte null-padded strings: title@$16, author@$36, released@$56.
+        for (int i = 0; i < 32; i++) {
+            audio_mmio_poke(0xBAB3 + i, buf[0x16 + i]);     // AUDIO_META_TITLE
+            audio_mmio_poke(0xBAD3 + i, buf[0x36 + i]);     // AUDIO_META_AUTHOR
+            audio_mmio_poke(0xBAF3 + i, buf[0x56 + i]);     // AUDIO_META_COPYRIGHT (released)
+        }
+        audio_mmio_poke(0xBB19, (unsigned char)info.songs); // AUDIO_META_SONGS
+        audio_mmio_poke(0xBB13, loadAddr & 0xFF);            audio_mmio_poke(0xBB14, (loadAddr >> 8) & 0xFF);
+        audio_mmio_poke(0xBB15, info.initAddress & 0xFF);    audio_mmio_poke(0xBB16, (info.initAddress >> 8) & 0xFF);
+        audio_mmio_poke(0xBB17, info.playAddress & 0xFF);    audio_mmio_poke(0xBB18, (info.playAddress >> 8) & 0xFF);
     }
     int s = (song > 0) ? song : (info.startSong ? info.startSong : 1);
     // 6502 A = 0-based subtune index (the ESP calls runInit(song - 1)); passing the
@@ -88,10 +107,41 @@ extern "C" int sidplay_load(const unsigned char *buf, int len, int song) {
     return 0;
 }
 
+// Convert a 16-bit SID frequency register to a MIDI note (0 = silent/sub-audible).
+// PAL: f_Hz = Fn * 985248 / 16777216; note = 69 + 12*log2(f/440).
+static unsigned char sid_freq_to_note(unsigned fn) {
+    if (fn < 50) return 0;                      // truly silent / sub-audible
+    float hz = (float)fn * 985248.0f / 16777216.0f;
+    int note = (int)(69.0f + 12.0f * log2f(hz / 440.0f) + 0.5f);
+    if (note < 12)  return 0;                   // below the visualizer's C0
+    if (note > 127) note = 127;
+    return (unsigned char)note;
+}
+
+// Publish the 6 SID voices' current notes to the $BA50 music block so the keyboard
+// visualizer can show what a .sid is playing. A voice is sounding when its gate
+// (control bit0) is set; freq comes from the SidVm register shadow.
+static void sid_publish_notes(void) {
+    static const int FLO[3] = { 0, 7, 14 };    // voice freq-lo register offsets
+    static const int CTL[3] = { 4, 11, 18 };   // voice control register offsets
+    audio_mmio_poke(0xBA50, 0x06);             // MUSIC_STATUS: bit1=music + bit2=SID
+    int slot = 0;
+    for (int v = 0; v < 3; v++) {
+        unsigned f = g_vm.sid1(FLO[v]) | ((unsigned)g_vm.sid1(FLO[v] + 1) << 8);
+        audio_mmio_poke(0xBA51 + slot++, (g_vm.sid1(CTL[v]) & 0x01) ? sid_freq_to_note(f) : 0);
+    }
+    for (int v = 0; v < 3; v++) {
+        unsigned f = g_vm.sid2(FLO[v]) | ((unsigned)g_vm.sid2(FLO[v] + 1) << 8);
+        audio_mmio_poke(0xBA51 + slot++, (g_vm.sid2(CTL[v]) & 0x01) ? sid_freq_to_note(f) : 0);
+    }
+    while (slot < 14) audio_mmio_poke(0xBA51 + slot++, 0);   // remaining voices silent
+}
+
 extern "C" void sidplay_advance(int samples) {
     if (!g_active) return;
     g_acc += (unsigned)samples;
     int guard = 0;
+    bool fired = false;
     while (g_acc >= g_period && ++guard < 8) {     // fire play frame(s) at the tune rate
         g_acc -= g_period;
         RunResult r = g_vm.runPlayFrame();
@@ -100,7 +150,9 @@ extern "C" void sidplay_advance(int samples) {
             xil_printf("[sid] play error: %s pc=%04X op=%02X\r\n",
                        run_status_name(r.status), r.pc, r.opcode);
         }
+        fired = true;
     }
+    if (fired) sid_publish_notes();                // refresh the visualizer at the tune rate
 }
 
 extern "C" void sidplay_stop(void) { g_active = false; }

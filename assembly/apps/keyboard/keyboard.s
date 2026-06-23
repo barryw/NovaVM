@@ -29,7 +29,7 @@ MIDI_BASE   = 12                ; C0 = MIDI note 12
 MAX_VOICES  = 14
 SID_FIRST_VOICE = 0
 SID_VOICE_COUNT = 6
-WTS_FIRST_VOICE = 6
+WTS_FIRST_VOICE = 0             ; SID or MIDI plays alone; MIDI uses voices 0-7
 WTS_VOICE_COUNT = 8
 BAR_X       = 6                 ; progress bar X
 BAR_Y       = 174               ; progress bar Y
@@ -1005,7 +1005,31 @@ draw_song_header:
 @print:
     lda #COL_CYAN
     sta RegFgCol
-    jmp print_centered_buffer
+    jsr print_centered_buffer
+    ; Author on row 2, released/copyright on row 4 (blank fields are skipped).
+    lda #2
+    ldx #<AUDIO_META_AUTHOR
+    ldy #>AUDIO_META_AUTHOR
+    jsr draw_meta_centered
+    lda #4
+    ldx #<AUDIO_META_COPYRIGHT
+    ldy #>AUDIO_META_COPYRIGHT
+    jsr draw_meta_centered
+    rts
+
+; Center a metadata string (X/Y = address) on row A in light gray; skip if empty.
+draw_meta_centered:
+    sta zp_tmp2
+    stx zp_str_ptr
+    sty zp_str_ptr+1
+    lda #32
+    jsr string_len_limited
+    beq @mc_done
+    lda #COL_LGRAY
+    sta RegFgCol
+    jsr print_centered_buffer
+@mc_done:
+    rts
 
 draw_source_header:
     lda #SOURCE_ROW
