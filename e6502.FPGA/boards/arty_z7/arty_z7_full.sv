@@ -317,8 +317,12 @@ module arty_z7_full (
                                   (sid_mono19 < -19'sd131072) ? -18'sd131072 : sid_mono19[17:0];
     wire signed [17:0] sid_l_src = fb_sid_stereo ? sid1_audio_w : sid_mono;
     wire signed [17:0] sid_r_src = fb_sid_stereo ? sid2_audio_w : sid_mono;
+    // PCM_GAIN=1 (not the default 3): the reDIP 8580 output is much hotter than
+    // 6581, and the DC blocker's *3 hard-clips loud 8580 notes (static) -- the SID
+    // is already <= +/-16383 after sid_chip's >>>9, so *1 fits 16-bit with headroom.
+    // The runtime SID volume (below) makes up the level downstream.
     wire [1:0][15:0] sid_pcm;
-    sid_hdmi_audio sid_cond (
+    sid_hdmi_audio #(.PCM_GAIN(1)) sid_cond (
         .clk(clk_pixel), .rst(reset), .sample_en(audio_sample_strobe),
         .sid_audio_l(sid_l_src), .sid_audio_r(sid_r_src),
         .audio_sample_word(sid_pcm)

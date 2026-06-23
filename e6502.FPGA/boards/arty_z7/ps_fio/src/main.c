@@ -152,7 +152,7 @@ int audio_fifo_space(void) { return (int)(Xil_In32(R_AUDIO_SPACE) & 0xFFFFu); }
 unsigned audio_evt_read(void) { return Xil_In32(R_AUDIO_EVT); }
 // reDIP-SID mix control (R_SID_VOL): [7:0] = level (32=x1, 64=x2), [8] = stereo
 // (1 = SID1->L / SID2->R for 2SID tunes, 0 = both SIDs summed to mono).
-static unsigned g_sid_lvl = 64, g_sid_stereo = 0;
+static unsigned g_sid_lvl = 128, g_sid_stereo = 0;   // x2 with the DC blocker at PCM_GAIN=1
 static void sid_vol_write(void) {
     Xil_Out32(R_SID_VOL, ((g_sid_stereo & 1u) << 8) | (g_sid_lvl & 0xFFu));
 }

@@ -99,7 +99,7 @@ module fio_bridge (
             dbg_vmem_space <= 3'd1; dbg_vmem_addr <= 17'd0;   // default SPACE_CHAR
             audio_we <= 1'b0; audio_data <= 8'd0;
             audio_evt_rd <= 1'b0;
-            sid_vol <= 8'd64;                // default reDIP-SID level (x2 in the mix)
+            sid_vol <= 8'd128;               // default reDIP-SID level (x2 with PCM_GAIN=1)
             sid_stereo <= 1'b0;              // default mono (both SIDs -> L+R)
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
