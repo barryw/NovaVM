@@ -800,7 +800,7 @@ public static class VgcConstants
     public const int VramData          = 0xA0E3;
     public const int VramCtrl          = 0xA0E4;
     public const int DisplayDim        = 0xA0E5;   // 0=black, 15=full brightness
-    public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash
+    public const int RegTextFlags      = 0xA0E6;   // bit0=reverse, bit1=explicit reverse attr, bit2=flash, bit3=bold
     public const int RegTextReverseAttr = 0xA0E7;  // packed bg/fg used when bit1 is set
     public const int RegGfxTransparentColor = 0xA0E8; // graphics-plane transparent color key; >15 disables transparency
     public const int RegPaletteMode    = 0xA0E9;   // legacy compatibility register; writes ignored, reads 0
@@ -847,9 +847,11 @@ public static class VgcConstants
     public const byte TextFlagReverse         = 0x01;
     public const byte TextFlagReverseExplicit = 0x02;
     public const byte TextFlagFlash           = 0x04;
+    public const byte TextFlagBold            = 0x08;
 
     public const byte TextAttrFlash           = 0x01;
     public const byte TextAttrReverse         = 0x02;
+    public const byte TextAttrBold            = 0x04;
 
     // -------------------------------------------------------------------------
     // VGC core registers ($A000-$A00F)
@@ -970,6 +972,7 @@ public static class VgcConstants
     public const byte CmdCopperList    = 0x20;     // P0 = list index (0-127)
     public const byte CmdCopperUse     = 0x21;     // P0 = list index (0-127)
     public const byte CmdCopperListEnd = 0x22;     // reset target to active list
+    public const byte CmdScrollMixed   = 0x23;     // transactional text/color/attr/gfx scroll up
 
     public const int CopperListCount        = 128;
     public const int MaxCopperEntriesPerList = 256;

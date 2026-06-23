@@ -673,8 +673,10 @@ ScreenWinPlaneAttr                  = $02
 TextFlagReverse                     = $01
 TextFlagReverseExplicit             = $02
 TextFlagFlash                       = $04
+TextFlagBold                        = $08
 TextAttrFlash                       = $01
 TextAttrReverse                     = $02
+TextAttrBold                        = $04
 
 ; --- VGC core registers ($A000-$A00F) ---
 RegMode                             = $A000
@@ -771,6 +773,7 @@ CmdSysReset                         = $1F
 CmdCopperList                       = $20
 CmdCopperUse                        = $21
 CmdCopperListEnd                    = $22
+CmdScrollMixed                      = $23
 CopperListCount                     = $80
 MaxCopperEntriesPerList             = $0100
 

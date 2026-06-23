@@ -177,7 +177,62 @@ bool find_string_property(const char* begin, const char* end, const char* key,
     return value && copy_json_string_value(value, end, out, out_len);
 }
 
+bool read_json_bool_value(const char* p, const char* end, bool& value) {
+    size_t remaining = (size_t)(end - p);
+    if (remaining >= 4 && strncmp(p, "true", 4) == 0) {
+        value = true;
+        return true;
+    }
+    if (remaining >= 5 && strncmp(p, "false", 5) == 0) {
+        value = false;
+        return true;
+    }
+    return false;
+}
+
+bool find_bool_property(const char* begin, const char* end, const char* key,
+                        bool& value) {
+    const char* p = find_property_value(begin, end, key);
+    return p && read_json_bool_value(p, end, value);
+}
+
+bool read_json_uint_value(const char* p, const char* end, unsigned max_value,
+                          unsigned& value) {
+    if (p >= end || *p < '0' || *p > '9')
+        return false;
+
+    unsigned parsed = 0;
+    while (p < end && *p >= '0' && *p <= '9') {
+        unsigned digit = (unsigned)(*p - '0');
+        if (parsed > (max_value - digit) / 10)
+            return false;
+        parsed = parsed * 10 + digit;
+        p++;
+    }
+
+    value = parsed;
+    return true;
+}
+
+bool find_uint_property(const char* begin, const char* end, const char* key,
+                        unsigned max_value, unsigned& value) {
+    const char* p = find_property_value(begin, end, key);
+    return p && read_json_uint_value(p, end, max_value, value);
+}
+
 } // namespace
+
+void initBootSplashConfigDefaults(BootSplashConfig& out) {
+    memset(&out, 0, sizeof(out));
+    snprintf(out.assetPath, sizeof(out.assetPath), "%s",
+             BOOT_SPLASH_DEFAULT_ASSET);
+    out.fadeInMs = BOOT_SPLASH_DEFAULT_FADE_IN_MS;
+    out.holdMs = BOOT_SPLASH_DEFAULT_HOLD_MS;
+    out.fadeOutMs = BOOT_SPLASH_DEFAULT_FADE_OUT_MS;
+    out.background = BOOT_SPLASH_DEFAULT_BACKGROUND;
+    out.border = BOOT_SPLASH_DEFAULT_BORDER;
+    out.enabled = true;
+}
 
 bool parseBootRuntimeConfigText(const char* text, size_t len,
                                 BootRuntimeConfig& out) {
@@ -220,5 +275,48 @@ bool parseBootRuntimeConfigText(const char* text, size_t len,
     find_string_property(runtime_begin, runtime_end, "extensionRom",
                          out.extRomPath, sizeof(out.extRomPath));
     out.valid = true;
+    return true;
+}
+
+bool parseBootSplashConfigText(const char* text, size_t len,
+                               BootSplashConfig& out) {
+    initBootSplashConfigDefaults(out);
+
+    if (!text || len == 0)
+        return false;
+
+    const char* begin = text;
+    const char* end = text + len;
+
+    const char* vm_begin = nullptr;
+    const char* vm_end = nullptr;
+    if (!find_object_value(begin, end, "vm", vm_begin, vm_end))
+        return true;
+
+    const char* splash_begin = nullptr;
+    const char* splash_end = nullptr;
+    if (!find_object_value(vm_begin, vm_end, "bootSplash", splash_begin,
+                           splash_end))
+        return true;
+
+    out.configured = true;
+    find_bool_property(splash_begin, splash_end, "enabled", out.enabled);
+
+    char asset[sizeof(out.assetPath)] = {};
+    if (find_string_property(splash_begin, splash_end, "asset", asset,
+                             sizeof(asset)) &&
+        asset[0] != '\0') {
+        snprintf(out.assetPath, sizeof(out.assetPath), "%s", asset);
+    }
+
+    find_uint_property(splash_begin, splash_end, "fadeInMs", 60000,
+                       out.fadeInMs);
+    find_uint_property(splash_begin, splash_end, "holdMs", 60000,
+                       out.holdMs);
+    find_uint_property(splash_begin, splash_end, "fadeOutMs", 60000,
+                       out.fadeOutMs);
+    find_uint_property(splash_begin, splash_end, "background", 15,
+                       out.background);
+    find_uint_property(splash_begin, splash_end, "border", 15, out.border);
     return true;
 }

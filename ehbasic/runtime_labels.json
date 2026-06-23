@@ -1521,7 +1521,7 @@
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1220,
+      "line": 1229,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1533,7 +1533,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1241,
+      "line": 1250,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1545,7 +1545,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1234,
+      "line": 1243,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1557,7 +1557,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1227,
+      "line": 1236,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1690,7 +1690,7 @@
     {
       "label": "FIO.FILE_ACCESS_READ",
       "source": "../runtime/asm/nova.inc",
-      "line": 855,
+      "line": 864,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1702,7 +1702,7 @@
     {
       "label": "FIO.FILE_ACCESS_RW",
       "source": "../runtime/asm/nova.inc",
-      "line": 869,
+      "line": 878,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1714,7 +1714,7 @@
     {
       "label": "FIO.FILE_ACCESS_WRITE",
       "source": "../runtime/asm/nova.inc",
-      "line": 862,
+      "line": 871,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1726,7 +1726,7 @@
     {
       "label": "FIO.FILE_TARGET_MASK",
       "source": "../runtime/asm/nova.inc",
-      "line": 876,
+      "line": 885,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1738,7 +1738,7 @@
     {
       "label": "FIO.FILE_TARGET_RAM",
       "source": "../runtime/asm/nova.inc",
-      "line": 883,
+      "line": 892,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1750,7 +1750,7 @@
     {
       "label": "FIO.FILE_TARGET_XRAM",
       "source": "../runtime/asm/nova.inc",
-      "line": 890,
+      "line": 899,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1959,7 +1959,7 @@
     {
       "label": "FIO.NAME",
       "source": "../runtime/asm/nova.inc",
-      "line": 845,
+      "line": 854,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1971,7 +1971,7 @@
     {
       "label": "FIO.NAMELEN",
       "source": "../runtime/asm/nova.inc",
-      "line": 799,
+      "line": 808,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2048,7 +2048,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1291,
+      "line": 1300,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2060,7 +2060,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1298,
+      "line": 1307,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2072,7 +2072,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1305,
+      "line": 1314,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2084,7 +2084,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1312,
+      "line": 1321,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5119,7 +5119,7 @@
     {
       "label": "VGC.PALDATA",
       "source": "../runtime/asm/nova.inc",
-      "line": 527,
+      "line": 533,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5155,7 +5155,7 @@
     {
       "label": "VGC.PALIDX",
       "source": "../runtime/asm/nova.inc",
-      "line": 520,
+      "line": 526,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -6763,7 +6763,7 @@
     {
       "label": "VTEXT.FILL_GFX_REGION",
       "source": "../runtime/asm/vtext_mixed.s",
-      "line": 99,
+      "line": 176,
       "inputs": [
         {
           "name": "X",
@@ -7069,9 +7069,46 @@
       "summary": "Read the character byte at VTEXT.CURX/CURY in the current region."
     },
     {
+      "label": "VTEXT.SCROLL_COMPOSITE_UP",
+      "source": "../runtime/asm/vtext_mixed.s",
+      "line": 111,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "Number of text rows to scroll upward. The gfx rectangle scrolls by A*4 pixel rows."
+        },
+        {
+          "name": "X",
+          "description": "Gfx-plane fill colour for the newly exposed bottom strip."
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on invalid geometry."
+        }
+      ],
+      "requires": [
+        "VTEXT_LEFT",
+        "VTEXT_TOP",
+        "VTEXT_WIDTH",
+        "VTEXT_HEIGHT",
+        "VTEXT_COLOR",
+        "VTEXT_ATTR",
+        "VTEXT_GFX_LEFTL/H",
+        "VTEXT_GFX_TOP",
+        "VTEXT_GFX_WIDTHL/H",
+        "VTEXT_GFX_HEIGHT"
+      ],
+      "kind": "routine",
+      "symbol": "vtext_scroll_composite_up",
+      "summary": "Transactionally scroll current VTEXT planes and configured gfx rectangle up by A text rows.",
+      "details": "Issues VCMD_SCROLLMIXED so hardware scrolls graphics, character,"
+    },
+    {
       "label": "VTEXT.SCROLL_GFX_PIXELS_UP",
       "source": "../runtime/asm/vtext_mixed.s",
-      "line": 150,
+      "line": 203,
       "inputs": [
         {
           "name": "A",
@@ -7102,7 +7139,7 @@
     {
       "label": "VTEXT.SCROLL_MIXED_UP",
       "source": "../runtime/asm/vtext_mixed.s",
-      "line": 52,
+      "line": 81,
       "inputs": [
         {
           "name": "A",
@@ -7130,7 +7167,7 @@
       "kind": "routine",
       "symbol": "vtext_scroll_mixed_up",
       "summary": "Scroll the current VTEXT rectangle and matching gfx rectangle up by A text rows.",
-      "details": "This is the software transactional scroll used by mixed"
+      "details": "Treats the VTEXT cell rectangle as a 4px-per-cell gfx rectangle,"
     },
     {
       "label": "VTEXT.SCROLL_UP",

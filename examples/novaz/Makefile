@@ -224,7 +224,7 @@ test-z6-colours: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_COLOURS
 	$(DOTNET) $(SMOKE_DLL) "$(Z6_COLOURS_IMAGE)" --generic-boot --screen-only --skip-manifest-check --expect-screen "colour fixture done" \
 	    --expect-text-color "egadef=>0F" --expect-text-color "egagrnblu=>12" --expect-text-color "egawhite=>0F" \
 	    --expect-text-color "egaparch=>F0" --expect-text-color "egarev=>F0" --expect-text-attr "egarev=>02" --expect-text-color "egaroman=>F0" --expect-text-attr "egaroman=>00" \
-	    --expect-text-color "egabold=>F8" --expect-text-color "egakeep=>F0" --expect-text-color "egaredkeep=>04" \
+	    --expect-text-color "egabold=>F0" --expect-text-attr "egabold=>04" --expect-text-color "egakeep=>F0" --expect-text-color "egaredkeep=>04" \
 	    --expect-text-color "egadflt=>0F"
 
 test-z6-v7-rejected: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(PACKER_SRC) $(Z6_SPEC_V7_STORY) $(SMOKE_DLL)

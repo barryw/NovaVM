@@ -347,6 +347,27 @@ module test_gtext;
             check("reverse gtext fills background", bg_seen > 0);
         end
 
+        // ----- Test 9: Bold GTEXT thickens glyph pixels without changing font slot -----
+        $display("Test: Bold GTEXT");
+
+        write_cmd(8'h07); wait_cmd_done();
+        dut.text_inst.font_mem.mem[{8'd65, 3'b000}] = 8'h80; // 'A' row 0: one leftmost pixel
+        write_reg(16'hA0E6, 8'h08); // bold text flag
+        write_param(0, 5);
+        write_cmd(8'h08);
+
+        set_fio_string("A");
+        write_param(0, 0); write_param(1, 0);
+        write_param(2, 0); write_param(3, 0);
+        write_param(4, 0); write_param(5, 1);
+        write_cmd(8'h0A);
+        wait_cmd_done();
+
+        check("bold gtext original pixel set", gfx_pixel(0, 0) == 4'd5);
+        check("bold gtext extends one pixel right", gfx_pixel(1, 0) == 4'd5);
+        check("bold gtext does not fill entire row", gfx_pixel(2, 0) == 4'd0);
+        write_reg(16'hA0E6, 8'h00);
+
         // ---------------------------------------------------------------
         // Summary
         // ---------------------------------------------------------------

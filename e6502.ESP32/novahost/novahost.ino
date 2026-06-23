@@ -18,6 +18,7 @@
 #include <SD.h>
 #include <SPI.h>
 #include <ctype.h>
+#include <string.h>
 #include "fpga_bridge.h"
 #include "debug_server.h"
 #include "device_manager.h"
@@ -555,7 +556,7 @@ static const char* const SID_CURVE_PATHS[] = {
 };
 
 static const char* const BOOT_LOGO_NVG_PATHS[] = {
-    "/assets/boot/novavm_logo.nvg"
+    BOOT_SPLASH_DEFAULT_ASSET
 };
 
 // =========================================================================
@@ -1222,11 +1223,49 @@ bool streamBootLogoNvg(File& f, const char* path) {
     return true;
 }
 
-bool setBootSplashVideoState(uint8_t dim) {
+BootSplashConfig readBootSplashConfig() {
+    BootSplashConfig cfg;
+    initBootSplashConfigDefaults(cfg);
+
+    if (!g_sd_mounted)
+        return cfg;
+
+    File f = SD.open("/config/boot.json", FILE_READ);
+    if (!f)
+        return cfg;
+
+    size_t len = f.size();
+    if (len == 0 || len > BOOT_CONFIG_MAX_BYTES) {
+        logLn("Boot splash config: boot.json size %u unsupported, using defaults",
+              (unsigned)len);
+        f.close();
+        return cfg;
+    }
+
+    char buf[BOOT_CONFIG_MAX_BYTES + 1];
+    size_t got = f.read((uint8_t*)buf, len);
+    f.close();
+    if (got != len) {
+        logLn("Boot splash config: read failed (%u/%u), using defaults",
+              (unsigned)got, (unsigned)len);
+        return cfg;
+    }
+    buf[len] = '\0';
+
+    if (!parseBootSplashConfigText(buf, len, cfg)) {
+        logLn("Boot splash config: parse failed, using defaults");
+        initBootSplashConfigDefaults(cfg);
+    }
+
+    return cfg;
+}
+
+bool setBootSplashVideoState(uint8_t dim, uint8_t background,
+                             uint8_t border) {
     return resetVgcDefaultPalette() &&
            fpgaBridge.poke(VGC_DISPLAY_DIM, dim) &&
-           fpgaBridge.poke(VGC_BGCOL, 0x00) &&
-           fpgaBridge.poke(VGC_BORDER, 0x0B) &&
+           fpgaBridge.poke(VGC_BGCOL, background & 0x0F) &&
+           fpgaBridge.poke(VGC_BORDER, border & 0x0F) &&
            fpgaBridge.poke(VGC_CURSOR_ENABLE, 0x00) &&
            fpgaBridge.poke(VGC_MODE, VGC_MODE_GFX_ONLY);
 }
@@ -1255,10 +1294,21 @@ bool showBootSplash() {
         return false;
     }
 
+    BootSplashConfig cfg = readBootSplashConfig();
+    if (!cfg.enabled) {
+        logLn("Boot splash skipped: disabled in boot.json");
+        return false;
+    }
+
+    const char* fallback_path = BOOT_LOGO_NVG_PATHS[0];
+    const char* paths[2];
+    size_t path_count = 0;
+    paths[path_count++] = cfg.assetPath[0] ? cfg.assetPath : fallback_path;
+    if (strcmp(paths[0], fallback_path) != 0)
+        paths[path_count++] = fallback_path;
+
     const char* path = nullptr;
-    File f = openFirstAsset("boot splash NVG", BOOT_LOGO_NVG_PATHS,
-                            sizeof(BOOT_LOGO_NVG_PATHS) / sizeof(BOOT_LOGO_NVG_PATHS[0]),
-                            path);
+    File f = openFirstAsset("boot splash NVG", paths, path_count, path);
     if (!f) return false;
 
     if (!holdFpgaResetForBoot("Boot splash")) {
@@ -1268,7 +1318,9 @@ bool showBootSplash() {
 
     logLn("Boot splash: drawing %s", path);
     unsigned long t0 = millis();
-    if (!setBootSplashVideoState(0) || !clearVgcGfx()) {
+    if (!setBootSplashVideoState(0, (uint8_t)cfg.background,
+                                 (uint8_t)cfg.border) ||
+        !clearVgcGfx()) {
         f.close();
         restoreBootSplashVideoState();
         return false;
@@ -1281,9 +1333,9 @@ bool showBootSplash() {
         return false;
     }
 
-    fadeBootSplash(0, 15, 1000);
-    delay(3000);
-    fadeBootSplash(15, 0, 1000);
+    fadeBootSplash(0, 15, (uint16_t)cfg.fadeInMs);
+    delay(cfg.holdMs);
+    fadeBootSplash(15, 0, (uint16_t)cfg.fadeOutMs);
     if (!clearVgcGfx())
         logLn("WARN: boot splash graphics clear failed after fade-out");
     if (!clearVgcText())

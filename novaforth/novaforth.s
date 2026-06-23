@@ -8,6 +8,13 @@
       .include "libeditor.inc"
       .include "replline.inc"
 
+; Dictionary base = first free byte above ALL linked BSS. replline's input_buf
+; now links from nova.lib and lands at the top of BSS, so the old `dict_start`
+; label (end of this module's own BSS) no longer marks the true end of RAM
+; reservations. Use the linker's __BSS_LAST__ so the dictionary never overlaps
+; input_buf regardless of segment link order.
+      .import __BSS_LAST__
+
 .ifndef ROMSWAP_FORTH
 ROMSWAP_FORTH = $06
 .endif
@@ -141,7 +148,9 @@ restore_xram_mid:.res 1
 restore_xram_hi:.res 1
 restore_rem_lo:.res 1
 restore_rem_hi:.res 1
-dict_start:
+; Dictionary starts at __BSS_LAST__ (see cold_start) — the true top of BSS after
+; the linker appends nova.lib's input_buf. No label here: a label at this point
+; would only mark the end of THIS module's BSS, which is below input_buf.
 
 ; =====================================================================
 ; CODE
@@ -181,9 +190,9 @@ cold_start:
       STA   base_cell
       STZ   base_cell+1
 
-      LDA   #<dict_start
+      LDA   #<__BSS_LAST__
       STA   here_lo
-      LDA   #>dict_start
+      LDA   #>__BSS_LAST__
       STA   here_hi
       LDA   #<ROM_LATEST
       STA   latest_lo
@@ -2034,11 +2043,11 @@ code_allot:
       STA   tmp_hi
       BCC   @bad
       LDA   tmp_hi
-      CMP   #>dict_start
+      CMP   #>__BSS_LAST__
       BCC   @bad
       BNE   @store
       LDA   tmp_lo
-      CMP   #<dict_start
+      CMP   #<__BSS_LAST__
       BCC   @bad
 @store:
       LDA   tmp_lo

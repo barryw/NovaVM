@@ -5,28 +5,30 @@ vblank, then issuing one blitter operation per VGC plane. This is exposed
 through the VTEXT automatic-scroll hook so applications can keep one scroll
 event and batch graphics, color, text attributes, and character cells together.
 
-Future hardware should add a transactional blitter command that accepts:
+Implemented hardware support adds `VCMD_SCROLLMIXED`/`CmdScrollMixed` (`$23`),
+a vblank-aligned mixed-scroll command specialized for the active NovaZ/VTEXT
+case. It accepts:
 
-- a plane mask, for example graphics, char, color, and text attribute planes
-- source rectangle
-- destination rectangle
-- optional fill rectangle/value for newly exposed rows or columns
-- commit timing, with vblank commit as the default
+- a text rectangle, text rows-up count, fill color, and fill attribute
+- a graphics rectangle, pixel rows-up count, and fill color
+- implicit character, color, and text-attribute planes for the text rectangle
+- vblank start as the transaction boundary
 
-The NDK API should stay stable. When hardware support exists, the VTEXT mixed
-scroll hook can become a thin wrapper around the transactional command instead
-of issuing separate per-plane blits.
+The NDK API stays stable. `vtext_scroll_mixed_up` now computes the matching
+graphics rectangle and calls `vtext_scroll_composite_up`, which issues `$23`
+instead of issuing separate per-plane blits.
 
 ## Hardware Text Attributes
 
-Nova also needs a real hardware-rendered bold text attribute. Today VTEXT only
-has flash and reverse attributes, so runtimes that want bold are tempted to
-change the foreground palette index or swap fonts. That is wrong for custom
+Nova also has a real hardware-rendered bold text attribute. VTEXT previously
+only had flash and reverse attributes, so runtimes that wanted bold were tempted
+to change the foreground palette index or swap fonts. That is wrong for custom
 palettes: `fg | 8` is not guaranteed to be a brighter readable version of the
 same colour, and font swapping is too application-specific.
 
-Add a `VTXT_ATTR_BOLD` bit to the shared VTEXT/VGC attribute model and render it
-in the VGC text pipeline. The first implementation can be a simple hardware
-effect, for example drawing the glyph one pixel wider when there is room inside
-the cell. The important contract is that applications request bold as text
-style, not as palette remapping and not by selecting a different font asset.
+`VTXT_ATTR_BOLD` is bit 2 in the shared VTEXT/VGC text attribute model.
+`VTXT_BOLD`/`TextFlagBold` is bit 3 in `RegTextFlags`; printed cells receive
+the bold attribute, and `GTEXT` also renders bold while the flag is set. The
+hardware effect draws glyph strokes one pixel wider inside the cell. The
+important contract is that applications request bold as text style, not as
+palette remapping and not by selecting a different font asset.

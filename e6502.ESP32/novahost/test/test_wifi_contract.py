@@ -60,7 +60,7 @@ def test_management_routes() -> None:
     novahost = read("e6502.ESP32/novahost/novahost.ino")
     nova_cli = read("e6502.Nova/Program.cs")
     nova_web = read("e6502.Nova/NovaWebServer.cs")
-    nova_mgmt = read("e6502.Nova/NovaHostManagementClient.cs")
+    nova_mgmt = read("e6502.NovaHost/NovaHostManagementClient.cs")
 
     checks = {
         "HTTP documents only the health endpoint": 'GET /health -> NovaHost liveness' in header
@@ -352,7 +352,10 @@ def test_fpga_spi_bridge_contract() -> None:
 
 def test_fio_clear_error_contract() -> None:
     basic = read("ehbasic/basic.asm")
-    fio = read("runtime/asm/fio.s")
+    # The FIOCLR helper now lives in its own object (fio_clear_error.s) so ROMs
+    # that only need FIOCLR avoid pulling the full fio.s body; fio_exec stays in
+    # fio.s. The contract therefore spans both files.
+    fio = read("runtime/asm/fio.s") + read("runtime/asm/fio_clear_error.s")
     nova_inc = read("runtime/asm/nova.inc")
     dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher_cpp = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
@@ -732,7 +735,7 @@ def test_runtime_autoboot_contract() -> None:
         "NovaZ V6 uses shared VGC palette helpers": "JSR vgc_set_palette_ega" in novaz_zvm6
         and "JSR vgc_set_palette_custom_xram" in novaz_zvm6
         and "JSR vgc_upload_palette_rgb_xram" not in novaz_zvm6,
-        "NovaZ runtime initializes with shared C64 palette and reset border": ".include \"vgc_palette.s\"" in novaz_runtime
+        "NovaZ runtime initializes with shared C64 palette and reset border": ".include \"vgc_palette.inc\"" in novaz_runtime
         and "JSR vgc_set_palette_c64" in novaz_runtime
         and "LDA #$0B" in novaz_runtime.split("init_video_colors:", 1)[1].split("setup_text_region:", 1)[0]
         and "STA VGC_BORDER" in novaz_runtime.split("init_video_colors:", 1)[1].split("setup_text_region:", 1)[0]
@@ -742,19 +745,22 @@ def test_runtime_autoboot_contract() -> None:
         and "JSR nz6_sync_border_to_bg" in novaz_zvm6.split("nz6_op_reset:", 1)[1].split("; --- PICS.PAK index", 1)[0]
         and "JSR nz6_sync_border_to_bg" not in novaz_zvm6.split("nz6_apply_colour_style:", 1)[1].split("nz6_sync_border_to_bg:", 1)[0]
         and "JSR nz6_sync_border_to_bg" in novaz_zvm6.split("nz6_gfx_fill_bg:", 1)[1].split("nz6_gfx_clear:", 1)[0],
-        "NovaZ V6 scrolls graphics before text on newline scroll": "NZ6_OP_PRE_NEWLINE_SCROLL = $0B" in novaz_zvm6_inc
-        and "LDA #NZ6_OP_PRE_NEWLINE_SCROLL" in novaz_linefeed
-        and "JSR nz_screen_v6_pre_newline_scroll" in novaz_linefeed
-        and "JSR vtext_put_char" in novaz_linefeed
-        and novaz_linefeed.find("JSR nz_screen_v6_pre_newline_scroll") < novaz_linefeed.find("JSR vtext_put_char")
-        and "JMP nz6_gfx_scroll_live" in novaz_pre_newline
-        and "nz6_gfx_scroll_live" not in novaz_cr_newline,
+        # V6 newline scroll now scrolls the gfx and text planes atomically through
+        # the VTEXT scroll hook (nz6_scroll_live_composite -> vtext_scroll_composite_up
+        # -> VCMD_SCROLLMIXED). This replaces the old "pre-scroll graphics, then text"
+        # two-pass approach and removes the tear between planes. The PRE_NEWLINE_SCROLL
+        # opcode is retained as a now-empty ABI slot.
+        "NovaZ V6 scrolls graphics and text atomically on newline scroll": "NZ6_OP_PRE_NEWLINE_SCROLL = $0B" in novaz_zvm6_inc
+        and "JSR vtext_set_scroll_hook" in novaz_zvm6
+        and "nz6_scroll_live_composite:" in novaz_zvm6
+        and "JMP vtext_scroll_composite_up" in novaz_zvm6
+        and "nz6_gfx_scroll_live" not in novaz_zvm6,
         "shared NVG library pages packed NVG2 through the blitter": "row-packed 4bpp pixels" in nvg_inc
         and "pager_load_current_file_page" in nvg_runtime
         and "blitter_start_gfx4_unpack" in nvg_runtime
         and "XRAM_NVG_STAGE_L" in nvg_runtime
         and "FIO_CMD_NVGLOAD" not in nvg_runtime,
-        "shared NVG loader uses shared VGC palette helper": ".include \"vgc_palette.s\"" in nvg_runtime
+        "shared NVG loader uses shared VGC palette helper": ".include \"vgc_palette.inc\"" in nvg_inc
         and "NVG_PALETTE_BYTES = VGC_CUSTOM_PALETTE_BYTES" in nvg_inc
         and "JSR   vgc_set_palette_custom_xram" in nvg_runtime
         and "STA   VGC_PALDATA" not in nvg_runtime
@@ -921,7 +927,7 @@ def test_boot_splash_handoff_contract() -> None:
     splash = splash.split("// =========================================================================\n// WiFi setup", 1)[0]
     rom_load = novahost.split("bool loadRomsToFPGA()", 1)[1]
     rom_load = rom_load.split("// =========================================================================\n// Accept new log viewer", 1)[0]
-    fade_out = splash.find("fadeBootSplash(15, 0, 1000);")
+    fade_out = splash.find("fadeBootSplash(15, 0, (uint16_t)cfg.fadeOutMs);")
     clear_text = splash.find("clearVgcText()", fade_out)
     restore_text = splash.find("restoreBootSplashVideoState();", clear_text)
     reset_hold = rom_load.find("fpgaBridge.resetHold()")
@@ -943,6 +949,16 @@ def test_boot_splash_handoff_contract() -> None:
         and "VGC_PALETTE_DATA" in novahost
         and "VGC_PALETTE_MODE" not in novahost
         and "VGC_PALMODE_CUSTOM" not in novahost,
+        "boot splash is driven by boot.json config with fallback asset": "BootSplashConfig readBootSplashConfig()" in novahost
+        and "parseBootSplashConfigText(buf, len, cfg)" in novahost
+        and "cfg.assetPath" in splash
+        and "BOOT_LOGO_NVG_PATHS[0]" in splash
+        and "Boot splash skipped: disabled in boot.json" in splash,
+        "boot splash config controls colors and timing": "setBootSplashVideoState(0, (uint8_t)cfg.background" in splash
+        and "(uint8_t)cfg.border" in splash
+        and "fadeBootSplash(0, 15, (uint16_t)cfg.fadeInMs);" in splash
+        and "delay(cfg.holdMs);" in splash
+        and "fadeBootSplash(15, 0, (uint16_t)cfg.fadeOutMs);" in splash,
         "NovaHost resets active palette to C64 for boot handoff": "VGC_DEFAULT_C64_PALETTE" in novahost
         and "bool resetVgcDefaultPalette()" in novahost
         and "fpgaBridge.poke(VGC_PALETTE_INDEX, 0x00)" in novahost

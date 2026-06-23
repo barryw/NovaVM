@@ -497,11 +497,17 @@ VTXT_REVEX        = $02
 .ifndef VTXT_FLASH
 VTXT_FLASH        = $04
 .endif
+.ifndef VTXT_BOLD
+VTXT_BOLD         = $08
+.endif
 .ifndef VTXT_ATTR_FLASH
 VTXT_ATTR_FLASH   = $01
 .endif
 .ifndef VTXT_ATTR_REV
 VTXT_ATTR_REV     = $02
+.endif
+.ifndef VTXT_ATTR_BOLD
+VTXT_ATTR_BOLD    = $04
 .endif
 
 ; VGC IRQ and command constants.
@@ -630,6 +636,9 @@ VCMD_COPPERUSE    = $21
 .endif
 .ifndef VCMD_COPPEREND
 VCMD_COPPEREND    = $22
+.endif
+.ifndef VCMD_SCROLLMIXED
+VCMD_SCROLLMIXED  = $23
 .endif
 
 ; ---------------------------------------------------------------------

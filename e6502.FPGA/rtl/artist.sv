@@ -41,6 +41,7 @@ module artist (
     input  logic [5:0]  gt_char_len,       // string length
     input  logic [7:0]  gt_scale_in,       // scale factor
     input  logic        gt_reverse,
+    input  logic        gt_bold,
     input  logic [3:0]  gt_reverse_fg,
     input  logic [3:0]  gt_reverse_bg
 );
@@ -55,6 +56,23 @@ module artist (
     // clk_pixel critical path.
     function automatic logic [16:0] gfx_addr_xy(input logic [8:0] px, input logic [7:0] py);
         gfx_addr_xy = {1'b0, py, 8'b0} + {3'b0, py, 6'b0} + {8'b0, px};
+    endfunction
+
+    function automatic logic gt_glyph_pixel(
+        input logic [7:0] bits,
+        input logic [2:0] col,
+        input logic bold
+    );
+        unique case (col)
+            3'd0: gt_glyph_pixel = bits[7];
+            3'd1: gt_glyph_pixel = bits[6] || (bold && bits[7]);
+            3'd2: gt_glyph_pixel = bits[5] || (bold && bits[6]);
+            3'd3: gt_glyph_pixel = bits[4] || (bold && bits[5]);
+            3'd4: gt_glyph_pixel = bits[3] || (bold && bits[4]);
+            3'd5: gt_glyph_pixel = bits[2] || (bold && bits[3]);
+            3'd6: gt_glyph_pixel = bits[1] || (bold && bits[2]);
+            3'd7: gt_glyph_pixel = bits[0] || (bold && bits[1]);
+        endcase
     endfunction
 
     // Extract character from packed flat vector
@@ -131,6 +149,7 @@ module artist (
     logic [15:0] gt_draw_x;
     logic [15:0] gt_draw_y;
     logic        gt_reverse_active;
+    logic        gt_bold_active;
     logic [3:0]  gt_bg_color;
 
     // =========================================================================
@@ -144,6 +163,7 @@ module artist (
         paint_phase = 0;
         gt_font_pending = 0;
         gt_reverse_active = 0;
+        gt_bold_active = 0;
         gt_bg_color = 0;
         paint_init = 0;
     end
@@ -165,6 +185,7 @@ module artist (
             font_re <= 0;
             fs_a_we <= 0;
             gt_reverse_active <= 0;
+            gt_bold_active <= 0;
             gt_bg_color <= 0;
         end else begin
             // Default: no writes this cycle
@@ -407,10 +428,12 @@ module artist (
                         if (gt_font_pending != 2'd0) begin
                             // Waiting for font ROM read
                         end else if (gt_char_idx < gt_len) begin
-                            if (gt_font_byte[3'd7 - gt_font_col] || gt_reverse_active) begin
+                            if (gt_glyph_pixel(gt_font_byte, gt_font_col, gt_bold_active) || gt_reverse_active) begin
                                 if (gt_draw_x < GFX_W && gt_draw_y < GFX_H) begin
                                     gfx_addr <= gfx_addr_xy(gt_draw_x[8:0], gt_draw_y[7:0]);
-                                    gfx_wdata <= gt_font_byte[3'd7 - gt_font_col] ? color : gt_bg_color;
+                                    gfx_wdata <= gt_glyph_pixel(gt_font_byte, gt_font_col, gt_bold_active)
+                                        ? color
+                                        : gt_bg_color;
                                     gfx_we <= 1;
                                 end
                             end
@@ -560,6 +583,7 @@ module artist (
                         if (gt_char_len > 0) begin
                             color <= gt_reverse ? gt_reverse_fg : cmd_color;
                             gt_reverse_active <= gt_reverse;
+                            gt_bold_active <= gt_bold;
                             gt_bg_color <= gt_reverse_bg;
                             gt_pen_x <= cmd_x0;
                             gt_start_y <= cmd_y0;

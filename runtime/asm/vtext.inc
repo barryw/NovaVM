@@ -43,6 +43,7 @@ VTEXT_FLAG_SCROLL = $02
 VTEXT_ATTR_NONE = $00
 VTEXT_ATTR_FLASH = VTXT_ATTR_FLASH
 VTEXT_ATTR_REVERSE = VTXT_ATTR_REV
+VTEXT_ATTR_BOLD = VTXT_ATTR_BOLD
 
 VTEXT_OK = $00
 VTEXT_ERR = $01
@@ -107,6 +108,7 @@ VTEXT_REGION_SIZE = 10
 .global vtext_clear_line
 .global vtext_scroll_up
 .global vtext_scroll_mixed_up
+.global vtext_scroll_composite_up
 .global vtext_fill_gfx_region
 .global vtext_scroll_gfx_pixels_up
 .global vtext_wait_blitter

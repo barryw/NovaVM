@@ -271,7 +271,8 @@ public static class BlockGraphics
     }
 
     public static void Text(byte[] bmp, int startX, int startY, int scale,
-        BitmapFont font, int fontSlot, byte[] charCodes, int charCount, byte color, byte? backgroundColor)
+        BitmapFont font, int fontSlot, byte[] charCodes, int charCount, byte color, byte? backgroundColor,
+        bool bold = false)
     {
         if (scale < 1) scale = 1;
         int penX = startX;
@@ -283,6 +284,8 @@ public static class BlockGraphics
             for (int row = 0; row < BitmapFont.GlyphHeight; row++)
             {
                 byte rowBits = font.GetRow(fontSlot, ch, row);
+                if (bold)
+                    rowBits = (byte)(rowBits | (rowBits >> 1));
                 for (int col = 0; col < BitmapFont.GlyphWidth; col++)
                 {
                     bool set = (rowBits & (0x80 >> col)) != 0;

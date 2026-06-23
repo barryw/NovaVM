@@ -1142,13 +1142,20 @@ ext_current_text_color:
       RTS
 
 ext_current_text_attr:
+      LDX   #$00
       LDA   VGC_TXTFLAGS
       AND   #VTXT_FLASH
-      BEQ   @plain
-      LDA   #VTXT_ATTR_FLASH
-      RTS
-@plain:
-      LDA   #$00
+      BEQ   :+
+      LDX   #VTXT_ATTR_FLASH
+:
+      LDA   VGC_TXTFLAGS
+      AND   #VTXT_BOLD
+      BEQ   :+
+      TXA
+      ORA   #VTXT_ATTR_BOLD
+      TAX
+:
+      TXA
       RTS
 
 ; ext_parse_addr_mask removed (BIT* relocated to main basic_bit_addr_mask).
