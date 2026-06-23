@@ -338,3 +338,24 @@ e6502.ESP32/novahost/test/test_shelf_alloc
 
 # Git worktrees
 .worktrees/
+
+# --- Build-output binaries -------------------------------------------------
+# Produced from source by the top-level `make binaries`; not tracked, so a deploy
+# is always a matched set (no stale/mismatched artifacts). Genuine fixtures stay
+# tracked: the e6502UnitTests CPU test suites, the cp437 font, *.nvg art, *.ndi
+# disk images, and the asm test fixtures under tests/.
+ehbasic/*.bin
+novaforth/*.bin
+novalogo/*.bin
+modules/**/*.bin
+modules/**/*.nmod
+assembly/apps/**/*.bin
+runtime/asm/*.bin
+runtime/asm/build/
+e6502.Avalonia/Resources/*.bin
+!e6502.Avalonia/Resources/cp437.bin
+e6502.CLI/Resources/*.bin
+e6502.FPGA/rom/ehbasic.bin
+e6502.FPGA/rom/extension.bin
+e6502.Browser/wwwroot/rust/*.bin
+website/emulator/rust/*.bin

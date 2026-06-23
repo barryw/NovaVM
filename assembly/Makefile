@@ -10,6 +10,12 @@ TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
 EDITBUF_TEST_DIR := apps/editbuf_test
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
+# Runtime feature archive: ld65 pulls only the referenced members (resolving
+# transitive deps like blitter/vtext) instead of hand-listing individual .o files.
+NOVA_LIB := $(NOVA_ASM)/build/nova.lib
+
+$(NOVA_LIB):
+	$(MAKE) -C $(NOVA_ASM)
 
 all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test
 
@@ -60,8 +66,8 @@ install-demo: demo
 
 vsprite-rotate: $(ROTATE_DIR)/vsprite_rotate.bin
 
-$(ROTATE_DIR)/vsprite_rotate.bin: $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite.o $(ROTATE_DIR)/vsprite_rotate.cfg
-	ld65 -C $(ROTATE_DIR)/vsprite_rotate.cfg -o $@ $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite.o
+$(ROTATE_DIR)/vsprite_rotate.bin: $(ROTATE_DIR)/vsprite_rotate.o $(NOVA_LIB) $(ROTATE_DIR)/vsprite_rotate.cfg
+	ld65 -C $(ROTATE_DIR)/vsprite_rotate.cfg -o $@ $(ROTATE_DIR)/vsprite_rotate.o $(NOVA_LIB)
 
 $(ROTATE_DIR)/vsprite_rotate.o: $(ROTATE_DIR)/vsprite_rotate.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
@@ -74,8 +80,8 @@ install-vsprite-rotate: vsprite-rotate
 
 turtle: $(TURTLE_DIR)/turtle.bin
 
-$(TURTLE_DIR)/turtle.bin: $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/vsprite.o $(TURTLE_DIR)/turtle.cfg
-	ld65 -C $(TURTLE_DIR)/turtle.cfg -o $@ $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/vsprite.o
+$(TURTLE_DIR)/turtle.bin: $(TURTLE_DIR)/turtle.o $(NOVA_LIB) $(TURTLE_DIR)/turtle.cfg
+	ld65 -C $(TURTLE_DIR)/turtle.cfg -o $@ $(TURTLE_DIR)/turtle.o $(NOVA_LIB)
 
 $(TURTLE_DIR)/turtle.o: $(TURTLE_DIR)/turtle.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/blitter.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
@@ -88,8 +94,8 @@ install-turtle: turtle
 
 editui-shell: $(EDITUI_SHELL_DIR)/editui_shell.bin
 
-$(EDITUI_SHELL_DIR)/editui_shell.bin: $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui.o $(EDITUI_SHELL_DIR)/editui_shell.cfg
-	ld65 -C $(EDITUI_SHELL_DIR)/editui_shell.cfg -o $@ $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui.o
+$(EDITUI_SHELL_DIR)/editui_shell.bin: $(EDITUI_SHELL_DIR)/editui_shell.o $(NOVA_LIB) $(EDITUI_SHELL_DIR)/editui_shell.cfg
+	ld65 -C $(EDITUI_SHELL_DIR)/editui_shell.cfg -o $@ $(EDITUI_SHELL_DIR)/editui_shell.o $(NOVA_LIB)
 
 $(EDITUI_SHELL_DIR)/editui_shell.o: $(EDITUI_SHELL_DIR)/editui_shell.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/editui.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
@@ -102,8 +108,8 @@ install-editui-shell: editui-shell
 
 editbuf-test: $(EDITBUF_TEST_DIR)/editbuf_test.bin
 
-$(EDITBUF_TEST_DIR)/editbuf_test.bin: $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editui.o $(EDITBUF_TEST_DIR)/editbuf.o $(EDITBUF_TEST_DIR)/editbuf_test.cfg
-	ld65 -C $(EDITBUF_TEST_DIR)/editbuf_test.cfg -o $@ $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editui.o $(EDITBUF_TEST_DIR)/editbuf.o
+$(EDITBUF_TEST_DIR)/editbuf_test.bin: $(EDITBUF_TEST_DIR)/editbuf_test.o $(NOVA_LIB) $(EDITBUF_TEST_DIR)/editbuf_test.cfg
+	ld65 -C $(EDITBUF_TEST_DIR)/editbuf_test.cfg -o $@ $(EDITBUF_TEST_DIR)/editbuf_test.o $(NOVA_LIB)
 
 $(EDITBUF_TEST_DIR)/editbuf_test.o: $(EDITBUF_TEST_DIR)/editbuf_test.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editbuf.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
