@@ -839,6 +839,87 @@ static void audio_timer_init(void) {
     xil_printf("[audio] TTC0 1kHz audio IRQ started\r\n");
 }
 
+// ---- Boot splash (ports ESP NovaHost showBootSplash to the Arty PS) ---------
+// Draws /assets/boot/novavm_logo.nvg (NVG2: 320x200, 4-bit packed + 16-colour
+// palette) onto the VGC gfx plane while the 6502 is held in reset, then holds it
+// on screen briefly before the CPU is released to NovaBASIC. The Arty bridge has
+// no VGC write port, so we drive the VGC command interface on the 6502 bus via
+// poke(): VCMD_MEMWRITE ($1A) with auto-increment (P4 bit0) streams the unpacked
+// pixels into gfx space 3. The 6502 is held, so there is no bus contention.
+#define VGCR_MODE     0xA000u
+#define VGCR_BGCOL    0xA001u
+#define VGCR_CURSEN   0xA00Au
+#define VGCR_BORDER   0xA00Du
+#define VGCR_CMD      0xA010u
+#define VGCR_P0       0xA011u
+#define VGCR_P1       0xA012u
+#define VGCR_P2       0xA013u
+#define VGCR_P3       0xA014u
+#define VGCR_P4       0xA015u
+#define VGCR_DIM      0xA0E5u
+#define VGCR_PALIDX   0xA0F4u
+#define VGCR_PALDAT   0xA0F5u
+#define VGC_MODE_GFX_ONLY 0x03u
+#define VCMD_MEMWRITE     0x1Au
+#define VGC_SPACE_GFX     3u
+
+static void boot_splash(void) {
+    FIL f;
+    if (f_open(&f, "0:/assets/boot/novavm_logo.nvg", FA_READ) != FR_OK) {
+        xil_printf("[splash] /assets/boot/novavm_logo.nvg not found -- skipped\r\n");
+        return;
+    }
+    unsigned char hdr[16];
+    UINT br = 0;
+    if (f_read(&f, hdr, 16, &br) != FR_OK || br != 16 ||
+        hdr[0] != 'N' || hdr[1] != 'V' || hdr[2] != 'G' || hdr[3] != '2') {
+        xil_printf("[splash] bad NVG2 header -- skipped\r\n");
+        f_close(&f);
+        return;
+    }
+    unsigned w = hdr[4] | (hdr[5] << 8), h = hdr[6] | (hdr[7] << 8), flags = hdr[8];
+    if (w != 320 || h != 200) {
+        xil_printf("[splash] unsupported %ux%u -- skipped\r\n", w, h);
+        f_close(&f);
+        return;
+    }
+
+    poke(VGCR_DIM, 0x0F);                  // full brightness
+    poke(VGCR_BGCOL, 0x00);
+    poke(VGCR_BORDER, 0x00);
+    poke(VGCR_CURSEN, 0x00);               // cursor off
+    poke(VGCR_MODE, VGC_MODE_GFX_ONLY);    // show only the gfx layer
+
+    if (flags & 0x02u) {                   // NVG_FLAG_PALETTE: 16 colours x 3 bytes
+        unsigned char pal[48];
+        if (f_read(&f, pal, sizeof pal, &br) == FR_OK && br == sizeof pal) {
+            poke(VGCR_PALIDX, 0x00);
+            for (int i = 0; i < (int)sizeof pal; i++) poke(VGCR_PALDAT, pal[i]);
+        }
+    }
+
+    // MEMWRITE target: gfx space, address 0, auto-increment after each byte.
+    poke(VGCR_P0, VGC_SPACE_GFX);
+    poke(VGCR_P1, 0x00);
+    poke(VGCR_P2, 0x00);
+    poke(VGCR_P4, 0x01);
+    unsigned char row[160];                // 320 px / 2 px-per-byte
+    for (unsigned y = 0; y < 200; y++) {
+        if (f_read(&f, row, sizeof row, &br) != FR_OK || br != sizeof row) break;
+        for (unsigned x = 0; x < 320; x++) {
+            unsigned char px = (x & 1u) ? (unsigned char)(row[x >> 1] & 0x0F)
+                                        : (unsigned char)(row[x >> 1] >> 4);
+            poke(VGCR_P3, px);
+            poke(VGCR_CMD, VCMD_MEMWRITE);
+        }
+    }
+    f_close(&f);
+    xil_printf("[splash] novavm_logo.nvg drawn to gfx plane\r\n");
+
+    for (volatile unsigned long i = 0; i < 400000000UL; i++) { }  // ~hold a few seconds
+    // Leave the gfx plane intact; NovaBASIC's cold-start sets text mode (hiding it).
+}
+
 int main(void) {
     static FATFS fs;
     Xil_DCacheEnable();
@@ -890,6 +971,8 @@ int main(void) {
         cr |=  (u32)(XUARTPS_CR_RX_EN | XUARTPS_CR_TX_EN);
         XUartPs_WriteReg(STDOUT_BASEADDRESS, XUARTPS_CR_OFFSET, cr);
     }
+
+    boot_splash();                              // draw novavm_logo.nvg (6502 still held)
 
     cpu_hold(0);                                // release the 6502 -> boots to READY
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
