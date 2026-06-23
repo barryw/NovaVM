@@ -15,6 +15,7 @@
 #include <string.h>
 #include "xil_io.h"
 #include "xil_cache.h"
+#include "sleep.h"             // usleep/sleep for the boot-splash fade
 #include "xttcps.h"             // TTC0 -> 1 kHz high-priority audio interrupt
 #include "xinterrupt_wrap.h"   // XSetupInterruptSystem -- same shared GIC the lwIP
                                // adapter uses (handles the SDT-encoded IntrId)
@@ -124,6 +125,10 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define MODULE_BYTES   16384u
 
 static inline void     poke(unsigned a, unsigned char d){ Xil_Out32(R_POKE, (a << 8) | d); }
+// The BootROM arms the system watchdog (SWDT @ 0xF8005000); this FSBL leaves it
+// running (XWdtPs compiled out). Disable it, and kick it during the long splash.
+static inline void     swdt_disable(void){ Xil_Out32(0xF8005000, 0x00ABC000u); } // ZKEY, WDEN=0
+static inline void     swdt_kick(void){    Xil_Out32(0xF8005008, 0x00001999u); } // RESTART key
 static inline unsigned char peek(unsigned a){ Xil_Out32(R_PEEK_ADDR, a); return (unsigned char)Xil_In32(R_PEEK_DATA); }
 // Read a byte of VGC video memory (space 1=char 2=color 3=gfx 4=sprite 7=textattr).
 // The char/etc RAM is internal to the VGC (not 6502-addressable); this rides the
@@ -879,7 +884,7 @@ static void boot_splash(void) {
         return;
     }
 
-    poke(VGCR_DIM, 0x0F);                  // full brightness
+    poke(VGCR_DIM, 0x00);                  // DIM is brightness: 0x00=dark. Render dark, then fade up.
     poke(VGCR_BGCOL, 0x00);
     poke(VGCR_BORDER, 0x00);
     poke(VGCR_CURSEN, 0x00);               // cursor off
@@ -902,8 +907,10 @@ static void boot_splash(void) {
 
     // Stream the unpacked pixels straight into VGC gfx memory through the dbg_vmem
     // write port -- one 32-bit write per pixel: {space[2:0], addr[16:0], data[7:0]}.
+    poke(VGCR_DIM, 0x00);                  // force fully dark right before drawing
     unsigned char row[160];                // 320 px / 2 px-per-byte
     for (unsigned y = 0; y < 200; y++) {
+        swdt_kick();
         if (f_read(&f, row, sizeof row, &br) != FR_OK || br != sizeof row) break;
         unsigned base = y * 320u;
         for (unsigned x = 0; x < 320; x++) {
@@ -916,12 +923,17 @@ static void boot_splash(void) {
     f_close(&f);
     xil_printf("[splash] novavm_logo.nvg drawn to gfx plane\r\n");
 
-    for (volatile unsigned long i = 0; i < 400000000UL; i++) { }  // ~hold a few seconds
+    // DISPLAY_DIM: 0x00 = dark, 0x0F = full bright. usleep() gives exact timing
+    // (busy-loops varied with loop body). Spec: fade in 1 s, hold 3 s, fade out 1 s.
+    for (int d = 0; d <= 15; d++)  { swdt_kick(); poke(VGCR_DIM, (unsigned char)d); usleep(62500); }  // fade in 1 s
+    for (int h = 0; h < 6; h++)    { swdt_kick(); usleep(500000); }                                    // hold 3 s
+    for (int d = 15; d >= 0; d--)  { swdt_kick(); poke(VGCR_DIM, (unsigned char)d); usleep(62500); }  // fade out 1 s
 
     // Restore the power-on text state so NovaBASIC starts from a clean VGC: text
-    // mode, cursor on, and the dbg_vmem read target back at char[0] (its reset
-    // default). The gfx plane stays resident but hidden in text mode.
+    // mode, full brightness, cursor on, dbg_vmem read target back at char[0] (its
+    // reset default). The gfx plane stays resident but hidden in text mode.
     poke(VGCR_MODE, 0x00);
+    poke(VGCR_DIM, 0x0F);                       // 0x0F = full brightness for NovaBASIC text
     poke(VGCR_CURSEN, 0x01);
     Xil_Out32(R_VMEM_ADDR, (1u << 17) | 0u);   // space=char, addr=0 (fio_bridge default)
 }
@@ -930,6 +942,11 @@ int main(void) {
     static FATFS fs;
     Xil_DCacheEnable();
     xil_printf("\r\n[NovaVM PS FIO host] starting\r\n");
+
+    xil_printf("[boot] REBOOT_STATUS=%08X SWDT_ZMR=%08X\r\n",
+               (unsigned)Xil_In32(0xF8000258), (unsigned)Xil_In32(0xF8005000));
+    swdt_disable();                             // stop the BootROM-armed SWDT (FSBL leaves it on)
+    xil_printf("[boot] SWDT_ZMR now=%08X\r\n", (unsigned)Xil_In32(0xF8005000));
 
     cpu_hold(1);                                // keep the 6502 in reset
 
@@ -992,6 +1009,7 @@ int main(void) {
     audio_timer_init();                         // start the 1 kHz audio IRQ (after the GIC is up)
 
     for (;;) {
+        swdt_kick();                            // keep the watchdog fed so it can't reset post-boot
         // --- FIO host service ---
         if (fio_pending()) {
             fio_clear();
