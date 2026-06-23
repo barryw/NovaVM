@@ -3328,9 +3328,17 @@ zvm_set_text_style:
         ORA zvm_text_style
         STA zvm_text_style
 @apply:
+        ; Reverse (style bit0) and bold (style bit1) render via the hardware VGC
+        ; text attribute, not the palette: ASL maps the style bits onto
+        ; VTXT_ATTR_REV ($02) and VTXT_ATTR_BOLD ($04). The colour cell stays at
+        ; the normal fg/bg ($0C); the VGC's reverse attribute swaps fg/bg at
+        ; render, reproducing the old REVERSE_NORMAL ($C0) look while keeping
+        ; mixed-mode backgrounds opaque (same model as the V6 path). Bold now
+        ; produces a real bold glyph instead of only a brighter colour cell.
         AND #$03
-        TAX
-        LDA zvm_style_color_table,X
+        ASL A
+        STA VTEXT_ATTR
+        LDA #ZVM_COLOR_NORMAL
         STA VTEXT_COLOR
         RTS
 
@@ -4771,10 +4779,6 @@ zvm_ext_table:
         .word zvm_ext_v6           ; 28 picture_table
         .word zvm_ext_v6           ; 29 buffer_screen (stores)
 zvm_ext_count = (* - zvm_ext_table) / 2
-
-zvm_style_color_table:
-        .byte ZVM_COLOR_NORMAL, ZVM_COLOR_REVERSE_NORMAL
-        .byte ZVM_COLOR_BOLD, ZVM_COLOR_REVERSE_BOLD
 
 msg_score:
         .byte "Score: ", 0

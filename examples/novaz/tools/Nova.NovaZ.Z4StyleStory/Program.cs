@@ -81,7 +81,7 @@ static void EmitStyleProgram(ZCode z)
     z.Print("normal text uses color 12");
     z.NewLine();
     z.SetTextStyle(2);
-    z.Print("bold text uses white");
+    z.Print("bold uses the bold attr");
     z.NewLine();
     z.Print("bold phrase survives reset");
     z.SetTextStyle(0);
@@ -89,10 +89,10 @@ static void EmitStyleProgram(ZCode z)
     z.Print("normal text again");
     z.NewLine();
     z.SetTextStyle(1);
-    z.Print("reverse text uses color c0");
+    z.Print("reverse uses the reverse attr");
     z.NewLine();
     z.SetTextStyle(3);
-    z.Print("bold reverse uses color f0");
+    z.Print("bold reverse uses both attrs");
     z.NewLine();
     z.SetTextStyle(0);
     z.SetTextStyle(4);
@@ -103,11 +103,11 @@ static void EmitStyleProgram(ZCode z)
     z.Print("fixed request is ignored");
     z.NewLine();
     // Styles are cumulative until style 0 resets them: bold then reverse,
-    // applied in separate calls, must combine to bold-reverse (color f0).
+    // applied in separate calls, must combine to bold-reverse (attr $06).
     z.SetTextStyle(0);
     z.SetTextStyle(2);
     z.SetTextStyle(1);
-    z.Print("stacked styles use color f0");
+    z.Print("stacked styles use both attrs");
     z.NewLine();
     z.SetTextStyle(0);
     z.Print("style fixture done");
