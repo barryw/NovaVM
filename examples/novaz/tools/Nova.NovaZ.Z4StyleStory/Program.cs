@@ -112,6 +112,7 @@ static void EmitStyleProgram(ZCode z)
     z.SetTextStyle(0);
     z.Print("style fixture done");
     z.NewLine();
+    z.ReadChar();   // hold the styled screen until a key press (Arty HDMI demo)
     z.Quit();
 }
 
@@ -149,6 +150,16 @@ sealed class ZCode
     }
 
     public void Quit() => Emit(0xBA);
+
+    // read_char 1 -> (sp): wait for a keypress. Holds the styled screen so the
+    // Arty HDMI demo persists; the headless smoke test matches the stable screen.
+    public void ReadChar()
+    {
+        Emit(0xF6);   // read_char (VAR form, opcode 246)
+        Emit(0x7F);   // operand types: one small constant, rest omitted
+        Emit(0x01);   // operand: 1 (read from the keyboard)
+        Emit(0x00);   // store result -> stack
+    }
 
     public byte[] ToArray() => [.. _bytes];
 
