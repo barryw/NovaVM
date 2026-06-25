@@ -1672,16 +1672,16 @@ module vgc (
             sys_reset_req <= 1'b0;
             reset_clear_phase <= RCLR_TEXT;
             reset_clear_addr <= 17'd0;
-            for (int i = 0; i < 32; i++) regs[i] <= 0;
+            for (int i = 0; i < 32; i++) regs[i] = 0;
             for (int i = 0; i < COPPER_MAX; i++) begin
-                copper_pos[i] <= 0;
-                copper_reg[i] <= 0;
-                copper_val[i] <= 0;
+                copper_pos[i] = 0;
+                copper_reg[i] = 0;
+                copper_val[i] = 0;
             end
             for (int i = 0; i < COPPER_LISTS; i++)
-                copper_list_count[i] <= 0;
+                copper_list_count[i] = 0;
             for (int i = 0; i < 64; i++)
-                fio_name[i] <= 0;
+                fio_name[i] = 0;
             fio_name_len <= 0;
             for (int i = 0; i < 8; i++)
                 sprrow_data[i] <= 8'h00;

@@ -31,7 +31,7 @@ endif
 VFLAGS    = --cc --exe --build -j $(VJOBS) --timing $(TRACE_FLAGS) \
             -I$(RTL)/vendor/redip_sid \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM \
-            -Wno-CASEINCOMPLETE -Wno-PROCASSINIT -Wno-UNOPTFLAT -Wno-LATCH \
+            -Wno-CASEINCOMPLETE -Wno-PROCASSWIRE -Wno-UNOPTFLAT -Wno-LATCH \
             -Wno-PINCONNECTEMPTY -Wno-SYNCASYNCNET -Wno-INITIALDLY -Wno-TIMESCALEMOD \
             -Wno-CASEX -Wno-PINMISSING -Wno-UNSIGNED \
             -CFLAGS "-O2"

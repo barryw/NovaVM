@@ -22,3 +22,9 @@ clean:
 FORCE:
 
 .PHONY: clean all install FORCE
+
+# --- bootable language floppy: novaforth.ndi (autoboot -> LOADRUNTIME -> $C000) ---
+NDI_RUNTIME := novaforth.bin
+NDI_OUTPUT  := novaforth.ndi
+NDI_LABEL   := NFORTH
+include ../runtime/ndi/ndi.mk

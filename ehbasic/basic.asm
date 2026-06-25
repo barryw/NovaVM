@@ -11211,38 +11211,37 @@ LAB_AUTOBOOT
                                   ; pushed @ab_done past short-branch range)
 @ab_try
 
-      ; Copy "AUTOBOOT" into FIO_NAME
-      LDX   #0
-@ab_copy
+      ; Probe the SD with a raw FIO LOAD instead of lib_call(FILES). The FILES
+      ; module path demand-pages a 16 KB module on the first file op, which cost
+      ; ~2-3 s between the banner and Ready at cold boot. A direct LOAD (the same
+      ; mechanism the resident loader uses) needs no page-in. The PS resolves the
+      ; bare name "AUTOBOOT" to AUTOBOOT.BIN (then AUTOBOOT.BAS) and reports which
+      ; via FIO_DIRTYPE, so .bin jumps to its load address and .bas loads+RUNs.
+
+      ; Copy "AUTOBOOT" into FIO_NAME; .bas loads at the program start (FIO_SRC),
+      ; which the PS ignores for .bin (it reads the load address from the file).
+      LDX   #7
+@ab_cp
       LDA   @ab_name,X
       STA   FIO_NAME,X
-      INX
-      CPX   #8
-      BNE   @ab_copy
-
+      DEX
+      BPL   @ab_cp
       LDA   #8
       STA   FIO_NAMELEN
-
-      ; Issue LOAD through lib_call(FILES): FILE_LOAD (nameptr -> ARG0, namelen ->
-      ; ARG1, dest -> ARG2). The "AUTOBOOT" name was just written into FIO_NAME
-      ; above, so we marshal &FIO_NAME/FIO_NAMELEN into ARG0/ARG1 and the BASIC
-      ; program start (Smem) into ARG2. The load dest MUST ride in ARG2, not be
-      ; pre-set into FIO_SRCL: the FILES module's demand-load page-in clobbers
-      ; FIO_SRCL ($B9A4) and the wrapper re-applies ARG2 to it AFTER the page-in.
-      JSR   basic_lib_zargs       ; zero ARG0..3
-      JSR   basic_file_arg_name   ; ARG0 = &FIO_NAME, ARG1 byte0 = FIO_NAMELEN
       LDA   Smeml
-      STA   LIB_ARG2              ; dest low  -> ARG2 byte0
+      STA   FIO_SRCL
       LDA   Smemh
-      STA   LIB_ARG2+1           ; dest high -> ARG2 byte1
-      LDX   #FILE_LOAD
-      JSR   basic_file_call       ; A = LIB_STATUS (0 = OK)
-      BEQ   @ab_found             ; autoboot exists
-      LDA   FIO_ERRCODE
-      CMP   #FIO_ERR_NOTFOUND
-      BNE   @ab_done              ; leave unexpected boot I/O errors visible
+      STA   FIO_SRCH
+      STZ   FIO_STATUS
+      LDA   #FIO_CMD_LOAD
+      STA   FIO_CMD
+@ab_lwait
+      LDA   FIO_STATUS
+      BEQ   @ab_lwait             ; spin until the PS answers
+      LSR   A                     ; FIO_OK=$02 even -> C=0; ERROR=$03 odd -> C=1
+      BCC   @ab_found             ; loaded
       JSR   fio_clear_error       ; missing AUTOBOOT is normal, not a disk error
-      BRA   @ab_done
+      JMP   @ab_done
 
 @ab_found
 

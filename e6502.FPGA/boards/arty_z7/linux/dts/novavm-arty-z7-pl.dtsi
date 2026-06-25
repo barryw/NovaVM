@@ -1,0 +1,42 @@
+// novavm-arty-z7-pl.dtsi
+// PL (6502 SoC) additions to the base Zynq-7000 device tree for NovaVM on Linux.
+// Addresses are authoritative, taken from build/arty_z7_full.xsa (ps_full.hwh):
+//   - fio_bridge register block: M_AXI_GP0 / M_AXI_FIO, 0x40000000..0x4000FFFF (64 KB)
+//   - PS->PL shared XRAM in PS DDR: base 0x10000000 (XRAM_DDR_BASE), via S_AXI_HP0
+// Include this from the board .dts (after the base zynq-7000 + Arty fixups).
+
+/ {
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		// PS-DDR window the PL bus-masters (S_AXI_HP0) for XRAM: the 512 KB
+		// expansion RAM, the 6581 filter curve (+0x80000), and the library
+		// module shelf. Reserve a generous aligned 16 MB so Linux never
+		// allocates it; novavm maps this coherently (the PL writes here, so
+		// the CPU mapping must be uncached or explicitly synced).
+		novavm_xram: novavm-xram@10000000 {
+			reg = <0x10000000 0x01000000>;	// 16 MB @ 0x10000000
+			no-map;
+		};
+	};
+
+	// fio_bridge: the PS<->PL register interface (peek/poke/ctrl/vmem/rom/audio,
+	// all the R_* regs at FIO_BASE+offset in ps_fio/src/main.c). Exposed to the
+	// userspace novavm host via UIO -- the correct Linux mechanism for a
+	// memory-mapped PL IP block, instead of a /dev/mem hack.
+	//
+	// generic-uio binds via uio_pdrv_genirq; pass on the kernel cmdline:
+	//   uio_pdrv_genirq.of_id=generic-uio
+	// (or register the compatible in the kernel). When the fio_event line is
+	// routed to the GIC, add interrupts/interrupt-parent so the host can block
+	// on the IRQ instead of polling.
+	fio_bridge: fio-bridge@40000000 {
+		compatible = "generic-uio", "ui_pdrv";
+		reg = <0x40000000 0x00010000>;	// 64 KB register block
+		// interrupt-parent = <&intc>;
+		// interrupts = <0 29 4>;	// fio_event (GIC SPI; wire to actual line)
+		memory-region = <&novavm_xram>;
+	};
+};

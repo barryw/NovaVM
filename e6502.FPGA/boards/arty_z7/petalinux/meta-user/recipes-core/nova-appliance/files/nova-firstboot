@@ -1,0 +1,24 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          nova-firstboot
+# Required-Start:    $local_fs
+# Default-Start:     S
+# Default-Stop:
+# Short-Description: grow rootfs to fill SD + init nova-fs
+### END INIT INFO
+FLAG=/etc/nova-firstboot-done
+[ -e "$FLAG" ] && exit 0
+echo "[nova-firstboot] growing rootfs (mmcblk0p2) to fill the SD card..."
+# Online-extend partition 2 to fill the card, refresh the kernel view, grow ext4.
+if echo ", +" | sfdisk --no-reread --force -N 2 /dev/mmcblk0 2>/dev/null; then
+    partx -u /dev/mmcblk0 2>/dev/null
+else
+    parted -s /dev/mmcblk0 resizepart 2 100% 2>/dev/null
+fi
+resize2fs /dev/mmcblk0p2 2>/dev/null && echo "[nova-firstboot] rootfs resized."
+# nova filesystem layout for the samba share
+mkdir -p /data/nova/hdds /data/nova/fds /data/nova/soundfonts \
+         /data/nova/roms /data/nova/programs /data/nova/assets /data/nova/config
+sync
+touch "$FLAG"
+echo "[nova-firstboot] done."

@@ -123,7 +123,42 @@ def patch_physpeed():
     for a in glob.glob(f"{WS}/**/liblwip220.a", recursive=True): os.remove(a)
     print("  patched", n, "physpeed.c for RTL8211F (+ removed stale obj/.a)")
 
+def patch_fsbl_watchdog():
+    # Vitis' Zynq FSBL starts the PS system watchdog during SD boot. The stock
+    # stop path clears WDEN but leaves the reset-output bits set, which makes
+    # boot-state diagnosis ambiguous and has left SD boots resetting during app
+    # init. Force the hardware ZMR to a fully disabled value before bitstream
+    # load and immediately before handoff; keep the app-level guard as a backup.
+    n = 0
+    for hooks in glob.glob(f"{WS}/**/zynq_fsbl/fsbl_hooks.c", recursive=True):
+        t = open(hooks).read()
+        if "NOVA_SWDT_FORCE_DISABLED" in t:
+            continue
+        t = t.replace('#include "fsbl_hooks.h"', '#include "fsbl_hooks.h"\n#include "xil_io.h"', 1)
+        helper = (
+            "\n#define NOVA_SWDT_FORCE_DISABLED 1\n"
+            "static void NovaDisableSystemWatchdog(void)\n"
+            "{\n"
+            "\tXil_Out32(0xF8005000U, 0x00ABC000U);\n"
+            "\tXil_Out32(0xF8005008U, 0x00001999U);\n"
+            "}\n"
+        )
+        t = t.replace('#include "xil_io.h"', '#include "xil_io.h"' + helper, 1)
+        t = t.replace(
+            '\tfsbl_printf(DEBUG_INFO,"In FsblHookBeforeBitstreamDload function \\r\\n");',
+            '\tNovaDisableSystemWatchdog();\n\tfsbl_printf(DEBUG_INFO,"NOVA: SWDT forced off before bitstream, ZMR=0x%08lx \\r\\n", Xil_In32(0xF8005000U));',
+            1)
+        t = t.replace(
+            '\tfsbl_printf(DEBUG_INFO,"In FsblHookBeforeHandoff function \\r\\n");',
+            '\tNovaDisableSystemWatchdog();\n\tfsbl_printf(DEBUG_INFO,"NOVA: SWDT forced off before handoff, ZMR=0x%08lx \\r\\n", Xil_In32(0xF8005000U));',
+            1)
+        open(hooks, "w").write(t); n += 1
+    for o in glob.glob(f"{WS}/**/fsbl_hooks.c.obj", recursive=True): os.remove(o)
+    for e in glob.glob(f"{WS}/**/fsbl.elf", recursive=True): os.remove(e)
+    print("  patched", n, "FSBL hooks to force SWDT off")
+
 plat.build()                 # 1st build regenerates lwipopts.h (DHCP=0)
+patch_fsbl_watchdog()        # force PS SWDT fully off in the FSBL SD-boot path
 patch_lwipopts()             # force DHCP=1 + timers
 patch_physpeed()             # RTL8211E link/speed-resolved retry
 plat.build()                 # rebuild: sources changed -> lib recompiles
@@ -138,7 +173,7 @@ app = client.create_app_component(
     name="ps_fio", platform=xpfm, domain=DOMAIN, template="empty_application")
 
 # Import our sources into the app's src/.
-for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "audio.c", "audio.h", "sid.c", "sid.h", "sidplay.cpp", "sidplay.h", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h"):
+for f in ("main.c", "net.c", "mgmt.c", "debug.c", "drives.c", "drives.h", "ndi.h", "ndi_shim.cpp", "usb.c", "audio.c", "audio.h", "sid.c", "sid.h", "sidplay.cpp", "sidplay.h", "loader_bin.h", "modules_embedded.h", "ehbasic_rom.h", "boot_logo_nvg.h"):
     app.import_files(from_loc=SRC, files=[f], dest_dir_in_cmp="src")
 
 # Reuse the ESP NovaHost's SID VM verbatim (the sandboxed 6502 + SID-poke mirror

@@ -363,3 +363,8 @@ website/emulator/rust/*.bin
 # MemPalace per-project files (issue #185)
 mempalace.yaml
 entities.json
+
+# Arty Z7 FPGA/host build artifacts
+e6502.FPGA/xsim.dir/
+e6502.FPGA/xvlog.pb
+e6502.FPGA/boards/arty_z7/linux/novavm/novavm

@@ -35,7 +35,9 @@
 #define PORTSC_PR     (1u << 8)
 #define PORTSC_PP     (1u << 12)
 
-extern void kb_emit(unsigned char c);   // main.c -> fio_bridge KEY
+extern void kb_emit(unsigned char c);            // main.c -> fio_bridge KEY
+extern void boot_watchdog_kick(void);          // main.c -> SWDT guard during long USB polls
+extern void set_autoboot_skip(int on);         // main.c -> AUTOBOOT_SKIP (Ctrl-held-at-boot)
 
 // ---- EHCI structures (32-byte aligned; we cache-manage them) ----------------
 typedef struct {
@@ -90,25 +92,25 @@ static void ulpi_wakeup(void)
 {
     if (Xil_In32(USB_ULPIVP) & (1u << 27)) return;          // already in sync state
     Xil_Out32(USB_ULPIVP, (1u << 31));                      // WU
-    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 31)); i++) {}
+    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 31)); i++) { if ((i & 0x3FFF) == 0) boot_watchdog_kick(); }
 }
 
 static void ulpi_write(u8 addr, u8 data)
 {
     ulpi_wakeup();
     Xil_Out32(USB_ULPIVP, (1u << 30) | (1u << 29) | ((u32)addr << 16) | (u32)data);  // data in [7:0]
-    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) {}
+    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) { if ((i & 0x3FFF) == 0) boot_watchdog_kick(); }
 }
 
 static u8 ulpi_read(u8 addr)
 {
     ulpi_wakeup();
     Xil_Out32(USB_ULPIVP, (1u << 30) | ((u32)addr << 16));  // RUN, RW=0 (read)
-    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) {}
+    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_ULPIVP) & (1u << 30)); i++) { if ((i & 0x3FFF) == 0) boot_watchdog_kick(); }
     return (u8)((Xil_In32(USB_ULPIVP) >> 8) & 0xFF);        // read data in [15:8]
 }
 
-static void udelay(unsigned us) { for (volatile unsigned i = 0; i < us * 60u; i++) {} }
+static void udelay(unsigned us) { for (volatile unsigned i = 0; i < us * 60u; i++) { if ((i & 0x3FFFu) == 0) boot_watchdog_kick(); } }
 
 // One control transfer on EP0 of `dev_addr`. setup[8] is the SETUP packet; for an
 // IN transfer, up to len bytes land in g_buf. Returns bytes transferred or -1.
@@ -201,7 +203,7 @@ void usb_init(void)
     // host mode, THEN configure the PHY (link is up), matching U-Boot ehci-zynq.c.
     // 1) Controller reset + host mode.
     Xil_Out32(USB_USBCMD, CMD_RST);
-    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_USBCMD) & CMD_RST); i++) {}
+    for (volatile int i = 0; i < 1000000 && (Xil_In32(USB_USBCMD) & CMD_RST); i++) { if ((i & 0x3FFF) == 0) boot_watchdog_kick(); }
     Xil_Out32(USB_USBINTR, 0);
     Xil_Out32(USB_USBMODE, MODE_CM_HOST | 0x10u);   // host + SDIS
     udelay(1000);
@@ -372,6 +374,7 @@ static void kbd_report(u8 *r, int len)
     if (len < 3) return;
     int shift = (r[0] & 0x22) ? 1 : 0;                          // L-shift(0x02) | R-shift(0x20)
     int ctrl  = (r[0] & 0x11) ? 1 : 0;                          // L-ctrl(0x01) | R-ctrl(0x10)
+    set_autoboot_skip(ctrl);                                    // hold Ctrl at boot -> skip autoboot
     for (int i = 2; i < len && i < 8; i++) {
         u8 k = r[i];
         if (k == 0) continue;

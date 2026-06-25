@@ -1,0 +1,74 @@
+/dts-v1/;
+#include "xilinx/zynq-7000.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	model = "NovaVM Arty Z7-20";
+	compatible = "novavm,arty-z7", "digilent,zynq-zybo-z7", "xlnx,zynq-7000";
+
+	aliases {
+		ethernet0 = &gem0;
+		serial0 = &uart0;	/* Arty USB-UART is UART0 (Zybo uses UART1) */
+		spi0 = &qspi;
+		mmc0 = &sdhci0;
+	};
+
+	memory@0 {
+		device_type = "memory";
+		reg = <0x0 0x20000000>;	/* Arty Z7-20 = 512 MB (Zybo = 1 GB) */
+	};
+
+	chosen {
+		bootargs = "";
+		stdout-path = "serial0:115200n8";
+	};
+
+	/* PS<->PL shared XRAM in PS DDR (XRAM_DDR_BASE=0x10000000), reached by the
+	 * PL via S_AXI_HP0. Carve it out so Linux never allocates it; novavm maps
+	 * it coherently. From build/arty_z7_full.xsa. */
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		novavm_xram: novavm-xram@10000000 {
+			reg = <0x10000000 0x01000000>;	/* 16 MB @ 0x10000000 */
+			no-map;
+		};
+	};
+
+	/* fio_bridge register block (M_AXI_GP0, 0x40000000..0x4000FFFF, 64 KB).
+	 * Exposed to the userspace novavm host via UIO (cmdline
+	 * uio_pdrv_genirq.of_id=generic-uio). fio_event IRQ wired later. */
+	fio_bridge: fio-bridge@40000000 {
+		compatible = "generic-uio", "ui_pdrv";
+		reg = <0x40000000 0x00010000>;
+		memory-region = <&novavm_xram>;
+	};
+};
+
+&clkc {
+	ps-clk-frequency = <50000000>;	/* Arty 50 MHz crystal (Zybo = 33.33 MHz) */
+};
+
+&uart0 {
+	status = "okay";
+};
+
+&gem0 {
+	status = "okay";
+	phy-mode = "rgmii-id";
+	phy-handle = <&ethernet_phy>;
+
+	ethernet_phy: ethernet-phy@0 {
+		reg = <1>;	/* RTL8211F at addr 1 (per net.c) */
+	};
+};
+
+&sdhci0 {
+	status = "okay";
+};
+
+&qspi {
+	status = "okay";
+};

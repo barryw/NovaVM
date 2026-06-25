@@ -1,0 +1,75 @@
+/include/ "system-conf.dtsi"
+
+/ {
+	/* --- USB host (Apple/HID keyboard) ---
+	 * PetaLinux auto-generates usb@e0002000 with phy_type=ulpi but no usb-phy
+	 * phandle and no dr_mode, so the chipidea driver won't bind (OTG is off in
+	 * the kernel, so it can't infer host mode). Add the classic Zynq ULPI PHY
+	 * (view-port 0x170 == bare-metal USB_ULPIVP) and force host mode. */
+	usb_phy0: usb_phy@0 {
+		compatible = "ulpi-phy";
+		#phy-cells = <0>;
+		reg = <0xe0002000 0x1000>;
+		view-port = <0x0170>;
+		drv-vbus;
+	};
+
+	/* --- fio_bridge register block (M_AXI_GP0, 0x40000000..0x4000FFFF) ---
+	 * Exposed to the userspace novavm host via UIO (generic-uio). */
+	fio_bridge: fio-bridge@40000000 {
+		compatible = "generic-uio";
+		reg = <0x40000000 0x00010000>;
+	};
+
+	/* --- PS<->PL XRAM shelf (the 6502's 512KB expansion RAM) ---
+	 * The PL axi_xram master maps the 6502 XMC window into PS DDR at
+	 * 0x10000000 (firmware XRAM_DDR_BASE). The kernel must NOT use this RAM or
+	 * it would corrupt XRAM (and vice-versa). Carve out 1 MB (512KB shelf +
+	 * the +0x80000 config page + headroom) with no-map so it's removed from
+	 * System RAM AND reachable from userspace via /dev/mem (novavm mmaps it to
+	 * service XLOAD/XPAGE/LOAD_RUNTIME + the module shelf). Safe: u-boot only
+	 * stages the FIT here transiently at boot; the kernel runs in low DDR
+	 * (0x8000-0xc64000), so nothing uses 0x10000000 at runtime. */
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+		xram_reserved: xram@10000000 {
+			reg = <0x10000000 0x00100000>;
+			no-map;
+		};
+	};
+};
+
+&usb0 {
+	dr_mode = "host";
+	usb-phy = <&usb_phy0>;
+};
+
+/* Pin the GEM MAC so it's stable for a static DHCP lease (matches the
+ * PetaLinux-generated value; explicit here so a regen can't change it). */
+&gem0 {
+	local-mac-address = [00 0a 35 00 1e 53];
+};
+
+/* Widen the watchdog window. Default timeout-sec=10 is too tight: the kernel
+ * keeps the FSBL-armed watchdog alive (HANDLE_BOOT_ENABLED), but the heavier
+ * ext4 boot's udev coldplug starves the ping kworker past 10s -> reset loop at
+ * S05 checkroot. 120s gives a 60s ping window, easily covering coldplug. */
+&watchdog0 {
+	timeout-sec = <120>;
+};
+
+/* Keep FCLK0 (the PL design's pixel-clock source, into the HDMI MMCM) running
+ * and at 125 MHz. Linux's Common Clock Framework otherwise MANAGES unclaimed
+ * FCLKs -- it had silently retuned FCLK0 to 100 MHz, and gating/retuning it
+ * under a live PL design is the documented cause of intermittent PL glitches
+ * (kernel Documentation/devicetree/bindings/clock/zynq-7000.txt). fclk-enable
+ * bit0 keeps FCLK0 ungated; assigned-clock-rates pins it to 125 MHz so the
+ * pixel clock (125*8.625/40 = 26.95 MHz, 720x480p) is correct from boot with
+ * NO /dev/mem poke. clock output 15 = fclk0. */
+&clkc {
+	fclk-enable = <0x1>;
+	assigned-clocks = <&clkc 15>;
+	assigned-clock-rates = <125000000>;
+};

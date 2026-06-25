@@ -15,6 +15,7 @@
 #include <string.h>
 #include "xil_io.h"
 #include "xil_cache.h"
+#include "xil_exception.h"
 #include "sleep.h"             // usleep/sleep for the boot-splash fade
 #include "xttcps.h"             // TTC0 -> 1 kHz high-priority audio interrupt
 #include "xinterrupt_wrap.h"   // XSetupInterruptSystem -- same shared GIC the lwIP
@@ -25,6 +26,7 @@
 #include "loader_bin.h"
 #include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
 #include "ehbasic_rom.h"        // EHBASIC_ROM[16384] -> basic_rom (idx=0) at boot
+#include "boot_logo_nvg.h"      // embedded fallback for JTAG/no-SD splash validation
 #include "ndi.h"                // read-only .ndi image reader
 #include "drives.h"             // drive-slot mount table
 #include "audio.h"              // TSF + TinyMIDI -> HDMI audio FIFO
@@ -44,7 +46,10 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define R_PEEK_ADDR  (FIO_BASE + 0x04)   // W addr[15:0]
 #define R_PEEK_DATA  (FIO_BASE + 0x08)   // R data[7:0]
 #define R_KEY        (FIO_BASE + 0x0C)   // W key[7:0]
-#define R_CTRL       (FIO_BASE + 0x10)   // RW bit0 = cpu_reset (1=hold)
+#define R_CTRL       (FIO_BASE + 0x10)   // RW bit0 = cpu_reset (1=hold), bit1 = system_reset
+#define CTRL_CPU_RESET 0x1u               // hold the 6502 in reset
+#define CTRL_SYS_RESET 0x2u               // full custom-chip reset (VGC/SID/WTS/math)
+#define AUTOBOOT_SKIP_ADDR 0xB9F0u        // 6502 RAM byte: nonzero -> LAB_AUTOBOOT skips autoboot
 #define R_STATUS     (FIO_BASE + 0x14)   // R {key_ready,fio_event}; W bit0 clears event
 #define R_CPU_PC     (FIO_BASE + 0x18)   // R live 6502 PC
 #define R_DBG        (FIO_BASE + 0x1C)   // R [0]rdy [1]sreq [2]sbusy [3]svalid [4]sdone [5]sready [6]we
@@ -123,12 +128,85 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define SHELF_BASE     0x00060000u
 #define SHELF_SLOT     0x00004000u       // 16 KB
 #define MODULE_BYTES   16384u
+#define BOOT_BUILD_MARKER 0xCAFE0013u
+
+static int g_jtag_visual_mode = 0;
 
 static inline void     poke(unsigned a, unsigned char d){ Xil_Out32(R_POKE, (a << 8) | d); }
-// The BootROM arms the system watchdog (SWDT @ 0xF8005000); this FSBL leaves it
-// running (XWdtPs compiled out). Disable it, and kick it during the long splash.
-static inline void     swdt_disable(void){ Xil_Out32(0xF8005000, 0x00ABC000u); } // ZKEY, WDEN=0
-static inline void     swdt_kick(void){    Xil_Out32(0xF8005008, 0x00001999u); } // RESTART key
+// AMD UG585: REBOOT_STATUS bit 22 is POR, bit 20 is debug reset, and
+// bit 16 is SWDT. Do not treat POR/debug history as a watchdog reset.
+#define REBOOT_STATUS_ADDR 0xF8000258u
+#define REBOOT_STATUS_SWDT_MASK (1u << 16)
+#define REBOOT_STATUS_DEBUG_MASK (1u << 20)
+#define REBOOT_STATUS_POR_MASK (1u << 22)
+#define SWDT_ZMR_ADDR 0xF8005000u
+#define SWDT_RESTART_ADDR 0xF8005008u
+#define SWDT_ZMR_WDEN_MASK 0x00000001u
+#define SWDT_ZMR_RSTEN_MASK 0x00000002u
+#define SCUWDT_CTL_ADDR 0xF8F00628u
+#define SCUWDT_RST_ADDR 0xF8F00630u
+#define SCUWDT_DISABLE_ADDR 0xF8F00634u
+#define SCUWDT_CTL_EN_MASK 0x00000001u
+
+// Disable both watchdog blocks defensively, but diagnose reset cause from
+// REBOOT_STATUS rather than from stale ZMR reset-output bits.
+static inline void     swdt_disable(void){ Xil_Out32(SWDT_ZMR_ADDR, 0x00ABC000u); } // ZKEY, WDEN=0
+static inline void     swdt_kick(void){    Xil_Out32(SWDT_RESTART_ADDR, 0x00001999u); } // RESTART key
+static inline void     scuwdt_disable(void){ Xil_Out32(SCUWDT_DISABLE_ADDR, 0x12345678u); Xil_Out32(SCUWDT_DISABLE_ADDR, 0x87654321u); Xil_Out32(SCUWDT_CTL_ADDR, 0x00000000u); }
+void boot_watchdog_kick(void){ swdt_kick(); }
+static void boot_print_reset_decode(unsigned reboot_status, unsigned swdt_zmr, unsigned scuwdt_ctl, unsigned scuwdt_rst)
+{
+    xil_printf("[boot] reset decode POR=%u DEBUG=%u SWDT=%u raw=%08X\r\n",
+               (reboot_status & REBOOT_STATUS_POR_MASK) ? 1u : 0u,
+               (reboot_status & REBOOT_STATUS_DEBUG_MASK) ? 1u : 0u,
+               (reboot_status & REBOOT_STATUS_SWDT_MASK) ? 1u : 0u,
+               reboot_status);
+    xil_printf("[boot] watchdog decode SWDT_EN=%u SWDT_RSTEN=%u SCUWDT_EN=%u SCUWDT_RST=%u\r\n",
+               (swdt_zmr & SWDT_ZMR_WDEN_MASK) ? 1u : 0u,
+               (swdt_zmr & SWDT_ZMR_RSTEN_MASK) ? 1u : 0u,
+               (scuwdt_ctl & SCUWDT_CTL_EN_MASK) ? 1u : 0u,
+               scuwdt_rst ? 1u : 0u);
+}
+// Drain the UART TX FIFO so the last bytes survive a reset/hang (XUARTPS SR
+// offset 0x2C, TXEMPTY = bit3). Used by crash diagnostics so the last line out.
+void buart_flush(void){ for (volatile int g=0; g<2000000; g++){ if (XUartPs_ReadReg(STDOUT_BASEADDRESS, 0x2C) & 0x8u) break; } }
+// Flushed boot checkpoint: prints + drains so the LAST checkpoint before a
+// crash/hang is always visible (localizes where the boot dies).
+#define BCKPT(s) do { xil_printf("[ck] " s "\r\n"); buart_flush(); } while (0)
+static inline unsigned boot_read_dfsr(void){ unsigned v; __asm__ volatile("mrc p15, 0, %0, c5, c0, 0" : "=r"(v)); return v; }
+static inline unsigned boot_read_ifsr(void){ unsigned v; __asm__ volatile("mrc p15, 0, %0, c5, c0, 1" : "=r"(v)); return v; }
+static inline unsigned boot_read_dfar(void){ unsigned v; __asm__ volatile("mrc p15, 0, %0, c6, c0, 0" : "=r"(v)); return v; }
+static inline unsigned boot_read_ifar(void){ unsigned v; __asm__ volatile("mrc p15, 0, %0, c6, c0, 2" : "=r"(v)); return v; }
+
+static void boot_exception_handler(void *data)
+{
+    const char *name = (const char *)data;
+    unsigned reboot_status = (unsigned)Xil_In32(REBOOT_STATUS_ADDR);
+    unsigned swdt_zmr = (unsigned)Xil_In32(SWDT_ZMR_ADDR);
+    unsigned scuwdt_ctl = (unsigned)Xil_In32(SCUWDT_CTL_ADDR);
+    unsigned scuwdt_rst = (unsigned)Xil_In32(SCUWDT_RST_ADDR);
+    Xil_ExceptionDisableMask(XIL_EXCEPTION_ALL);
+    swdt_disable();
+    scuwdt_disable();
+    xil_printf("\r\n[boot] EXCEPTION %s\r\n", name); buart_flush();
+    xil_printf("[boot] DFSR=%08X DFAR=%08X IFSR=%08X IFAR=%08X\r\n",
+               boot_read_dfsr(), boot_read_dfar(), boot_read_ifsr(), boot_read_ifar()); buart_flush();
+    xil_printf("[boot] REBOOT_STATUS=%08X SWDT_ZMR=%08X SCUWDT_CTL=%08X SCUWDT_RST=%08X\r\n",
+               reboot_status, swdt_zmr, scuwdt_ctl, scuwdt_rst); buart_flush();
+    boot_print_reset_decode(reboot_status, swdt_zmr, scuwdt_ctl, scuwdt_rst); buart_flush();
+    for (;;) { }
+}
+
+static void boot_exception_handlers_init(void)
+{
+    Xil_ExceptionInit();
+    Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_UNDEFINED_INT,
+                                 boot_exception_handler, (void *)"UNDEFINED");
+    Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_PREFETCH_ABORT_INT,
+                                 boot_exception_handler, (void *)"PREFETCH_ABORT");
+    Xil_ExceptionRegisterHandler(XIL_EXCEPTION_ID_DATA_ABORT_INT,
+                                 boot_exception_handler, (void *)"DATA_ABORT");
+}
 static inline unsigned char peek(unsigned a){ Xil_Out32(R_PEEK_ADDR, a); return (unsigned char)Xil_In32(R_PEEK_DATA); }
 // Read a byte of VGC video memory (space 1=char 2=color 3=gfx 4=sprite 7=textattr).
 // The char/etc RAM is internal to the VGC (not 6502-addressable); this rides the
@@ -138,10 +216,16 @@ static inline unsigned char vmem_read(unsigned space, unsigned addr){
     (void)Xil_In32(R_VMEM_DATA);
     return (unsigned char)Xil_In32(R_VMEM_DATA);
 }
-static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? 1u : 0u); }
+static inline void     cpu_hold(int hold){ Xil_Out32(R_CTRL, hold ? CTRL_CPU_RESET : 0u); }
 // Pulse the 6502 reset line: it re-runs from the reset vector and boots to READY.
 // The ROM + resident loader staged at boot stay resident, so no restage needed.
 void vm_reset(void){ cpu_hold(1); for (volatile int i = 0; i < 200000; i++) {} cpu_hold(0); }
+
+// Reset requests from the debug server (lwIP callback context) are deferred to
+// the main service loop: a cold reset runs boot_splash() (~5 s of usleep), which
+// must not block the lwIP callback. 0 = none, 1 = warm (CPU only), 2 = cold.
+volatile int g_reset_request = 0;
+void request_vm_reset(int cold){ g_reset_request = cold ? 2 : 1; }
 static inline int      fio_pending(void){ return Xil_In32(R_STATUS) & 1u; }
 static inline void     fio_clear(void){ Xil_Out32(R_STATUS, 1u); }
 static inline int      key_ready(void){ return (Xil_In32(R_STATUS) >> 1) & 1u; }
@@ -167,6 +251,9 @@ void audio_set_sid_stereo(int on)    { g_sid_stereo = on ? 1u : 0u; sid_vol_writ
 // audio.c publishes per-voice notes + playback state into the $BA50 music-status
 // block (the keyboard visualizer reads it). poke() reaches the PL music_regs RAM.
 void audio_mmio_poke(unsigned addr, unsigned char v) { poke(addr, v); }
+// usb.c calls this each HID report so holding Ctrl during boot makes
+// LAB_AUTOBOOT skip the autoboot probe (reads AUTOBOOT_SKIP at cold start).
+void set_autoboot_skip(int on) { poke(AUTOBOOT_SKIP_ADDR, on ? 1u : 0u); }
 
 // Non-static wrappers so mgmt.c / debug.c can reach the AXI bridge primitives.
 unsigned char dbg_peek(unsigned a){ return peek(a); }
@@ -398,6 +485,16 @@ static void fio_load(void) {
                 fio_ok(); return;
             }
         }
+    }
+
+    // AUTOBOOT contract: the cold-boot autoboot probe (LAB_AUTOBOOT) sends the
+    // bare name "AUTOBOOT". On the SD root, resolve it to AUTOBOOT.BIN first
+    // (.bin -> jump to its load address) then AUTOBOOT.BAS (.bas -> load + RUN).
+    // A bare name from a normal LOAD keeps its .bas-only default (fio_path).
+    if (strlen(name) == 8 && !strncasecmp(name, "AUTOBOOT", 8)) {
+        FIL tf;
+        if (f_open(&tf, "0:/AUTOBOOT.BIN", FA_READ) == FR_OK) { f_close(&tf); strcpy(name, "AUTOBOOT.BIN"); }
+        else                                                   strcpy(name, "AUTOBOOT.BAS");
     }
 
     fio_path(name, path, sizeof path);
@@ -863,24 +960,65 @@ static void audio_timer_init(void) {
 #define VGC_MODE_GFX_ONLY 0x03u
 #define VGC_SPACE_GFX     3u
 
-static void boot_splash(void) {
-    FIL f;
-    if (f_open(&f, "0:/assets/boot/novavm_logo.nvg", FA_READ) != FR_OK) {
-        xil_printf("[splash] /assets/boot/novavm_logo.nvg not found -- skipped\r\n");
-        return;
+typedef struct {
+    FIL file;
+    const unsigned char *mem;
+    unsigned mem_len;
+    unsigned pos;
+    int from_sd;
+} nvg_source_t;
+
+static int nvg_source_open(nvg_source_t *src)
+{
+    memset(src, 0, sizeof(*src));
+    if (f_open(&src->file, "0:/assets/boot/novavm_logo.nvg", FA_READ) == FR_OK) {
+        src->from_sd = 1;
+        xil_printf("[splash] using SD novavm_logo.nvg\r\n");
+        return 1;
     }
+
+    src->mem = NOVAVM_LOGO_NVG;
+    src->mem_len = NOVAVM_LOGO_NVG_len;
+    xil_printf("[splash] using embedded novavm_logo.nvg fallback\r\n");
+    return 1;
+}
+
+static int nvg_source_read(nvg_source_t *src, void *dst, unsigned len)
+{
+    if (src->from_sd) {
+        UINT br = 0;
+        return f_read(&src->file, dst, len, &br) == FR_OK && br == len;
+    }
+
+    if (src->pos + len > src->mem_len) return 0;
+    memcpy(dst, src->mem + src->pos, len);
+    src->pos += len;
+    return 1;
+}
+
+static void nvg_source_close(nvg_source_t *src)
+{
+    if (src->from_sd) f_close(&src->file);
+}
+
+// boot_splash_cb: render the logo + fade in, run during_hold() while the logo is
+// displayed at full brightness (so PS bring-up overlaps the logo instead of a
+// blank screen), then fade out + restore text mode. during_hold==0 => plain 3s hold.
+static void boot_splash_cb(void (*during_hold)(void)) {
+    nvg_source_t src;
+    nvg_source_open(&src);
+
     unsigned char hdr[16];
-    UINT br = 0;
-    if (f_read(&f, hdr, 16, &br) != FR_OK || br != 16 ||
+    if (!nvg_source_read(&src, hdr, 16) ||
         hdr[0] != 'N' || hdr[1] != 'V' || hdr[2] != 'G' || hdr[3] != '2') {
         xil_printf("[splash] bad NVG2 header -- skipped\r\n");
-        f_close(&f);
+        nvg_source_close(&src);
         return;
     }
     unsigned w = hdr[4] | (hdr[5] << 8), h = hdr[6] | (hdr[7] << 8), flags = hdr[8];
     if (w != 320 || h != 200) {
         xil_printf("[splash] unsupported %ux%u -- skipped\r\n", w, h);
-        f_close(&f);
+        nvg_source_close(&src);
         return;
     }
 
@@ -892,7 +1030,7 @@ static void boot_splash(void) {
 
     if (flags & 0x02u) {                   // NVG_FLAG_PALETTE: 16 colours x 3 bytes
         unsigned char pal[48];
-        if (f_read(&f, pal, sizeof pal, &br) == FR_OK && br == sizeof pal) {
+        if (nvg_source_read(&src, pal, sizeof pal)) {
             poke(VGCR_PALIDX, 0x00);
             for (int i = 0; i < (int)sizeof pal; i++) poke(VGCR_PALDAT, pal[i]);
         }
@@ -911,7 +1049,7 @@ static void boot_splash(void) {
     unsigned char row[160];                // 320 px / 2 px-per-byte
     for (unsigned y = 0; y < 200; y++) {
         swdt_kick();
-        if (f_read(&f, row, sizeof row, &br) != FR_OK || br != sizeof row) break;
+        if (!nvg_source_read(&src, row, sizeof row)) break;
         unsigned base = y * 320u;
         for (unsigned x = 0; x < 320; x++) {
             unsigned addr = base + x;
@@ -920,13 +1058,14 @@ static void boot_splash(void) {
             Xil_Out32(R_VMEM_WRITE, ((unsigned)VGC_SPACE_GFX << 25) | (addr << 8) | px);
         }
     }
-    f_close(&f);
+    nvg_source_close(&src);
     xil_printf("[splash] novavm_logo.nvg drawn to gfx plane\r\n");
 
     // DISPLAY_DIM: 0x00 = dark, 0x0F = full bright. usleep() gives exact timing
     // (busy-loops varied with loop body). Spec: fade in 1 s, hold 3 s, fade out 1 s.
     for (int d = 0; d <= 15; d++)  { swdt_kick(); poke(VGCR_DIM, (unsigned char)d); usleep(62500); }  // fade in 1 s
-    for (int h = 0; h < 6; h++)    { swdt_kick(); usleep(500000); }                                    // hold 3 s
+    if (during_hold) during_hold();            // run PS bring-up with the logo displayed
+    else for (int h = 0; h < 6; h++) { swdt_kick(); usleep(500000); }                                 // hold 3 s
     for (int d = 15; d >= 0; d--)  { swdt_kick(); poke(VGCR_DIM, (unsigned char)d); usleep(62500); }  // fade out 1 s
 
     // Restore the power-on text state so NovaBASIC starts from a clean VGC: text
@@ -937,16 +1076,118 @@ static void boot_splash(void) {
     poke(VGCR_CURSEN, 0x01);
     Xil_Out32(R_VMEM_ADDR, (1u << 17) | 0u);   // space=char, addr=0 (fio_bridge default)
 }
+static void boot_splash(void) { boot_splash_cb(0); }   // plain splash (used by cold_boot)
+
+// PS bring-up, run during the splash hold (logo displayed, 6502 held) so the
+// ~3s gigabit autonegotiation overlaps the logo instead of a blank screen. IRQs
+// are masked across the mgmt/debug TCP-server setup -- an interrupt landing
+// mid-tcp_accept was the SD-only reboot. The 6502 stays held the whole time
+// (which is what keeps mgmt_init stable) and is released by main() afterwards.
+static void boot_bringup(void) {
+    swdt_kick(); xil_printf("[boot] init net\r\n");
+    net_init();                                 // PS Ethernet (DHCP + TCP upload)
+    Xil_ExceptionDisableMask(XIL_EXCEPTION_IRQ); // no IRQs during the TCP-server setup
+    swdt_kick(); xil_printf("[boot] init mgmt\r\n");
+    mgmt_init();                                // NovaHost 6504 management server
+    swdt_kick(); xil_printf("[boot] init debug\r\n");
+    debug_init();                               // NovaHost 6503 debug server
+    swdt_kick(); xil_printf("[boot] init usb\r\n");
+    usb_init();                                 // PS USB host (HID keyboard)
+    swdt_kick(); xil_printf("[boot] init audio\r\n");
+    audio_init();                               // reset the software SIDs + mix
+    swdt_kick(); xil_printf("[boot] init audio timer\r\n");
+    audio_timer_init();                         // 1 kHz audio IRQ (after the GIC is up)
+    Xil_ExceptionEnableMask(XIL_EXCEPTION_IRQ);  // re-enable IRQs
+    swdt_kick(); xil_printf("[boot] bring-up done\r\n");
+}
+
+// Service one pending FIO command from the 6502. Returns 1 if a command was
+// handled, 0 if the bus was idle. Shared by the boot-time pump and service loop.
+static int service_fio(void) {
+    if (!fio_pending()) return 0;
+    fio_clear();
+    unsigned char cmd = peek(FIO_CMD);
+    if (cmd != 0) { if (cmd != FIO_CMD_XPAGE) xil_printf("[fio] cmd=0x%02x\r\n", cmd); poke(FIO_STATUS, 0); }
+    if      (cmd == FIO_CMD_LOAD)    fio_load();
+    else if (cmd == FIO_CMD_SAVE)    fio_save();
+    else if (cmd == FIO_CMD_DIROPEN) fio_diropen();
+    else if (cmd == FIO_CMD_DIRREAD) fio_dirread();
+    else if (cmd == FIO_CMD_DELETE)  fio_delete();
+    else if (cmd == FIO_CMD_XLOAD)   fio_xload();
+    else if (cmd == FIO_CMD_XPAGE)   fio_xpage();
+    else if (cmd == FIO_CMD_LOADRUNTIME) fio_load_runtime();
+    else if (cmd == FIO_CMD_FOPEN)   fio_fopen();
+    else if (cmd == FIO_CMD_FCREATE) fio_fcreate();
+    else if (cmd == FIO_CMD_FWRITE)  fio_fwrite();
+    else if (cmd == FIO_CMD_FCLOSE)  fio_fclose();
+    else if (cmd == FIO_CMD_FREAD)   fio_fread();
+    else if (cmd == FIO_CMD_FSEEK)   fio_fseek();
+    else if (cmd == FIO_CMD_FTELL)   fio_ftell();
+    else if (cmd == FIO_CMD_FSIZE)   fio_fsize();
+    else if (cmd == FIO_CMD_MIDPLAY) fio_midplay();
+    else if (cmd == FIO_CMD_MIDSTOP) { audio_stop(); fio_ok(); }
+    else if (cmd == FIO_CMD_SFLOAD)  fio_sfload();
+    else if (cmd == FIO_CMD_VOLUME)  fio_volume();
+    else if (cmd == FIO_CMD_LOAD_MODULE) {
+        int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
+        if (load_module(id, slot) == 0) {
+            for (int s = 0; s < 4; s++) poke(0x0418 + s, 0);
+            poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK);
+        } else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+    } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+    return 1;
+}
+
+// Full cold reset (nova vm cold-start). Pulses dbg_system_reset (CTRL bit1),
+// which is OR'd into every custom block's reset in top.sv, so the 6502, VGC,
+// SID1/SID2, wavetable synth and math coprocessor all return to power-on
+// defaults. Then re-shows the boot splash and releases the CPU to a fresh
+// NovaBASIC. Runs from the service loop, never the lwIP callback (splash blocks).
+static void cold_boot(void) {
+    xil_printf("[boot] cold reset: full system reset + splash\r\n");
+    Xil_Out32(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);  // hold CPU + assert system reset
+    usleep(2000);
+    Xil_Out32(R_CTRL, CTRL_CPU_RESET);                   // release system reset, keep CPU held
+    usleep(2000);
+    // Re-stage the PS-patched ROM + resident loader (parity with power-on; BRAM
+    // contents survive a logic reset but this keeps cold boot identical to boot).
+    for (unsigned a = 0; a < 16384; a++) Xil_Out32(R_ROMW, (a << 8) | EHBASIC_ROM[a]);
+    for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
+    poke(AUTOBOOT_SKIP_ADDR, 0);                         // usb_poll re-sets it if Ctrl held
+    audio_init();                                        // resync PS SID/WTS mirror after HW reset
+    boot_splash();                                       // re-draw logo + restore text mode
+    Xil_Out32(R_CTRL, 0);                                // release CPU -> NovaBASIC cold start
+    xil_printf("[fio] cold reset complete; 6502 released\r\n");
+}
 
 int main(void) {
     static FATFS fs;
     Xil_DCacheEnable();
     xil_printf("\r\n[NovaVM PS FIO host] starting\r\n");
+    xil_printf("[boot] BUILD MARKER 0x%08X %s %s\r\n",
+               BOOT_BUILD_MARKER, __DATE__, __TIME__);
 
-    xil_printf("[boot] REBOOT_STATUS=%08X SWDT_ZMR=%08X\r\n",
-               (unsigned)Xil_In32(0xF8000258), (unsigned)Xil_In32(0xF8005000));
-    swdt_disable();                             // stop the BootROM-armed SWDT (FSBL leaves it on)
-    xil_printf("[boot] SWDT_ZMR now=%08X\r\n", (unsigned)Xil_In32(0xF8005000));
+    unsigned reboot_status = (unsigned)Xil_In32(REBOOT_STATUS_ADDR);
+    unsigned swdt_zmr = (unsigned)Xil_In32(SWDT_ZMR_ADDR);
+    unsigned scuwdt_ctl = (unsigned)Xil_In32(SCUWDT_CTL_ADDR);
+    unsigned scuwdt_rst = (unsigned)Xil_In32(SCUWDT_RST_ADDR);
+    xil_printf("[boot] REBOOT_STATUS=%08X SWDT_ZMR=%08X SCUWDT_CTL=%08X SCUWDT_RST=%08X\r\n",
+               reboot_status, swdt_zmr, scuwdt_ctl, scuwdt_rst);
+    boot_print_reset_decode(reboot_status, swdt_zmr, scuwdt_ctl, scuwdt_rst);
+    swdt_kick();
+    swdt_disable();
+    scuwdt_disable();
+    swdt_zmr = (unsigned)Xil_In32(SWDT_ZMR_ADDR);
+    scuwdt_ctl = (unsigned)Xil_In32(SCUWDT_CTL_ADDR);
+    scuwdt_rst = (unsigned)Xil_In32(SCUWDT_RST_ADDR);
+    xil_printf("[boot] watchdogs now SWDT_ZMR=%08X SCUWDT_CTL=%08X SCUWDT_RST=%08X\r\n",
+               swdt_zmr, scuwdt_ctl, scuwdt_rst);
+    boot_print_reset_decode(reboot_status, swdt_zmr, scuwdt_ctl, scuwdt_rst);
+    boot_exception_handlers_init();
+    xil_printf("[boot] exception handlers installed\r\n");
+    int jtag_visual_mode = (reboot_status & REBOOT_STATUS_DEBUG_MASK) ? 1 : 0;
+    g_jtag_visual_mode = jtag_visual_mode;
+    if (jtag_visual_mode) xil_printf("[boot] JTAG visual diagnostic mode\r\n");
 
     cpu_hold(1);                                // keep the 6502 in reset
 
@@ -957,29 +1198,33 @@ int main(void) {
         Xil_Out32(R_ROMW, (a << 8) | EHBASIC_ROM[a]);   // idx=0 (bit22=0) = basic_rom
     xil_printf("[fio] basic_rom loaded from PS (16384 bytes)\r\n");
 
-    if (f_mount(&fs, "0:/", 1) != FR_OK) {
-        xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
-        mgmt_set_sd(0);
-    } else {
-        xil_printf("[fio] microSD mounted\r\n");
-        mgmt_set_sd(1);
-        drives_load();                          // restore mounted .ndi slots
-    }
-
-    // Stream the 6581 filter curve into XRAM $080000 (DDR) for the reDIP-SID
-    // sid_curve_reader, exactly as NovaHost does on the ULX3S. 4096x16 = 8 KB.
-    // (8580's filter is linear -- no curve. Non-fatal if missing.)
-    {
-        FIL cf;
-        if (f_open(&cf, "0:/F6581.BIN", FA_READ) == FR_OK) {
-            UINT br = 0;
-            f_read(&cf, (void *)(XRAM_DDR_BASE + 0x80000u), 8192, &br);
-            f_close(&cf);
-            Xil_DCacheFlushRange(XRAM_DDR_BASE + 0x80000u, 8192);
-            xil_printf("[sid] 6581 filter curve loaded (%u bytes)\r\n", (unsigned)br);
+    if (!jtag_visual_mode) {
+        if (f_mount(&fs, "0:/", 1) != FR_OK) {
+            xil_printf("[fio] WARNING: SD mount failed (module loads will NAK)\r\n");
+            mgmt_set_sd(0);
         } else {
-            xil_printf("[sid] F6581.BIN not found -- 6581 filter inaccurate\r\n");
+            xil_printf("[fio] microSD mounted\r\n");
+            mgmt_set_sd(1);
+            drives_load();                          // restore mounted .ndi slots
         }
+
+        // Stream the 6581 filter curve into XRAM $080000 (DDR) for the reDIP-SID
+        // sid_curve_reader, exactly as NovaHost does on the ULX3S. 4096x16 = 8 KB.
+        // (8580's filter is linear -- no curve. Non-fatal if missing.)
+        {
+            FIL cf;
+            if (f_open(&cf, "0:/F6581.BIN", FA_READ) == FR_OK) {
+                UINT br = 0;
+                f_read(&cf, (void *)(XRAM_DDR_BASE + 0x80000u), 8192, &br);
+                f_close(&cf);
+                Xil_DCacheFlushRange(XRAM_DDR_BASE + 0x80000u, 8192);
+                xil_printf("[sid] 6581 filter curve loaded (%u bytes)\r\n", (unsigned)br);
+            } else {
+                xil_printf("[sid] F6581.BIN not found -- 6581 filter inaccurate\r\n");
+            }
+        }
+    } else {
+        mgmt_set_sd(0);
     }
 
     // Stage the resident lib_call loader into CPU RAM $0320.
@@ -995,62 +1240,37 @@ int main(void) {
         XUartPs_WriteReg(STDOUT_BASEADDRESS, XUARTPS_CR_OFFSET, cr);
     }
 
-    boot_splash();                              // draw novavm_logo.nvg (6502 still held)
+    poke(AUTOBOOT_SKIP_ADDR, 0);                // clean autoboot-skip default; usb_poll sets it if Ctrl held
 
-    cpu_hold(0);                                // release the 6502 -> boots to READY
+    if (jtag_visual_mode) {
+        boot_splash();                          // plain logo, then park
+        cpu_hold(0);
+        xil_printf("[boot] JTAG visual diagnostic parked after BASIC release\r\n");
+        for (;;) { swdt_kick(); usleep(500000); }
+    }
+
+    // Render the logo, then run PS bring-up (net/servers/USB/audio) WHILE the logo
+    // is displayed -- the 6502 stays HELD across mgmt_init (which is what keeps it
+    // stable on SD), and the ~3s gigabit autoneg overlaps the logo instead of a
+    // blank screen. The 6502 is released right after, so Ready appears the instant
+    // the logo fades out -- no gap, no reboot.
+    boot_splash_cb(boot_bringup);
+
+    cpu_hold(0);                                // release the 6502 -> cold start; serviced below
     xil_printf("[fio] 6502 released; servicing FIO events + console keys\r\n");
-
-    net_init();                                 // bring up PS Ethernet (DHCP + TCP upload)
-    mgmt_init();                                // NovaHost 6504 management server (after lwip_init)
-    debug_init();                               // NovaHost 6503 debug server (after lwip_init)
-    usb_init();                                 // bring up PS USB host (HID keyboard)
-
-    audio_init();                               // reset the software SIDs + mix
-    audio_timer_init();                         // start the 1 kHz audio IRQ (after the GIC is up)
+    swdt_kick(); xil_printf("[boot] entering service loop\r\n");
 
     for (;;) {
         swdt_kick();                            // keep the watchdog fed so it can't reset post-boot
-        // --- FIO host service ---
-        if (fio_pending()) {
-            fio_clear();
-            unsigned char cmd = peek(FIO_CMD);
-            // log + mark busy (skip the high-frequency story-paging command to keep serial fast)
-            if (cmd != 0) { if (cmd != FIO_CMD_XPAGE) xil_printf("[fio] cmd=0x%02x\r\n", cmd); poke(FIO_STATUS, 0); }
-            if      (cmd == FIO_CMD_LOAD)    fio_load();
-            else if (cmd == FIO_CMD_SAVE)    fio_save();
-            else if (cmd == FIO_CMD_DIROPEN) fio_diropen();
-            else if (cmd == FIO_CMD_DIRREAD) fio_dirread();
-            else if (cmd == FIO_CMD_DELETE)  fio_delete();
-            else if (cmd == FIO_CMD_XLOAD)   fio_xload();
-            else if (cmd == FIO_CMD_XPAGE)   fio_xpage();
-            else if (cmd == FIO_CMD_LOADRUNTIME) fio_load_runtime();
-            else if (cmd == FIO_CMD_FOPEN)   fio_fopen();
-            else if (cmd == FIO_CMD_FCREATE) fio_fcreate();
-            else if (cmd == FIO_CMD_FWRITE)  fio_fwrite();
-            else if (cmd == FIO_CMD_FCLOSE)  fio_fclose();
-            else if (cmd == FIO_CMD_FREAD)   fio_fread();
-            else if (cmd == FIO_CMD_FSEEK)   fio_fseek();
-            else if (cmd == FIO_CMD_FTELL)   fio_ftell();
-            else if (cmd == FIO_CMD_FSIZE)   fio_fsize();
-            else if (cmd == FIO_CMD_MIDPLAY) fio_midplay();
-            else if (cmd == FIO_CMD_MIDSTOP) { audio_stop(); fio_ok(); }
-            else if (cmd == FIO_CMD_SFLOAD)  fio_sfload();
-            else if (cmd == FIO_CMD_VOLUME)  fio_volume();
-            else if (cmd == FIO_CMD_LOAD_MODULE) {
-                int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
-                if (load_module(id, slot) == 0) {
-                    // Cap the loader's 4-slot module shelf ($0418..$041B) at one
-                    // entry (the resident). The page-in is a no-op (PS wrote bank-1),
-                    // so a stale shelf-HIT on a module SWITCH would skip the load and
-                    // leave the wrong module resident. Clearing the tags forces every
-                    // switch to MISS -> FIO -> PS rewrites bank-1; repeats still hit
-                    // the fast LIB_RESIDENT path before the shelf scan. The loader
-                    // re-records the victim slot after FIO_STATUS=OK -> exactly 1 tag.
-                    for (int s = 0; s < 4; s++) poke(0x0418 + s, 0);
-                    poke(FIO_ERRCODE,0); poke(FIO_STATUS,FIO_OK);
-                } else { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
-            } else if (cmd != 0) { poke(FIO_ERRCODE,1); poke(FIO_STATUS,FIO_ERR); }
+        // --- deferred reset request (from the debug server, outside its callback) ---
+        if (g_reset_request) {
+            int cold = (g_reset_request == 2);
+            g_reset_request = 0;
+            if (cold) cold_boot();              // full system reset + splash
+            else      vm_reset();               // warm: CPU-only re-cold-start
         }
+        // --- FIO host service ---
+        service_fio();
         // --- console keyboard: forward serial bytes into the VGC key queue ---
         int ch = uart_getc();
         if (ch >= 0) {

@@ -1,0 +1,8 @@
+# UIO so the userspace novavm host can mmap the fio_bridge register block
+# (fio-bridge@40000000, compatible "generic-uio"). Pair with kernel cmdline
+# uio_pdrv_genirq.of_id=generic-uio.
+CONFIG_UIO=y
+CONFIG_UIO_PDRV_GENIRQ=y
+# FPGA manager so U-Boot/Linux can load the PL bitstream.
+CONFIG_FPGA=y
+CONFIG_FPGA_MGR_ZYNQ_FPGA=y

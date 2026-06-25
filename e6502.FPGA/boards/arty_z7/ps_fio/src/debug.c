@@ -29,6 +29,7 @@ unsigned char dbg_vmem(unsigned space, unsigned addr);
 unsigned char dbg_xram(unsigned addr);              // main.c — read XRAM from PS DDR
 void          kb_emit(unsigned char c);
 void          vm_reset(void);
+void          request_vm_reset(int cold);           // main.c — defer reset to the service loop
 
 #define DBG_PORT   6503
 #define RXCAP      8192u
@@ -300,10 +301,10 @@ static void do_get_cursor(struct tcp_pcb *pcb) {
 
 static void do_reset(struct tcp_pcb *pcb, const char *s, int cold) {
     (void)s;
-    vm_reset();
-    // Best-effort settle so a follow-up type_text lands after the READY prompt
-    // (the 6502 reaches READY within a few ms; wait_ready is not pollable here).
-    for (volatile int i = 0; i < 4000000; i++) {}
+    // Defer to the main service loop: a cold reset re-runs boot_splash() (~5 s of
+    // usleep) and must not block this lwIP callback. We respond immediately; the
+    // reset (and, for cold, the splash) then runs outside the callback.
+    request_vm_reset(cold);
     char b[64];
     snprintf(b, sizeof b, "{\"ok\":true,\"%s\":true}", cold ? "cold_start" : "reset");
     respond(pcb, b);

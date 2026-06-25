@@ -52,7 +52,12 @@ module arty_z7_full (
     wire clk_fb, clk_fb_buf, clk_x5_raw, clk_pix_raw;
     wire clk_pixel, clk_pixel_x5, mmcm_locked;
     MMCME2_BASE #(
-        .BANDWIDTH("OPTIMIZED"), .CLKIN1_PERIOD(8.000), .DIVCLK_DIVIDE(1),
+        // LOW bandwidth = max input-jitter attenuation. The MMCM is fed from the
+        // PS FCLK_CLK0 (a relatively jittery clock); AMD's guidance is to use the
+        // MMCM's low-bandwidth jitter-filter mode when sourcing a PL clock from an
+        // FCLK. OPTIMIZED let jitter through and at the tight 26.95 MHz pixel-clock
+        // margin it was corrupting the 6502 (intermittent jump-to-garbage).
+        .BANDWIDTH("LOW"), .CLKIN1_PERIOD(8.000), .DIVCLK_DIVIDE(1),
         .CLKFBOUT_MULT_F(8.625), .CLKOUT0_DIVIDE_F(8.000), .CLKOUT1_DIVIDE(40),
         .CLKOUT0_DUTY_CYCLE(0.5), .CLKOUT1_DUTY_CYCLE(0.5),
         .CLKOUT0_PHASE(0.0), .CLKOUT1_PHASE(0.0), .CLKFBOUT_PHASE(0.0),
@@ -116,6 +121,7 @@ module arty_z7_full (
     wire [15:0]  fb_peek_addr; wire fb_peek_en; wire [7:0] fb_peek_data;
     wire         fb_key_valid; wire [7:0] fb_key_data; wire fb_key_ready;
     wire         fb_cpu_reset;
+    wire         fb_system_reset;   // PS-pulsed full custom-chip reset (VGC/SID/WTS/math/CPU)
     wire         fb_rom_we, fb_rom_idx; wire [13:0] fb_rom_addr; wire [7:0] fb_rom_data;
     wire         fb_vmem_re; wire [2:0] fb_vmem_space; wire [16:0] fb_vmem_addr; wire [7:0] fb_vmem_rdata;
     wire         fb_vmem_we; wire [7:0] fb_vmem_wdata;   // PS -> VGC memory write (boot splash); mirrors ULX3S debug_bridge
@@ -146,7 +152,7 @@ module arty_z7_full (
         .dbg_vmem_addr(fb_vmem_addr), .dbg_vmem_data(fb_vmem_wdata), .dbg_vmem_rdata(fb_vmem_rdata),
         .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
         .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
-        .dbg_cpu_reset(fb_cpu_reset), .dbg_system_reset(1'b0), .dbg_cpu_resume(1'b0),
+        .dbg_cpu_reset(fb_cpu_reset), .dbg_system_reset(fb_system_reset), .dbg_cpu_resume(1'b0),
         .brg_sdram_b_we(1'b0), .brg_sdram_b_oe(1'b0),
         .brg_sdram_b_addr(25'd0), .brg_sdram_b_din(8'd0),
         .host_wts_event_we(1'b0), .host_wts_event_data(8'd0), .host_wts_event_ready(),
@@ -372,6 +378,7 @@ module arty_z7_full (
         .dbg_rom_we(fb_rom_we), .dbg_rom_idx(fb_rom_idx),
         .dbg_rom_addr(fb_rom_addr), .dbg_rom_data(fb_rom_data),
         .dbg_cpu_reset(fb_cpu_reset),
+        .dbg_system_reset(fb_system_reset),
         .dbg_vmem_re(fb_vmem_re), .dbg_vmem_we(fb_vmem_we), .dbg_vmem_wdata(fb_vmem_wdata),
         .dbg_vmem_space(fb_vmem_space),
         .dbg_vmem_addr(fb_vmem_addr), .dbg_vmem_rdata(fb_vmem_rdata),

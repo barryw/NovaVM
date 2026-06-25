@@ -24,3 +24,9 @@ clean:
 FORCE:
 
 .PHONY: clean all install FORCE
+
+# --- bootable language floppy: novalogo.ndi (autoboot -> LOADRUNTIME -> $C000) ---
+NDI_RUNTIME := novalogo.bin
+NDI_OUTPUT  := novalogo.ndi
+NDI_LABEL   := NLOGO
+include ../runtime/ndi/ndi.mk

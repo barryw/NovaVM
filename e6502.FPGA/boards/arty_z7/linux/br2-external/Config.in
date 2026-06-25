@@ -1,0 +1,2 @@
+# NovaVM-on-Linux custom packages (added in Phase 2: the novavm host, audio driver).
+# source "$BR2_EXTERNAL_NOVAVM_ARTY_PATH/package/novavm/Config.in"

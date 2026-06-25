@@ -641,18 +641,18 @@ module wts_chip (
             decay_threshold = {1'b0, sustain_level} + {1'b0, decay_step};
             unique case (stage)
                 ENV_ATTACK:
-                    next_env_stage = (attack_step == 16'd0 || current >= (16'hFFFF - attack_step))
+                    next_env_stage = env_stage_t'((attack_step == 16'd0 || current >= (16'hFFFF - attack_step))
                         ? ENV_DECAY
-                        : ENV_ATTACK;
+                        : ENV_ATTACK);
                 ENV_DECAY:
-                    next_env_stage = (decay_step == 16'd0 || current <= sustain_level ||
+                    next_env_stage = env_stage_t'((decay_step == 16'd0 || current <= sustain_level ||
                                       decay_threshold >= 17'h10000 || current <= decay_threshold[15:0])
                         ? ENV_SUSTAIN
-                        : ENV_DECAY;
+                        : ENV_DECAY);
                 ENV_RELEASE:
-                    next_env_stage = (release_step == 16'd0 || current <= release_step)
+                    next_env_stage = env_stage_t'((release_step == 16'd0 || current <= release_step)
                         ? ENV_OFF
-                        : ENV_RELEASE;
+                        : ENV_RELEASE);
                 default:
                     next_env_stage = stage;
             endcase
