@@ -1,7 +1,0 @@
-=== xvlog (SystemVerilog) ===
-=== xvlog (Verilog) ===
-=== xelab ===
-ERROR: [VRFC 10-3818] variable 'ext_rom_active' is driven by invalid combination of procedural drivers [/home/barry/NovaVM/e6502.FPGA/rtl/top.sv:643]
-ERROR: [XSIM 43-3322] Static elaboration of top level Verilog design unit(s) in library work failed.
-=== xsim ===
-ERROR: Please check the snapshot name which is created during 'xelab',the current snapshot name "xsim.dir/tbsim/xsimk" does not exist 

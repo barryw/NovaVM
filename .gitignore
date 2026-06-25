@@ -372,3 +372,12 @@ xsim.dir/
 *.jou
 *.wdb
 webtalk*.log
+
+# Arty sim + language-floppy build outputs
+e6502.FPGA/boards/arty_z7/sim/*.out
+e6502.FPGA/boards/arty_z7/sim/*.pb
+e6502.FPGA/boards/arty_z7/sim/*.log
+novaforth/*.o
+novaforth/AUTOBOOT.bin
+novalogo/*.o
+novalogo/AUTOBOOT.bin
