@@ -368,3 +368,7 @@ entities.json
 e6502.FPGA/xsim.dir/
 e6502.FPGA/xvlog.pb
 e6502.FPGA/boards/arty_z7/linux/novavm/novavm
+xsim.dir/
+*.jou
+*.wdb
+webtalk*.log
