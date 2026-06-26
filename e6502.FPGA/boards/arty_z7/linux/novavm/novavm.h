@@ -24,6 +24,13 @@
 #define R_AUDIO_SPACE  0x34u   /* R [15:0] -> free bytes in HDMI audio FIFO        */
 #define R_AUDIO_EVT    0x38u   /* R {valid,index[7:0],data[7:0]} 6502 SID/WTS write, pops FIFO */
 #define R_SID_VOL      0x3Cu   /* W [7:0]=mix level [8]=stereo                     */
+/* --- OSD config overlay (added with the OSD-compositor bitstream; see
+ *     OSD_CONFIG_SPEC.md). Until that bitstream lands these offsets are
+ *     unimplemented in the PL and nosd.c gates them behind g_osd_hw. --- */
+#define R_BUTTONS      0x40u   /* R {press_edge[3:0],level[3:0]} front-panel btns  */
+#define R_OSD_CTRL     0x44u   /* RW bit0=osd_enable bit1=system_pause             */
+#define R_OSD_FB       0x48u   /* W {transp,bg[3:0],fg[3:0],char[7:0],addr[12:0]}  */
+#define R_OSD_FILL     0x4Cu   /* W {transp,bg[3:0],fg[3:0],char[7:0]} fill grid   */
 #define CTRL_CPU_RESET 0x1u
 #define CTRL_SYS_RESET 0x2u
 #define VGC_SPACE_CHAR 1u

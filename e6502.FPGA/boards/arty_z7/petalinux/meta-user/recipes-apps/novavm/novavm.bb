@@ -22,7 +22,10 @@ do_compile[nostamp]  = "1"
 
 inherit update-rc.d
 INITSCRIPT_NAME   = "novavm"
-INITSCRIPT_PARAMS = "defaults 99"
+# Early in rcS (S04, right after nova-firstboot seeds /data) so the hold-screen +
+# 6502 boot to BASIC happen in seconds, not after the full Linux boot. The init
+# script mknod's /dev/mem itself (udev doesn't create it until its slow coldplug).
+INITSCRIPT_PARAMS = "start 04 S ."
 
 # Absolute source paths embed into the binary's debug strings; harmless here.
 INSANE_SKIP:${PN} = "buildpaths"
@@ -34,7 +37,7 @@ do_compile() {
     ${CC} ${CFLAGS} ${LDFLAGS} -O2 -pthread -I${NOVAVM_SRC} \
         ${NOVAVM_SRC}/novavm.c ${NOVAVM_SRC}/naudio.c ${NOVAVM_SRC}/nservers.c \
         ${NOVAVM_SRC}/nkbd.c ${NOVAVM_SRC}/nfio.c ${NOVAVM_SRC}/nsplash.c \
-        ${NOVAVM_SRC}/nbootcfg.c ${NOVAVM_SRC}/cJSON.c \
+        ${NOVAVM_SRC}/nbootcfg.c ${NOVAVM_SRC}/nosd.c ${NOVAVM_SRC}/cJSON.c \
         -lm -o ${B}/novavm
 }
 

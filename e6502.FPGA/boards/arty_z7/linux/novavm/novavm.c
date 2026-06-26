@@ -23,6 +23,7 @@
 #include "loader_bin.h"     /* LOADER_BIN[248]: resident lib_call loader, staged @ $0320 */
 #include "modules_embedded.h" /* EMBEDDED_MOD[1..8], 16KB each (3=MOD_SYSTEM: line input) */
 #include "nfio.h"            /* XRAM/file/.ndi-drive FIO commands */
+#include "nosd.h"            /* OSD config menu: buttons + mount/unmount UI */
 
 #define R_AUDIO 0x30u        /* W [7:0] -> push 1 PCM byte to the HDMI audio FIFO */
 #define R_AUDIO_SPACE 0x34u  /* R [15:0] -> free bytes in the HDMI audio FIFO     */
@@ -294,6 +295,72 @@ static int load_module(int id) {
     return 0;
 }
 
+/* "Please hold" wait screen — painted the instant the PL is up (via the init
+ * script's `novavm bootmsg`), so the display is never blank during the slow Linux
+ * boot. Writes char + colour RAM through the vmem port and sets the text regs; no
+ * 6502 needed. The subsequent cold-boot resets the VGC, clearing this, and the
+ * real boot splash takes over. */
+#define VGC_SPACE_COLOR 2u
+static void vmem_write(unsigned sp, unsigned a, unsigned char v) {
+    wr(R_VMEM_DATA, ((sp & 7u) << 25) | ((a & 0x1FFFFu) << 8) | v);
+}
+static void boot_wait_msg(void) {
+    poke(0xA000, 0x00);   /* VGCR_MODE   = text  */
+    poke(0xA001, 0x06);   /* VGCR_BGCOL  = blue  */
+    poke(0xA00D, 0x06);   /* VGCR_BORDER = blue  */
+    poke(0xA00A, 0x00);   /* cursor off          */
+    poke(0xA0E5, 0x0F);   /* VGCR_DIM    = full  */
+    for (unsigned a = 0; a < 80u * 50u; a++) {
+        vmem_write(VGC_SPACE_CHAR,  a, 0x20);   /* space */
+        vmem_write(VGC_SPACE_COLOR, a, 0x01);   /* white */
+    }
+    static const char *L[] = {
+        "N O V A V M",
+        "",
+        "",
+        "Your call is VERY important to us!",
+        "",
+        "Please remain on the line and an operator will",
+        "be with you just as soon as possible.",
+        "",
+        "",
+        ". . . booting . . .",
+    };
+    int n = (int)(sizeof L / sizeof L[0]);
+    int top = (50 - n) / 2;
+    for (int r = 0; r < n; r++) {
+        const char *s = L[r];
+        int len = (int)strlen(s);
+        int col = (80 - len) / 2;
+        unsigned base = (unsigned)((top + r) * 80 + col);
+        for (int j = 0; j < len; j++)
+            vmem_write(VGC_SPACE_CHAR, base + (unsigned)j, (unsigned char)s[j]);
+    }
+}
+
+/* Cold-boot the 6502: reset all chips, load the ROM, stage the $0320 resident
+ * loader, run the boot splash, release, and bring the VGC up. Used at startup
+ * and by host_reboot_vm() for the OSD's mount-and-boot. */
+static int vm_cold_boot(void) {
+    wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);
+    usleep(150000);
+    if (load_rom("/data/nova/roms/ehbasic.bin") != 0) return 1;
+    for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
+    printf("[novavm] staged resident loader @ $0320 (%zu bytes)\n", sizeof(LOADER_BIN));
+    boot_splash();                 /* boot.json logo + fade while the 6502 is held */
+    poke(AUTOBOOT_SKIP_ADDR, 0);
+    cpu_hold(0);                    /* release -> cold start */
+    usleep(600000);
+    poke(0xA000, 0x00);            /* VGCR_MODE   = text       */
+    poke(0xA0E5, 0x0F);            /* VGCR_DIM    = full bright */
+    poke(0xA00A, 0x01);            /* VGCR_CURSEN = cursor on   */
+    return 0;
+}
+
+/* OSD mount-and-boot: re-run the cold boot so the 6502 re-reads boot.json mounts
+ * on autoboot (overrides nosd.c's weak stub; called from the OSD button thread). */
+void host_reboot_vm(void) { vm_cold_boot(); }
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);   /* line-buffer: make the boot log visible live */
     int fd = open("/dev/mem", O_RDWR | O_SYNC);
@@ -301,6 +368,8 @@ int main(int argc, char **argv) {
     g_reg = mmap(NULL, 0x10000, PROT_READ | PROT_WRITE, MAP_SHARED, fd, FIO_BASE);
     if (g_reg == MAP_FAILED) { perror("mmap"); return 1; }
     if (argc > 1 && !strcmp(argv[1], "screen")) { dump_screen(); return 0; }
+    if (argc > 1 && !strcmp(argv[1], "osd-test")) { osd_selftest(); return 0; }
+    if (argc > 1 && !strcmp(argv[1], "bootmsg")) { boot_wait_msg(); return 0; }
     /* test: inject a string into BASIC via R_KEY (then a CR). '~' -> CR.
      * Wait for the 6502 to consume each key (R_STATUS bit1 key_ready clears)
      * before the next, so they don't overwrite in the VGC's single key slot. */
@@ -330,36 +399,14 @@ int main(int argc, char **argv) {
     } else printf("[novavm] XRAM mapped: %u KB @ %#x\n", XRAM_BYTES >> 10, XRAM_DDR_BASE);
 
 
-    /* Cold-reset the custom chips (VGC/SID/WTS/math) before booting the 6502.
-     * The VGC powers up with garbage sprite/register state; without this the
-     * 6502 reads garbage and jumps off into the weeds. Hold CPU + assert system
-     * reset, settle, then load_rom() drops to CPU-reset-only. (Original task #1.) */
-    wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);
-    usleep(150000);
-    if (load_rom("/data/nova/roms/ehbasic.bin") != 0) return 1;
-
-    /* Stage the resident lib_call loader at $0320 (the "loader band"). EHBASIC's
-     * warm-start does JSR $0320; this 248-byte stub must be resident there or the
-     * 6502 executes $00 (BRK) -> BRK runaway into the $020D handler -> garbage.
-     * THE bug: my port loaded the ROM but never staged this (ps_fio main.c:1230). */
-    for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
-    printf("[novavm] staged resident loader @ $0320 (%zu bytes)\n", sizeof(LOADER_BIN));
-
-    boot_splash();   /* render the boot.json logo + fade while the 6502 is held */
-
-    poke(AUTOBOOT_SKIP_ADDR, 0);
-    cpu_hold(0);
-    /* VGC display init (the bare-metal boot_splash restore the host must do):
-     * text mode, full brightness, cursor on. Without DIM=0x0F the HDMI output
-     * stays blanked. Poke after the 6502 cold-start sets up the VGC. */
-    usleep(600000);
-    poke(0xA000, 0x00);   /* VGCR_MODE   = text          */
-    poke(0xA0E5, 0x0F);   /* VGCR_DIM    = full bright    */
-    poke(0xA00A, 0x01);   /* VGCR_CURSEN = cursor on      */
+    /* Cold-boot the 6502 (reset chips, ROM + $0320 loader, splash, release, VGC
+     * up). Factored so the OSD's mount-and-boot reuses the identical sequence. */
+    if (vm_cold_boot() != 0) return 1;
     audio_init(); audio_start();   /* naudio.c: real SID/WTS+MIDI feeder (replaces the silence loop) */
     kbd_init();                    /* nkbd.c: physical USB keyboard -> R_KEY */
     servers_init();                /* nservers.c: mgmt/debug/upload servers for the nova CLI */
     nfio_init();                   /* nfio.c: XRAM/file/.ndi-drive command state */
+    osd_init();                    /* nosd.c: OSD config menu (no-op until OSD-compositor bitstream) */
     printf("[novavm] 6502 released; VGC on; audio+keyboard+servers live; servicing FIO (programs -> %s)\n", PROG_DIR);
 
     for (;;) {

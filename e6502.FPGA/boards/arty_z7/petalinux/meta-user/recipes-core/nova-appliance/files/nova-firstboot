@@ -4,21 +4,63 @@
 # Required-Start:    $local_fs
 # Default-Start:     S
 # Default-Stop:
-# Short-Description: grow rootfs to fill SD + init nova-fs
+# Short-Description: grow /data to fill the SD + seed nova-fs from the ro template
 ### END INIT INFO
-FLAG=/etc/nova-firstboot-done
-[ -e "$FLAG" ] && exit 0
-echo "[nova-firstboot] growing rootfs (mmcblk0p2) to fill the SD card..."
-# Online-extend partition 2 to fill the card, refresh the kernel view, grow ext4.
-if echo ", +" | sfdisk --no-reread --force -N 2 /dev/mmcblk0 2>/dev/null; then
-    partx -u /dev/mmcblk0 2>/dev/null
+#
+# Read-only-rootfs appliance: the OS partition is mounted ro, so everything
+# writable (and our done-flag) lives on the /data ext4 partition (nova-sd.wks p3,
+# fstab-mounted). On first boot we grow p3 to fill the card and seed /data/nova
+# from the read-only template baked into the rootfs at /usr/share/nova-fs.
+
+FLAG=/data/.nova-firstboot-done
+TPL=/usr/share/nova-fs
+
+# Wait for /data (fstab) to be mounted before we touch it.
+n=0; while ! mountpoint -q /data 2>/dev/null && [ $n -lt 40 ]; do n=$((n + 1)); sleep 0.25; done
+
+# /var/lib must be writable for samba + udev, but it lives on the read-only rootfs
+# and this kernel has no overlayfs -- bind it to tmpfs (seeded from the baked
+# content) every boot, before samba starts. The stock read-only-rootfs hook does
+# not do this reliably here (its overlay needs overlayfs; its cp-bind gate misfires).
+if ! mountpoint -q /var/lib 2>/dev/null && ! touch /var/lib/.rwtest 2>/dev/null; then
+    mkdir -p /var/volatile/varlib
+    cp -a /var/lib/. /var/volatile/varlib/ 2>/dev/null
+    mount --bind /var/volatile/varlib /var/lib && echo "[nova-firstboot] /var/lib -> tmpfs (rw)"
 else
-    parted -s /dev/mmcblk0 resizepart 2 100% 2>/dev/null
+    rm -f /var/lib/.rwtest 2>/dev/null
 fi
-resize2fs /dev/mmcblk0p2 2>/dev/null && echo "[nova-firstboot] rootfs resized."
-# nova filesystem layout for the samba share
-mkdir -p /data/nova/hdds /data/nova/fds /data/nova/soundfonts \
-         /data/nova/roms /data/nova/programs /data/nova/assets /data/nova/config
+
+# sshd needs a writable /etc/ssh for its host keys, but / is read-only -- key
+# generation was failing ("Read-only file system") so sshd refused every
+# connection. Persist the keys on /data (survives reboots, no host-key-changed
+# churn) and bind them over the ro /etc/ssh, before sshd (rc5) starts. Seed the
+# baked config + generate the keys once.
+if [ ! -f /data/ssh/ssh_host_ed25519_key ]; then
+    mkdir -p /data/ssh
+    cp -a /etc/ssh/. /data/ssh/ 2>/dev/null
+    ssh-keygen -q -t rsa     -N "" -f /data/ssh/ssh_host_rsa_key     2>/dev/null
+    ssh-keygen -q -t ecdsa   -N "" -f /data/ssh/ssh_host_ecdsa_key   2>/dev/null
+    ssh-keygen -q -t ed25519 -N "" -f /data/ssh/ssh_host_ed25519_key 2>/dev/null
+    echo "[nova-firstboot] generated persistent ssh host keys on /data"
+fi
+mountpoint -q /etc/ssh 2>/dev/null || mount --bind /data/ssh /etc/ssh
+
+if [ ! -e "$FLAG" ]; then
+    echo "[nova-firstboot] growing /data (mmcblk0p3) to fill the SD card..."
+    if echo ", +" | sfdisk --no-reread --force -N 3 /dev/mmcblk0 2>/dev/null; then
+        partx -u /dev/mmcblk0 2>/dev/null
+    else
+        parted -s /dev/mmcblk0 resizepart 3 100% 2>/dev/null
+    fi
+    resize2fs /dev/mmcblk0p3 2>/dev/null && echo "[nova-firstboot] /data resized."
+fi
+
+# Seed nova-fs from the read-only template if it's missing (first boot / wiped).
+if [ ! -f /data/nova/roms/ehbasic.bin ] && [ -d "$TPL" ]; then
+    mkdir -p /data/nova
+    cp -a "$TPL"/. /data/nova/ 2>/dev/null
+    echo "[nova-firstboot] /data/nova seeded from $TPL."
+fi
 sync
 touch "$FLAG"
 echo "[nova-firstboot] done."

@@ -84,12 +84,23 @@ module fio_bridge (
     input  wire [15:0] audio_evt_data,  // {index[7:0], data[7:0]} at FIFO head
     input  wire        audio_evt_empty,
     output reg  [7:0]  sid_vol,         // R_SID_VOL[7:0] (0x3C): reDIP-SID mix level
-    output reg         sid_stereo       // R_SID_VOL[8]: 1 = SID1->L / SID2->R, 0 = mono
+    output reg         sid_stereo,      // R_SID_VOL[8]: 1 = SID1->L / SID2->R, 0 = mono
+    // ---- system reset: clean reset of all custom chips + CPU (top ORs this into
+    //      custom_rst/cpu_reset). CTRL (0x10) bit1. Held level, like dbg_cpu_reset. ----
+    output reg         dbg_system_reset,
+    // ---- OSD config overlay (see osd_overlay.sv + OSD_CONFIG_SPEC.md) ----
+    input  wire [3:0]  btn_level,       // debounced front-panel buttons (active high)
+    output reg         osd_enable,      // OSD_CTRL (0x44) bit0: overlay visible
+    output reg         system_pause,    // OSD_CTRL (0x44) bit1: freeze CPU + chips
+    output reg         osd_fb_we,       // OSD_FB (0x48): 1-cycle cell-write pulse
+    output reg  [31:0] osd_fb_wdata     // {transp,bg,fg,char,addr} for the OSD framebuffer
 );
     assign dbg_peek_en = 1'b1;   // continuously peek the latched address
     assign dbg_vmem_re = 1'b1;   // continuously read the latched vmem addr/space
 
     reg fio_event_sticky;
+    reg [3:0] btn_level_d;          // previous debounced button level (edge detect)
+    reg [3:0] press_edge_sticky;    // 1-shot per button, cleared on BUTTONS read
 
     always_ff @(posedge aclk) begin
         if (!aresetn) begin
@@ -106,6 +117,10 @@ module fio_bridge (
             audio_evt_rd <= 1'b0;
             sid_vol <= 8'd128;               // default reDIP-SID level (x2 with PCM_GAIN=1)
             sid_stereo <= 1'b0;              // default mono (both SIDs -> L+R)
+            dbg_system_reset <= 1'b0;
+            osd_enable <= 1'b0; system_pause <= 1'b0;
+            osd_fb_we <= 1'b0; osd_fb_wdata <= 32'd0;
+            btn_level_d <= 4'd0; press_edge_sticky <= 4'd0;
         end else begin
             dbg_poke_en <= 1'b0;             // 1-cycle pulses
             key_valid   <= 1'b0;
@@ -113,13 +128,17 @@ module fio_bridge (
             audio_we    <= 1'b0;
             dbg_vmem_we <= 1'b0;
             audio_evt_rd <= 1'b0;
+            osd_fb_we   <= 1'b0;
             if (fio_event) fio_event_sticky <= 1'b1;
+            // front-panel buttons: debounced level in, latch rising edges sticky
+            btn_level_d <= btn_level;
+            press_edge_sticky <= press_edge_sticky | (btn_level & ~btn_level_d);
 
             // ---- write channel (single outstanding) ----
             if (s_awvalid && s_wvalid && !s_awready && !s_bvalid) begin
                 s_awready <= 1'b1;
                 s_wready  <= 1'b1;
-                case (s_awaddr[5:2])
+                case (s_awaddr[6:2])
                     4'h0: begin                       // POKE
                         dbg_poke_en   <= 1'b1;
                         dbg_poke_addr <= s_wdata[23:8];
@@ -127,7 +146,8 @@ module fio_bridge (
                     end
                     4'h1: dbg_peek_addr <= s_wdata[15:0];          // PEEK_ADDR
                     4'h3: begin key_valid <= 1'b1; key_data <= s_wdata[7:0]; end // KEY
-                    4'h4: dbg_cpu_reset <= s_wdata[0];             // CTRL
+                    4'h4: begin dbg_cpu_reset <= s_wdata[0];       // CTRL (0x10)
+                                dbg_system_reset <= s_wdata[1]; end // bit1 = clean system reset
                     4'h5: if (s_wdata[0]) fio_event_sticky <= 1'b0; // STATUS clear
                     4'h9: begin                                    // ROMW (0x24)
                         dbg_rom_we   <= 1'b1;
@@ -147,6 +167,8 @@ module fio_bridge (
                     end
                     4'hC: begin audio_we <= 1'b1; audio_data <= s_wdata[7:0]; end // AUDIO (0x30)
                     4'hF: begin sid_vol <= s_wdata[7:0]; sid_stereo <= s_wdata[8]; end // SID_VOL/STEREO (0x3C)
+                    5'h11: begin osd_enable <= s_wdata[0]; system_pause <= s_wdata[1]; end // OSD_CTRL (0x44)
+                    5'h12: begin osd_fb_we <= 1'b1; osd_fb_wdata <= s_wdata; end           // OSD_FB (0x48)
                     default: ;
                 endcase
                 s_bvalid <= 1'b1;
@@ -160,9 +182,9 @@ module fio_bridge (
             // ---- read channel ----
             if (s_arvalid && !s_arready && !s_rvalid) begin
                 s_arready <= 1'b1;
-                case (s_araddr[5:2])
+                case (s_araddr[6:2])
                     4'h2: s_rdata <= {24'd0, dbg_peek_data};            // PEEK_DATA
-                    4'h4: s_rdata <= {31'd0, dbg_cpu_reset};            // CTRL
+                    4'h4: s_rdata <= {30'd0, dbg_system_reset, dbg_cpu_reset}; // CTRL (0x10)
                     4'h5: s_rdata <= {30'd0, key_ready, fio_event_sticky}; // STATUS
                     4'h6: s_rdata <= {16'd0, dbg_cpu_pc};               // CPU_PC
                     4'h7: s_rdata <= {16'd0, dbg_bus};                  // DBG (0x1C)
@@ -172,6 +194,8 @@ module fio_bridge (
                     // AUDIO_EVT (0x38): {valid, index[7:0], data[7:0]}; pop on read.
                     4'hE: begin s_rdata <= {15'd0, ~audio_evt_empty, audio_evt_data};
                                 audio_evt_rd <= ~audio_evt_empty; end
+                    5'h10: begin s_rdata <= {24'd0, press_edge_sticky, btn_level}; // BUTTONS (0x40)
+                                 press_edge_sticky <= (btn_level & ~btn_level_d); end // clear, keep coincident edge
                     default: s_rdata <= 32'hDEAD_0000;
                 endcase
                 s_rvalid <= 1'b1;

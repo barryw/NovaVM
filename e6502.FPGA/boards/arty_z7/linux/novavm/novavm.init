@@ -9,12 +9,29 @@
 ### END INIT INFO
 
 DAEMON=/usr/bin/novavm
-LOG=/var/log/novavm.log
+LOG=/run/novavm.log      # tmpfs: writable even while the rootfs is still read-only (early boot)
 
 case "$1" in
   start)
     echo "Starting NovaVM host..."
-    setsid "$DAEMON" </dev/null >"$LOG" 2>&1 &
+    # CRITICAL: /dev/mem does NOT exist this early — udev only creates it during
+    # its slow coldplug (which runs after us). Create the static node ourselves
+    # (major 1, minor 1) so the hold-screen + 6502 boot happen NOW, not after the
+    # ~50s coldplug. Harmless if it already exists.
+    [ -c /dev/mem ] || mknod /dev/mem c 1 1 2>/dev/null
+    echo "[$(cut -d. -f1 /proc/uptime)s] init mem=$([ -c /dev/mem ] && echo Y || echo N) rom=$([ -s /data/nova/roms/ehbasic.bin ] && echo Y || echo N)" >> /run/novavm-timing 2>/dev/null
+    # Paint the "please hold" screen immediately (needs only /dev/mem + the PL).
+    "$DAEMON" bootmsg 2>/dev/null
+    echo "[$(cut -d. -f1 /proc/uptime)s] bootmsg done" >> /run/novavm-timing 2>/dev/null
+    # Background a waiter so we never block the rc sequence: hold until /dev/mem +
+    # the BASIC ROM exist, then launch. The USB keyboard enumerates later (udev
+    # coldplug); nkbd re-scans /dev/input forever, so the early start is fine.
+    ( n=0
+      while [ ! -c /dev/mem ] || [ ! -s /data/nova/roms/ehbasic.bin ]; do
+        n=$((n + 1)); [ "$n" -ge 240 ] && break; sleep 0.25
+      done
+      echo "[$(cut -d. -f1 /proc/uptime)s] launching novavm" >> /run/novavm-timing 2>/dev/null
+      setsid "$DAEMON" </dev/null >"$LOG" 2>&1 ) &
     ;;
   stop)
     echo "Stopping NovaVM host..."

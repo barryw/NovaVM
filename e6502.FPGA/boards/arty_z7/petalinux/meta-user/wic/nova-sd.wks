@@ -1,0 +1,12 @@
+# nova-sd.wks — read-only-rootfs appliance SD layout for NovaVM on Arty Z7.
+#
+#   p1  /boot   vfat   BOOT.BIN + image.ub + boot.scr   -> mounted ro
+#   p2  /       ext4   the OS (read-only-rootfs)         -> mounted ro, never dirty
+#   p3  /data   ext4   nova-fs: disks/programs/config/ROM -> rw, journaled
+#
+# Because the OS partition is read-only it can never need fsck/journal recovery —
+# power off whenever. Only /data is writable; nova-firstboot grows p3 to fill the
+# card and seeds it from the read-only /usr/share/nova-fs template on first boot.
+part /boot --source bootimg-partition --use-label --fstype=vfat --label boot --active --align 4 --fixed-size 512M
+part /     --source rootfs            --use-label --fstype=ext4 --label root --align 4 --fixed-size 2G
+part /data                            --fstype=ext4 --label data --align 4 --size 256M --fsoptions "defaults"

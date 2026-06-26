@@ -11,7 +11,7 @@ set -e
 cd "$(dirname "$0")"
 CC="${CC:-arm-linux-gnueabihf-gcc}"
 $CC -O2 -static -pthread -I. -o novavm \
-    novavm.c naudio.c nservers.c nkbd.c nfio.c nsplash.c nbootcfg.c cJSON.c -lm
+    novavm.c naudio.c nservers.c nkbd.c nfio.c nsplash.c nbootcfg.c nosd.c cJSON.c -lm
 $CC --version >/dev/null
 arm-linux-gnueabihf-size novavm | tail -1
 echo "built: $(pwd)/novavm"

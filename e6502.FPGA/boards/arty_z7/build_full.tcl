@@ -17,6 +17,7 @@ reset_run synth_1
 # builds added, or it duplicates sid_chip/sid_curve_reader and Vivado keeps the
 # stub (-> no SID audio).
 remove_files -quiet [get_files -quiet *sid_stubs.sv]
+remove_files -quiet [get_files -quiet *osd_overlay.sv]   ;# drop OSD compositor cruft from persistent project
 
 # --- reDIP-SID: the real cycle-accurate core in place of sid_stubs.sv. Vivado
 # rejects the cores' SystemVerilog, so synth from sed'd COPIES (default_nettype

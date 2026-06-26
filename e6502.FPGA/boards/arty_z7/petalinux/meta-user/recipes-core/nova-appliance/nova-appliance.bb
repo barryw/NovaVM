@@ -14,8 +14,10 @@ NOVAVM_REPO ?= "/home/barry/NovaVM"
 RDEPENDS:${PN} = "samba avahi-daemon parted e2fsprogs-resize2fs util-linux-sfdisk util-linux-partx novavm"
 
 inherit update-rc.d
+# Early in rcS (after S03mountall mounts /data, before S04novavm) so /data is
+# grown + seeded before novavm reads the ROM from it.
 INITSCRIPT_NAME = "nova-firstboot"
-INITSCRIPT_PARAMS = "start 99 S ."
+INITSCRIPT_PARAMS = "start 03 S ."
 
 do_install() {
     install -d -m 0700 ${D}/home/root/.ssh
@@ -25,15 +27,21 @@ do_install() {
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/nova-firstboot ${D}${sysconfdir}/init.d/nova-firstboot
 
-    # --- nova-fs essentials (lean set): BASIC ROM + boot config + splash logo +
-    # the two language floppies. Games/extras are added at runtime over Samba. ---
-    install -d ${D}/data/nova/roms ${D}/data/nova/config ${D}/data/nova/assets/boot ${D}/data/nova/hdds
-    install -d ${D}/data/nova/fds ${D}/data/nova/programs ${D}/data/nova/soundfonts
-    install -m 0644 ${NOVAVM_REPO}/e6502.FPGA/boards/arty_z7/rom/ehbasic.bin       ${D}/data/nova/roms/ehbasic.bin
-    install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/config/boot.json    ${D}/data/nova/config/boot.json
-    install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/boot/novavm_logo.nvg ${D}/data/nova/assets/boot/novavm_logo.nvg
-    install -m 0644 ${NOVAVM_REPO}/novaforth/novaforth.ndi                         ${D}/data/nova/hdds/novaforth.ndi
-    install -m 0644 ${NOVAVM_REPO}/novalogo/novalogo.ndi                           ${D}/data/nova/hdds/novalogo.ndi
+    # --- nova-fs essentials, staged as a READ-ONLY TEMPLATE on the rootfs
+    # (${datadir}/nova-fs). nova-firstboot copies it onto the writable /data
+    # partition on first boot (the rootfs is read-only, so it can't be /data). ---
+    NFS=${D}${datadir}/nova-fs
+    install -d ${NFS}/roms ${NFS}/config ${NFS}/assets/boot ${NFS}/disks ${NFS}/programs ${NFS}/soundfonts
+    install -m 0644 ${NOVAVM_REPO}/e6502.FPGA/boards/arty_z7/rom/ehbasic.bin        ${NFS}/roms/ehbasic.bin
+    install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/config/boot.json     ${NFS}/config/boot.json
+    install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/boot/novavm_logo.nvg ${NFS}/assets/boot/novavm_logo.nvg
+    install -m 0644 ${NOVAVM_REPO}/novaforth/novaforth.ndi                          ${NFS}/disks/novaforth.ndi
+    install -m 0644 ${NOVAVM_REPO}/novalogo/novalogo.ndi                            ${NFS}/disks/novalogo.ndi
+
+    # /data is just a mountpoint for the separate writable ext4 partition
+    # (nova-sd.wks). Its fstab entry is added by the base-files bbappend, so it
+    # doesn't collide with base-files owning /etc/fstab.
+    install -d ${D}/data
 }
 
-FILES:${PN} += "/home/root/.ssh/authorized_keys /data"
+FILES:${PN} += "/home/root/.ssh/authorized_keys /data ${datadir}/nova-fs"

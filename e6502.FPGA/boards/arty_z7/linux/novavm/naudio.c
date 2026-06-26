@@ -80,8 +80,10 @@ static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 /* ---- PL register helpers (were non-static wrappers in ps_fio main.c) ----------
  * Bare-metal used absolute addresses (FIO_BASE + 0x30 etc.); here the wr/rd from
  * novavm.h take the offset, so we pass R_AUDIO/R_AUDIO_SPACE/... directly. */
+volatile int g_naudio_mute = 0;   /* OSD pause: feed silence to the HDMI audio FIFO */
+void naudio_set_mute(int on) { g_naudio_mute = on ? 1 : 0; }
 static inline void     audio_fifo_write_bytes(const unsigned char *buf, int n) {
-    for (int i = 0; i < n; i++) wr(R_AUDIO, buf[i]);
+    for (int i = 0; i < n; i++) wr(R_AUDIO, g_naudio_mute ? 0 : buf[i]);
 }
 static inline int      audio_fifo_space(void) { return (int)(rd(R_AUDIO_SPACE) & 0xFFFFu); }
 static inline unsigned audio_evt_read(void)   { return rd(R_AUDIO_EVT); }
