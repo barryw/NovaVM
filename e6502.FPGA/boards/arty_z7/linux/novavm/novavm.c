@@ -147,9 +147,21 @@ static int has_ext(const char *p, const char *ext) {
     return d && !strcasecmp(d, ext);
 }
 
+/* Set by the OSD "reboot to BASIC" action; fio_load consumes it once to refuse
+ * the autoboot probe so the next cold start lands at the BASIC prompt. */
+static volatile int g_boot_to_basic = 0;
+
 static void fio_load(void) {
     char name[80], path[160];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+
+    /* OSD "reboot to BASIC": refuse the autoboot probe once, regardless of what
+     * is still mounted -> BASIC sees not-found and drops to the prompt. */
+    if (g_boot_to_basic && strlen(name) == 8 && !strcasecmp(name, "AUTOBOOT")) {
+        g_boot_to_basic = 0;
+        fio_fail(FIO_ERR_NOTFOUND);
+        return;
+    }
 
     /* A mounted .ndi boot image takes priority (games/runtimes): resolve the name
      * inside it first; nfio_image_load loads + sets FIO_SRC/SIZE/DIRTYPE on a hit.
@@ -360,6 +372,11 @@ static int vm_cold_boot(void) {
 /* OSD mount-and-boot: re-run the cold boot so the 6502 re-reads boot.json mounts
  * on autoboot (overrides nosd.c's weak stub; called from the OSD button thread). */
 void host_reboot_vm(void) { vm_cold_boot(); }
+
+/* OSD "reboot to BASIC" (offered after an unmount): cold-boot but make fio_load
+ * refuse the one-shot autoboot probe, so the box lands at the BASIC prompt even
+ * if other slots are still mounted. */
+void host_reboot_to_basic(void) { g_boot_to_basic = 1; vm_cold_boot(); }
 
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);   /* line-buffer: make the boot log visible live */

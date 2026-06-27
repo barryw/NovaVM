@@ -47,9 +47,9 @@ static int slot_is_floppy(int s) { return s < 2; }      /* fd0,fd1 floppy; hd0,h
 #define FLOPPY_MAX 1474560u                             /* 1.44 MB, inclusive */
 
 /* ---- menu model ---- */
-typedef enum { SC_NONE, SC_CONFIG, SC_SLOTS, SC_SLOTMENU, SC_DISKLIST } osd_screen;
+typedef enum { SC_NONE, SC_CONFIG, SC_SLOTS, SC_SLOTMENU, SC_DISKLIST, SC_AFTER_UNMOUNT } osd_screen;
 
-enum { IT_GOTO_SLOTS, IT_GOTO_SLOTMENU, IT_GOTO_DISKLIST, IT_UNMOUNT, IT_MOUNT, IT_CANCEL, IT_CLOSE };
+enum { IT_GOTO_SLOTS, IT_GOTO_SLOTMENU, IT_GOTO_DISKLIST, IT_UNMOUNT, IT_MOUNT, IT_CANCEL, IT_CLOSE, IT_REBOOT_BASIC };
 
 typedef struct { char label[48]; int kind; int arg; } osd_item;
 
@@ -75,7 +75,8 @@ static int        g_testmode = 0;   /* 1 = dry-run mount-boot (no board reset)  
 /* Hooks fulfilled in step 3 (audio mute + clean VM reboot). Declared weak so the
  * step-1 build links without naudio/novavm providing them yet. */
 __attribute__((weak)) void naudio_set_mute(int on)  { (void)on; }
-__attribute__((weak)) void host_reboot_vm(void)     { }
+__attribute__((weak)) void host_reboot_vm(void)       { }
+__attribute__((weak)) void host_reboot_to_basic(void) { }
 
 /* ---------- framebuffer backend ---------- */
 
@@ -133,6 +134,7 @@ static const char *screen_title(void)
         case SC_SLOTS:    return "Mounts";
         case SC_SLOTMENU: return SLOT[g_sc_arg];
         case SC_DISKLIST: return slot_is_floppy(g_sc_arg) ? "Select Floppy" : "Select Disk";
+        case SC_AFTER_UNMOUNT: return "Disk Unmounted";
         default:          return "";
     }
 }
@@ -291,6 +293,16 @@ static void build_disklist(int s)
     add_item("Cancel", IT_CANCEL, 0);
 }
 
+/* Shown right after an unmount: offer to drop back to BASIC now (a running disk
+ * keeps running until a reboot), or stay in the OSD. */
+static void build_after_unmount(int s)
+{
+    (void)s;
+    g_nitem = 0;
+    add_item("Reboot to BASIC", IT_REBOOT_BASIC, 0);
+    add_item("Back",            IT_CANCEL,       0);
+}
+
 static void rebuild(void)
 {
     switch (g_sc) {
@@ -298,6 +310,7 @@ static void rebuild(void)
         case SC_SLOTS:    build_slots();           break;
         case SC_SLOTMENU: build_slotmenu(g_sc_arg); break;
         case SC_DISKLIST: build_disklist(g_sc_arg); break;
+        case SC_AFTER_UNMOUNT: build_after_unmount(g_sc_arg); break;
         default:          g_nitem = 0;             break;
     }
     if (g_cursor >= g_nitem) g_cursor = g_nitem ? g_nitem - 1 : 0;
@@ -369,8 +382,9 @@ static void select_item(void)
         case IT_GOTO_SLOTS:    push_to(SC_SLOTS, 0);           break;
         case IT_GOTO_SLOTMENU: push_to(SC_SLOTMENU, it->arg);  break;
         case IT_GOTO_DISKLIST: push_to(SC_DISKLIST, it->arg);  break;
-        case IT_UNMOUNT:       do_unmount(it->arg); pop_screen(); break;  /* back to slots, refreshed */
+        case IT_UNMOUNT:       do_unmount(it->arg); push_to(SC_AFTER_UNMOUNT, it->arg); break;
         case IT_MOUNT:         do_mount_boot(it->arg);         break;
+        case IT_REBOOT_BASIC:  close_osd(); if (!g_testmode) host_reboot_to_basic(); break;
         case IT_CANCEL:        pop_screen();                   break;
         case IT_CLOSE:         close_osd();                    break;
     }

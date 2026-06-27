@@ -45,6 +45,10 @@ load_runtime:
         RTS
 
 boot_runtime:
+        LDA #$0C                        ; form-feed: clear the text screen + home the
+        STA VGC_CHAROUT                 ; cursor so the runtime starts on a clean
+                                        ; screen (no BASIC banner / "booting..." bleed).
+                                        ; Baked in here -> every language floppy inherits it.
         LDX #$FF
         TXS
         LDA #ROMSWAP_PRIMARY
