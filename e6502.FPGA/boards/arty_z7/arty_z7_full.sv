@@ -67,7 +67,7 @@ module arty_z7_full (
         .CLKOUT0(clk_x5_raw), .CLKOUT0B(), .CLKOUT1(clk_pix_raw), .CLKOUT1B(),
         .CLKOUT2(), .CLKOUT2B(), .CLKOUT3(), .CLKOUT3B(),
         .CLKOUT4(), .CLKOUT5(), .CLKOUT6(),
-        .LOCKED(mmcm_locked), .PWRDWN(1'b0), .RST(btn[0])
+        .LOCKED(mmcm_locked), .PWRDWN(1'b0), .RST(1'b0)   // btn[0] freed for OSD; MMCM locks from power-on
     );
     BUFG bufg_fb (.I(clk_fb), .O(clk_fb_buf));
     BUFG bufg_x5 (.I(clk_x5_raw), .O(clk_pixel_x5));
@@ -81,6 +81,23 @@ module arty_z7_full (
         else if (rst_cnt != 12'hFFF) begin rst_cnt <= rst_cnt + 1; reset <= 1'b1; end
         else reset <= 1'b0;
     end
+
+    // ---- front-panel buttons (OSD) -----------------------------------------
+    // btn[3:0] active-high (board pull-downs). Debounce to a clean level; the
+    // fio_bridge edge-detects presses. btn[0] is freed from the MMCM reset above.
+    (* ASYNC_REG="TRUE" *) logic [3:0] btn_s1, btn_s2;
+    logic [3:0]  btn_db_prev, btn_level;
+    logic [16:0] btn_db_div;                  // ~4.85 ms debounce window at 27 MHz
+    always_ff @(posedge clk_pixel) begin
+        btn_s1 <= btn; btn_s2 <= btn_s1;
+        btn_db_div <= btn_db_div + 1'b1;
+        if (btn_db_div == 17'd0) begin
+            if (btn_s2 == btn_db_prev) btn_level <= btn_s2;   // stable across a full window
+            btn_db_prev <= btn_s2;
+        end
+    end
+    wire        fb_osd_enable, fb_system_pause, fb_osd_fb_we;
+    wire [31:0] fb_osd_fb_wdata;
 
     // ---- nova_core <-> axi_xram SDRAM-contract wires -----------------------
     wire [24:0] xa_addrA, xa_addrB, xa_saddr;
@@ -145,7 +162,7 @@ module arty_z7_full (
         .audio_l(), .audio_r(),
         .dbg_peek_en(fb_peek_en), .dbg_peek_addr(fb_peek_addr), .dbg_peek_data(fb_peek_data),
         .dbg_poke_en(fb_poke_en), .dbg_poke_addr(fb_poke_addr), .dbg_poke_data(fb_poke_data),
-        .dbg_pause(1'b0),
+        .dbg_pause(1'b0), .system_pause(fb_system_pause),
         .dbg_nic_buf_we(1'b0), .dbg_nic_buf_re(1'b0), .dbg_nic_buf_sel(1'b0),
         .dbg_nic_buf_addr(8'd0), .dbg_nic_buf_data(8'd0), .dbg_nic_buf_rdata(),
         .dbg_vmem_we(fb_vmem_we), .dbg_vmem_re(fb_vmem_re), .dbg_vmem_space(fb_vmem_space),
@@ -265,9 +282,18 @@ module arty_z7_full (
         .M_AXI_FIO_rvalid(f_rvalid), .M_AXI_FIO_rready(f_rready)
     );
 
-    // ---- VGC RGB -> HDMI ---------------------------------------------------
-    wire [23:0] rgb24 = {vid_r, vid_r, vid_g, vid_g, vid_b, vid_b};
-    wire [23:0] hdmi_rgb = vid_de ? rgb24 : 24'h000000;
+    // ---- VGC RGB -> OSD compositor -> HDMI ---------------------------------
+    // The OSD overlay dims the VGC pixels and paints the config menu on top when
+    // enabled; otherwise a (~4px-delayed) passthrough. Pixel coords recovered
+    // from vid_de; framebuffer written by the PS via fio_bridge OSD_FB.
+    wire [23:0] osd_rgb_out;
+    osd_overlay #(.FONT_HEX("rom/fonts.hex")) osd_inst (
+        .clk(clk_pixel), .rst(reset),
+        .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b), .vid_de(vid_de),
+        .osd_enable(fb_osd_enable),
+        .fb_we(fb_osd_fb_we), .fb_wdata(fb_osd_fb_wdata),
+        .rgb_out(osd_rgb_out)
+    );
     localparam int HDMI_START_X = 858 - 3;
     localparam int HDMI_START_Y = 525 - 1;
     wire [2:0] tmds; wire tmds_clock;
@@ -352,7 +378,7 @@ module arty_z7_full (
     // fio_bridge is present). Instantiated with NO params so it links the dcp.
     hdmi hdmi_inst (
         .clk_pixel_x5(clk_pixel_x5), .clk_pixel(clk_pixel), .clk_audio(clk_audio),
-        .reset(reset), .rgb(hdmi_rgb), .audio_sample_word(hdmi_audio_mixed),
+        .reset(reset), .rgb(osd_rgb_out), .audio_sample_word(hdmi_audio_mixed),
         .tmds(tmds), .tmds_clock(tmds_clock),
         .cx(cx), .cy(cy), .frame_width(fw), .frame_height(fh),
         .screen_width(sw), .screen_height(sh)
@@ -390,7 +416,10 @@ module arty_z7_full (
         .dbg_aux({xa_swords, xa_sleft}),
         .audio_we(fb_audio_we), .audio_data(fb_audio_data), .audio_space(fb_audio_space),
         .audio_evt_rd(aevt_rd), .audio_evt_data(aevt_data), .audio_evt_empty(aevt_empty),
-        .sid_vol(fb_sid_vol), .sid_stereo(fb_sid_stereo)
+        .sid_vol(fb_sid_vol), .sid_stereo(fb_sid_stereo),
+        .btn_level(btn_level),
+        .osd_enable(fb_osd_enable), .system_pause(fb_system_pause),
+        .osd_fb_we(fb_osd_fb_we), .osd_fb_wdata(fb_osd_fb_wdata)
     );
 
     // (debug ILA removed — no longer needed; shrinks the design)

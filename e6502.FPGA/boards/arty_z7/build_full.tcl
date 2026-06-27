@@ -41,7 +41,7 @@ add_files -norecurse [list \
     $sdst/nova_redip_sid_api.sv $sdst/sid_chip.sv $sdst/sid_curve_reader.sv]
 
 add_files -norecurse [list \
-    "arty_z7_full.sv" "axi_xram.sv" "fio_bridge.sv" "hdmi_bb.sv" \
+    "arty_z7_full.sv" "axi_xram.sv" "fio_bridge.sv" "osd_overlay.sv" "hdmi_bb.sv" \
     "$rtl/dpram.sv" "$rtl/dpram_dc.sv" \
     "$rtl/vgc.sv" "$rtl/vgc_timing.sv" "$rtl/vgc_text.sv" "$rtl/vgc_gfx.sv" \
     "$rtl/artist.sv" "$rtl/vgc_sprites.sv" "$rtl/vgc_copper.sv" \

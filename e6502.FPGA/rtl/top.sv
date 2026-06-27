@@ -56,6 +56,7 @@ module top (
     input  logic [15:0] dbg_poke_addr,
     input  logic [7:0]  dbg_poke_data,
     input  logic        dbg_pause,        // halt CPU when high
+    input  logic        system_pause,     // OSD: freeze CPU + SID (+WTS via cpu_ce); video scan-out keeps running
     input  logic        dbg_nic_buf_we,
     input  logic        dbg_nic_buf_re,
     input  logic        dbg_nic_buf_sel,
@@ -435,6 +436,7 @@ module top (
     always_ff @(posedge clk) begin
         if (cpu_reset)      cpu_ce <= 0;
         else if (xram_stall) cpu_ce <= 0;
+        else if (system_pause) cpu_ce <= 0;   // OSD pause: freeze 6502 (+ WTS via wts_cpu_ce)
         else                cpu_ce <= ~cpu_ce;
     end
 
@@ -1770,6 +1772,8 @@ module top (
         if (custom_rst) begin
             sid_clk_acc <= 26'd0;
             sid_ce_1m   <= 0;
+        end else if (system_pause) begin
+            sid_ce_1m   <= 1'b0;             // OSD pause: freeze SID oscillators (accumulator held)
         end else if (sid_clk_next >= {1'b0, SID_PIXEL_HZ}) begin
             sid_clk_acc <= sid_clk_next - {1'b0, SID_PIXEL_HZ};
             sid_ce_1m   <= 1'b1;
