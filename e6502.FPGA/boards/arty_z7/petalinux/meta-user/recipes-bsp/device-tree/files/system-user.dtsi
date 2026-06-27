@@ -41,18 +41,19 @@
 	};
 };
 
-/* USB host DISABLED for base bring-up. With dr_mode=host the chipidea
- * controller drives 5V VBUS (drv-vbus on usb_phy0) the instant it starts, and
- * that browns the board straight into a power-on reset -- confirmed live:
- * REBOOT_STATUS=0x00400000 (POR) and the serial reset fires EXACTLY at
- * "ci_hdrc ci_hdrc.0: USB 2.0 started". Disabling the node lets the board boot
- * clean to BASIC (verified by hand in u-boot: `fdt set .../usb@e0002000 status
- * disabled` -> full boot). Re-enabling the USB keyboard is a separate increment
- * once the VBUS drive is sorted; the dr_mode/usb-phy host config is kept below,
- * commented, ready to restore. */
+/* USB host (Apple/HID keyboard). dr_mode=host + usb-phy=<&usb_phy0> (drv-vbus)
+ * is the standard Zynq7 ULPI-host config. The VBUS brownout that POR-reset the
+ * board ("ci_hdrc ci_hdrc.0: USB 2.0 started" -> REBOOT_STATUS=0x00400000) is
+ * NOT a config bug -- the Arty Z7 reference manual documents it: enabling the
+ * host controller turns on the VBUS switch (IC9) into 150uF + a 500mA VBUS line,
+ * which resets the board *when powered from the USB-JTAG-UART port*. Digilent's
+ * documented fix: power from the barrel jack (J18, 7-15VDC center-positive 2.1mm,
+ * 12V/3A from the accessory kit) with the JP5 power-select jumper on "REG". With
+ * external power the rail holds, VBUS comes up clean, and the keyboard enumerates. */
 &usb0 {
-	status = "disabled";
-	/* dr_mode = "host"; usb-phy = <&usb_phy0>;  -- restore with VBUS fix */
+	dr_mode = "host";
+	usb-phy = <&usb_phy0>;
+	status = "okay";
 };
 
 /* Pin the GEM MAC so it's stable for a static DHCP lease (matches the
