@@ -31,12 +31,16 @@ AUTOBOOT.bin: ndi-autoboot.o $(NDI_AUTOBOOT_CFG)
 	$(MAKE) -C $(NDI_NOVA_ASM) build/nova.lib
 	$(LD65) -C $(NDI_AUTOBOOT_CFG) -o $@ ndi-autoboot.o $(NDI_NOVA_LIB)
 
-$(NDI_OUTPUT): $(NDI_RUNTIME) AUTOBOOT.bin $(NDI_PACKER)
+# A language may set NDI_ASSETS (a list of --asset <path>:<name> flags, e.g. the
+# forth library tree it autoloads at boot) + NDI_ASSET_DEPS (their files, for the
+# rebuild trigger). Both default empty -> a plain runtime+autoboot image.
+$(NDI_OUTPUT): $(NDI_RUNTIME) AUTOBOOT.bin $(NDI_PACKER) $(NDI_ASSET_DEPS)
 	$(DOTNET) run --project $(NDI_PACKER) -- \
 	    --output "$(NDI_OUTPUT)" \
 	    --autoboot AUTOBOOT.bin \
 	    --runtime "$(NDI_RUNTIME)" --runtime-name "RUNTIME.BIN" \
-	    --label "$(NDI_LABEL)" --size-kb "$(NDI_SIZE_KB)"
+	    --label "$(NDI_LABEL)" --size-kb "$(NDI_SIZE_KB)" \
+	    $(NDI_ASSETS)
 
 # Build a completely clean image from scratch (no stale runtime/autoboot/.ndi).
 ndi:

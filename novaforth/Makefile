@@ -27,4 +27,11 @@ FORCE:
 NDI_RUNTIME := novaforth.bin
 NDI_OUTPUT  := novaforth.ndi
 NDI_LABEL   := NFORTH
+# Bake the forth library tree into the image: novaforth INCLUDEs forth/lib/core.4th
+# + forth/autoexec.4th (and their includes) at boot, so the libs must travel with
+# the disk. The packer turns each path into a real .ndi subdirectory (forth/lib/...).
+# demos.4th is a top-level show-off file: INCLUDE "demos.4th" then TUNNEL / etc.
+NDI_FORTH_FILES := forth/autoexec.4th demos.4th $(shell find forth/lib -name '*.4th' 2>/dev/null)
+NDI_ASSETS      := $(foreach f,$(NDI_FORTH_FILES),--asset $(f):$(f))
+NDI_ASSET_DEPS  := $(NDI_FORTH_FILES)
 include ../runtime/ndi/ndi.mk

@@ -68,6 +68,8 @@
 #define FIO_CMD_DIROPEN 0x03
 #define FIO_CMD_DIRREAD 0x04
 #define FIO_CMD_DELETE 0x05
+#define FIO_CMD_CD     0x20   /* set current drive/subdir  -> nfio_cd  */
+#define FIO_CMD_PWD    0x26   /* read current drive/subdir -> nfio_pwd */
 #define FIO_CMD_LOAD_MODULE 0x2C
 #define MODULE_BYTES 16384u
 #define FIO_CMD_VOLUME  0x0C   /* -> naudio fio_volume  */
@@ -166,6 +168,9 @@ static void fio_load(void) {
     /* A mounted .ndi boot image takes priority (games/runtimes): resolve the name
      * inside it first; nfio_image_load loads + sets FIO_SRC/SIZE/DIRTYPE on a hit.
      * -1 = nothing mounted or not in the image -> fall through to the SD load. */
+    /* User filesystem first: drive-prefix / CWD / subdir paths (exact name+type). */
+    if (nfio_disk_active() && nfio_disk_load(name) == 0) { fio_ok(); return; }
+
     if (nfio_image_load(name) == 0) { fio_ok(); return; }
 
     /* AUTOBOOT contract: bare "AUTOBOOT" -> AUTOBOOT.BIN then AUTOBOOT.BAS. */
@@ -198,26 +203,25 @@ static void fio_load(void) {
 }
 
 static void fio_save(void) {
+    if (nfio_disk_active()) { nfio_disk_save(); return; }   /* a disk is mounted */
     char name[80], path[160];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
     fio_path(name, path, sizeof path);
-    unsigned src = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8);
-    unsigned end = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
-    if (end <= src) { fio_fail(FIO_ERR_IO); return; }
-    unsigned len = end - src;
-    g_fbuf[0] = src & 0xFF; g_fbuf[1] = (src >> 8) & 0xFF;
-    for (unsigned i = 0; i < len; i++) g_fbuf[2 + i] = peek((src + i) & 0xFFFF);
+    int len = nfio_stage_save(g_fbuf, sizeof g_fbuf);   /* shared 2-byte-header staging */
+    if (len < 0) { fio_fail(FIO_ERR_IO); return; }
     mkdir(PROG_DIR, 0775);
     FILE *f = fopen(path, "wb");
     if (!f) { fio_fail(FIO_ERR_IO); return; }
-    size_t bw = fwrite(g_fbuf, 1, len + 2, f);
+    size_t bw = fwrite(g_fbuf, 1, (size_t)len + 2, f);
     fclose(f);
-    if (bw != len + 2) { fio_fail(FIO_ERR_IO); return; }
-    printf("[fio] SAVE %s ($%04x-$%04x, %u bytes)\n", path, src, end, len);
+    if (bw != (size_t)len + 2) { fio_fail(FIO_ERR_IO); return; }
+    unsigned src = g_fbuf[0] | (g_fbuf[1] << 8);
+    printf("[fio] SAVE %s ($%04x-$%04x, %d bytes)\n", path, src, src + len, len);
     fio_ok();
 }
 
 static void fio_diropen(void) {
+    if (nfio_disk_active()) { nfio_disk_diropen(); return; }
     if (g_dir) closedir(g_dir);
     g_dir = opendir(PROG_DIR);
     if (!g_dir) { fio_fail(FIO_ERR_IO); return; }
@@ -225,6 +229,7 @@ static void fio_diropen(void) {
 }
 
 static void fio_dirread(void) {
+    if (nfio_disk_active()) { nfio_disk_dirread(); return; }
     if (!g_dir) { fio_fail(FIO_ERR_EOD); return; }
     struct dirent *de;
     while ((de = readdir(g_dir))) {
@@ -245,6 +250,7 @@ static void fio_dirread(void) {
 }
 
 static void fio_delete(void) {
+    if (nfio_disk_active()) { nfio_disk_delete(); return; }
     char name[80], path[160];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
     fio_path(name, path, sizeof path);
@@ -437,6 +443,8 @@ int main(int argc, char **argv) {
             case FIO_CMD_DIROPEN: fio_diropen(); break;
             case FIO_CMD_DIRREAD: fio_dirread(); break;
             case FIO_CMD_DELETE:  fio_delete(); break;
+            case FIO_CMD_CD:      nfio_cd();  break;   /* set current drive/subdir  */
+            case FIO_CMD_PWD:     nfio_pwd(); break;   /* read current drive/subdir */
             case FIO_CMD_LOAD_MODULE: {
                 int id = peek(FIO_SRC_LO);
                 if (load_module(id) == 0) {

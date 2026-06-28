@@ -1380,6 +1380,9 @@ FIO_TYPE_DIR      = $05
 .ifndef FIO_TYPE_FORTH
 FIO_TYPE_FORTH    = $06
 .endif
+.ifndef FIO_TYPE_LOGO
+FIO_TYPE_LOGO     = $07
+.endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.
 .ifndef EXT_CMD_RESERVED0

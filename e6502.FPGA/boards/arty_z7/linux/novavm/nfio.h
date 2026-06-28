@@ -62,4 +62,19 @@ void fio_fsize(void);         /* FIO_CMD_FSIZE       0x34: report handle size   
  * the caller owns the mailbox result. See nfio.c for the exact wiring snippet. */
 int  nfio_image_load(const char *name);
 
+/* ---- drive-aware user filesystem (SAVE/LOAD/DIR/DELETE/CD/PWD) -------------
+ * Routed to from novavm.c's FIO handlers when a disk is mounted (gate with
+ * nfio_disk_active()); each reads the FIO mailbox + owns fio_ok()/fio_fail(),
+ * except nfio_disk_load() which returns 0/-1 like nfio_image_load(). Files are
+ * (name + type) with no extensions — the type comes from FIO_DIRTYPE on SAVE. */
+int  nfio_disk_active(void);    /* 1 if the CWD is a mounted disk (routing gate) */
+int  nfio_stage_save(unsigned char *buf, unsigned bufsz); /* RAM range -> save image (hdr+bytes); ret len or -1 */
+void nfio_disk_save(void);      /* FIO_CMD_SAVE    when a disk is mounted        */
+int  nfio_disk_load(const char *name); /* try a path/prefix load; 0 hit, -1 miss */
+void nfio_disk_diropen(void);   /* FIO_CMD_DIROPEN when a disk is mounted        */
+void nfio_disk_dirread(void);   /* FIO_CMD_DIRREAD: name + FIO_DIRTYPE + FIO_SIZE */
+void nfio_disk_delete(void);    /* FIO_CMD_DELETE  when a disk is mounted        */
+void nfio_cd(void);             /* FIO_CMD_CD: set the current drive/subdir      */
+void nfio_pwd(void);            /* FIO_CMD_PWD: "drive:dir" -> FIO_NAME/NAMELEN   */
+
 #endif /* NFIO_H */

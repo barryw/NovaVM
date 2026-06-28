@@ -72,6 +72,9 @@
 #define FIO_TARGET_XRAM 0x10   /* 0x00 = CPU RAM, 0x10 = XRAM   */
 
 #define FIO_ERR_NOTMOUNTED 5
+#ifndef FIO_ERR_DISKFULL
+#define FIO_ERR_DISKFULL   4
+#endif
 
 /* NDI / 6502 file types (wire values) */
 #define DT_BAS 0
@@ -510,40 +513,68 @@ static void drives_refresh(void) {
 }
 
 /* ===========================================================================
- *  MOUNTED BOOT IMAGE — port of main.c boot_image() / img_find().
+ *  MOUNTED IMAGES + DRIVE-AWARE FILESYSTEM
+ *  A file is (name + type) — no extensions; the type byte lives in the .ndi dir
+ *  entry. The CWD is a drive (+ optional subdir); a "fd0:" prefix overrides it
+ *  for one op. SAVE/LOAD/DIR/DELETE/CD/PWD route through here when a disk is
+ *  mounted (port of main.c boot_image()/img_find(), generalised to any slot).
  * =========================================================================== */
-static ndi_t g_img;
-static int   g_img_slot = -1;
+#ifndef DT_LOGO
+#define DT_LOGO 7                    /* novalogo source (alongside DT_FORTH=6)   */
+#endif
 
-/* Resolve + (re)open the boot drive's .ndi. Returns the open image, or NULL if
- * nothing is mounted / the image failed to open. Path "/x.ndi" (client form) is
- * host-resolved as NOVA_FS_ROOT + path (matching nservers.c's sd_path()). */
-static ndi_t *boot_image(void) {
-    drives_refresh();
-    int slot = drive_boot_slot();
-    if (slot < 0) {
+static ndi_t g_img;
+static int   g_img_slot = -1;        /* slot whose .ndi is open in g_img         */
+static int   g_cwd_slot = -1;        /* explicit CD target; -1 = follow boot slot */
+static char  g_cwd_dir[160] = "";    /* subdir within the CWD drive ("" = root)  */
+
+/* Open a given slot's .ndi into the single cached image (re-open on slot/path
+ * change). NULL if the slot is empty / the image won't open. */
+static ndi_t *slot_image(int slot) {
+    if (slot < 0 || slot >= DRIVE_SLOTS || !drive_path(slot)[0]) {
         if (g_img_slot >= 0) { ndi_close(&g_img); g_img_slot = -1; }
         return 0;
     }
-    /* Re-open if the boot slot changed OR its path changed under us (remount). */
     static char open_path[200];
     char full[200];
     const char *p = drive_path(slot);
     if (p[0] == '/') snprintf(full, sizeof full, "%s%s", NOVA_FS_ROOT, p);
     else             snprintf(full, sizeof full, "%s/%s", NOVA_FS_ROOT, p);
-
     if (slot != g_img_slot || strcmp(full, open_path) != 0) {
         if (g_img_slot >= 0) ndi_close(&g_img);
         if (ndi_open(&g_img, full) != 0) { g_img_slot = -1; return 0; }
         g_img_slot = slot;
         snprintf(open_path, sizeof open_path, "%s", full);
-        printf("[fio] boot image %s = %s\n", drive_slot_name(slot), full);
+        printf("[fio] image %s = %s\n", drive_slot_name(slot), full);
     }
     return &g_img;
 }
 
-/* Resolve a 6502 filename inside the mounted image: exact (ci), then "+.bin". */
+/* The boot drive = first non-empty slot (fd0..hd1). */
+static ndi_t *boot_image(void) {
+    drives_refresh();
+    return slot_image(drive_boot_slot());
+}
+
+/* The slot whose disk is "current": explicit CD target, else the boot drive. */
+static int nfio_cwd_slot(void) {
+    drives_refresh();
+    if (g_cwd_slot >= 0 && drive_path(g_cwd_slot)[0]) return g_cwd_slot;
+    return drive_boot_slot();
+}
+
+static int ndi_walk(ndi_t *m, const char *path, int create,
+                    uint16_t *parent_out, char *fname, int fnsz);  /* fwd decl */
+
+/* Resolve a 6502 filename inside the mounted image. A name with '/' is a path
+ * (e.g. forth/lib/core.4th) -> walk the real subdirectories; a bare name is
+ * matched at the root, exact then "+.bin" (RUNTIME/AUTOBOOT). */
 static int img_find(ndi_t *img, const char *name) {
+    if (strchr(name, '/')) {
+        uint16_t parent; char fname[NDI_MAX_NAME + 1];
+        if (ndi_walk(img, name, 0, &parent, fname, sizeof fname) != 0) return -1;
+        return ndi_find(img, fname, parent);
+    }
     int idx = ndi_find(img, name, NDI_ROOT);
     if (idx < 0 && !strchr(name, '.')) {
         char tmp[40];
@@ -594,19 +625,15 @@ static uint8_t fio_name_type(const char *name) {
     return DT_BIN;
 }
 
-/* ===========================================================================
- *  MOUNTED-IMAGE LOAD HOOK (for novavm.c's fio_load) — port of the image branch
- *  of main.c fio_load(). Loads the named file from the mounted image into 6502
- *  RAM and fills FIO_SRC/FIO_SIZE/FIO_DIRTYPE. Returns 0 on a successful image
- *  load, -1 if not mounted / not found. Caller owns fio_ok()/fio_fail().
- * =========================================================================== */
-int nfio_image_load(const char *name) {
-    ndi_t *img = boot_image();
-    if (!img) return -1;
-    int idx = img_find(img, name);
-    if (idx < 0) return -1;
+/* Read directory entry `idx` from `img` into 6502 RAM and set FIO_SRC/SIZE/
+ * DIRTYPE — the shared tail of every .ndi -> RAM load. The image and disk load
+ * paths differ ONLY in how they resolve idx; this is everything after that. A
+ * DT_BIN file's 2-byte load-address header picks the destination, any other type
+ * lands at the caller's FIO_SRC. 0 ok, -1 if a directory / unreadable. */
+static int ndi_emit_to_ram(ndi_t *img, int idx) {
     ndi_entry_t e;
     ndi_get(img, idx, &e);
+    if (e.flags & FL_DIRECTORY) return -1;
     int n = ndi_read(img, idx, 0, g_fbuf, sizeof g_fbuf);
     if (n < 2) return -1;
     int is_bin = (e.file_type == DT_BIN);
@@ -620,6 +647,282 @@ int nfio_image_load(const char *name) {
     poke(FIO_DIRTYPE, e.file_type);
     printf("[fio] LOAD(ndi) %s -> $%04x (%u bytes, type %d)\n", e.filename, dst, len, e.file_type);
     return 0;
+}
+
+/* ===========================================================================
+ *  MOUNTED-IMAGE LOAD HOOK (for novavm.c's fio_load) — port of the image branch
+ *  of main.c fio_load(). Resolves `name` at the boot drive's root (+.bin) and
+ *  loads it. Returns 0 on a hit, -1 if not mounted / not found. Caller owns the
+ *  fio_ok()/fio_fail() result.
+ * =========================================================================== */
+int nfio_image_load(const char *name) {
+    ndi_t *img = boot_image();
+    if (!img) return -1;
+    int idx = img_find(img, name);
+    if (idx < 0) return -1;
+    return ndi_emit_to_ram(img, idx);
+}
+
+/* ===========================================================================
+ *  DRIVE-AWARE SAVE / LOAD / DIR / DELETE / CD / PWD — the user filesystem.
+ *  novavm.c's FIO handlers route here whenever a disk is mounted; otherwise they
+ *  keep their local /data/nova/programs behaviour (the no-disk fallback).
+ * =========================================================================== */
+
+/* Create a directory entry (no data sectors). Returns its slot, or -1. */
+static int ndi_mkdir(ndi_t *m, const char *name, uint16_t parent) {
+    int slot = ndi_dir_find_free_slot(m);
+    if (slot < 0) return -1;
+    ndi_dir_write_entry(m, slot, FL_ACTIVE | FL_DIRECTORY, DT_DIR, parent, 0, 0, name, 0);
+    if (ndi_flush_metadata(m) != 0) return -1;
+    return slot;
+}
+
+/* Walk "a/b/file" from root; copy the final component into fname and return its
+ * parent dir index. mkdir missing dirs when `create`. 0 ok, -1 error. */
+static int ndi_walk(ndi_t *m, const char *path, int create,
+                    uint16_t *parent_out, char *fname, int fnsz) {
+    uint16_t parent = NDI_ROOT;
+    const char *p = path;
+    while (*p == '/') p++;
+    for (;;) {
+        const char *slash = strchr(p, '/');
+        if (!slash) {
+            if (!*p) return -1;
+            snprintf(fname, fnsz, "%s", p);
+            *parent_out = parent;
+            return 0;
+        }
+        int cl = (int)(slash - p);
+        if (cl <= 0 || cl >= NDI_MAX_NAME) return -1;
+        char comp[NDI_MAX_NAME + 1];
+        memcpy(comp, p, cl); comp[cl] = 0;
+        int idx = ndi_find(m, comp, parent);
+        if (idx < 0) {
+            if (!create) return -1;
+            idx = ndi_mkdir(m, comp, parent);
+            if (idx < 0) return -1;
+        } else {
+            ndi_entry_t e; ndi_dir_read_entry(m, idx, &e);
+            if (!(e.flags & FL_DIRECTORY)) return -1;   /* a file blocks the path */
+        }
+        parent = (uint16_t)idx;
+        p = slash + 1;
+        while (*p == '/') p++;
+    }
+}
+
+/* Collapse "a/b/.." -> "a", drop "." and empty components, no surrounding '/'. */
+static void ndi_path_normalize(char *path) {
+    char stack[32][NDI_MAX_NAME + 1]; int sp = 0;
+    const char *p = path;
+    while (*p) {
+        while (*p == '/') p++;
+        if (!*p) break;
+        const char *s = p;
+        while (*p && *p != '/') p++;
+        int cl = (int)(p - s); if (cl > NDI_MAX_NAME) cl = NDI_MAX_NAME;
+        char comp[NDI_MAX_NAME + 1]; memcpy(comp, s, cl); comp[cl] = 0;
+        if (!strcmp(comp, ".")) continue;
+        if (!strcmp(comp, "..")) { if (sp > 0) sp--; continue; }
+        if (sp < 32) { snprintf(stack[sp], sizeof stack[sp], "%s", comp); sp++; }
+    }
+    char out[160]; int ol = 0;
+    for (int i = 0; i < sp; i++) {
+        if (i && ol < (int)sizeof out - 1) out[ol++] = '/';
+        for (const char *c = stack[i]; *c && ol < (int)sizeof out - 1; c++) out[ol++] = *c;
+    }
+    out[ol] = 0;
+    snprintf(path, 160, "%s", out);
+}
+
+/* Resolve a 6502 name ("fd0:dir/file" | "dir/file" | "file") to a drive slot +
+ * an in-image path. Relative names hang off the CWD subdir. slot>=0, or -1. */
+static int nfio_resolve(const char *in, char *path, int psz) {
+    const char *colon = strchr(in, ':');
+    if (colon) {
+        int dl = (int)(colon - in);
+        if (dl <= 0 || dl > 8) return -1;
+        char drv[12]; memcpy(drv, in, dl); drv[dl] = 0;
+        int slot = drive_slot_index(drv);
+        if (slot < 0) return -1;
+        const char *rest = colon + 1;
+        while (*rest == '/') rest++;
+        snprintf(path, psz, "%s", rest);
+        return slot;
+    }
+    int slot = nfio_cwd_slot();
+    if (slot < 0) return -1;
+    if (g_cwd_dir[0]) snprintf(path, psz, "%s/%s", g_cwd_dir, in);
+    else              snprintf(path, psz, "%s", in);
+    return slot;
+}
+
+/* Resolve a path that NAMES a directory -> its dir index (root for empty). -1 err. */
+static int nfio_resolve_dir(ndi_t *img, const char *path, uint16_t *parent_out) {
+    const char *pp = path; while (*pp == '/') pp++;
+    if (!*pp) { *parent_out = NDI_ROOT; return 0; }
+    char dpath[210]; snprintf(dpath, sizeof dpath, "%s/.", pp);  /* descend into last comp */
+    char dummy[NDI_MAX_NAME + 1];
+    return ndi_walk(img, dpath, 0, parent_out, dummy, sizeof dummy);
+}
+
+/* Is the current working drive a mounted disk? (Routing gate for novavm.c.) */
+int nfio_disk_active(void) { return nfio_cwd_slot() >= 0; }
+
+/* Stage the 6502 RAM range [FIO_SRC, FIO_END) into `buf` as a save image:
+ * buf[0..1] = the load address (lo,hi), buf[2..] = the bytes. Returns the payload
+ * length (the image is len+2 bytes), or -1 if the range is empty / won't fit.
+ * Shared by the local fio_save and the .ndi nfio_disk_save (one 2-byte-header
+ * staging path, two stores). */
+int nfio_stage_save(unsigned char *buf, unsigned bufsz) {
+    unsigned src = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8);
+    unsigned end = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
+    if (end <= src || (unsigned)(end - src) + 2 > bufsz) return -1;
+    unsigned len = end - src;
+    buf[0] = src & 0xFF; buf[1] = (src >> 8) & 0xFF;
+    for (unsigned i = 0; i < len; i++) buf[2 + i] = peek((src + i) & 0xFFFF);
+    return (int)len;
+}
+
+/* SAVE: store the 6502 RAM range as (name + type) on the resolved drive/subdir.
+ * Type comes from FIO_DIRTYPE (the runtime stamps FORTH/LOGO/...). */
+void nfio_disk_save(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 1, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_IO); return; }
+    int len = nfio_stage_save(g_wbuf, WBUF_BYTES);
+    if (len < 0) { fio_fail(FIO_ERR_IO); return; }
+    uint8_t type = peek(FIO_DIRTYPE);
+    if (ndi_find(img, fname, parent) >= 0) ndi_delete(img, fname, parent);  /* overwrite */
+    int idx = ndi_create(img, fname, type, parent, (uint32_t)(len + 2));
+    if (idx < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
+    if (ndi_write(img, idx, 0, g_wbuf, (uint32_t)(len + 2)) != 0) { fio_fail(FIO_ERR_IO); return; }
+    ndi_flush(img);
+    printf("[fio] SAVE(ndi) %s:%s type %d (%d bytes)\n", drive_slot_name(slot), path, type, len);
+    fio_ok();
+}
+
+/* LOAD: resolve drive/subdir, read into 6502 RAM, set FIO_SRC/SIZE/DIRTYPE.
+ * Returns 0 on hit, -1 not-found (caller falls through). */
+int nfio_disk_load(const char *name) {
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) return -1;
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) return -1;
+    int idx = ndi_find(img, fname, parent);
+    if (idx < 0) return -1;
+    return ndi_emit_to_ram(img, idx);   /* shared load tail (see nfio_image_load) */
+}
+
+/* ---- DIR: iterate one directory's entries ------------------------------- */
+static ndi_t  *g_ddir_img    = NULL;
+static uint16_t g_ddir_parent = NDI_ROOT;
+static int      g_ddir_idx    = 0;
+
+/* DIROPEN: bare -> the CWD dir; else the named drive:dir. */
+void nfio_disk_diropen(void) {
+    char name[80];
+    int nl = fio_read_name(name, sizeof name);
+    char path[200]; int slot;
+    if (nl <= 0) { slot = nfio_cwd_slot(); snprintf(path, sizeof path, "%s", g_cwd_dir); }
+    else         { slot = nfio_resolve(name, path, sizeof path); }
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent;
+    if (nfio_resolve_dir(img, path, &parent) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    g_ddir_img = img; g_ddir_parent = parent; g_ddir_idx = 0;
+    fio_ok();
+}
+
+/* DIRREAD: next entry -> FIO_NAME/NAMELEN, FIO_DIRTYPE, FIO_SIZE. EOD at end. */
+void nfio_disk_dirread(void) {
+    if (!g_ddir_img) { fio_fail(FIO_ERR_EOD); return; }
+    ndi_entry_t e;
+    while (g_ddir_idx < g_ddir_img->dir_entry_count) {
+        int i = g_ddir_idx++;
+        ndi_dir_read_entry(g_ddir_img, i, &e);
+        if (!(e.flags & FL_ACTIVE)) continue;
+        if (e.parent_index != g_ddir_parent) continue;
+        int nl = 0; while (e.filename[nl] && nl < 63) nl++;
+        poke(FIO_DIRTYPE, (e.flags & FL_DIRECTORY) ? DT_DIR : e.file_type);
+        poke(FIO_NAMELEN, nl);
+        for (int k = 0; k < nl; k++) poke(FIO_NAME + k, e.filename[k]);
+        poke(FIO_SIZE_LO, e.size_bytes & 0xFF);
+        poke(FIO_SIZE_HI, (e.size_bytes >> 8) & 0xFF);
+        fio_ok();
+        return;
+    }
+    g_ddir_img = NULL;
+    fio_fail(FIO_ERR_EOD);
+}
+
+/* DELETE: resolve + remove a file (not a directory). */
+void nfio_disk_delete(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    if (ndi_delete(img, fname, parent) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    fio_ok();
+}
+
+/* CD "fd0:" | "fd0:dir" | "dir" | ".." | "/" — updates g_cwd_slot/g_cwd_dir. */
+void nfio_cd(void) {
+    char name[80];
+    int nl = fio_read_name(name, sizeof name);
+    if (nl <= 0) { fio_ok(); return; }       /* bare CD = stay */
+    char buf[120]; snprintf(buf, sizeof buf, "%s", name);
+    int slot = nfio_cwd_slot();
+    char newdir[160];
+    char *colon = strchr(buf, ':');
+    if (colon) {
+        *colon = 0;
+        int s = drive_slot_index(buf);
+        if (s < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+        slot = s;
+        char *rest = colon + 1; while (*rest == '/') rest++;
+        snprintf(newdir, sizeof newdir, "%s", rest);          /* absolute on that drive */
+    } else if (buf[0] == '/') {
+        char *rest = buf; while (*rest == '/') rest++;
+        snprintf(newdir, sizeof newdir, "%s", rest);          /* absolute on current drive */
+    } else if (g_cwd_dir[0]) {
+        snprintf(newdir, sizeof newdir, "%s/%s", g_cwd_dir, buf);  /* relative */
+    } else {
+        snprintf(newdir, sizeof newdir, "%s", buf);
+    }
+    ndi_path_normalize(newdir);
+    ndi_t *img = slot_image(slot);
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t pr;
+    if (nfio_resolve_dir(img, newdir, &pr) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    g_cwd_slot = slot;
+    snprintf(g_cwd_dir, sizeof g_cwd_dir, "%s", newdir);
+    fio_ok();
+}
+
+/* PWD: write "fd0:dir/sub" into FIO_NAME / FIO_NAMELEN. */
+void nfio_pwd(void) {
+    int slot = nfio_cwd_slot();
+    char out[200];
+    const char *dn = (slot >= 0) ? drive_slot_name(slot) : "??";
+    if (g_cwd_dir[0]) snprintf(out, sizeof out, "%s:%s", dn, g_cwd_dir);
+    else              snprintf(out, sizeof out, "%s:", dn);
+    int n = (int)strlen(out); if (n > 63) n = 63;
+    poke(FIO_NAMELEN, n);
+    for (int i = 0; i < n; i++) poke(FIO_NAME + i, out[i]);
+    fio_ok();
 }
 
 /* ===========================================================================

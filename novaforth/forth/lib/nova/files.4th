@@ -35,7 +35,8 @@ DECIMAL
 25 CONSTANT FILES-FN-FSTATUS
 26 CONSTANT FILES-FN-FDELETE
 27 CONSTANT FILES-FN-FRENAME
-28 CONSTANT FILES-FN-COUNT
+28 CONSTANT FILES-FN-DIR-LIST
+29 CONSTANT FILES-FN-COUNT
 
 HEX
 B9A0 CONSTANT FIO-CMD-REG
@@ -106,6 +107,7 @@ B9B0 CONSTANT FIO-NAME
 04 CONSTANT FIO-TYPE-GFX
 05 CONSTANT FIO-TYPE-DIR
 06 CONSTANT FIO-TYPE-FORTH
+07 CONSTANT FIO-TYPE-LOGO
 
 00 CONSTANT PAGER-TARGET-XRAM
 01 CONSTANT PAGER-TARGET-RAM
@@ -251,5 +253,23 @@ DECIMAL
 : FILES-FRENAME ( c-addr1 u1 c-addr2 u2 -- ior )
   LIB-ARG3 ! LIB-ARG2 ! FILES-NAME!
   FILES-FN-FRENAME FILES-CALL ;
+
+\ FILES-DIR-LIST ( c-addr u -- ior ): the host prints a formatted NAME/TYPE/SIZE
+\ listing of the directory named by c-addr/u (u=0 -> the current directory).
+: FILES-DIR-LIST ( c-addr u -- ior )
+  FILES-NAME! FILES-FN-DIR-LIST FILES-CALL ;
+
+\ ---- user-facing disk words ------------------------------------------------
+\ DIR [path]      list the current directory (or drive:path if given)
+\ CATALOG [path]  alias for DIR
+\ CD <path>       change the current drive/subdir   (e.g. CD fd0:games)
+\ PWD             print the current drive:dir
+: DIR ( "<path>" -- )
+  PARSE-NAME FILES-DIR-LIST DROP ;
+: CATALOG ( "<path>" -- )  DIR ;
+: CD ( "<path>" -- )
+  PARSE-NAME DUP 0= IF 2DROP EXIT THEN FILES-CD DROP ;
+: PWD ( -- )
+  FILES-PWD DROP TYPE CR ;
 
 BASE !

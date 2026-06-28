@@ -281,6 +281,8 @@ file_save:
       STA   FIO_ENDL
       LDA   LIB_ARG3+1
       STA   FIO_ENDH
+      LDA   LIB_ARG1+1               ; file type rides the namelen cell's high byte
+      STA   FIO_DIRTYPE              ; -> the host stamps it into the .ndi dir entry
       JSR   fio_save
       JMP   file_finish_status
 
@@ -330,7 +332,8 @@ file_dir_read:
 
 ; --- $1C FILE_DIR_LIST: optional filter -> open + iterate + print whole listing.
 ; Keeps the bank-0 BASIC DIR handler thin: this module (bank-1, with VGC MMIO)
-; does the open/read loop and prints each entry (type + name + CR) itself.
+; does the open/read loop and prints a header + one NAME / TYPE / SIZE row per
+; entry (dirs show blank size). Shared by BASIC, novaforth and novalogo DIR.
 file_dir_list:
       LDA   LIB_ARG1+0                 ; filter length (0 = list everything)
       BEQ   @fdl_nofilter
@@ -340,12 +343,30 @@ file_dir_list:
 @fdl_nofilter:
       STZ   FIO_NAMELEN
 @fdl_open:
-      JSR   fio_dir_open               ; A=0 entry ready, !=0 empty/EOD
+      JSR   fdl_header                 ; column header + rule (once)
+      JSR   fio_dir_open               ; open the listing (entries fetched below)
+@fdl_loop:
+      JSR   fio_dir_read               ; A=0 -> entry ready, !=0 -> end of dir
       CMP   #$00
       BNE   @fdl_done
-@fdl_loop:
-      LDA   FIO_DIRTYPE                ; type string ("  BAS  " ...) -- 8-byte entries
-      CMP   #$06
+      LDY   #$00                       ; --- NAME, left, padded to 18 cols ---
+@fdl_nm:
+      CPY   FIO_NAMELEN
+      BCS   @fdl_nmpad
+      LDA   FIO_NAME,Y
+      STA   VGC_CHAROUT
+      INY
+      BRA   @fdl_nm
+@fdl_nmpad:
+      CPY   #18
+      BCS   @fdl_type
+      LDA   #' '
+      STA   VGC_CHAROUT
+      INY
+      BRA   @fdl_nmpad
+@fdl_type:
+      LDA   FIO_DIRTYPE                ; --- TYPE (first 7 of the 8-byte field) ---
+      CMP   #$08
       BCC   @fdl_typeok
       LDA   #$02                       ; out of range -> BIN
 @fdl_typeok:
@@ -353,37 +374,108 @@ file_dir_list:
       ASL   a
       ASL   a                          ; type * 8
       TAX
-      LDY   #$07                       ; print 7 chars of the entry
+      LDY   #$07
 @fdl_tl:
       LDA   fdl_strs,X
       STA   VGC_CHAROUT
       INX
       DEY
       BNE   @fdl_tl
-      LDY   #$00                       ; filename
-@fdl_nl:
-      CPY   FIO_NAMELEN
-      BCS   @fdl_eol
-      LDA   FIO_NAME,Y
+      JSR   fdl_size                   ; --- SIZE (right-justified decimal) ---
+      LDA   #$0D                        ; CR + LF: the VGC needs BOTH to advance a
+      STA   VGC_CHAROUT                 ; row ($0D alone just returns to column 0,
+      LDA   #$0A                        ; so every entry would overwrite the last).
       STA   VGC_CHAROUT
-      INY
-      BRA   @fdl_nl
-@fdl_eol:
-      LDA   #$0D
-      STA   VGC_CHAROUT
-      JSR   fio_dir_read               ; next entry
-      CMP   #$00
-      BEQ   @fdl_loop                  ; A=0 -> more
+      BRA   @fdl_loop                  ; read + print the next entry
 @fdl_done:
       STZ   LIB_STATUS                 ; listing completed OK
       RTS
-fdl_strs:                              ; 6 x 8-byte type fields (print first 7)
+
+; Column header + rule line (printed once before the entries).
+fdl_header:
+      LDX   #$00
+@fh:  LDA   fdl_hdr,X
+      BEQ   @fhd
+      STA   VGC_CHAROUT
+      INX
+      BRA   @fh
+@fhd: RTS
+
+; Print FIO_SIZEL/H as a right-justified 5-digit decimal (leading spaces), with a
+; one-column gap in front. A directory entry (type DIR) prints blanks, not a size.
+fdl_size:
+      LDA   #' '
+      STA   VGC_CHAROUT
+      LDA   FIO_DIRTYPE
+      CMP   #FIO_TYPE_DIR
+      BNE   @fs_num
+      LDX   #$05                       ; dir: 5 blanks
+@fs_blank:
+      LDA   #' '
+      STA   VGC_CHAROUT
+      DEX
+      BNE   @fs_blank
+      RTS
+@fs_num:
+      LDA   FIO_SIZEL
+      STA   NVR0L
+      LDA   FIO_SIZEH
+      STA   NVR0H
+      LDX   #$00                       ; place index 0..4 (10000..1)
+      STZ   NVR1L                      ; "printed a nonzero digit" flag
+@fs_place:
+      LDY   #$00                       ; digit value at this place
+@fs_sub:
+      LDA   NVR0L
+      SEC
+      SBC   pow10_lo,X
+      STA   NVR2L
+      LDA   NVR0H
+      SBC   pow10_hi,X
+      BCC   @fs_emit                   ; NVR0 < pow10 -> place done
+      STA   NVR0H
+      LDA   NVR2L
+      STA   NVR0L
+      INY
+      BRA   @fs_sub
+@fs_emit:
+      CPX   #$04                       ; the 1's place -> always a digit
+      BEQ   @fs_dig
+      CPY   #$00
+      BNE   @fs_dig
+      LDA   NVR1L                      ; leading zero with nothing printed yet?
+      BNE   @fs_dig
+      LDA   #' '                       ; -> blank instead of '0'
+      STA   VGC_CHAROUT
+      BRA   @fs_next
+@fs_dig:
+      TYA
+      ORA   #'0'
+      STA   VGC_CHAROUT
+      LDA   #$01
+      STA   NVR1L
+@fs_next:
+      INX
+      CPX   #$05
+      BCC   @fs_place
+      RTS
+
+pow10_lo: .byte <10000, <1000, <100, <10, <1
+pow10_hi: .byte >10000, >1000, >100, >10, >1
+
+fdl_hdr:
+      .byte "NAME              TYPE    SIZE", $0D, $0A
+      .byte "----------------- ----- ------", $0D, $0A, $00
+
+fdl_strs:                              ; 8 x 8-byte type fields (print first 7)
       .byte "  BAS   "
       .byte "  SID   "
       .byte "  BIN   "
       .byte "  MID   "
       .byte "  GFX   "
       .byte "  DIR   "
+      .byte "  FORTH "
+      .byte "  LOGO  "
 
 ; --- $04 FILE_DELETE: name -> fio_delete ---
 file_delete:

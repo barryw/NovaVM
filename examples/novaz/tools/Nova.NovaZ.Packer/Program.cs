@@ -72,11 +72,33 @@ if (options.StoryPath is not null)
     Console.WriteLine("Imported STORY.MANIFEST");
 }
 
+// Assets keep their relative path as REAL .ndi subdirectories — e.g.
+// forth/lib/core.4th becomes forth/ -> lib/ -> core.4th, navigable with CD/DIR.
+// .4th files are stored as the FORTH type. Nothing is hidden or locked: every
+// entry (RUNTIME.BIN, the forth tree, ...) shows in DIR and can be deleted.
+var dirCache = new Dictionary<string, ushort> { [""] = 0xFFFF };
+ushort EnsureDir(string dirPath)
+{
+    if (dirCache.TryGetValue(dirPath, out var cached)) return cached;
+    int s = dirPath.LastIndexOf('/');
+    ushort parent = EnsureDir(s < 0 ? "" : dirPath[..s]);
+    var idx = (ushort)image.MakeDirectory(s < 0 ? dirPath : dirPath[(s + 1)..], parent);
+    dirCache[dirPath] = idx;
+    Console.WriteLine($"  mkdir {dirPath}/");
+    return idx;
+}
+
 foreach (var asset in options.Assets)
 {
     var data = File.ReadAllBytes(asset.Path);
-    image.WriteFile(asset.Name, NdiFileType.Bin, 0xFFFF, data);
-    Console.WriteLine($"Imported {asset.Name} ({data.Length} bytes)");
+    var name = asset.Name.Replace('\\', '/');
+    int slash = name.LastIndexOf('/');
+    ushort parent = slash < 0 ? (ushort)0xFFFF : EnsureDir(name[..slash]);
+    string fname = slash < 0 ? name : name[(slash + 1)..];
+    var type = fname.EndsWith(".4th", StringComparison.OrdinalIgnoreCase)
+        ? NdiFileType.Forth : NdiFileType.Bin;
+    image.WriteFile(fname, type, parent, data);
+    Console.WriteLine($"Imported {name} ({data.Length} bytes, {type})");
 }
 
 if (options.SoundsPath is not null)
