@@ -58,35 +58,32 @@ module vgc_copper #(
     // =========================================================================
     wire [16:0] beam_pos = gfx_addr_xy(gfx_x, gfx_y);
 
+    // Two coupled left-edge fixes live here:
+    //  1) Gate on the whole VISIBLE scanline (v_count < V_ACTIVE), NOT in_text_area
+    //     (the canvas region excludes the left border), so a per-scanline write
+    //     isn't held back to the active area -- which made the entire left border
+    //     scan out with the PREVIOUS line's value (bars lagged one scanline).
+    //  2) Fire COMBINATIONALLY the cycle the beam reaches an entry, so the register
+    //     write lands one pixel-clock earlier -- in time for COLUMN 0. A registered
+    //     copper_fire put the write at h_count=1, leaving the very first pixel one
+    //     scanline stale: a 1px-low seam on the screen's left edge.
+    // copper_index stays registered so each entry fires exactly once, on
+    // consecutive cycles. Both verified pixel-aligned at columns 0..N in the
+    // boards/arty_z7/sim/vgc render testbench.
+    wire fire_now = copper_enabled && (v_count < V_ACTIVE) &&
+                    copper_index < copper_count &&
+                    beam_pos >= copper_pos[copper_index];
+    assign copper_fire     = fire_now;
+    assign copper_fire_reg = copper_reg[copper_index];
+    assign copper_fire_val = copper_val[copper_index];
+
     always_ff @(posedge clk) begin
-        if (rst) begin
+        if (rst)
             copper_index <= 0;
-            copper_fire <= 0;
-        end else begin
-            copper_fire <= 0;
-
-            // Vblank: reset index
-            if (h_count == 0 && v_count == V_ACTIVE) begin
-                copper_index <= 0;
-            end
-
-            // Fire copper entries when the beam reaches their position.
-            // Gate on the whole VISIBLE scanline (v_count < V_ACTIVE), NOT just
-            // in_text_area: the canvas region excludes the left border, so gating
-            // on it held every register write back until the active area began.
-            // The left border then scanned out with the PREVIOUS line's value, so
-            // copper bars lagged one scanline on the left edge only. Firing across
-            // the full visible line lands the write before the left border draws.
-            // Verified pixel-aligned in boards/arty_z7/sim/vgc (render testbench).
-            if (copper_enabled && (v_count < V_ACTIVE) &&
-                copper_index < copper_count &&
-                beam_pos >= copper_pos[copper_index]) begin
-                copper_fire <= 1;
-                copper_fire_reg <= copper_reg[copper_index];
-                copper_fire_val <= copper_val[copper_index];
-                copper_index <= copper_index + 1;
-            end
-        end
+        else if (h_count == 0 && v_count == V_ACTIVE)   // vblank: reset index
+            copper_index <= 0;
+        else if (fire_now)
+            copper_index <= copper_index + 1;
     end
 
 endmodule

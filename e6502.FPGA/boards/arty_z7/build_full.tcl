@@ -13,6 +13,14 @@ generate_target all [get_files -quiet *ps_full.bd]
 add_files -norecurse build/ps_full/ps_full.gen/sources_1/bd/ps_full/hdl/ps_full_wrapper.v
 reset_run synth_1
 
+# Vivado auto-sets INCREMENTAL_CHECKPOINT to the previous synth result after every
+# build, so the next build runs incremental synthesis -- which once silently kept
+# a stale vgc_copper across a real logic change, shipping PL logic that did NOT
+# match the source even though a clean sim had proven the fix (cost a whole
+# build+flash+power-cycle to catch). On an FPGA that is never worth the speedup.
+# Clear it so every build is a full synth from source.
+set_property INCREMENTAL_CHECKPOINT "" [get_runs synth_1]
+
 # The project persists across builds: drop the silent sid_stubs.sv that earlier
 # builds added, or it duplicates sid_chip/sid_curve_reader and Vivado keeps the
 # stub (-> no SID audio).
