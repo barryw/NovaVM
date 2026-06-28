@@ -380,6 +380,32 @@ VGC_TXTFLAGS      = $A0E6
 .ifndef VGC_TXTREVATTR
 VGC_TXTREVATTR    = $A0E7
 .endif
+; @label VGC.TEXT_BG
+; @kind const
+; @symbol VGC_TEXT_BG
+; @summary Per-character background control. Each emitted character captures this
+;   value into its cell: $10 (VGC_TEXT_BG_TRANSPARENT) = transparent, so the cell
+;   shows the live VGC_BGCOL / copper background; $00-$0F = an opaque background
+;   colour baked into that one cell. Defaults to transparent. Set it before
+;   printing; it affects all subsequent characters until changed.
+.ifndef VGC_TEXT_BG
+VGC_TEXT_BG       = $A0C0
+.endif
+.ifndef VGC_TEXT_BG_TRANSPARENT
+VGC_TEXT_BG_TRANSPARENT = $10
+.endif
+.ifndef VGC_CC_RESET
+; Inline text-style control codes. Write these bytes to VGC_CHAROUT (or simply
+; embed them in a printed string) and the VGC restyles the text as it scans it
+; out, PETSCII-style. The two colour codes are each followed by one param byte.
+VGC_CC_RESET    = $01    ; reverse/flash/bold off + char background transparent
+VGC_CC_BOLD     = $06    ; bold    (toggle: 1st occurrence on, next off)
+VGC_CC_FLASH    = $07    ; flash   (toggle)
+VGC_CC_REVERSE  = $0E    ; reverse (toggle)
+VGC_CC_FG       = $10    ; + 1 byte: foreground colour 0-15
+VGC_CC_BG       = $11    ; + 1 byte: screen background colour 0-15
+VGC_CC_CHARBG   = $14    ; + 1 byte: char background, 0-15 opaque / 16 transparent
+.endif
 ; @label VGC.GFXTRANS
 ; @kind const
 ; @symbol VGC_GFXTRANS

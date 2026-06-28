@@ -14,6 +14,16 @@ A016 CONSTANT VGC-P5
 A017 CONSTANT VGC-P6
 A018 CONSTANT VGC-P7
 A0E9 CONSTANT VGC-PALETTE
+A0C0 CONSTANT VGC-TEXT-BG
+\ Inline text-style control codes (see nova.inc VGC_CC_*). EMIT them into the
+\ text stream and the VGC restyles as it prints. FG/BG/CHARBG take a param byte.
+01 CONSTANT CC-RESET
+06 CONSTANT CC-BOLD
+07 CONSTANT CC-FLASH
+0E CONSTANT CC-REVERSE
+10 CONSTANT CC-FG
+11 CONSTANT CC-BG
+14 CONSTANT CC-CHARBG
 
 01 CONSTANT VGC-CMD-PLOT
 02 CONSTANT VGC-CMD-UNPLOT
@@ -49,6 +59,24 @@ DECIMAL
 : GRAPHICS 3 VGC-MODE C! 0 VGC-CURSOR C! ;
 : MIXED-GFX 1 VGC-MODE C! 0 VGC-CURSOR C! ;
 : TEXT 0 VGC-MODE C! ;
+
+\ Per-character background colour. Each printed character captures the current
+\ setting into its own cell, so you can mix freely across the screen:
+\   CHARBG-OFF        transparent (default) - the char shows whatever the
+\                     screen background is (VGC-BGCOL / a copper gradient).
+\   ( color ) CHARBG  opaque background colour 0-15 baked into the char.
+: CHARBG ( color -- ) $0F AND VGC-TEXT-BG C! ;
+: CHARBG-OFF ( -- ) $10 VGC-TEXT-BG C! ;
+
+\ Inline style helpers — emit a code into the text stream so the styling travels
+\ with what you print. INK/PAPER take a colour; REVERSE/BOLD/FLASH toggle (1st
+\ use on, next off); PLAIN resets everything to normal (transparent bg, no fx).
+: INK ( color -- )   CC-FG EMIT EMIT ;
+: PAPER ( color -- ) CC-BG EMIT EMIT ;
+: REVERSE ( -- )     CC-REVERSE EMIT ;
+: BOLD ( -- )        CC-BOLD EMIT ;
+: FLASH ( -- )       CC-FLASH EMIT ;
+: PLAIN ( -- )       CC-RESET EMIT ;
 : PALETTE ( mode -- ) 1 AND VGC-PALETTE C! ;
 : NOVA-PALETTE ( -- ) PALETTE-NOVA PALETTE ;
 : C64-PALETTE ( -- ) PALETTE-NOVA PALETTE ;

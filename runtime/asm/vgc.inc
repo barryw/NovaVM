@@ -22,6 +22,8 @@ VGC_RESULT_ERROR = $01
 .global vgc_set_fg
 .global vgc_set_bg
 .global vgc_set_border
+.global vgc_set_charbg
+.global vgc_charbg_off
 .global vgc_display_on
 .global vgc_display_off
 .global vgc_irq_install

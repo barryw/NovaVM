@@ -2,7 +2,7 @@
 ; Runtime label hash table for ADDR("LABEL") in the SYSTEM module.
 
 RUNTIME_LABEL_BUCKET_COUNT = 64
-RUNTIME_LABEL_COUNT = 119
+RUNTIME_LABEL_COUNT = 120
 
 RuntimeLabelBuckets:
       .word @bucket_00
@@ -309,7 +309,7 @@ RuntimeLabelBuckets:
 
 @bucket_1C:
       .byte 15
-      .word $FFBA
+      .word $FFC2
       .byte "FIO.CLEAR_ERROR"
       .byte 0
 
@@ -590,6 +590,9 @@ RuntimeLabelBuckets:
       .byte 12
       .word $A0E8
       .byte "VGC.GFXTRANS"
+      .byte 11
+      .word $A0C0
+      .byte "VGC.TEXT_BG"
       .byte 0
 
 @bucket_3C:

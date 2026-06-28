@@ -560,7 +560,9 @@ XTK_MDOTS16L       = $62              ; MDOTS16L(ax,ay,bx,by) - signed dot low w
 XTK_MDOTS16H       = $63              ; MDOTS16H(ax,ay,bx,by) - signed dot high word
 XTK_MCROSSL        = $64              ; MCROSSL(ax,ay,bx,by) - signed cross low word
 XTK_MCROSSH        = $65              ; MCROSSH(ax,ay,bx,by) - signed cross high word
-                                      ; $66-$6A reserved
+XTK_CHARBG         = $66              ; CHARBG <color> — opaque per-char text bg (0-15)
+XTK_CHARBGOFF      = $67              ; CHARBGOFF — per-char text bg transparent (default)
+                                      ; $68-$6A reserved
 XTK_REVERSE        = $6B              ; REVERSE [fg,bg] — reverse text output
 XTK_REVERSEOFF     = $6C              ; REVERSEOFF — normal text output
 XTK_FLASH          = $6D              ; FLASH — flashing text output
@@ -2089,8 +2091,10 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_MDOTS16H   ($63) - function only
       .word LAB_15D9-1        ; XTK_MCROSSL    ($64) - function only
       .word LAB_15D9-1        ; XTK_MCROSSH    ($65) - function only
-      ; $66-$6A reserved
-      .repeat $05
+      .word LAB_CHARBG-1      ; XTK_CHARBG     ($66)
+      .word LAB_CHARBGOFF-1   ; XTK_CHARBGOFF  ($67)
+      ; $68-$6A reserved
+      .repeat $03
       .word LAB_15D9-1
       .endrepeat
       .word LAB_REVERSE-1     ; XTK_REVERSE    ($6B)
@@ -8911,7 +8915,8 @@ TAB_XTKSTR
       .word @s_mlen2, @s_mscalx, @s_mscaly
       .word @s_mmul16l, @s_mmul16h, @s_mdots16l, @s_mdots16h
       .word @s_mcrossl, @s_mcrossh
-      .repeat $05
+      .word @s_charbg, @s_charbgoff
+      .repeat $03
       .word @s_reserved_ext
       .endrepeat
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
@@ -8993,6 +8998,8 @@ TAB_XTKSTR
 @s_mdots16h: .byte "MDOTS16H(",0
 @s_mcrossl: .byte "MCROSSL(",0
 @s_mcrossh: .byte "MCROSSH(",0
+@s_charbg:  .byte "CHARBG",0
+@s_charbgoff: .byte "CHARBGOFF",0
 @s_reverse: .byte "REVERSE",0
 @s_reverseoff: .byte "REVERSEOFF",0
 @s_flash:   .byte "FLASH",0
@@ -9049,37 +9056,38 @@ LAB_BOOT_SCREEN_CLEAR
       JSR   V_OUTP
       RTS
 
+; position the text cursor: A = column, Y = row. Shared by the splash lines below
+; (factored out to reclaim ROM — the BASIC ROM is essentially full).
+LAB_SPL_CUR
+      STA   VGC_CURSX
+      STA   TPos
+      STY   VGC_CURSY
+      RTS
+
 LAB_SPLASH
       JSR   LAB_BOOT_SCREEN_CLEAR
       LDA   #$21              ; centered x for "NovaBASIC v1.0"
-      STA   VGC_CURSX
-      STA   TPos
-      LDA   #$01              ; leave breathing room on the first row
-      STA   VGC_CURSY
+      LDY   #$01              ; leave breathing room on the first row
+      JSR   LAB_SPL_CUR
       LDA   #<LAB_BNR1
       LDY   #>LAB_BNR1
       JSR   LAB_18C3
 
-      LDA   #$1A              ; centered x for "Derived from EhBASIC 2.22p5"
-      STA   VGC_CURSX
-      STA   TPos
-      LDA   #$03              ; one empty row between lines
-      STA   VGC_CURSY
+      LDA   #$1E              ; centered x for "Derived from EhBASIC"
+      LDY   #$03              ; one empty row between lines
+      JSR   LAB_SPL_CUR
       LDA   #<LAB_BNR2
       LDY   #>LAB_BNR2
       JSR   LAB_18C3
 
       LDA   #$11              ; centered x for "xxxxx BASIC bytes free  xxxK expansion memory"
-      STA   VGC_CURSX
-      STA   TPos
-      LDA   #$05              ; one empty row between lines
-      STA   VGC_CURSY
-      RTS
+      LDY   #$05              ; one empty row between lines
+      JMP   LAB_SPL_CUR       ; tail call: set cursor, return to splash caller
 
 LAB_BNR1
       .byte "NovaBASIC v1.0",$00
 LAB_BNR2
-      .byte "Derived from EhBASIC 2.22p5",$00
+      .byte "Derived from EhBASIC",$00   ; license-required attribution string
 
 ; sprite.s is no longer compiled into the BASIC ROM: every SPRITE keyword now
 ; routes through the shared GRAPHICS module via lib_call (GFN_SPR_*), exactly as
@@ -9369,6 +9377,20 @@ LAB_FLASHOFF                    ; relocated from ext EXT_FLASHOFF (direct, Group
       LDA   VGC_TXTFLAGS
       AND   #$FB
       STA   VGC_TXTFLAGS
+      RTS
+
+; perform CHARBG <color> — opaque per-character text background (0-15), baked into
+; each subsequently PRINTed cell. CHARBGOFF restores the transparent default so the
+; cell shows the live screen background. Both store one byte to VGC_TEXT_BG; they
+; share the STX tail via the classic BIT-absolute ($2C) skip so CHARBG's parsed
+; colour (in X) and CHARBGOFF's #VGC_TEXT_BG_TRANSPARENT fall through to one store.
+
+LAB_CHARBG
+      JSR   LAB_GTBY          ; parse colour byte (0-15) -> X
+      .byte $2C               ; BIT abs: swallow the LDX #imm below when entered here
+LAB_CHARBGOFF
+      LDX   #VGC_TEXT_BG_TRANSPARENT ; transparent (default)
+      STX   VGC_TEXT_BG       ; bake colour / clear to transparent
       RTS
 
 ; perform VPOKE plane,addr,value — write a byte to VGC memory

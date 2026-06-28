@@ -1043,7 +1043,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$FFBA`
+- Address: `$FFC2`
 
 Outputs:
 - `A`: 0 on success.
@@ -3175,6 +3175,13 @@ Low byte of the last tween result.
 - Kind: `u8`
 - Symbol: `TWEEN_VALUEL`
 
+## VGC.CHARBG_OFF
+
+Make subsequently printed characters TRANSPARENT (the default):
+
+- Kind: `routine`
+- Symbol: `vgc_charbg_off`
+
 ## VGC.CIRCLE
 
 Issue the VGC circle/ellipse command using VGC.P0..VGC.P7.
@@ -3531,6 +3538,16 @@ Set the VGC border colour.
 Inputs:
 - `X`: Border colour byte.
 
+## VGC.SET_CHARBG
+
+Give subsequently printed characters an OPAQUE background colour.
+
+- Kind: `routine`
+- Symbol: `vgc_set_charbg`
+
+Inputs:
+- `X`: Background colour byte (0-15).
+
 ## VGC.SET_FG
 
 Set the current text foreground colour.
@@ -3593,6 +3610,14 @@ Load the IBM EGA palette into the active VGC palette.
 
 Outputs:
 - `A`: 0 on success.
+
+## VGC.TEXT_BG
+
+Per-character background control. Each emitted character captures this
+
+- Kind: `const`
+- Symbol: `VGC_TEXT_BG`
+- Address: `$A0C0`
 
 ## VGC.UNPLOT
 

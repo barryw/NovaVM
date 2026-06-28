@@ -2219,6 +2219,27 @@ do_listp:
       CMP   #VAL_LIST
       JMP   predicate_result
 
+; ---------------------------------------------------------------------
+; do_setcharbg — SETCHARBG <color>: opaque per-character text background.
+;   Arity 1: dispatcher pre-evaluates the arg into eval_val (low byte = color
+;   0-15). Store it straight to the VGC per-char background register so every
+;   subsequently-printed char paints its cell with this color.
+; ---------------------------------------------------------------------
+do_setcharbg:
+      LDA   eval_val_lo
+      STA   VGC_TEXT_BG
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_clearcharbg — CLEARCHARBG: revert to transparent per-char background.
+;   Arity 0, no arguments. Writes VGC_TEXT_BG_TRANSPARENT ($10) so printed
+;   chars again show the live screen background (the default).
+; ---------------------------------------------------------------------
+do_clearcharbg:
+      LDA   #VGC_TEXT_BG_TRANSPARENT
+      STA   VGC_TEXT_BG
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -2309,6 +2330,10 @@ str_wordp_name:
       .byte 5, "WORD?"
 str_listp_name:
       .byte 5, "LIST?"
+str_setcharbg_name:
+      .byte 9, "SETCHARBG"
+str_clearcharbg_name:
+      .byte 11, "CLEARCHARBG"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -2539,5 +2564,13 @@ builtin_table:
       .word str_apply_name
       .word do_apply
       .byte 0
+
+      .word str_setcharbg_name
+      .word do_setcharbg
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the color
+
+      .word str_clearcharbg_name
+      .word do_clearcharbg
+      .byte 0                    ; arity 0: no arguments
 
       .word $0000               ; end sentinel

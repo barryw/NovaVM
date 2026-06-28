@@ -166,6 +166,28 @@ vgc_set_border:
       STX   VGC_BORDER
       RTS
 
+; @label VGC.SET_CHARBG
+; @kind routine
+; @symbol vgc_set_charbg
+; @summary Give subsequently printed characters an OPAQUE background colour.
+;   Each emitted character captures this colour into its own cell, independent
+;   of the screen background. Call vgc_charbg_off to return to transparent.
+; @in X: Background colour byte (0-15).
+vgc_set_charbg:
+      STX   VGC_TEXT_BG
+      RTS
+
+; @label VGC.CHARBG_OFF
+; @kind routine
+; @symbol vgc_charbg_off
+; @summary Make subsequently printed characters TRANSPARENT (the default):
+;   each character's cell shows the live screen background (VGC_BGCOL / copper)
+;   rather than a colour baked in at print time.
+vgc_charbg_off:
+      LDA   #VGC_TEXT_BG_TRANSPARENT
+      STA   VGC_TEXT_BG
+      RTS
+
 ; @label VGC.DISPLAY_ON
 ; @kind routine
 ; @symbol vgc_display_on
