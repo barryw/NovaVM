@@ -70,8 +70,15 @@ module vgc_copper #(
                 copper_index <= 0;
             end
 
-            // Fire copper entries when beam reaches their position
-            if (copper_enabled && in_text_area &&
+            // Fire copper entries when the beam reaches their position.
+            // Gate on the whole VISIBLE scanline (v_count < V_ACTIVE), NOT just
+            // in_text_area: the canvas region excludes the left border, so gating
+            // on it held every register write back until the active area began.
+            // The left border then scanned out with the PREVIOUS line's value, so
+            // copper bars lagged one scanline on the left edge only. Firing across
+            // the full visible line lands the write before the left border draws.
+            // Verified pixel-aligned in boards/arty_z7/sim/vgc (render testbench).
+            if (copper_enabled && (v_count < V_ACTIVE) &&
                 copper_index < copper_count &&
                 beam_pos >= copper_pos[copper_index]) begin
                 copper_fire <= 1;
