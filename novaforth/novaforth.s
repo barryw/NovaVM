@@ -162,7 +162,12 @@ cold_start:
       LDX   #$FF
       TXS
 
-      LDA   #ROMSWAP_FORTH
+      ; The shared autoboot launcher LOADRUNTIMEs us into the PRIMARY $C000 bank
+      ; and enters with REG_ROMSWAP = ROMSWAP_PRIMARY, so that is the bank we run
+      ; in and the one lib_call must restore after a module call. (Using
+      ; ROMSWAP_FORTH here left the FILES module mapped at $C000 on return -> the
+      ; CPU RTS'd into module code and hung on the first lib call, e.g. PWD/DIR.)
+      LDA   #ROMSWAP_PRIMARY
       STA   LIB_HOME_BANK
       LDA   #MODULE_ID_NONE
       STA   LIB_RESIDENT
