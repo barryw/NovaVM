@@ -43,7 +43,11 @@ DECIMAL
 
 : VGC-CMD! ( cmd -- ) VGC-WAIT VGC-CMD C! VGC-WAIT ;
 
-: GRAPHICS 1 VGC-MODE C! 0 VGC-CURSOR C! ;
+\ GRAPHICS = mode 3 (gfx only, text layer hidden). Mode 1 leaves the text layer
+\ ON TOP of the gfx, painting the REPL over your drawing; use MIXED-GFX for that
+\ on purpose. GRAPHICS is pure graphics.
+: GRAPHICS 3 VGC-MODE C! 0 VGC-CURSOR C! ;
+: MIXED-GFX 1 VGC-MODE C! 0 VGC-CURSOR C! ;
 : TEXT 0 VGC-MODE C! ;
 : PALETTE ( mode -- ) 1 AND VGC-PALETTE C! ;
 : NOVA-PALETTE ( -- ) PALETTE-NOVA PALETTE ;

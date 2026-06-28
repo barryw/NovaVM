@@ -136,4 +136,16 @@ DECIMAL
   LIB-ARG0 !
   SND-FN-MUSIC-NOTE SOUND-CALL NDK-RESULT8 SWAP ;
 
+\ ---- one-word convenience: the name is parsed from the input, like INCLUDE ----
+\ SFLOAD <name>    load a soundfont  ->  /data/nova/soundfonts/<name>.sf2
+\ MIDPLAY <name>   play a MIDI       ->  /data/nova/soundfonts/<name>.mid
+\ MIDSTOP          stop MIDI playback
+\ SIDPLAY <name>   load + play a .sid (song 0)
+\ SIDSTOP          stop SID playback
+: SFLOAD  ( "<name>" -- )  PARSE-NAME SND-SFLOAD-FILE  DROP ;
+: MIDPLAY ( "<name>" -- )  PARSE-NAME SND-MIDPLAY-FILE DROP ;
+: MIDSTOP ( -- )           SND-MIDSTOP DROP ;
+: SIDPLAY ( "<name>" -- )  PARSE-NAME 0 SND-SIDPLAY-FILE DROP ;
+: SIDSTOP ( -- )           SND-SIDSTOP DROP ;
+
 BASE !
