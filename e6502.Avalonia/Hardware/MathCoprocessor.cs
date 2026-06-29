@@ -42,7 +42,8 @@ public sealed class MathCoprocessor
                                       VgcConstants.MathCapDistApprox |
                                       VgcConstants.MathCapRng |
                                       VgcConstants.MathCapDivS32_16 |
-                                      VgcConstants.MathCapAtan2,
+                                      VgcConstants.MathCapAtan2 |
+                                      VgcConstants.MathCapSqrt,
             VgcConstants.MathCaps1 => VgcConstants.MathCap1VecDotS16 |
                                       VgcConstants.MathCap1VecDotFx |
                                       VgcConstants.MathCap1VecCrossS16 |
@@ -86,6 +87,8 @@ public sealed class MathCoprocessor
             DivS32ByS16(data);
         else if (address == VgcConstants.MathAtanDxHi)
             Atan2(data);
+        else if (address == VgcConstants.MathSqrtHi)
+            Sqrt(data);
         else if (address == VgcConstants.MathVecOp)
             VectorOp(data);
     }
@@ -178,6 +181,32 @@ public sealed class MathCoprocessor
         _regs[VgcConstants.MathRes2 - VgcConstants.MathBase] = (byte)(hypot >> 8);
         _regs[VgcConstants.MathRes3 - VgcConstants.MathBase] = 0;
         _regs[VgcConstants.MathStatus - VgcConstants.MathBase] = VgcConstants.MathStatusOk;
+    }
+
+    private void Sqrt(byte hi)
+    {
+        // Unsigned 16-bit floor integer sqrt (non-restoring, bit-by-bit).
+        // MUST stay bit-identical with math_copro.sv's OP_SQRT FSM.
+        int n = _regs[VgcConstants.MathSqrtLo - VgcConstants.MathBase] | (hi << 8);
+        int res = 0;
+        int bit = 1 << 14;          // 4^7, highest power of 4 <= 65535
+        while (bit > n)
+            bit >>= 2;
+        while (bit != 0)
+        {
+            if (n >= res + bit)
+            {
+                n -= res + bit;
+                res = (res >> 1) + bit;
+            }
+            else
+            {
+                res >>= 1;
+            }
+            bit >>= 2;
+        }
+
+        SetResult16((ushort)res, VgcConstants.MathStatusOk);
     }
 
     private void VectorOp(byte op)

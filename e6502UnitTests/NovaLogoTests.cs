@@ -345,8 +345,15 @@ public class NovaLogoTests
             "INT 9 -> 9");
         Assert.IsTrue(RunLogoLines("PRINT ROUND 5").Contains("5", StringComparison.Ordinal),
             "ROUND 5 -> 5");
-        Assert.IsTrue(RunLogoLines("PRINT SQRT 9").Contains("3", StringComparison.Ordinal),
-            "SQRT 9 -> 3");
+        // SQRT must compute a real floor integer square root, not |n|.
+        // Add the result to a distinctive base so a stray "3"/"4" elsewhere on
+        // screen (e.g. the boot banner) can't make a broken SQRT look correct.
+        Assert.IsTrue(RunLogoLines("PRINT 1000 + SQRT 9").Contains("1003", StringComparison.Ordinal),
+            "SQRT 9 -> 3 (1000 + 3 = 1003)");
+        Assert.IsTrue(RunLogoLines("PRINT 1000 + SQRT 16").Contains("1004", StringComparison.Ordinal),
+            "SQRT 16 -> 4 (1000 + 4 = 1004)");
+        Assert.IsTrue(RunLogoLines("PRINT 1000 + SQRT 15").Contains("1003", StringComparison.Ordinal),
+            "SQRT 15 -> 3 floor (1000 + 3 = 1003)");
         Assert.IsTrue(RunLogoLines("PRINT NUMBER? 5").Contains("1", StringComparison.Ordinal),
             "NUMBER? 5 -> 1");
         Assert.IsTrue(RunLogoLines("PRINT WORD? \"HI").Contains("1", StringComparison.Ordinal),

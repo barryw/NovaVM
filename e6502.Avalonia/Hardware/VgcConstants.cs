@@ -623,6 +623,8 @@ public static class VgcConstants
     public const int MathVecByHi       = 0xBB47;
     public const int MathVecScalarLo   = 0xBB48;
     public const int MathVecScalarHi   = 0xBB49;
+    public const int MathSqrtLo        = 0xBB4A;
+    public const int MathSqrtHi        = 0xBB4B;  // write triggers integer SQRT
     public const int MathVecOp         = 0xBB4E;  // write triggers vector operation
 
     public const byte MathVersionCurrent = 0x02;
@@ -633,6 +635,7 @@ public static class VgcConstants
     public const byte MathCapRng         = 0x10;
     public const byte MathCapDivS32_16   = 0x20;
     public const byte MathCapAtan2       = 0x40;
+    public const byte MathCapSqrt        = 0x80;
     public const byte MathCap1VecDotS16  = 0x01;
     public const byte MathCap1VecDotFx   = 0x02;
     public const byte MathCap1VecCrossS16 = 0x04;

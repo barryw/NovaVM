@@ -933,6 +933,29 @@ public class NovaForthTests
     }
 
     [TestMethod]
+    public void MathLibrarySqrtUsesCoprocessor()
+    {
+        // The nova math library's SQRT word drives the hardware math
+        // coprocessor (floor integer sqrt), proving the single coprocessor
+        // implementation is reachable from Forth.
+        string screen = RunForthLines(
+            "INCLUDE forth/lib/nova/math.4th",
+            "9 SQRT .",
+            "16 SQRT .",
+            "15 SQRT .",
+            "144 SQRT .",
+            "0 SQRT .");
+
+        Assert.IsTrue(screen.Contains("3 ", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("4 ", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("12 ", StringComparison.Ordinal), screen);
+        Assert.IsTrue(screen.Contains("0 ", StringComparison.Ordinal), screen);
+        Assert.IsFalse(screen.Contains("INCLUDE FAILED", StringComparison.Ordinal), screen);
+        Assert.IsFalse(screen.Contains("UNKNOWN WORD", StringComparison.Ordinal), screen);
+        Assert.IsFalse(screen.Contains("STACK UNDERFLOW", StringComparison.Ordinal), screen);
+    }
+
+    [TestMethod]
     public void VgcLibraryDrawsCircle()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Forth);

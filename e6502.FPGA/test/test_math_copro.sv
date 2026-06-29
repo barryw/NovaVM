@@ -48,6 +48,8 @@ module test_math_copro;
     localparam VEC_BX_LO  = MATH + 36;
     localparam VEC_BY_LO  = MATH + 38;
     localparam VEC_S_LO   = MATH + 40;
+    localparam SQRT_LO    = MATH + 42;
+    localparam SQRT_HI    = MATH + 43;
     localparam VEC_OP     = MATH + 46;
 
     localparam VEC_OP_DOT_S16   = 8'h01;
@@ -240,6 +242,14 @@ module test_math_copro;
         read_result_hi16(hi_word);
     endtask
 
+    task automatic run_sqrt(input logic [15:0] n, output logic [15:0] value);
+        write_reg(SQRT_LO, n[7:0]);
+        write_reg(SQRT_HI, n[15:8]);   // high byte triggers the op
+        check("SQRT trigger stalls CPU until result is ready", rdy_out === 1'b0);
+        wait_ready();
+        read_result16(value);
+    endtask
+
     task automatic sincos(input logic [7:0] angle, output logic [7:0] sin_value, output logic [7:0] cos_value);
         write_reg(SINCOS, angle);
         check("SINCOS trigger stalls CPU until result is ready", rdy_out === 1'b0);
@@ -271,7 +281,7 @@ module test_math_copro;
         read_reg(VERSION, r8);
         check_eq8("VERSION exposes math ABI v2", r8, 8'h02);
         read_reg(CAPS0, r8);
-        check_eq8("CAPS0 exposes implemented scalar ops", r8, 8'h7F);
+        check_eq8("CAPS0 exposes implemented scalar ops", r8, 8'hFF);
         read_reg(CAPS1, r8);
         check_eq8("CAPS1 exposes vector ops", r8, 8'h1F);
         read_status(r8);
@@ -283,7 +293,7 @@ module test_math_copro;
         read_reg(VERSION, r8);
         check_eq8("VERSION is read-only", r8, 8'h02);
         read_reg(CAPS0, r8);
-        check_eq8("CAPS0 is read-only", r8, 8'h7F);
+        check_eq8("CAPS0 is read-only", r8, 8'hFF);
         read_status(r8);
         check_eq8("STATUS is read-only", r8, STATUS_OK);
 
@@ -379,6 +389,23 @@ module test_math_copro;
         run_vec_words(VEC_OP_SCALE_FX, r16, r16b);
         check_eq16("VEC SCALE_FX x", r16, 16'h00C0);
         check_eq16("VEC SCALE_FX y", r16b, 16'h0080);
+
+        run_sqrt(16'd0, r16);
+        check_eq16("SQRT 0", r16, 16'd0);
+        read_status(r8);
+        check_eq8("SQRT leaves STATUS ok", r8, STATUS_OK);
+        run_sqrt(16'd1, r16);
+        check_eq16("SQRT 1", r16, 16'd1);
+        run_sqrt(16'd9, r16);
+        check_eq16("SQRT 9", r16, 16'd3);
+        run_sqrt(16'd15, r16);
+        check_eq16("SQRT 15 floor", r16, 16'd3);
+        run_sqrt(16'd16, r16);
+        check_eq16("SQRT 16", r16, 16'd4);
+        run_sqrt(16'd144, r16);
+        check_eq16("SQRT 144", r16, 16'd12);
+        run_sqrt(16'd65535, r16);
+        check_eq16("SQRT 65535", r16, 16'd255);
 
         write_reg(RNG, 8'h78);
         write_reg(RNG, 8'h56);

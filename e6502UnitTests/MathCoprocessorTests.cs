@@ -20,7 +20,8 @@ public class MathCoprocessorTests
                             VgcConstants.MathCapDistApprox |
                             VgcConstants.MathCapRng |
                             VgcConstants.MathCapDivS32_16 |
-                            VgcConstants.MathCapAtan2;
+                            VgcConstants.MathCapAtan2 |
+                            VgcConstants.MathCapSqrt;
         byte expectedCaps1 = VgcConstants.MathCap1VecDotS16 |
                              VgcConstants.MathCap1VecDotFx |
                              VgcConstants.MathCap1VecCrossS16 |
@@ -166,6 +167,38 @@ public class MathCoprocessorTests
         _math.Write((ushort)VgcConstants.MathVecOp, VgcConstants.MathVecOpScaleFx);
         Assert.AreEqual(0x00C0, ReadResult16());
         Assert.AreEqual(0x0080, ReadResultHi16());
+    }
+
+    [TestMethod]
+    public void SqrtComputesFloorIntegerRoot()
+    {
+        (ushort input, ushort expected)[] cases =
+        [
+            (0, 0),
+            (1, 1),
+            (9, 3),
+            (15, 3),
+            (16, 4),
+            (144, 12),
+            (65535, 255),
+        ];
+
+        foreach ((ushort input, ushort expected) in cases)
+        {
+            WriteWord(VgcConstants.MathSqrtLo, input);
+            Assert.AreEqual(expected, ReadResult16(), $"SQRT {input} should be {expected}");
+            Assert.AreEqual(VgcConstants.MathStatusOk, _math.Read((ushort)VgcConstants.MathStatus),
+                $"SQRT {input} should leave STATUS ok");
+        }
+    }
+
+    [TestMethod]
+    public void Caps0AdvertisesSqrt()
+    {
+        byte caps0 = _math.Read((ushort)VgcConstants.MathCaps0);
+        Assert.AreEqual(VgcConstants.MathCapSqrt,
+            (byte)(caps0 & VgcConstants.MathCapSqrt), "CAPS0 must advertise the SQRT capability bit.");
+        Assert.AreEqual(0xFF, caps0, "With SQRT added, all eight CAPS0 scalar-op bits are now set.");
     }
 
     [TestMethod]

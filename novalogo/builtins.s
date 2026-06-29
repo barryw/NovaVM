@@ -2062,15 +2062,13 @@ do_random:
       JMP   return_number
 
 ; ---------------------------------------------------------------------
-; do_sqrt — SQRT n: approximate sqrt via DIST_APPROX(n, 0)
+; do_sqrt — SQRT n: exact floor integer sqrt via the math coprocessor
 ; ---------------------------------------------------------------------
 do_sqrt:
       LDA   eval_val_lo
-      STA   MATH_DIST_DX_LO
+      STA   MATH_SQRT_LO
       LDA   eval_val_hi
-      STA   MATH_DIST_DX_HI
-      STZ   MATH_DIST_DY_LO
-      STZ   MATH_DIST_DY_HI       ; trigger (write to DY_HI triggers)
+      STA   MATH_SQRT_HI          ; trigger (write to SQRT_HI triggers)
       LDA   MATH_RES0
       STA   eval_val_lo
       LDA   MATH_RES1

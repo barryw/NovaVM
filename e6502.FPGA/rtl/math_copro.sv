@@ -60,6 +60,8 @@ module math_copro (
     localparam R_VEC_BY_HI   = 6'd39;
     localparam R_VEC_S_LO    = 6'd40;
     localparam R_VEC_S_HI    = 6'd41;
+    localparam R_SQRT_LO     = 6'd42;
+    localparam R_SQRT_HI     = 6'd43;
     localparam R_VEC_OP      = 6'd46;
 
     localparam logic [31:0] RNG_DEFAULT = 32'hDEADBEEF;
@@ -67,7 +69,7 @@ module math_copro (
     localparam logic signed [31:0] FX_MIN = -32'sd32768;
     localparam logic [7:0] MATH_VERSION = 8'd2;
     localparam logic [7:0] MATH_CAPS0 =
-        8'b0111_1111; // MUL16 | MULFX | SINCOS | DIST | RNG | DIV | ATAN2
+        8'b1111_1111; // MUL16 | MULFX | SINCOS | DIST | RNG | DIV | ATAN2 | SQRT
     localparam logic [7:0] MATH_CAPS1 =
         8'b0001_1111; // VEC_DOT_S16 | VEC_DOT_FX | VEC_CROSS | VEC_LEN2 | VEC_SCALE_FX
 
@@ -90,6 +92,7 @@ module math_copro (
         OP_SINCOS,
         OP_ATAN2,
         OP_DIST,
+        OP_SQRT,
         OP_VEC_DOT_S16,
         OP_VEC_DOT_FX,
         OP_VEC_CROSS_S16,
@@ -127,6 +130,9 @@ module math_copro (
     logic signed [23:0] atan_y;
     logic signed [9:0]  atan_z;
     logic        atan_zero;
+    logic [15:0] sqrt_n;
+    logic [15:0] sqrt_res;
+    logic [15:0] sqrt_bit;
 
     wire math_sel = (cpu_addr >= MATH_BASE) && (cpu_addr <= MATH_END);
     wire [5:0] reg_off = cpu_addr[5:0] - MATH_BASE[5:0];
@@ -361,6 +367,9 @@ module math_copro (
             atan_y <= 24'sd0;
             atan_z <= 10'sd0;
             atan_zero <= 1'b0;
+            sqrt_n <= 16'd0;
+            sqrt_res <= 16'd0;
+            sqrt_bit <= 16'd0;
         end else begin
             if (op != OP_NONE) begin
                 unique case (op)
@@ -548,6 +557,36 @@ module math_copro (
                         end
                     end
 
+                    OP_SQRT: begin
+                        // Unsigned 16-bit floor integer sqrt (non-restoring,
+                        // bit-by-bit). MUST stay bit-identical with
+                        // MathCoprocessor.Sqrt() in C#.
+                        if (op_stage == 6'd0) begin
+                            // Align: shrink bit until bit <= n.
+                            if (sqrt_bit > sqrt_n)
+                                sqrt_bit <= sqrt_bit >> 2;
+                            else
+                                op_stage <= 6'd1;
+                        end else begin
+                            if (sqrt_bit == 16'd0) begin
+                                regs[R_RES0] <= sqrt_res[7:0];
+                                regs[R_RES1] <= sqrt_res[15:8];
+                                regs[R_RES2] <= 8'h00;
+                                regs[R_RES3] <= 8'h00;
+                                regs[R_STATUS] <= STATUS_OK;
+                                op <= OP_NONE;
+                            end else begin
+                                if (sqrt_n >= (sqrt_res + sqrt_bit)) begin
+                                    sqrt_n   <= sqrt_n - (sqrt_res + sqrt_bit);
+                                    sqrt_res <= (sqrt_res >> 1) + sqrt_bit;
+                                end else begin
+                                    sqrt_res <= sqrt_res >> 1;
+                                end
+                                sqrt_bit <= sqrt_bit >> 2;
+                            end
+                        end
+                    end
+
                     OP_VEC_DOT_S16,
                     OP_VEC_DOT_FX,
                     OP_VEC_CROSS_S16,
@@ -719,6 +758,14 @@ module math_copro (
                             op_angle <= cpu_wdata;
                             op_stage <= 6'd0;
                             op <= OP_SINCOS;
+                        end
+
+                        R_SQRT_HI: begin
+                            sqrt_n   <= {cpu_wdata, regs[R_SQRT_LO]};
+                            sqrt_res <= 16'd0;
+                            sqrt_bit <= 16'h4000; // 4^7, highest power of 4 <= 65535
+                            op_stage <= 6'd0;
+                            op <= OP_SQRT;
                         end
 
                         R_ATAN_DX_HI: begin

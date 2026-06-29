@@ -686,6 +686,31 @@ public class BasicRegressionTests
     }
 
     [TestMethod]
+    public void MathCoprocessorSqrtReachableFromBasic()
+    {
+        // Drive the hardware math coprocessor's integer SQRT from BASIC via
+        // POKE/PEEK: POKE the input low byte to $BB4A, then the high byte to
+        // $BB4B (writing the high byte triggers the op), then PEEK the result
+        // low byte at $BB38. SQRT(144) = 12, so 2000 + 12 = 2012 proves the
+        // single coprocessor implementation is reachable from BASIC.
+        // Separately, EhBASIC's own float SQR(9) = 3 path stays correct:
+        // 3000 + 3 = 3003.
+        string screen = RunProgram(new[]
+        {
+            "10 POKE $BB4A,144",
+            "20 POKE $BB4B,0",
+            "30 PRINT 2000+PEEK($BB38)",
+            "40 PRINT 3000+SQR(9)",
+            "RUN"
+        });
+
+        Assert.IsTrue(screen.Contains("2012", StringComparison.Ordinal),
+            $"Coprocessor SQRT(144) via POKE/PEEK should yield 12 (2000+12=2012).\n{screen}");
+        Assert.IsTrue(screen.Contains("3003", StringComparison.Ordinal),
+            $"EhBASIC float SQR(9) should still be 3 (3000+3=3003).\n{screen}");
+    }
+
+    [TestMethod]
     public void XramStashFetchRoundtripRestoresRam()
     {
         string screen = RunProgram(new[]

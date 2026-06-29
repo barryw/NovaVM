@@ -1064,6 +1064,12 @@ MATH_VEC_S_LO     = $BB48
 .ifndef MATH_VEC_S_HI
 MATH_VEC_S_HI     = $BB49
 .endif
+.ifndef MATH_SQRT_LO
+MATH_SQRT_LO      = $BB4A
+.endif
+.ifndef MATH_SQRT_HI
+MATH_SQRT_HI      = $BB4B
+.endif
 .ifndef MATH_VEC_OP
 MATH_VEC_OP       = $BB4E
 .endif
@@ -1090,6 +1096,9 @@ MATH_CAP_DIV_S32_16  = $20
 .endif
 .ifndef MATH_CAP_ATAN2
 MATH_CAP_ATAN2       = $40
+.endif
+.ifndef MATH_CAP_SQRT
+MATH_CAP_SQRT        = $80
 .endif
 .ifndef MATH_CAP1_VEC_DOT_S16
 MATH_CAP1_VEC_DOT_S16   = $01

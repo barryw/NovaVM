@@ -1521,7 +1521,7 @@
     {
       "label": "FIO.CMD_LOADRUNTIME",
       "source": "../runtime/asm/nova.inc",
-      "line": 1255,
+      "line": 1264,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1533,7 +1533,7 @@
     {
       "label": "FIO.CMD_NVGLOAD",
       "source": "../runtime/asm/nova.inc",
-      "line": 1276,
+      "line": 1285,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1545,7 +1545,7 @@
     {
       "label": "FIO.CMD_RNG",
       "source": "../runtime/asm/nova.inc",
-      "line": 1269,
+      "line": 1278,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1557,7 +1557,7 @@
     {
       "label": "FIO.CMD_XPAGE",
       "source": "../runtime/asm/nova.inc",
-      "line": 1262,
+      "line": 1271,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2048,7 +2048,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../runtime/asm/nova.inc",
-      "line": 1326,
+      "line": 1335,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2060,7 +2060,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../runtime/asm/nova.inc",
-      "line": 1333,
+      "line": 1342,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2072,7 +2072,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../runtime/asm/nova.inc",
-      "line": 1340,
+      "line": 1349,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2084,7 +2084,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../runtime/asm/nova.inc",
-      "line": 1347,
+      "line": 1356,
       "inputs": [],
       "outputs": [],
       "requires": [],
