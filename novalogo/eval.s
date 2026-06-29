@@ -948,112 +948,21 @@ eval_check_infix:
 ;   Input: eval_val_hi/lo/frac (16.8 fixed-point, signed)
 ;   Clobbers: A, X, Y, num_val_lo/hi, num_tmp_lo/hi
 ; ---------------------------------------------------------------------
+; Thin wrapper: render the number into input_buf with the shared
+; render_number_to_buf (identical signed integer + .frac formatting), then copy
+; it to the screen. Numbers are short (<= ~9 chars) so input_buf never truncates.
 print_number:
-      ; Check sign — if negative, print '-' and negate
-      LDA   eval_val_hi
-      BPL   @positive
-      ; Print minus sign
-      LDA   #'-'
+      STZ   z:buf_idx
+      JSR   render_number_to_buf
+      LDX   #0
+@pn:
+      CPX   z:buf_idx
+      BCS   @pn_done
+      LDA   input_buf,X
       STA   VGC_CHAROUT
-      ; Negate 3-byte value (two's complement)
-      LDA   eval_val_frac
-      EOR   #$FF
-      CLC
-      ADC   #1
-      STA   eval_val_frac
-      LDA   eval_val_lo
-      EOR   #$FF
-      ADC   #0
-      STA   eval_val_lo
-      LDA   eval_val_hi
-      EOR   #$FF
-      ADC   #0
-      STA   eval_val_hi
-
-@positive:
-      ; Print integer part (eval_val_hi:eval_val_lo as 16-bit unsigned)
-      JSR   print_uint16
-
-      ; Print fractional part if non-zero
-      LDA   eval_val_frac
-      BNE   @has_frac
-      RTS
-@has_frac:
-
-      ; Print decimal point
-      LDA   #'.'
-      STA   VGC_CHAROUT
-
-      ; Convert frac byte to decimal digits
-      ; frac * 10 / 256 = first digit, repeat with remainder
-      LDA   eval_val_frac
-      STA   num_tmp_lo
-      STZ   num_tmp_hi
-
-      ; First digit: (frac * 10) >> 8
-      ; frac * 10 = (frac * 8) + (frac * 2)
-      LDA   num_tmp_lo
-      ASL
-      STA   num_val_lo          ; frac * 2
-      LDA   num_tmp_hi
-      ROL
-      STA   num_val_hi
-
-      ASL   num_val_lo
-      ROL   num_val_hi
-      ASL   num_val_lo
-      ROL   num_val_hi          ; frac * 8
-
-      CLC
-      LDA   num_tmp_lo
-      ASL                       ; frac * 2 (low byte)
-      ADC   num_val_lo
-      STA   num_val_lo
-      LDA   num_tmp_hi
-      ROL
-      ADC   num_val_hi
-      STA   num_val_hi          ; num_val = frac * 10
-
-      ; High byte = first decimal digit
-      LDA   num_val_hi
-      ORA   #'0'
-      STA   VGC_CHAROUT
-
-      ; Remainder = low byte → second digit
-      LDA   num_val_lo
-      STA   num_tmp_lo
-      STZ   num_tmp_hi
-
-      ; Second digit: (remainder * 10) >> 8
-      LDA   num_tmp_lo
-      ASL
-      STA   num_val_lo
-      LDA   num_tmp_hi
-      ROL
-      STA   num_val_hi
-
-      ASL   num_val_lo
-      ROL   num_val_hi
-      ASL   num_val_lo
-      ROL   num_val_hi
-
-      CLC
-      LDA   num_tmp_lo
-      ASL
-      ADC   num_val_lo
-      STA   num_val_lo
-      LDA   num_tmp_hi
-      ROL
-      ADC   num_val_hi
-      STA   num_val_hi
-
-      ; High byte = second digit; skip if zero (trailing)
-      LDA   num_val_hi
-      BEQ   @done
-      ORA   #'0'
-      STA   VGC_CHAROUT
-
-@done:
+      INX
+      BRA   @pn
+@pn_done:
       RTS
 
 ; ---------------------------------------------------------------------

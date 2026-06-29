@@ -254,129 +254,22 @@ eval_list:
 ;   Entry: eval_val_lo/hi = head cons pair pointer (or $0000)
 ;   Clobbers: A, X, Y, ptr_lo/hi, ptr2_lo/hi, list_ptr
 ; ---------------------------------------------------------------------
+; Thin wrapper: render the list elements into input_buf via render_list_to_buf
+; (same element formatting + nested brackets), wrap them in [ ] on the screen.
+; Long lists (> ~126 chars of text) truncate at the input_buf bound.
 print_list:
       LDA   #'['
       STA   VGC_CHAROUT
-
-      LDA   eval_val_lo
-      STA   list_ptr_lo
-      LDA   eval_val_hi
-      STA   list_ptr_hi
-
-      LDX   #0                  ; 0 = first element (no leading space)
-
-@pl_loop:
-      LDA   list_ptr_lo
-      ORA   list_ptr_hi
-      BNE   :+
-      JMP   @pl_done
-:
-      CPX   #0
-      BEQ   @pl_no_space
-      LDA   #' '
+      STZ   z:buf_idx
+      JSR   render_list_to_buf
+      LDX   #0
+@pl_emit:
+      CPX   z:buf_idx
+      BCS   @pl_done
+      LDA   input_buf,X
       STA   VGC_CHAROUT
-@pl_no_space:
-      LDX   #1
-
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
-      LDY   #CONS_CAR_TYPE
-      LDA   (ptr_lo),Y
-      CMP   #VAL_LIST
-      BEQ   @pl_sublist
-      CMP   #VAL_WORD
-      BNE   :+
-      JMP   @pl_word
-:
-      ; Number
-      PHX
-      LDA   list_ptr_lo
-      PHA
-      LDA   list_ptr_hi
-      PHA
-      LDY   #CONS_CAR_HI
-      LDA   (ptr_lo),Y
-      STA   eval_val_hi
-      LDY   #CONS_CAR_LO
-      LDA   (ptr_lo),Y
-      STA   eval_val_lo
-      LDY   #CONS_CAR_FRAC
-      LDA   (ptr_lo),Y
-      STA   eval_val_frac
-      JSR   print_number
-      PLA
-      STA   list_ptr_hi
-      PLA
-      STA   list_ptr_lo
-      PLX
-      BRA   @pl_advance
-
-@pl_sublist:
-      PHX
-      LDA   list_ptr_lo
-      PHA
-      LDA   list_ptr_hi
-      PHA
-      LDY   #CONS_CAR_LO
-      LDA   (ptr_lo),Y
-      STA   eval_val_lo
-      LDY   #CONS_CAR_HI
-      LDA   (ptr_lo),Y
-      STA   eval_val_hi
-      JSR   print_list
-      PLA
-      STA   list_ptr_hi
-      PLA
-      STA   list_ptr_lo
-      PLX
-      BRA   @pl_advance
-
-@pl_word:
-      PHX
-      LDA   list_ptr_lo
-      PHA
-      LDA   list_ptr_hi
-      PHA
-      LDY   #CONS_CAR_LO
-      LDA   (ptr_lo),Y
-      STA   ptr2_lo
-      LDY   #CONS_CAR_HI
-      LDA   (ptr_lo),Y
-      STA   ptr2_hi
-      LDY   #0
-      LDA   (ptr2_lo),Y
-      TAX
-      BEQ   @pl_word_done
-      INY
-@pl_word_ch:
-      LDA   (ptr2_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BNE   @pl_word_ch
-@pl_word_done:
-      PLA
-      STA   list_ptr_hi
-      PLA
-      STA   list_ptr_lo
-      PLX
-
-@pl_advance:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
-      LDY   #CONS_CDR_LO
-      LDA   (ptr_lo),Y
-      TAX
-      LDY   #CONS_CDR_HI
-      LDA   (ptr_lo),Y
-      STA   list_ptr_hi
-      STX   list_ptr_lo
-      JMP   @pl_loop
-
+      INX
+      BRA   @pl_emit
 @pl_done:
       LDA   #']'
       STA   VGC_CHAROUT

@@ -84,6 +84,9 @@ proc_load_active: .res 1
 proc_prev_lo:     .res 1
 proc_prev_hi:     .res 1
 
+; Scratch name length for the SAVE variable serializer.
+sb_namelen:       .res 1
+
 ; =====================================================================
 ; CODE segment — procedure routines
 ; =====================================================================
@@ -2033,6 +2036,158 @@ save_append:
       RTS
 
 ; ---------------------------------------------------------------------
+; sb_put — append A to save_buf at save_pos, advancing it. Drops the byte once
+;   save_pos reaches 4096 (the save_buf size), guarding the BSS. Preserves X;
+;   clobbers Y, ptr2.
+; ---------------------------------------------------------------------
+sb_put:
+      PHA
+      LDA   save_pos_hi
+      CMP   #$10                      ; save_buf is 4096 ($1000) bytes -> full
+      BCS   @full
+      CLC
+      LDA   #<save_buf
+      ADC   save_pos_lo
+      STA   ptr2_lo
+      LDA   #>save_buf
+      ADC   save_pos_hi
+      STA   ptr2_hi
+      PLA
+      LDY   #0
+      STA   (ptr2_lo),Y
+      INC   save_pos_lo
+      BNE   :+
+      INC   save_pos_hi
+:     RTS
+@full:
+      PLA
+      RTS
+
+; ---------------------------------------------------------------------
+; sb_copybuf — append input_buf[0..buf_idx) to save_buf via sb_put. Used to flush
+;   the output of render_number_to_buf / render_list_to_buf (which target
+;   input_buf) into save_buf. Clobbers A/X/Y, ptr2.
+; ---------------------------------------------------------------------
+sb_copybuf:
+      LDX   #0
+@l:
+      CPX   z:buf_idx
+      BCS   @d
+      LDA   input_buf,X
+      JSR   sb_put
+      INX
+      BRA   @l
+@d:
+      RTS
+
+; ---------------------------------------------------------------------
+; sb_value — append a re-parseable rendering of eval_type/eval_val to save_buf:
+;   number -> bare digits; word -> "word (quoted, so it reloads as a word, safe
+;   for numeric words); list -> [ ... ] with bare elements (nested lists keep
+;   their brackets). Reuses render_number_to_buf / render_list_to_buf (which
+;   render into input_buf) + sb_copybuf. Clobbers A/X/Y, ptr/ptr2, list scratch.
+; ---------------------------------------------------------------------
+sb_value:
+      LDA   eval_type
+      CMP   #VAL_LIST
+      BEQ   @list
+      CMP   #VAL_WORD
+      BEQ   @word
+      ; number
+      STZ   z:buf_idx
+      JSR   render_number_to_buf
+      JMP   sb_copybuf
+@word:
+      LDA   #'"'
+      JSR   sb_put
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y                ; word length
+      TAX
+      BEQ   @wd
+      LDY   #1
+@wc:
+      LDA   (ptr_lo),Y
+      PHY
+      JSR   sb_put
+      PLY
+      INY
+      DEX
+      BNE   @wc
+@wd:
+      RTS
+@list:
+      LDA   #'['
+      JSR   sb_put
+      STZ   z:buf_idx
+      JSR   render_list_to_buf        ; elements (with nested brackets) -> input_buf
+      JSR   sb_copybuf
+      LDA   #']'
+      JMP   sb_put
+
+; ---------------------------------------------------------------------
+; sb_emit_var — append one "MAKE \"<name> <value>\n" line for the variable record
+;   at var_entry. Reuses sb_value for the round-trippable value. Clobbers
+;   A/X/Y, ptr/ptr2, eval_*, list scratch.
+; ---------------------------------------------------------------------
+sb_emit_var:
+      LDX   #0                        ; emit "MAKE \""
+@k:
+      LDA   str_make_kw,X
+      JSR   sb_put
+      INX
+      CPX   #6
+      BNE   @k
+      LDA   var_entry_lo              ; emit the name chars
+      STA   ptr_lo
+      LDA   var_entry_hi
+      STA   ptr_hi
+      LDY   #VAR_NAME_LEN
+      LDA   (ptr_lo),Y
+      STA   sb_namelen
+      LDX   #0
+@nm:
+      CPX   sb_namelen
+      BCS   @nmd
+      TXA
+      CLC
+      ADC   #VAR_NAME
+      TAY
+      LDA   (ptr_lo),Y
+      JSR   sb_put
+      INX
+      BRA   @nm
+@nmd:
+      LDA   #' '
+      JSR   sb_put
+      ; load the value (entry + 3 + name_len) into eval_*
+      LDA   var_entry_lo
+      STA   ptr_lo
+      LDA   var_entry_hi
+      STA   ptr_hi
+      LDA   sb_namelen
+      CLC
+      ADC   #VAR_NAME
+      TAY
+      LDA   (ptr_lo),Y
+      STA   eval_type
+      INY
+      LDA   (ptr_lo),Y
+      STA   eval_val_hi
+      INY
+      LDA   (ptr_lo),Y
+      STA   eval_val_lo
+      INY
+      LDA   (ptr_lo),Y
+      STA   eval_val_frac
+      JSR   sb_value
+      LDA   #$0A
+      JMP   sb_put
+
+; ---------------------------------------------------------------------
 ; proc_serialize_all — serialize every user procedure into save_buf by reusing
 ;   the editor's proc_record_to_buffers + proc_edit_reconstruct (which renders
 ;   one "TO <name> :params\n<body>END\n" block into proc_body_buf). Sets LIB_ARG2
@@ -2049,12 +2204,36 @@ proc_serialize_all:
 @walk:
       LDA   proc_entry_lo
       ORA   proc_entry_hi
-      BEQ   @done
+      BEQ   @vars
       JSR   proc_record_to_buffers
       JSR   proc_edit_reconstruct      ; -> proc_body_buf[0..proc_body_len)
       JSR   save_append
       JSR   proc_next
       BRA   @walk
+@vars:
+      ; Append the global variables as "MAKE \"name value" lines AFTER the
+      ; procedures, so LOAD defines procs first and then restores the variables.
+      LDA   var_head_lo
+      STA   var_entry_lo
+      LDA   var_head_hi
+      STA   var_entry_hi
+@vwalk:
+      LDA   var_entry_lo
+      ORA   var_entry_hi
+      BEQ   @done
+      JSR   sb_emit_var
+      LDA   var_entry_lo               ; advance var_entry = entry->next
+      STA   ptr_lo
+      LDA   var_entry_hi
+      STA   ptr_hi
+      LDY   #VAR_NEXT_LO
+      LDA   (ptr_lo),Y
+      TAX
+      INY
+      LDA   (ptr_lo),Y
+      STA   var_entry_hi
+      STX   var_entry_lo
+      BRA   @vwalk
 @done:
       LDA   #<save_buf
       STA   LIB_ARG2+0
@@ -2205,6 +2384,10 @@ proc_load_text:
 
 
 
+
+; "MAKE " + a double-quote — the prefix of each serialized global-variable line.
+str_make_kw:
+      .byte "MAKE ", $22
 
 ; Builtin name strings for workspace commands
 str_po_name:
