@@ -28,3 +28,13 @@ Things we'd like to include, captured so they don't get lost. Not in priority or
   a proc; debug key-injection couldn't trigger the editor's `Ctrl-K S` save (the `^K` prefix
   is recognized, the completion key isn't landing). Verify with a real keyboard, or crack
   the key-injection. SAVE reuses the editor's own serializer, so high confidence it works.
+
+- **`SQRT` is broken — returns `|n|`, not `√n`.** `do_sqrt` (novalogo/builtins.s) computes
+  `DIST_APPROX(n, 0)` = √(n²+0²) = `|n|`, so `SQRT 9 → 9` and `SQRT 16 → 16`. The math
+  coprocessor has no sqrt capability (only MUL16/MULFX/SINCOS/DIST_APPROX/RNG/DIV/ATAN2), so
+  the fix needs either an integer-sqrt routine in the Logo ROM (ROM is at ~31 bytes headroom —
+  needs a reclaim pass) or a new `MATH_CAP_SQRT` in the coprocessor (host C + desktop C# + RTL
+  → bitstream). Also strengthen the masking test: `ReporterMathFamilyComputesCorrectly` only
+  "passes" because a whole-screen `Contains("3")` matches a stray digit in the boot banner,
+  not the SQRT result — make it assert SQRT's actual output. (Pre-existing bug, surfaced by
+  the 2026-06 platform assessment.)
