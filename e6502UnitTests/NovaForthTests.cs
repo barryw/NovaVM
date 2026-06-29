@@ -957,8 +957,8 @@ public class NovaForthTests
         Assert.IsFalse(screen.Contains("UNKNOWN WORD", StringComparison.Ordinal), screen);
         Assert.IsFalse(screen.Contains("STACK UNDERFLOW", StringComparison.Ordinal), screen);
 
-        Assert.AreEqual(1, bus.Read((ushort)VgcConstants.RegMode),
-            "GRAPHICS should switch the VGC into graphics-over-text mode.");
+        Assert.AreEqual(3, bus.Read((ushort)VgcConstants.RegMode),
+            "GRAPHICS should switch the VGC into graphics-only mode (mode 3, text layer hidden); MIXED-GFX is the gfx-over-text variant.");
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegPaletteMode),
             "The legacy palette mode register should remain a compatibility no-op.");
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.RegCmd),

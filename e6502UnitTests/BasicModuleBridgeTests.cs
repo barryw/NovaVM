@@ -47,8 +47,10 @@ public class BasicModuleBridgeTests
         // ext ROM is already displaced — exactly like any other lib_call. The
         // functional contract (ext-ROM keywords still work) is restored on demand by
         // ensure_ext_resident, which parts (a)/(b) below verify.
-        Assert.AreEqual(LibModuleSystem, bus.ReadRam(LibResident),
-            "At the Ready prompt the line-reader lib_call leaves the SYSTEM module resident.");
+        Assert.AreEqual(LibResidentHostExt, bus.ReadRam(LibResident),
+            "At the first Ready prompt the cold-start extension ROM is still resident " +
+            "(the line reader's SYSTEM lib_call fires on the first input, not before); " +
+            "the steady-state SYSTEM-resident prompt is asserted at the end of this test.");
 
         // (a) A converted GRAPHICS keyword forces a real lib_call page-in that
         //     displaces the extension ROM from bank 1 and sets LIB_RESIDENT to a
