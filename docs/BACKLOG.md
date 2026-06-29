@@ -28,3 +28,15 @@ Things we'd like to include, captured so they don't get lost. Not in priority or
   a proc; debug key-injection couldn't trigger the editor's `Ctrl-K S` save (the `^K` prefix
   is recognized, the completion key isn't landing). Verify with a real keyboard, or crack
   the key-injection. SAVE reuses the editor's own serializer, so high confidence it works.
+
+## Arty / FPGA
+
+- **Watchdog (SWDT) races the PL-reload boot → cold-boot loop.** The board has a 120 s
+  `cdns-wdt` hardware watchdog (`f8005000.watchdog`). Each reboot reloads the PL and the boot
+  takes ~2–2.5 min; a slow boot — especially with a dirty/`rw` rootfs that needs an fsck —
+  can exceed 120 s and reset *mid-boot*, before `novavm` starts kicking the watchdog, which
+  loops. Hit during 2026-06 reboot-heavy hardware testing; recovered with a clean power-cycle
+  (fsck + faster boot) + restoring a known-good `fd0`. Fix options: lengthen or disable the
+  watchdog during boot, kick it earlier (FSBL/u-boot), or avoid the full PL reload when the
+  bitstream is unchanged. Until then, reboot-heavy on-hardware testing is fragile — prefer
+  verifying multiple runtimes within a single boot where possible.
