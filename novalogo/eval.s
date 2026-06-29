@@ -77,7 +77,7 @@ eval_loop:
 
       ; Dispatch based on tag
       CMP   #TOK_WORD
-      BEQ   @do_command
+      BEQ   dispatch_command
 
       ; Bare expression — skip it for now (could error)
       ; Advance to next token
@@ -87,6 +87,14 @@ eval_loop:
 @bail_out:
       RTS
 
+; ---------------------------------------------------------------------
+; dispatch_command — shared command-word dispatch for eval_loop and eval_body.
+;   On a builtin: evaluate args then JMP (handler); the handler ends at
+;   eval_continue, which routes back to whichever loop is active (eval_in_body
+;   decides). On an unknown word: try user procedures, then the extension table.
+;   Reached by branch from eval_loop and by JMP from eval_body.
+; ---------------------------------------------------------------------
+dispatch_command:
 @do_command:
       ; Look up the word in the builtin table
       JSR   lookup_builtin
@@ -146,7 +154,7 @@ eval_loop:
       BCS   @try_ext_cmd
       ; Found a procedure — invoke it (proc_stopped restored internally)
       JSR   proc_invoke
-      JMP   eval_loop
+      JMP   eval_continue        ; routes back to eval_loop or eval_body
 
 @try_ext_cmd:
       ; Try extension command table before giving up
@@ -227,89 +235,20 @@ eval_body:
       CMP   #TOK_RBRACKET
       BEQ   @done
 
-      ; Dispatch command words (same as eval_loop)
+      ; Command words go through the shared dispatch_command (used by eval_loop
+      ; too). Builtins + proc_invoke + ext commands all finish at eval_continue,
+      ; which returns here automatically while eval_in_body is set — so no
+      ; body-specific dispatch copy is needed.
       CMP   #TOK_WORD
-      BEQ   @do_command
-
+      BNE   @skip
+      JMP   dispatch_command
+@skip:
       ; Skip non-word tokens (bare numbers, brackets inside expressions, etc.)
       JSR   eval_advance
       BRA   eval_body
 
-@do_command:
-      ; Same dispatch as eval_loop — look up builtin, eval args, call handler
-      JSR   lookup_builtin
-      BCS   @unknown
-
-      LDX   ptr2_lo
-      STX   handler_lo
-      LDX   ptr2_hi
-      STX   handler_hi
-      TAX
-      PHX
-      JSR   eval_advance
-      PLX
-
-      CPX   #0
-      BEQ   @call_handler
-      ; Save handler address — eval_expr may invoke proc_invoke
-      LDA   handler_hi
-      PHA
-      LDA   handler_lo
-      PHA
-@eval_args:
-      PHX
-      JSR   eval_expr
-      BCS   @arg_error
-      PLX
-      DEX
-      BNE   @eval_args
-      ; Restore handler address
-      PLA
-      STA   handler_lo
-      PLA
-      STA   handler_hi
-
-@call_handler:
-      JMP   (handler_lo)
-      ; handler JMPs to eval_continue, which routes back here
-
-@arg_error:
-      PLX
-      PLA
-      PLA
-      JMP   err_notenough_throw
-
 @done:
       RTS
-
-@unknown:
-      ; Try user-defined procedures before erroring (inside body)
-      JSR   proc_lookup
-      BCS   @try_ext_cmd
-      JSR   proc_invoke
-      JMP   eval_body
-
-@try_ext_cmd:
-      ; Try extension command table before giving up (inside body)
-      JSR   lookup_ext_cmd
-      BCS   @truly_unknown
-      TAX
-      PHX
-      JSR   eval_advance
-      PLX
-      JSR   ext_eval_args
-      BCS   @body_ext_err
-      ; Dispatch: legacy trampoline or paged-library lib_call (branches on
-      ; ext_mod_id). Result left in eval_val.
-      JSR   ext_invoke
-      JMP   eval_continue
-
-@body_ext_err:
-      JMP   err_notenough_throw
-
-@truly_unknown:
-      ; Print "I don't know how to " + the word (inside body)
-      JMP   err_idk_word
 
 ; ---------------------------------------------------------------------
 ; eval_advance — advance eval_cur to the next token in the list

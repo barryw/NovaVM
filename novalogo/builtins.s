@@ -2240,6 +2240,119 @@ do_clearcharbg:
       STA   VGC_TEXT_BG
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; file_set_name_from_eval — marshal the quoted-word filename in eval_val into the
+;   FILES mailbox: LIB_ARG0 = pointer to the name chars, LIB_ARG1 byte0 = length.
+;   eval_val_lo/hi points at a length-prefixed string ([len][chars]). Caller must
+;   have already verified eval_type = VAL_WORD. Clobbers A/Y, ptr_lo/hi.
+; ---------------------------------------------------------------------
+file_set_name_from_eval:
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      LDY   #0
+      LDA   (ptr_lo),Y              ; length byte
+      STA   LIB_ARG1+0
+      CLC
+      LDA   eval_val_lo
+      ADC   #1                      ; skip the length byte -> first char
+      STA   LIB_ARG0+0
+      LDA   eval_val_hi
+      ADC   #0
+      STA   LIB_ARG0+1
+      RTS
+
+; ---------------------------------------------------------------------
+; do_catalog — CATALOG / DIR: list the current directory. Arity 0. namelen=0
+;   makes the FILES module list everything; the host prints the formatted table.
+; ---------------------------------------------------------------------
+do_catalog:
+      STZ   LIB_ARG1+0              ; namelen 0 -> list the current directory
+      LDA   #MODULE_ID_FILES
+      LDX   #FILE_DIR_LIST
+      JSR   do_lib_call
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_save — SAVE "name: serialize all user procedures to a Logo file. Arity 1
+;   (the dispatcher pre-evaluates the filename word into eval_val).
+; ---------------------------------------------------------------------
+do_save:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @ok
+      LDX   #<str_save_name
+      LDY   #>str_save_name
+      JMP   err_nei
+@ok:
+      JSR   file_set_name_from_eval ; ARG0 = nameptr, ARG1 byte0 = namelen
+      LDA   #FIO_TYPE_LOGO
+      STA   LIB_ARG1+1             ; file type rides the namelen cell's high byte
+      JSR   proc_serialize_all     ; fills ARG2 = src, ARG3 = end (proc text)
+      LDA   #MODULE_ID_FILES
+      LDX   #FILE_SAVE
+      JSR   do_lib_call
+      JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_load — LOAD "name: read a Logo file and define the procedures it contains.
+;   Arity 1. Loads the text into proc_body_buf then feeds it to proc_load_text.
+; ---------------------------------------------------------------------
+do_load:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BEQ   @ok
+      LDX   #<str_load_name
+      LDY   #>str_load_name
+      JMP   err_nei
+@ok:
+      JSR   file_set_name_from_eval
+      LDA   #FIO_TYPE_LOGO
+      STA   LIB_ARG1+1
+      STA   FIO_DIRTYPE            ; ask the host to treat it as a Logo file
+      ; Load destination = save_buf (separate from proc_body_buf, which the
+      ; per-procedure body builder reuses while parsing).
+      LDA   #<save_buf
+      STA   LIB_ARG2+0
+      LDA   #>save_buf
+      STA   LIB_ARG2+1
+      LDA   #MODULE_ID_FILES
+      LDX   #FILE_LOAD
+      JSR   do_lib_call
+      BEQ   @loaded
+      JMP   eval_continue          ; load failed -> nothing defined
+@loaded:
+      LDA   FIO_SIZEL              ; bytes loaded -> scan length
+      STA   load_rem_lo
+      LDA   FIO_SIZEH
+      STA   load_rem_hi
+      LDA   #<save_buf
+      STA   load_pos_lo
+      LDA   #>save_buf
+      STA   load_pos_hi
+      ; Save the bits of outer eval state that proc_load_text's nested tokenize/
+      ; eval clobber and that eval_continue needs back. tok_head/tok_tail are
+      ; rebuilt by the next REPL line, and eval_reporter is 0 for a command, so
+      ; only eval_cur (resume point) and eval_in_body (body context) need saving.
+      LDA   eval_cur_lo
+      PHA
+      LDA   eval_cur_hi
+      PHA
+      LDA   eval_in_body
+      PHA
+      LDA   #1
+      STA   proc_load_active       ; route TO through the non-interactive collector
+      JSR   proc_load_text
+      STZ   proc_load_active
+      PLA
+      STA   eval_in_body
+      PLA
+      STA   eval_cur_hi
+      PLA
+      STA   eval_cur_lo
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -2334,6 +2447,14 @@ str_setcharbg_name:
       .byte 9, "SETCHARBG"
 str_clearcharbg_name:
       .byte 11, "CLEARCHARBG"
+str_save_name:
+      .byte 4, "SAVE"
+str_load_name:
+      .byte 4, "LOAD"
+str_catalog_name:
+      .byte 7, "CATALOG"
+str_dir_name:
+      .byte 3, "DIR"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -2572,5 +2693,21 @@ builtin_table:
       .word str_clearcharbg_name
       .word do_clearcharbg
       .byte 0                    ; arity 0: no arguments
+
+      .word str_save_name
+      .word do_save
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the filename
+
+      .word str_load_name
+      .word do_load
+      .byte 1                    ; arity 1: dispatcher pre-evaluates the filename
+
+      .word str_catalog_name
+      .word do_catalog
+      .byte 0                    ; arity 0: list the current directory
+
+      .word str_dir_name
+      .word do_catalog
+      .byte 0                    ; DIR = alias for CATALOG
 
       .word $0000               ; end sentinel

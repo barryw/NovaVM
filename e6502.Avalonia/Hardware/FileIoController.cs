@@ -389,6 +389,11 @@ public sealed partial class FileIoController
                 SaveRawRamFile(filename, ".4th", VgcConstants.FioDirTypeForth);
                 return;
             }
+            if (fioType == VgcConstants.FioDirTypeLogo)
+            {
+                SaveRawRamFile(filename, ".logo", VgcConstants.FioDirTypeLogo);
+                return;
+            }
             if (fioType != VgcConstants.FioDirTypeBas && fioType != VgcConstants.FioDirTypeBin)
             {
                 SetError(VgcConstants.FioErrIo);
@@ -508,6 +513,7 @@ public sealed partial class FileIoController
             requestedType ??= _regs[VgcConstants.FioDirType - VgcConstants.FioBase] switch
             {
                 VgcConstants.FioDirTypeForth => VgcConstants.FioDirTypeForth,
+                VgcConstants.FioDirTypeLogo => VgcConstants.FioDirTypeLogo,
                 VgcConstants.FioDirTypeBin => VgcConstants.FioDirTypeBin,
                 _ => null
             };
@@ -515,6 +521,11 @@ public sealed partial class FileIoController
             if (requestedType == VgcConstants.FioDirTypeForth)
             {
                 LoadRawRamFile(filename, ".4th", VgcConstants.FioDirTypeForth);
+                return;
+            }
+            if (requestedType == VgcConstants.FioDirTypeLogo)
+            {
+                LoadRawRamFile(filename, ".logo", VgcConstants.FioDirTypeLogo);
                 return;
             }
             if (requestedType == VgcConstants.FioDirTypeBin)
@@ -2662,6 +2673,7 @@ public sealed partial class FileIoController
         ".mid" or ".midi" or ".nms" => NdiFileType.Mid,
         ".gfx" or ".nvg" => NdiFileType.Gfx,
         ".4th" or ".fth" or ".fs" or ".fr" => NdiFileType.Forth,
+        ".logo" or ".lgo" => NdiFileType.Logo,
         _ => NdiFileType.Bas
     };
 
@@ -2672,6 +2684,7 @@ public sealed partial class FileIoController
         NdiFileType.Mid => ".mid",
         NdiFileType.Gfx => ".gfx",
         NdiFileType.Forth => ".4th",
+        NdiFileType.Logo => ".logo",
         _ => ".bas"
     };
 
@@ -2683,6 +2696,7 @@ public sealed partial class FileIoController
         NdiFileType.Gfx => VgcConstants.FioDirTypeGfx,
         NdiFileType.Dir => VgcConstants.FioDirTypeDir,
         NdiFileType.Forth => VgcConstants.FioDirTypeForth,
+        NdiFileType.Logo => VgcConstants.FioDirTypeLogo,
         _ => VgcConstants.FioDirTypeBas
     };
 
@@ -2694,6 +2708,7 @@ public sealed partial class FileIoController
             ".bas" => VgcConstants.FioDirTypeBas,
             ".bin" => VgcConstants.FioDirTypeBin,
             ".4th" or ".fth" or ".fs" or ".fr" => VgcConstants.FioDirTypeForth,
+            ".logo" or ".lgo" => VgcConstants.FioDirTypeLogo,
             "" => null,
             _ => null
         };

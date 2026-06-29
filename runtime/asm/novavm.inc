@@ -119,6 +119,7 @@ FioDirTypeMid                       = $03
 FioDirTypeGfx                       = $04
 FioDirTypeDir                       = $05
 FioDirTypeForth                     = $06
+FioDirTypeLogo                      = $07
 FioErrDiskFull                      = $04
 FioErrNotMounted                    = $05
 MusicStatus                         = $BA50

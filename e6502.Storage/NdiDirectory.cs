@@ -2,7 +2,7 @@ using System.Text;
 
 namespace e6502.Storage;
 
-public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4, Dir = 5, Forth = 6 }
+public enum NdiFileType : byte { Bas = 0, Sid = 1, Bin = 2, Mid = 3, Gfx = 4, Dir = 5, Forth = 6, Logo = 7 }
 
 [Flags]
 public enum NdiEntryFlags : byte { Active = 0x01, Directory = 0x02, Locked = 0x80 }

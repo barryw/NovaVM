@@ -622,6 +622,7 @@ static uint8_t fio_name_type(const char *name) {
     if (!strncasecmp(d, ".mid", 5)) return DT_MID;
     if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
     if (!strncasecmp(d, ".4th", 5)) return DT_FORTH;
+    if (!strncasecmp(d, ".logo", 6)) return DT_LOGO;
     return DT_BIN;
 }
 

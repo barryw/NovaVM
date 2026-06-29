@@ -148,6 +148,7 @@ public static class VgcConstants
     public const byte FioDirTypeGfx    = 0x04;
     public const byte FioDirTypeDir    = 0x05;
     public const byte FioDirTypeForth  = 0x06;
+    public const byte FioDirTypeLogo   = 0x07;
     public const byte FioErrDiskFull   = 0x04;
     public const byte FioErrNotMounted = 0x05;
 

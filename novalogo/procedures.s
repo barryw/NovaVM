@@ -63,6 +63,27 @@ save_heap_ptr_hi: .res 1
 ; Param-binding scratch: length-prefixed name built here for var_set
 param_name_tmp:   .res 32
 
+; LOAD scan state: absolute position + remaining bytes within proc_body_buf
+; (which holds the freshly-loaded file text). Durable across tokenize_line /
+; proc_build_record calls (those clobber ZP scratch but not BSS).
+load_pos_lo:      .res 1
+load_pos_hi:      .res 1
+load_rem_lo:      .res 1
+load_rem_hi:      .res 1
+
+; SAVE accumulation buffer: all procedures serialized to "TO ... END\n" text.
+save_buf:         .res 4096
+save_pos_lo:      .res 1
+save_pos_hi:      .res 1
+
+; LOAD mode flag: when nonzero, proc_collect defines from the load buffer instead
+; of opening the editor (set around proc_load_text by do_load).
+proc_load_active: .res 1
+
+; Predecessor "next"-field pointer recorded by proc_find_by_name for ERASE.
+proc_prev_lo:     .res 1
+proc_prev_hi:     .res 1
+
 ; =====================================================================
 ; CODE segment — procedure routines
 ; =====================================================================
@@ -75,6 +96,7 @@ proc_init:
       STZ   proc_head_lo
       STZ   proc_head_hi
       STZ   proc_stopped
+      STZ   proc_load_active
       RTS
 
 ; ---------------------------------------------------------------------
@@ -83,11 +105,46 @@ proc_init:
 ;   eval_cur_lo/hi has been advanced past the TO token.
 ; ---------------------------------------------------------------------
 proc_collect:
+      JSR   proc_parse_header
+      BCS   @err_noname
+      LDA   proc_load_active
+      BEQ   @interactive
+      ; LOAD path: collect the body from the load buffer (proc_load_body sets
+      ; proc_body_src/proc_body_len directly) and build the record.
+      JSR   proc_load_body
+      JSR   proc_build_record
+      RTS
+@interactive:
+      ; Initialize body buffer, then open the shared EDITUI editor on it. Carry
+      ; set means the user asked to save before exiting.
+      STZ   proc_body_len_lo
+      STZ   proc_body_len_hi
+      JSR   proc_open_editor
+      BCS   @body_done
+      RTS
+@body_done:
+      JSR   proc_print_defined
+      RTS
+@err_noname:
+      JSR   print_inl
+      .byte "TO NEEDS A NAME", 0
+      JSR   eval_newline
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_parse_header — parse "<name> :p1 :p2 ..." from the token stream at
+;   eval_cur (already advanced past the TO command token) into the collect
+;   buffers: proc_name_buf/proc_name_len and proc_param_buf/proc_param_cnt/
+;   proc_param_end. Returns carry clear = ok, carry set = no name token (no
+;   print — caller reports). Shared by the interactive TO collector and LOAD.
+; ---------------------------------------------------------------------
+proc_parse_header:
       ; Next token should be the procedure name (TOK_WORD)
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BNE   @have_name
-      JMP   @err_noname
+      SEC
+      RTS
 @have_name:
       LDA   eval_cur_lo
       STA   ptr_lo
@@ -97,7 +154,8 @@ proc_collect:
       LDA   (ptr_lo),Y
       CMP   #TOK_WORD
       BEQ   @name_ok
-      JMP   @err_noname
+      SEC
+      RTS
 @name_ok:
       ; Copy procedure name to proc_name_buf (length-prefixed)
       LDY   #TOK_PAYLOAD
@@ -182,26 +240,7 @@ proc_collect:
 @params_done:
       LDA   proc_param_cnt
       STA   proc_param_buf        ; count byte at [0]
-
-      ; Initialize body buffer
-      STZ   proc_body_len_lo
-      STZ   proc_body_len_hi
-
-      ; Open the shared EDITUI editor on an empty body buffer. Carry set means
-      ; the user asked to save (Ctrl+K S / "Save First") before exiting.
-      JSR   proc_open_editor
-      BCS   @body_done
-      RTS
-
-      ; Print "NAME DEFINED\n"
-@body_done:
-      JSR   proc_print_defined
-      RTS
-
-@err_noname:
-      JSR   print_inl
-      .byte "TO NEEDS A NAME", 0
-      JSR   eval_newline
+      CLC
       RTS
 
 ; ---------------------------------------------------------------------
@@ -1581,6 +1620,11 @@ proc_find_by_name:
       LDA   ptr_hi
       STA   var_name_hi
 
+      ; Track the predecessor "next" field to patch (for ERASE). It starts as
+      ; &proc_head_lo (a ZP address, so high byte = 0).
+      LDA   #<proc_head_lo
+      STA   proc_prev_lo
+      STZ   proc_prev_hi
       LDA   proc_head_lo
       STA   proc_entry_lo
       LDA   proc_head_hi
@@ -1652,7 +1696,11 @@ proc_find_by_name:
 @ne_pop:
       PLX
 @next:
-      ; Follow next pointer
+      ; prev = &current->next (current record), then current = current->next
+      LDA   proc_entry_lo
+      STA   proc_prev_lo
+      LDA   proc_entry_hi
+      STA   proc_prev_hi
       JSR   proc_next
       BRA   @walk
 
@@ -1709,157 +1757,51 @@ do_pots:
 ; ---------------------------------------------------------------------
 do_po:
       JSR   eval_expr
-      BCC   @po_type_ok
-      JMP   @err
-@po_type_ok:
+      BCS   @err
       LDA   eval_type
       CMP   #VAL_WORD
-      BEQ   @po_word_ok
-      JMP   @err
-@po_word_ok:
-
-      ; Look up by name
+      BNE   @err
+      ; Look up by name -> proc_entry
       LDA   eval_val_lo
       STA   ptr_lo
       LDA   eval_val_hi
       STA   ptr_hi
       JSR   proc_find_by_name
-      BCC   @po_found
-      JMP   @err_notfound
-@po_found:
-
-      ; proc_entry_lo/hi = record
-      ; Print "TO "
-      LDA   #'T'
-      STA   VGC_CHAROUT
-      LDA   #'O'
-      STA   VGC_CHAROUT
-      LDA   #' '
-      STA   VGC_CHAROUT
-
-      ; Print name
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #2
-      LDA   (ptr_lo),Y             ; name_len
-      TAX
-      STA   proc_name_len
-      BEQ   @po_params
-      LDY   #3
-@po_name_ch:
-      LDA   (ptr_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BNE   @po_name_ch
-
-@po_params:
-      ; Y = 3 + name_len = offset to param_count
-      LDA   proc_name_len
-      CLC
-      ADC   #3
-      TAY
-      LDA   (ptr_lo),Y             ; param_count
-      STA   proc_param_cnt
-      INY                           ; offset to first param
-      STY   proc_rec_off
-
-      LDA   proc_param_cnt
-      BEQ   @po_header_done
-
-      LDX   proc_param_cnt
-@po_param:
-      ; Print " :"
-      LDA   #' '
-      STA   VGC_CHAROUT
-      LDA   #':'
-      STA   VGC_CHAROUT
-
-      ; Read param name length
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   proc_rec_off
-      LDA   (ptr_lo),Y             ; param name length
-      PHX
-      TAX                           ; X = chars to print
-      INY
-@po_pch:
-      CPX   #0
-      BEQ   @po_param_done
-      LDA   (ptr_lo),Y
-      STA   VGC_CHAROUT
-      INY
-      DEX
-      BRA   @po_pch
-@po_param_done:
-      STY   proc_rec_off
-      PLX
-      DEX
-      BNE   @po_param
-
-@po_header_done:
-      JSR   eval_newline
-
-      ; Read body_len
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   proc_rec_off
-      LDA   (ptr_lo),Y             ; body_len_lo
-      STA   proc_body_len_lo
-      INY
-      LDA   (ptr_lo),Y             ; body_len_hi
-      STA   proc_body_len_hi
-      INY                           ; Y = offset to body text
-
-      ; Compute absolute pointer to body
-      STY   proc_rec_off
-      CLC
-      LDA   proc_entry_lo
-      ADC   proc_rec_off
+      BCS   @err_notfound
+      ; Reuse the editor's record->text reconstruction, then print the buffer
+      ; (the same "TO ... END" text SAVE writes), converting $0A to a newline.
+      JSR   proc_record_to_buffers
+      JSR   proc_edit_reconstruct       ; -> proc_body_buf[0..proc_body_len)
+      LDA   #<proc_body_buf
       STA   proc_ptr_lo
-      LDA   proc_entry_hi
-      ADC   #0
+      LDA   #>proc_body_buf
       STA   proc_ptr_hi
-
-      ; Print body text, converting $0A to CR+LF
-@po_body:
       LDA   proc_body_len_lo
-      ORA   proc_body_len_hi
-      BEQ   @po_end
-
+      STA   num_tmp_lo
+      LDA   proc_body_len_hi
+      STA   num_tmp_hi
+@pb:
+      LDA   num_tmp_lo
+      ORA   num_tmp_hi
+      BEQ   @pb_done
       LDY   #0
       LDA   (proc_ptr_lo),Y
       CMP   #$0A
-      BNE   @po_char
+      BNE   @pb_ch
       JSR   eval_newline
-      BRA   @po_advance
-@po_char:
+      BRA   @pb_adv
+@pb_ch:
       STA   VGC_CHAROUT
-@po_advance:
+@pb_adv:
       INC   proc_ptr_lo
       BNE   :+
       INC   proc_ptr_hi
-:     LDA   proc_body_len_lo
+:     LDA   num_tmp_lo
       BNE   :+
-      DEC   proc_body_len_hi
-:     DEC   proc_body_len_lo
-      BRA   @po_body
-
-@po_end:
-      ; Print "END"
-      LDA   #'E'
-      STA   VGC_CHAROUT
-      LDA   #'N'
-      STA   VGC_CHAROUT
-      LDA   #'D'
-      STA   VGC_CHAROUT
-      JSR   eval_newline
+      DEC   num_tmp_hi
+:     DEC   num_tmp_lo
+      BRA   @pb
+@pb_done:
       JMP   eval_continue
 
 @err:
@@ -1877,107 +1819,19 @@ do_po:
 ; ---------------------------------------------------------------------
 do_erase:
       JSR   eval_expr
-      BCC   @er_type_ok
-      JMP   @err
-@er_type_ok:
+      BCS   @err
       LDA   eval_type
       CMP   #VAL_WORD
-      BEQ   @er_word_ok
-      JMP   @err
-@er_word_ok:
-
-      ; Save name pointer
+      BNE   @err
+      ; Locate the procedure; proc_find_by_name also records proc_prev = the
+      ; predecessor "next" field to patch for the unlink.
       LDA   eval_val_lo
-      STA   var_name_lo
+      STA   ptr_lo
       LDA   eval_val_hi
-      STA   var_name_hi
-
-      ; Walk proc_head with prev tracking
-      ; prev = address of "next" pointer to patch (starts as &proc_head)
-      LDA   #<proc_head_lo
-      STA   proc_ptr_lo             ; prev_ptr_lo
-      LDA   #>proc_head_lo
-      STA   proc_ptr_hi             ; prev_ptr_hi (ZP, so high byte = 0)
-
-      LDA   proc_head_lo
-      STA   proc_entry_lo
-      LDA   proc_head_hi
-      STA   proc_entry_hi
-
-@walk:
-      LDA   proc_entry_lo
-      ORA   proc_entry_hi
-      BNE   @walk_ok
-      JMP   @not_found
-@walk_ok:
-
-      ; Compare name
-      LDA   var_name_lo
-      STA   ptr_lo
-      LDA   var_name_hi
       STA   ptr_hi
-      LDY   #0
-      LDA   (ptr_lo),Y             ; search name len
-      STA   proc_name_len
-
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      LDY   #2
-      LDA   (ptr_lo),Y             ; record name len
-      CMP   proc_name_len
-      BNE   @erase_next
-
-      TAX
-      BEQ   @erase_match            ; both empty = match
-      LDY   #0
-@ecmp:
-      PHX
-      PHY
-      LDA   var_name_lo
-      STA   ptr_lo
-      LDA   var_name_hi
-      STA   ptr_hi
-      INY
-      LDA   (ptr_lo),Y             ; search char
-      STA   proc_rec_off
-
-      PLY
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
-      PHY
-      TYA
-      CLC
-      ADC   #3
-      TAY
-      LDA   (ptr_lo),Y             ; record char
-      PLY
-      CMP   proc_rec_off
-      BNE   @ecmp_ne
-      PLX
-      INY
-      DEX
-      BNE   @ecmp
-      BRA   @erase_match
-
-@ecmp_ne:
-      PLX
-
-@erase_next:
-      ; prev = &current->next (proc_entry + 0)
-      LDA   proc_entry_lo
-      STA   proc_ptr_lo
-      LDA   proc_entry_hi
-      STA   proc_ptr_hi
-      ; current = current->next
-      JSR   proc_next
-      BRA   @walk
-
-@erase_match:
-      ; Unlink: prev->next = current->next  (read current->next once)
+      JSR   proc_find_by_name
+      BCS   @not_found
+      ; Unlink: *proc_prev = proc_entry->next
       LDA   proc_entry_lo
       STA   ptr_lo
       LDA   proc_entry_hi
@@ -1988,9 +1842,9 @@ do_erase:
       INY
       LDA   (ptr_lo),Y             ; next_hi -> stack
       PHA
-      LDA   proc_ptr_lo            ; ptr = prev
+      LDA   proc_prev_lo           ; ptr = prev "next" field
       STA   ptr_lo
-      LDA   proc_ptr_hi
+      LDA   proc_prev_hi
       STA   ptr_hi
       LDY   #0
       TXA
@@ -1998,7 +1852,6 @@ do_erase:
       INY
       PLA
       STA   (ptr_lo),Y             ; prev->next_hi = next_hi
-
       JMP   eval_continue
 
 @not_found:
@@ -2125,6 +1978,225 @@ do_apply:
       LDX   #<str_apply_name
       LDY   #>str_apply_name
       JMP   err_nei
+
+; =====================================================================
+; SAVE / LOAD support — serialize procedures to text and parse it back.
+; =====================================================================
+
+; ---------------------------------------------------------------------
+; save_append — append proc_body_buf[0..proc_body_len) to save_buf at save_pos,
+;   advancing save_pos. Run after proc_edit_reconstruct rendered one procedure's
+;   "TO ... END\n" text into proc_body_buf. Clobbers A/Y, ptr2, proc_ptr,num_tmp.
+; ---------------------------------------------------------------------
+save_append:
+      CLC                             ; dest = save_buf + save_pos -> ptr2
+      LDA   #<save_buf
+      ADC   save_pos_lo
+      STA   ptr2_lo
+      LDA   #>save_buf
+      ADC   save_pos_hi
+      STA   ptr2_hi
+      LDA   #<proc_body_buf           ; src = proc_body_buf -> proc_ptr
+      STA   proc_ptr_lo
+      LDA   #>proc_body_buf
+      STA   proc_ptr_hi
+      LDA   proc_body_len_lo          ; count -> num_tmp
+      STA   num_tmp_lo
+      LDA   proc_body_len_hi
+      STA   num_tmp_hi
+@cp:
+      LDA   num_tmp_lo
+      ORA   num_tmp_hi
+      BEQ   @done
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      STA   (ptr2_lo),Y
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     INC   ptr2_lo
+      BNE   :+
+      INC   ptr2_hi
+:     LDA   num_tmp_lo
+      BNE   :+
+      DEC   num_tmp_hi
+:     DEC   num_tmp_lo
+      BRA   @cp
+@done:
+      CLC                             ; save_pos += proc_body_len
+      LDA   save_pos_lo
+      ADC   proc_body_len_lo
+      STA   save_pos_lo
+      LDA   save_pos_hi
+      ADC   proc_body_len_hi
+      STA   save_pos_hi
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_serialize_all — serialize every user procedure into save_buf by reusing
+;   the editor's proc_record_to_buffers + proc_edit_reconstruct (which renders
+;   one "TO <name> :params\n<body>END\n" block into proc_body_buf). Sets LIB_ARG2
+;   = save_buf start and LIB_ARG3 = end (one past the last byte) for FILE_SAVE.
+;   Preserves LIB_ARG0/ARG1 (filename). Clobbers scratch. ~4 KB output cap.
+; ---------------------------------------------------------------------
+proc_serialize_all:
+      STZ   save_pos_lo
+      STZ   save_pos_hi
+      LDA   proc_head_lo
+      STA   proc_entry_lo
+      LDA   proc_head_hi
+      STA   proc_entry_hi
+@walk:
+      LDA   proc_entry_lo
+      ORA   proc_entry_hi
+      BEQ   @done
+      JSR   proc_record_to_buffers
+      JSR   proc_edit_reconstruct      ; -> proc_body_buf[0..proc_body_len)
+      JSR   save_append
+      JSR   proc_next
+      BRA   @walk
+@done:
+      LDA   #<save_buf
+      STA   LIB_ARG2+0
+      LDA   #>save_buf
+      STA   LIB_ARG2+1
+      CLC
+      LDA   #<save_buf
+      ADC   save_pos_lo
+      STA   LIB_ARG3+0
+      LDA   #>save_buf
+      ADC   save_pos_hi
+      STA   LIB_ARG3+1
+      RTS
+
+; ---------------------------------------------------------------------
+; load_advance — advance proc_ptr by one byte and decrement load_rem (16-bit).
+;   Preserves A; clobbers nothing else.
+; ---------------------------------------------------------------------
+load_advance:
+      PHA
+      INC   proc_ptr_lo
+      BNE   :+
+      INC   proc_ptr_hi
+:     LDA   load_rem_lo
+      BNE   :+
+      DEC   load_rem_hi
+:     DEC   load_rem_lo
+      PLA
+      RTS
+
+; ---------------------------------------------------------------------
+; load_next_line — copy the next text line from the load buffer (load_pos /
+;   load_rem) into input_buf: NUL-terminated, CR stripped, capped at ~120 chars,
+;   consuming the terminating '\n'. Returns carry set if a line was produced,
+;   carry clear at end of buffer. Clobbers A/X/Y, proc_ptr.
+; ---------------------------------------------------------------------
+load_next_line:
+      LDA   load_rem_lo
+      ORA   load_rem_hi
+      BNE   @go
+      CLC
+      RTS
+@go:
+      LDA   load_pos_lo
+      STA   proc_ptr_lo
+      LDA   load_pos_hi
+      STA   proc_ptr_hi
+      LDX   #0
+@lp:
+      LDA   load_rem_lo
+      ORA   load_rem_hi
+      BEQ   @eol
+      LDY   #0
+      LDA   (proc_ptr_lo),Y
+      JSR   load_advance             ; consume the char (preserves A)
+      CMP   #$0A
+      BEQ   @eol                     ; end of line (newline consumed)
+      CMP   #$0D
+      BEQ   @lp                      ; drop CR (tokenizer treats it as space)
+      CPX   #119
+      BCS   @lp                      ; buffer full -> drop extra chars
+      STA   input_buf,X
+      INX
+      BRA   @lp
+@eol:
+      LDA   #0
+      STA   input_buf,X
+      LDA   proc_ptr_lo
+      STA   load_pos_lo
+      LDA   proc_ptr_hi
+      STA   load_pos_hi
+      SEC
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_load_body — (LOAD path) collect the body lines that follow a "TO" header
+;   from the load buffer into proc_body_buf, stopping at (and consuming) a line
+;   that is exactly "END". Each line is stored followed by '\n', matching the
+;   record's stored body format, so proc_collect can hand proc_body_src/
+;   proc_body_len straight to proc_build_record. proc_buf_put advances ptr2 + the
+;   16-bit proc_body_len. Clobbers A/X/Y, ptr2, proc_ptr.
+; ---------------------------------------------------------------------
+proc_load_body:
+      LDA   #<proc_body_buf
+      STA   ptr2_lo
+      STA   proc_body_src_lo
+      LDA   #>proc_body_buf
+      STA   ptr2_hi
+      STA   proc_body_src_hi
+      STZ   proc_body_len_lo
+      STZ   proc_body_len_hi
+@bl:
+      JSR   load_next_line
+      BCC   @end                       ; EOF before END
+      LDA   input_buf+0                 ; this line == "END"?
+      CMP   #'E'
+      BNE   @copy
+      LDA   input_buf+1
+      CMP   #'N'
+      BNE   @copy
+      LDA   input_buf+2
+      CMP   #'D'
+      BNE   @copy
+      LDA   input_buf+3
+      BEQ   @end
+@copy:
+      LDX   #0
+@cl:
+      LDA   input_buf,X
+      BEQ   @cl_done
+      JSR   proc_buf_put
+      INX
+      BRA   @cl
+@cl_done:
+      LDA   #$0A
+      JSR   proc_buf_put
+      BRA   @bl
+@end:
+      RTS
+
+; ---------------------------------------------------------------------
+; proc_load_text — (LOAD) drive the loaded text in the load buffer line by line
+;   exactly like the REPL main loop: tokenize each line and route "TO" through
+;   check_to_command, which — with proc_load_active set — defines the procedure
+;   from the buffer via proc_load_body instead of opening the editor. Any other
+;   non-empty line runs through eval_line, as if typed at the prompt. The caller
+;   saves/restores outer eval state and sets/clears proc_load_active. Clobbers
+;   everything.
+; ---------------------------------------------------------------------
+proc_load_text:
+@line:
+      JSR   load_next_line
+      BCC   @done
+      LDA   input_buf+0
+      BEQ   @line                       ; blank line -> skip
+      JSR   tokenize_line
+      JSR   check_to_command            ; carry set = TO/EDIT handled
+      BCS   @line
+      JSR   eval_line
+      BRA   @line
+@done:
+      RTS
 
 ; =====================================================================
 ; RODATA — procedure strings

@@ -8,6 +8,7 @@
       .include "libeditor.inc"     ; EDITOR_FN_* ids for lib_call(EDITOR) routing
       .include "libsound.inc"      ; SND_* ids for lib_call(SOUND) routing (tone/noise/volume)
       .include "libturtle.inc"     ; MODULE_ID_TURTLE ($07) + TUR_OP/TOP_* for the turtle adapter
+      .include "libfiles.inc"      ; MODULE_ID_FILES ($04) + FILE_* ids for SAVE/LOAD/CATALOG
       .include "replline.inc"      ; shared REPL line reader ABI
       .include "ext_iface.inc"
       .include "heap.s"
