@@ -237,7 +237,7 @@ print_banner:
       SBC   #0
       STA   eval_val_hi
       STZ   eval_val_frac
-      JSR   print_uint16
+      JSR   print_uint16          ; unsigned: free bytes can exceed 32767
 
       JSR   print_inl
       .byte " BYTES FREE", $0D, $0A, $0D, $0A, 0

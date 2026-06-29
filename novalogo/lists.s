@@ -2030,7 +2030,7 @@ render_list_to_buf:
 render_number_to_buf:
       ; Handle sign
       LDA   eval_val_hi
-      BPL   @rn_positive
+      BPL   render_uint16_to_buf     ; same address as @rn_positive (now its own label)
       ; Write '-'
       LDY   z:buf_idx
       LDA   #'-'
@@ -2051,6 +2051,9 @@ render_number_to_buf:
       ADC   #0
       STA   eval_val_hi
 
+; Unsigned entry: render eval_val_hi:eval_val_lo as an unsigned 16-bit decimal
+; into input_buf (no sign check / negation). Used by the banner's free-bytes line.
+render_uint16_to_buf:
 @rn_positive:
       ; Render integer part using power-of-10 subtraction
       LDA   eval_val_lo

@@ -367,6 +367,35 @@ public class NovaLogoHarnessTests
                 Assert.AreEqual(60, sprite.y, "SPRITEPOS should update sprite Y through the extension command.");
                 Assert.IsFalse(sprite.enabled, "SPRITEOFF should disable the sprite after SPRITEON.");
             });
+
+        yield return new LogoHarnessCase(
+            "file, directory, and character-background commands",
+            [
+                // SETCHARBG/CLEARCHARBG drive the VGC directly. The file/dir ops
+                // lib_call the FILES module; it is not staged on the test shelf, so
+                // each call returns an error that the handler ignores and continues
+                // (no "I DON'T KNOW HOW TO" / "NOT ENOUGH INPUTS"). This case exists
+                // to give every registered command a harness entry and to prove the
+                // arity wiring (argument parsing) does not fault.
+                Line("SETCHARBG 4"),
+                Line("CLEARCHARBG"),
+                Line("MKDIR \"WSDIR"),
+                Line("CD \"WSDIR"),
+                Line("PWD"),
+                Line("MAKE \"WSV 7"),
+                Line("SAVE \"WSFILE"),
+                Line("LOAD \"WSFILE"),
+                Line("CATALOG"),
+                Line("DIR"),
+                Line("RMDIR \"WSDIR"),
+                Line("PRINT \"FILEOPS_DONE")
+            ],
+            "FILEOPS_DONE",
+            ["SETCHARBG", "CLEARCHARBG", "MKDIR", "CD", "PWD", "SAVE", "LOAD", "CATALOG", "DIR", "RMDIR"],
+            screen =>
+            {
+                AssertScreenContains(screen, "FILEOPS_DONE");
+            });
     }
 
     private static void RunHarnessCase(LogoHarnessCase testCase)

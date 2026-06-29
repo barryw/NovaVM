@@ -965,66 +965,21 @@ print_number:
 @pn_done:
       RTS
 
-; ---------------------------------------------------------------------
-; print_uint16 — print eval_val_hi:eval_val_lo as unsigned decimal
-;   No leading zeros (except value 0 prints "0")
-;   Clobbers: A, X, Y, num_val_lo/hi, num_tmp_lo/hi
-; ---------------------------------------------------------------------
+; print_uint16 — print eval_val_hi:eval_val_lo as an UNSIGNED decimal (banner
+; free-bytes line, where the value can exceed 32767). Reuses the unsigned entry
+; into render_number_to_buf so no signed '-' is emitted.
 print_uint16:
-      ; Copy to working regs
-      LDA   eval_val_lo
-      STA   num_val_lo
-      LDA   eval_val_hi
-      STA   num_val_hi
-
-      LDX   #0                  ; digit buffer index
-      LDY   #0                  ; power-of-10 table index
-
-@div_loop:
-      STZ   num_tmp_lo          ; digit counter for this power
-@sub_loop:
-      ; Subtract current power of 10
-      SEC
-      LDA   num_val_lo
-      SBC   pow10_lo,Y
-      PHA
-      LDA   num_val_hi
-      SBC   pow10_hi,Y
-      BCC   @sub_done           ; underflow — done with this digit
-      STA   num_val_hi
-      PLA
-      STA   num_val_lo
-      INC   num_tmp_lo
-      BRA   @sub_loop
-@sub_done:
-      PLA                       ; discard low byte from failed subtract
-      LDA   num_tmp_lo
-      STA   pn_buf,X
-      INX
-      INY
-      CPY   #5                  ; 5 powers (10000,1000,100,10,1)
-      BCC   @div_loop
-
-      ; Print digits, suppressing leading zeros
-      LDY   #0                  ; suppress flag (0=suppress)
+      STZ   z:buf_idx
+      JSR   render_uint16_to_buf
       LDX   #0
-@print_loop:
-      LDA   pn_buf,X
-      BNE   @nonzero
-      CPY   #0
-      BEQ   @maybe_skip        ; still suppressing
-@nonzero:
-      LDY   #1                  ; seen nonzero digit
-      ORA   #'0'
+@pu:
+      CPX   z:buf_idx
+      BCS   @pu_done
+      LDA   input_buf,X
       STA   VGC_CHAROUT
-@maybe_skip:
       INX
-      CPX   #4
-      BCC   @print_loop
-      ; Always print the last digit (ones place)
-      LDA   pn_buf+4
-      ORA   #'0'
-      STA   VGC_CHAROUT
+      BRA   @pu
+@pu_done:
       RTS
 
 ; ---------------------------------------------------------------------

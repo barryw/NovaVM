@@ -2353,6 +2353,52 @@ do_load:
       STA   eval_cur_lo
       JMP   eval_continue
 
+; ---------------------------------------------------------------------
+; do_cd / do_mkdir / do_rmdir — directory ops that take a quoted-word name (like
+;   SAVE). Each loads its FILE_* fn id into X and shares file_name_op. Arity 1.
+; ---------------------------------------------------------------------
+do_cd:
+      LDX   #FILE_CD
+      BRA   file_name_op
+do_mkdir:
+      LDX   #FILE_MKDIR
+      BRA   file_name_op
+do_rmdir:
+      LDX   #FILE_RMDIR
+      BRA   file_name_op
+file_name_op:                    ; X = FILE_* fn id; eval_val = quoted-word name
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BNE   @err
+      JSR   file_set_name_from_eval ; ARG0=nameptr, ARG1 b0=namelen; preserves X
+      LDA   #MODULE_ID_FILES
+      JSR   do_lib_call             ; A=module, X=fn
+      JMP   eval_continue
+@err:
+      LDX   #<str_dir_name          ; shared name for the rare wrong-type message
+      LDY   #>str_dir_name
+      JMP   err_nei
+
+; ---------------------------------------------------------------------
+; do_pwd — PWD: ask the FILES module for the current path (returned in FIO_NAME /
+;   FIO_NAMELEN) and print it. Arity 0.
+; ---------------------------------------------------------------------
+do_pwd:
+      LDA   #MODULE_ID_FILES
+      LDX   #FILE_PWD
+      JSR   do_lib_call
+      LDX   #0
+@pw:
+      CPX   FIO_NAMELEN
+      BCS   @pwd
+      LDA   FIO_NAME,X
+      STA   VGC_CHAROUT
+      INX
+      BRA   @pw
+@pwd:
+      JSR   eval_newline
+      JMP   eval_continue
+
 ; =====================================================================
 ; RODATA — builtin table and name strings
 ; =====================================================================
@@ -2455,6 +2501,14 @@ str_catalog_name:
       .byte 7, "CATALOG"
 str_dir_name:
       .byte 3, "DIR"
+str_mkdir_name:
+      .byte 5, "MKDIR"
+str_rmdir_name:
+      .byte 5, "RMDIR"
+str_cd_name:
+      .byte 2, "CD"
+str_pwd_name:
+      .byte 3, "PWD"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -2709,5 +2763,21 @@ builtin_table:
       .word str_dir_name
       .word do_catalog
       .byte 0                    ; DIR = alias for CATALOG
+
+      .word str_mkdir_name
+      .word do_mkdir
+      .byte 1                    ; arity 1: directory name
+
+      .word str_rmdir_name
+      .word do_rmdir
+      .byte 1                    ; arity 1: directory name
+
+      .word str_cd_name
+      .word do_cd
+      .byte 1                    ; arity 1: directory name
+
+      .word str_pwd_name
+      .word do_pwd
+      .byte 0                    ; arity 0: prints the current path
 
       .word $0000               ; end sentinel
