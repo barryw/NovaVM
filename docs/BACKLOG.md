@@ -36,7 +36,19 @@ Things we'd like to include, captured so they don't get lost. Not in priority or
   takes ~2–2.5 min; a slow boot — especially with a dirty/`rw` rootfs that needs an fsck —
   can exceed 120 s and reset *mid-boot*, before `novavm` starts kicking the watchdog, which
   loops. Hit during 2026-06 reboot-heavy hardware testing; recovered with a clean power-cycle
-  (fsck + faster boot) + restoring a known-good `fd0`. Fix options: lengthen or disable the
-  watchdog during boot, kick it earlier (FSBL/u-boot), or avoid the full PL reload when the
-  bitstream is unchanged. Until then, reboot-heavy on-hardware testing is fragile — prefer
-  verifying multiple runtimes within a single boot where possible.
+  (fsck + faster boot) + restoring a known-good `fd0`.
+
+  **Decided: kill the watchdog — it's pointless on a hobby 8-bit box, never needed here.**
+  Remove it at the source so it's never armed. Three coordinated changes in the committed
+  `meta-user` layer — they MUST land together, since disabling the DT node while the FSBL still
+  arms it would brick boot:
+  1. **FSBL: don't arm it.** Add `meta-user/recipes-bsp/fsbl/fsbl_%.bbappend` that excludes the
+     watchdog (`-DFSBL_WDT_EXCLUDE_VAL`; confirm the exact compiler-flags var for the
+     `fsbl-firmware` recipe in PetaLinux 2024.2).
+  2. **Device-tree:** in `system-user.dtsi` change `&watchdog0 { timeout-sec = <120>; }` to
+     `&watchdog0 { status = "disabled"; }` so the kernel never manages it.
+  3. **Rootfs:** drop `watchdogd` so nothing re-arms `/dev/watchdog` after boot.
+  Build + test during a full `.wic` rebuild — PetaLinux was NOT configured on the dev box where
+  this was diagnosed (just an unpacked 2024.2 tree, no `settings.sh`), so it couldn't be
+  verified there; do not commit it unbuilt. Once gone, reboot-heavy hardware testing stops
+  being fragile.
