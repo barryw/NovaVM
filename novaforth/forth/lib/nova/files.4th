@@ -271,5 +271,18 @@ DECIMAL
   PARSE-NAME DUP 0= IF 2DROP EXIT THEN FILES-CD DROP ;
 : PWD ( -- )
   FILES-PWD DROP TYPE CR ;
+: MKDIR ( "<path>" -- )
+  PARSE-NAME DUP 0= IF 2DROP EXIT THEN FILES-MKDIR DROP ;
+: RMDIR ( "<path>" -- )
+  PARSE-NAME DUP 0= IF 2DROP EXIT THEN FILES-RMDIR DROP ;
+: DELETE ( "<name>" -- )
+  PARSE-NAME DUP 0= IF 2DROP EXIT THEN FILES-DELETE DROP ;
+\ GSAVE/GLOAD: caller pushes space gaddr glen, then we PARSE-NAME the file name,
+\ leaving ( space gaddr glen c-addr u ). FILES-GSAVE/GLOAD want ( c-addr u space
+\ gaddr glen ), so rotate c-addr u under the three gfx args (three 4 ROLLs).
+: GSAVE ( space gaddr glen "<name>" -- )
+  PARSE-NAME 4 ROLL 4 ROLL 4 ROLL FILES-GSAVE DROP ;
+: GLOAD ( space gaddr glen "<name>" -- )
+  PARSE-NAME 4 ROLL 4 ROLL 4 ROLL FILES-GLOAD DROP ;
 
 BASE !

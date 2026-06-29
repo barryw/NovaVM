@@ -529,7 +529,7 @@ XTK_BLITERR       = $43              ; BLITERR — numeric function (no args)
 XTK_BLITCOUNT     = $44              ; BLITCOUNT — numeric function (no args)
 XTK_BITTGL        = $45              ; BITTGL addr,mask — toggle bits
 XTK_HELP           = $46              ; HELP [keyword] — open help panel
-XTK_RESERVED47     = $47              ; reserved
+XTK_DELETE         = $47              ; DELETE "name" — alias of DEL (reuses reserved $47 slot)
 XTK_FONT           = $48              ; FONT n — select font slot (0-7)
 XTK_CD             = $49              ; CD "path"
 XTK_MKDIR          = $4A              ; MKDIR "path"
@@ -562,7 +562,8 @@ XTK_MCROSSL        = $64              ; MCROSSL(ax,ay,bx,by) - signed cross low 
 XTK_MCROSSH        = $65              ; MCROSSH(ax,ay,bx,by) - signed cross high word
 XTK_CHARBG         = $66              ; CHARBG <color> — opaque per-char text bg (0-15)
 XTK_CHARBGOFF      = $67              ; CHARBGOFF — per-char text bg transparent (default)
-                                      ; $68-$6A reserved
+XTK_CATALOG        = $68              ; CATALOG [path] — alias of DIR (reuses reserved $68 slot)
+                                      ; $69-$6A reserved
 XTK_REVERSE        = $6B              ; REVERSE [fg,bg] — reverse text output
 XTK_REVERSEOFF     = $6C              ; REVERSEOFF — normal text output
 XTK_FLASH          = $6D              ; FLASH — flashing text output
@@ -1451,24 +1452,22 @@ LAB_XCRNCHD
       BCC   @matched
       CMP   #'Z'+1
       BCS   @matched
-      ; Allow compact COPPER subcommands (COPPERADD, COPPERON, etc.)
-      ; while still rejecting unrelated keyword prefixes.
-      TAY
-      LDA   Tindx
-      CMP   #(XTK_COPPER-1)
+      ; Allow compact COPPER subcommands (COPPERADD, COPPERON, etc.) while still
+      ; rejecting unrelated keyword prefixes. Subcommand initials: A C L O U.
+      ; A still holds the folded continuation char; X is the buffer read index
+      ; (needed after @matched), so index the table with Y instead.
+      LDY   Tindx
+      CPY   #(XTK_COPPER-1)
       BNE   @try_next
-      TYA
-      CMP   #'A'
+      LDY   #4
+@cop_sub
+      CMP   @cop_inits,Y
       BEQ   @matched
-      CMP   #'C'
-      BEQ   @matched
-      CMP   #'L'
-      BEQ   @matched
-      CMP   #'O'
-      BEQ   @matched
-      CMP   #'U'
-      BEQ   @matched
+      DEY
+      BPL   @cop_sub
       BRA   @try_next
+@cop_inits
+      .byte "ACLOU"
 
 @matched
       LDY   csidx
@@ -2060,7 +2059,7 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_BLITCOUNT  ($44) — function only
       .word LAB_BITTGL-1      ; XTK_BITTGL     ($45) — toggle bits
       .word LAB_15D9-1        ; XTK_HELP       ($46) — HELP removed (docs -> LaTeX books)
-      .word LAB_15D9-1        ; reserved       ($47)
+      .word LAB_FDEL-1        ; XTK_DELETE     ($47) — alias of DEL (reused reserved slot)
       .word LAB_FONT-1        ; XTK_FONT       ($48)
       .word LAB_CD-1          ; XTK_CD         ($49)
       .word LAB_MKDIR-1       ; XTK_MKDIR      ($4A)
@@ -2093,8 +2092,9 @@ TAB_XTKCMD
       .word LAB_15D9-1        ; XTK_MCROSSH    ($65) - function only
       .word LAB_CHARBG-1      ; XTK_CHARBG     ($66)
       .word LAB_CHARBGOFF-1   ; XTK_CHARBGOFF  ($67)
-      ; $68-$6A reserved
-      .repeat $03
+      .word LAB_DIR-1         ; XTK_CATALOG    ($68) — alias of DIR (reused reserved slot)
+      ; $69-$6A reserved
+      .repeat $02
       .word LAB_15D9-1
       .endrepeat
       .word LAB_REVERSE-1     ; XTK_REVERSE    ($6B)
@@ -8898,7 +8898,7 @@ TAB_XTKSTR
       .word @s_blitcopy, @s_blitfill, @s_blitstatus, @s_bliterr, @s_blitcount
       .word @s_bittgl
       .word @s_reserved_ext   ; XTK_HELP ($46) — HELP removed (name stripped)
-      .word @s_reserved_ext
+      .word @s_delete         ; XTK_DELETE ($47) — alias of DEL (reused reserved slot)
       .word @s_font
       .word @s_cd
       .word @s_mkdir
@@ -8916,7 +8916,9 @@ TAB_XTKSTR
       .word @s_mmul16l, @s_mmul16h, @s_mdots16l, @s_mdots16h
       .word @s_mcrossl, @s_mcrossh
       .word @s_charbg, @s_charbgoff
-      .repeat $03
+      .word @s_catalog        ; XTK_CATALOG ($68) — alias of DIR (reused reserved slot)
+      ; $69-$6A reserved
+      .repeat $02
       .word @s_reserved_ext
       .endrepeat
       .word @s_reverse, @s_reverseoff, @s_flash, @s_flashoff
@@ -9010,6 +9012,8 @@ TAB_XTKSTR
 @s_addr:    .byte "ADDR(",0
 @s_joy:     .byte "JOY",0
 @s_sw:      .byte "SW",0
+@s_delete:  .byte "DELETE",0
+@s_catalog: .byte "CATALOG",0
 
 ; system dependant i/o vectors
 ; these are in RAM and are set by the monitor at start-up
@@ -11384,7 +11388,7 @@ StrTab
 EndTab
 
 LAB_SMSG
-      .byte " BASIC bytes free  ",$00
+      .byte " bytes free  ",$00
 
 LAB_XMSG
       .byte "K expansion memory",$00

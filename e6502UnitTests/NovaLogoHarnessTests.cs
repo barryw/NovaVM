@@ -387,11 +387,15 @@ public class NovaLogoHarnessTests
                 Line("LOAD \"WSFILE"),
                 Line("CATALOG"),
                 Line("DIR"),
+                Line("GSAVE \"PIC 4 0 8000"),
+                Line("GLOAD \"PIC 4 0 8000"),
+                Line("DELETE \"WSFILE"),
                 Line("RMDIR \"WSDIR"),
                 Line("PRINT \"FILEOPS_DONE")
             ],
             "FILEOPS_DONE",
-            ["SETCHARBG", "CLEARCHARBG", "MKDIR", "CD", "PWD", "SAVE", "LOAD", "CATALOG", "DIR", "RMDIR"],
+            ["SETCHARBG", "CLEARCHARBG", "MKDIR", "CD", "PWD", "SAVE", "LOAD", "CATALOG", "DIR",
+             "RMDIR", "GSAVE", "GLOAD", "DELETE"],
             screen =>
             {
                 AssertScreenContains(screen, "FILEOPS_DONE");

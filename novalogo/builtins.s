@@ -2277,14 +2277,8 @@ do_catalog:
 ;   (the dispatcher pre-evaluates the filename word into eval_val).
 ; ---------------------------------------------------------------------
 do_save:
-      LDA   eval_type
-      CMP   #VAL_WORD
-      BEQ   @ok
-      LDX   #<str_save_name
-      LDY   #>str_save_name
-      JMP   err_nei
-@ok:
-      JSR   file_set_name_from_eval ; ARG0 = nameptr, ARG1 byte0 = namelen
+      JSR   file_word_name         ; ARG0 = nameptr, ARG1 byte0 = namelen
+      BCS   @err
       LDA   #FIO_TYPE_LOGO
       STA   LIB_ARG1+1             ; file type rides the namelen cell's high byte
       JSR   proc_serialize_all     ; fills ARG2 = src, ARG3 = end (proc text)
@@ -2292,20 +2286,36 @@ do_save:
       LDX   #FILE_SAVE
       JSR   do_lib_call
       JMP   eval_continue
+@err:
+      LDX   #<str_save_name
+      LDY   #>str_save_name
+      JMP   err_nei
+
+; file_word_name — require eval_val to be a VAL_WORD and marshal it into the
+; FILES name mailbox (ARG0=ptr, ARG1 b0=len). Carry clear = ok, carry set =
+; not a word. Preserves X (so callers can hold a FILE_* fn id there).
+file_word_name:
+      LDA   eval_type
+      CMP   #VAL_WORD
+      BNE   @nw
+      JSR   file_set_name_from_eval
+      CLC
+      RTS
+@nw:
+      SEC
+      RTS
 
 ; ---------------------------------------------------------------------
 ; do_load — LOAD "name: read a Logo file and define the procedures it contains.
 ;   Arity 1. Loads the text into proc_body_buf then feeds it to proc_load_text.
 ; ---------------------------------------------------------------------
 do_load:
-      LDA   eval_type
-      CMP   #VAL_WORD
-      BEQ   @ok
+      JSR   file_word_name
+      BCC   @ok
       LDX   #<str_load_name
       LDY   #>str_load_name
       JMP   err_nei
 @ok:
-      JSR   file_set_name_from_eval
       LDA   #FIO_TYPE_LOGO
       STA   LIB_ARG1+1
       STA   FIO_DIRTYPE            ; ask the host to treat it as a Logo file
@@ -2365,14 +2375,12 @@ do_rmdir:
       LDX   #FILE_RMDIR
       BRA   file_name_op
 file_name_op:                    ; X = FILE_* fn id; eval_val = quoted-word name
-      LDA   eval_type
-      CMP   #VAL_WORD
-      BNE   @err
-      JSR   file_set_name_from_eval ; ARG0=nameptr, ARG1 b0=namelen; preserves X
+      JSR   file_word_name          ; preserves X
+      BCS   file_dir_err
       LDA   #MODULE_ID_FILES
       JSR   do_lib_call             ; A=module, X=fn
       JMP   eval_continue
-@err:
+file_dir_err:
       LDX   #<str_dir_name          ; shared name for the rare wrong-type message
       LDY   #>str_dir_name
       JMP   err_nei
@@ -2396,6 +2404,54 @@ do_pwd:
 @pwd:
       JSR   eval_newline
       JMP   eval_continue
+
+; ---------------------------------------------------------------------
+; do_delete — DELETE "name: delete a file. Arity 1, same handling as RMDIR/CD.
+; ---------------------------------------------------------------------
+do_delete:
+      LDX   #FILE_DELETE
+      BRA   file_name_op
+
+; ---------------------------------------------------------------------
+; do_gsave / do_gload — GSAVE/GLOAD "name <space> <addr> <len>: save/load a VGC
+;   memory region to/from a .gfx file via the FILES module. Arity 0 (reads its
+;   own 4 args). Register packing matches BASIC/Forth + libfiles.inc FILE_GSAVE:
+;     LIB_ARG0     = nameptr        LIB_ARG1 b0 = namelen
+;     LIB_ARG2 b0  = space          LIB_ARG2 b1.b2 = gaddr (u16 LE)
+;     LIB_ARG3 b0.b1 = glen (u16 LE)
+; ---------------------------------------------------------------------
+do_gsave:
+      LDX   #FILE_GSAVE
+      BRA   gfx_op
+do_gload:
+      LDX   #FILE_GLOAD
+gfx_op:                          ; X = FILE_* fn id
+      STX   gfx_fn
+      JSR   eval_expr            ; arg 1: name (quoted word)
+      BCS   file_dir_err
+      JSR   file_word_name       ; -> LIB_ARG0 / LIB_ARG1 b0
+      BCS   file_dir_err
+      JSR   eval_expr            ; arg 2: space
+      LDA   eval_val_lo
+      STA   LIB_ARG2+0
+      JSR   eval_expr            ; arg 3: gaddr (u16)
+      LDA   eval_val_lo
+      STA   LIB_ARG2+1
+      LDA   eval_val_hi
+      STA   LIB_ARG2+2
+      JSR   eval_expr            ; arg 4: glen (u16)
+      LDA   eval_val_lo
+      STA   LIB_ARG3+0
+      LDA   eval_val_hi
+      STA   LIB_ARG3+1
+      LDA   #MODULE_ID_FILES
+      LDX   gfx_fn
+      JSR   do_lib_call
+      JMP   eval_continue
+
+      .segment "BSS"
+gfx_fn:   .res 1                 ; FILE_* fn id held across the arg evaluations
+      .segment "CODE"
 
 ; =====================================================================
 ; RODATA — builtin table and name strings
@@ -2507,6 +2563,12 @@ str_cd_name:
       .byte 2, "CD"
 str_pwd_name:
       .byte 3, "PWD"
+str_delete_name:
+      .byte 6, "DELETE"
+str_gsave_name:
+      .byte 5, "GSAVE"
+str_gload_name:
+      .byte 5, "GLOAD"
 
 ; Builtin table: name_ptr(2) + handler_addr(2) + arity(1)
 builtin_table:
@@ -2777,5 +2839,17 @@ builtin_table:
       .word str_pwd_name
       .word do_pwd
       .byte 0                    ; arity 0: prints the current path
+
+      .word str_delete_name
+      .word do_delete
+      .byte 1                    ; arity 1: file name
+
+      .word str_gsave_name
+      .word do_gsave
+      .byte 0                    ; arity 0: reads name + space + addr + len
+
+      .word str_gload_name
+      .word do_gload
+      .byte 0                    ; arity 0: reads name + space + addr + len
 
       .word $0000               ; end sentinel

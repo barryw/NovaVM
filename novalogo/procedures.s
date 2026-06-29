@@ -56,7 +56,6 @@ save_tok_head_lo: .res 1
 save_tok_head_hi: .res 1
 save_tok_tail_lo: .res 1
 save_tok_tail_hi: .res 1
-save_input_buf:   .res 128      ; save outer input_buf during proc body exec
 save_heap_ptr_lo: .res 1        ; save heap for token re-use
 save_heap_ptr_hi: .res 1
 
@@ -1206,14 +1205,8 @@ proc_invoke:
       LDA   proc_stopped
       PHA
 
-      ; Save input_buf to BSS save area
-      LDX   #0
-@save_ib:
-      LDA   input_buf,X
-      STA   save_input_buf,X
-      INX
-      CPX   #128
-      BNE   @save_ib
+      ; (input_buf is not preserved across the body: the caller resumes from its
+      ; token list / record, never re-reading input_buf, so saving it is dead.)
 
       ; Advance eval_cur past the procedure name token
       JSR   eval_advance
@@ -1536,15 +1529,6 @@ proc_invoke:
       LDA   save_heap_ptr_hi
       STA   heap_ptr+1
 
-      ; Restore input_buf
-      LDX   #0
-@rest_ib:
-      LDA   save_input_buf,X
-      STA   input_buf,X
-      INX
-      CPX   #128
-      BNE   @rest_ib
-
       ; Restore eval_cur to the resume point in the caller's token stream
       LDA   save_eval_cur_lo
       STA   eval_cur_lo
@@ -1585,14 +1569,7 @@ proc_invoke:
       BNE   @be_lp
 @be_done:
       JSR   eval_newline
-      ; Restore input_buf and stack, skip body execution
-      LDX   #0
-@be_rest_ib:
-      LDA   save_input_buf,X
-      STA   input_buf,X
-      INX
-      CPX   #128
-      BNE   @be_rest_ib
+      ; Restore stack, skip body execution (input_buf not preserved — see above)
       ; Restore stack (6 bytes: proc_stopped, eval_in_body, tok_tail, tok_head)
       LDX   #$00                  ; X = normal exit status
       PLA                         ; saved proc_stopped
@@ -1992,13 +1969,6 @@ do_apply:
 ;   "TO ... END\n" text into proc_body_buf. Clobbers A/Y, ptr2, proc_ptr,num_tmp.
 ; ---------------------------------------------------------------------
 save_append:
-      CLC                             ; dest = save_buf + save_pos -> ptr2
-      LDA   #<save_buf
-      ADC   save_pos_lo
-      STA   ptr2_lo
-      LDA   #>save_buf
-      ADC   save_pos_hi
-      STA   ptr2_hi
       LDA   #<proc_body_buf           ; src = proc_body_buf -> proc_ptr
       STA   proc_ptr_lo
       LDA   #>proc_body_buf
@@ -2013,26 +1983,16 @@ save_append:
       BEQ   @done
       LDY   #0
       LDA   (proc_ptr_lo),Y
-      STA   (ptr2_lo),Y
+      JSR   sb_put                    ; append at save_pos (guarded, bumps save_pos)
       INC   proc_ptr_lo
       BNE   :+
       INC   proc_ptr_hi
-:     INC   ptr2_lo
-      BNE   :+
-      INC   ptr2_hi
 :     LDA   num_tmp_lo
       BNE   :+
       DEC   num_tmp_hi
 :     DEC   num_tmp_lo
       BRA   @cp
 @done:
-      CLC                             ; save_pos += proc_body_len
-      LDA   save_pos_lo
-      ADC   proc_body_len_lo
-      STA   save_pos_lo
-      LDA   save_pos_hi
-      ADC   proc_body_len_hi
-      STA   save_pos_hi
       RTS
 
 ; ---------------------------------------------------------------------
