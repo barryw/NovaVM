@@ -61,10 +61,13 @@
 	local-mac-address = [00 0a 35 00 1e 53];
 };
 
-/* Widen the watchdog window. Default timeout-sec=10 is too tight: the kernel
- * keeps the FSBL-armed watchdog alive (HANDLE_BOOT_ENABLED), but the heavier
- * ext4 boot's udev coldplug starves the ping kworker past 10s -> reset loop at
- * S05 checkroot. 120s gives a 60s ping window, easily covering coldplug. */
+/* Keep the SWDT node ENABLED with a wide 120s window. The FSBL arms the SWDT; the
+ * kernel babysits it (HANDLE_BOOT_ENABLED) from probe until the early-boot init
+ * script watchdog-off (rcS S01, recipes-core/watchdog-off) disarms it via
+ * magic-close. The node MUST stay enabled so the cdns_wdt driver creates
+ * /dev/watchdog for that script -- disabling it would leave the FSBL-armed SWDT
+ * unmanaged and brick the boot. 120s comfortably covers power-on -> S01, well
+ * before the udev coldplug that used to starve the kernel pinger into a reset loop. */
 &watchdog0 {
 	timeout-sec = <120>;
 };

@@ -1,0 +1,19 @@
+#!/bin/sh
+# NovaVM: disarm the FSBL-armed System Watchdog Timer (SWDT) early in boot.
+#
+# Hobby 8-bit retro-computer: nothing needs auto-recovery from a hung CPU. The FSBL
+# arms the SWDT (120s) and the kernel babysits it via CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED,
+# but that kernel pinger gets starved during the heavy udev coldplug and trips a 120s
+# cold-boot reset loop. nowayout is off, so userspace may stop the timer: opening
+# /dev/watchdog, writing the magic 'V', and closing performs a clean stop (magic-close).
+#
+# This runs at rcS S01 -- before S04udev/coldplug -- so the SWDT is gone before the
+# starvation window. The cdns_wdt driver is built-in, so /dev/watchdog (devtmpfs) is
+# already present here. See recipes-bsp/device-tree (watchdog0 stays ENABLED).
+if [ -e /dev/watchdog ]; then
+  printf "V" > /dev/watchdog 2>/dev/null
+  echo "NovaVM watchdog-off: SWDT disarmed via magic-close" > /dev/kmsg 2>/dev/null
+else
+  echo "NovaVM watchdog-off: /dev/watchdog absent at boot, NOT disarmed" > /dev/kmsg 2>/dev/null
+fi
+exit 0
