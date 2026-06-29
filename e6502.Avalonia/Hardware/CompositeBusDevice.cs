@@ -58,6 +58,12 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private byte _screenWinPlane;   // direct screen window: 0=char, 1=color, 2=attr
 
     public ActiveRom CurrentRom { get; private set; } = ActiveRom.Basic;
+
+    // The active primary runtime (Basic/Forth/Logo) a ROMSWAP_PRIMARY ($02) restore must return
+    // to. On the board, Forth/Logo run IN the primary $C000 bank (loaded via LOADRUNTIME), so
+    // their lib_call home-bank restore writes $02; we model them as distinct ROMs here, so
+    // "$02 = primary" must map to whichever runtime was booted/selected — not always BASIC.
+    private ActiveRom _primaryRom = ActiveRom.Basic;
     public event EventHandler? RomSwapRequested;
 
     public VirtualGraphicsController Vgc => _vgc;
@@ -241,11 +247,13 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         {
             Array.Copy(_logoRom, 0, _ram, VgcConstants.RomBase, 16384);
             CurrentRom = ActiveRom.Logo;
+            _primaryRom = ActiveRom.Logo;
         }
         else if (bootRom == ActiveRom.Forth && _forthRom != null)
         {
             Array.Copy(_forthRom, 0, _ram, VgcConstants.RomBase, 16384);
             CurrentRom = ActiveRom.Forth;
+            _primaryRom = ActiveRom.Forth;
         }
 
         // Bank-1 overlay starts as the active primary runtime's static extension, and
@@ -461,6 +469,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         // Selecting a primary runtime resets the bank-1 overlay to that runtime's static
         // extension (a paged-in module is dropped when the runtime changes).
+        _primaryRom = CurrentRom;
         LoadExtBankStatic(CurrentRom);
 
         if (notifyRomChange && previous != CurrentRom)
@@ -468,6 +477,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         return true;
     }
+
+    // ROM image bytes for the active primary runtime — used by the ROMSWAP_PRIMARY ($02) restore
+    // so it returns to the booted runtime (Forth/Logo) rather than always BASIC.
+    private byte[] PrimaryRomImage() => _primaryRom switch
+    {
+        ActiveRom.Forth when _forthRom != null => _forthRom,
+        ActiveRom.Logo when _logoRom != null => _logoRom,
+        _ => _basicRom,
+    };
 
     public void ResetCustomChips(ActiveRom bootRom = ActiveRom.Basic, bool notifyRomChange = true)
     {
@@ -746,10 +764,15 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         // ROM swap register — intercept before VGC and ROM write protection.
         if (address == VgcConstants.RegRomSwap)
         {
-            if (data == VgcConstants.RomSwapBasic && CurrentRom != ActiveRom.Basic)
+            if (data == VgcConstants.RomSwapBasic && CurrentRom != _primaryRom)
             {
-                Array.Copy(_basicRom, 0, _ram, VgcConstants.RomBase, 16384);
-                CurrentRom = ActiveRom.Basic;
+                // $02 = ROMSWAP_PRIMARY: restore the ACTIVE primary runtime (Basic/Forth/Logo),
+                // not always BASIC. A Forth/Logo session's lib_call home-bank restore writes $02;
+                // on the board those runtimes run IN the primary $C000 bank, so $02 must bring the
+                // booted runtime back here too — else BASIC gets swapped in under running Forth/Logo
+                // (the CPU then RTS'd into the wrong ROM and hung). See _primaryRom.
+                Array.Copy(PrimaryRomImage(), 0, _ram, VgcConstants.RomBase, 16384);
+                CurrentRom = _primaryRom;
                 // NOTE: do NOT reload _extBank here. On HW the romswap register only changes the
                 // $C000 MUX source; the bank-1 ext_rom BRAM persists. A home-bank restore after a
                 // lib_call trampoline MUST keep the paged-in module so the next call HITs. The
