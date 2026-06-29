@@ -20,10 +20,11 @@ Things we'd like to include, captured so they don't get lost. Not in priority or
   ~126 chars now silently truncates — a regression in a core command. Restore the streaming
   (unbounded) emit path. Needs ~200 B reclaimed; competes with property lists for the 16 KB.
 
-- **Hardware-verify Logo `SAVE`/`LOAD` round-trip.** `CATALOG`/`DIR` is verified on real
-  hardware (directory listing prints correctly). The `SAVE`/`LOAD` round-trip is *not* yet
-  hardware-verified — only because defining a procedure requires the full-screen editor, and
-  debug key-injection couldn't trigger the editor's `Ctrl-K S` save. Verify with a real
-  keyboard, or crack the key-injection (the `^K` prefix is recognized; the completion key
-  isn't landing). Implementation is build-verified and reuses the editor's own serializer
-  for SAVE and the tokenizer/evaluator for LOAD.
+- **Hardware-verify Logo `SAVE`/`LOAD` *procedure* round-trip.** Verified on real hardware:
+  `CATALOG`/`DIR` (directory listing), the `SAVE`/`LOAD` round-trip for **variables**
+  (number/word/list all restore correctly after overwrite), and the Logo file type
+  (`CATALOG` shows the saved workspace as type `LOGO` — the `0x07` type works end-to-end).
+  Still pending: the **procedure** round-trip, which needs the full-screen editor to define
+  a proc; debug key-injection couldn't trigger the editor's `Ctrl-K S` save (the `^K` prefix
+  is recognized, the completion key isn't landing). Verify with a real keyboard, or crack
+  the key-injection. SAVE reuses the editor's own serializer, so high confidence it works.
