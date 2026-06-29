@@ -77,4 +77,13 @@ void nfio_disk_delete(void);    /* FIO_CMD_DELETE  when a disk is mounted       
 void nfio_cd(void);             /* FIO_CMD_CD: set the current drive/subdir      */
 void nfio_pwd(void);            /* FIO_CMD_PWD: "drive:dir" -> FIO_NAME/NAMELEN   */
 
+/* ---- directory create/remove + VGC graphics-memory save/load --------------
+ * Ports of the desktop FileIoController DoMkdir/DoRmdir/DoGSave/DoGLoad. Each
+ * reads the FIO mailbox + owns fio_ok()/fio_fail(). They act on the mounted
+ * .ndi when a disk is current, else on the flat /data/nova/programs store. */
+void nfio_mkdir(void);          /* FIO_CMD_MKDIR 0x21: create a directory        */
+void nfio_rmdir(void);          /* FIO_CMD_RMDIR 0x22: remove an empty directory */
+void nfio_gsave(void);          /* FIO_CMD_GSAVE 0x06: VGC plane region -> .gfx   */
+void nfio_gload(void);          /* FIO_CMD_GLOAD 0x07: .gfx -> VGC plane region   */
+
 #endif /* NFIO_H */

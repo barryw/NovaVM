@@ -68,7 +68,11 @@
 #define FIO_CMD_DIROPEN 0x03
 #define FIO_CMD_DIRREAD 0x04
 #define FIO_CMD_DELETE 0x05
+#define FIO_CMD_GSAVE  0x06   /* save VGC graphics memory  -> nfio_gsave */
+#define FIO_CMD_GLOAD  0x07   /* load VGC graphics memory  -> nfio_gload */
 #define FIO_CMD_CD     0x20   /* set current drive/subdir  -> nfio_cd  */
+#define FIO_CMD_MKDIR  0x21   /* create a directory        -> nfio_mkdir */
+#define FIO_CMD_RMDIR  0x22   /* remove an empty directory -> nfio_rmdir */
 #define FIO_CMD_PWD    0x26   /* read current drive/subdir -> nfio_pwd */
 #define FIO_CMD_LOAD_MODULE 0x2C
 #define MODULE_BYTES 16384u
@@ -443,7 +447,11 @@ int main(int argc, char **argv) {
             case FIO_CMD_DIROPEN: fio_diropen(); break;
             case FIO_CMD_DIRREAD: fio_dirread(); break;
             case FIO_CMD_DELETE:  fio_delete(); break;
+            case FIO_CMD_GSAVE:   nfio_gsave(); break; /* VGC graphics memory -> .gfx */
+            case FIO_CMD_GLOAD:   nfio_gload(); break; /* .gfx -> VGC graphics memory */
             case FIO_CMD_CD:      nfio_cd();  break;   /* set current drive/subdir  */
+            case FIO_CMD_MKDIR:   nfio_mkdir(); break; /* create a directory        */
+            case FIO_CMD_RMDIR:   nfio_rmdir(); break; /* remove an empty directory */
             case FIO_CMD_PWD:     nfio_pwd(); break;   /* read current drive/subdir */
             case FIO_CMD_LOAD_MODULE: {
                 int id = peek(FIO_SRC_LO);
