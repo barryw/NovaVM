@@ -1537,22 +1537,25 @@ static JsonObject BuildVmRunCyclesRequest(List<string> args)
     return new JsonObject { ["command"] = "run_cycles", ["cycles"] = cycles };
 }
 
-// Capture the VGC graphics framebuffer (320x200, 4-bit/pixel, space 3) + the
-// 16-colour palette over the 6503 debug protocol and write a PNG, so the gfx
-// output (e.g. Z6 pictures) can be inspected without HDMI. One persistent
-// connection batches the ~250 read_vram calls + palette reads.
+// Capture the VGC output over the 6503 debug protocol and write a PNG, so the
+// display can be inspected without HDMI. The default is a TRUE composite that
+// flattens the layers the desktop renderer draws (border + background + gfx +
+// text + sprites) into the native 720x480 frame, matching
+// EmulatorCanvas.RenderFramebuffer. `--gfx-only` keeps the fast gfx-plane-only
+// path (320x200, space 3). One persistent connection batches every
+// peek/peek_block/read_vram round-trip.
 static int DoVmScreenshot(string host, int port, List<string> args)
 {
+    bool gfxOnly = TakeFlag(args, "--gfx-only", "--gfx");
     string outPath = args.Count > 0 && !args[0].StartsWith('-') ? args[0] : "screenshot.png";
-    const int W = 320, H = 200;        // VGC gfx plane
     const int PAL_IDX = 0xA0F4;        // RegPaletteIndex
     const int PAL_DATA = 0xA0F5;       // RegPaletteData (quantized RGB444 byte, auto-inc)
 
     using var client = new TcpClient { NoDelay = true };
-    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(120));
     client.ConnectAsync(host, port, cts.Token).GetAwaiter().GetResult();
     using NetworkStream ns = client.GetStream();
-    ns.ReadTimeout = 30000; ns.WriteTimeout = 30000;
+    ns.ReadTimeout = 60000; ns.WriteTimeout = 60000;
     using var reader = new StreamReader(ns, Encoding.UTF8, false, 1 << 16, leaveOpen: true);
     using var writer = new StreamWriter(ns, new UTF8Encoding(false), 4096, leaveOpen: true)
         { AutoFlush = true, NewLine = "\n" };
@@ -1579,7 +1582,16 @@ static int DoVmScreenshot(string host, int port, List<string> args)
     }
     bool useColor = palOk && palNonZero;
 
-    // Read the gfx framebuffer: 64000 pixels (low nibble = colour index).
+    if (gfxOnly)
+        return WriteGfxOnlyScreenshot(Send, outPath, pal, useColor);
+
+    return WriteCompositeScreenshot(Send, outPath, pal, useColor);
+}
+
+// Fast path: gfx plane only (320x200, 4bpp low-nibble palette index, space 3).
+static int WriteGfxOnlyScreenshot(Func<string, JsonNode> Send, string outPath, byte[] pal, bool useColor)
+{
+    const int W = 320, H = 200;
     byte[] idx = new byte[W * H];
     int p = 0;
     for (int a = 0; a < W * H; a += 256)
@@ -1602,8 +1614,324 @@ static int DoVmScreenshot(string host, int port, List<string> args)
         img[i * 3] = rr; img[i * 3 + 1] = gg; img[i * 3 + 2] = bb;
     }
     WritePng(outPath, W, H, img);
-    Console.WriteLine($"Screenshot {W}x{H} -> {outPath}{(useColor ? "" : " (grayscale; palette unavailable)")}");
+    Console.WriteLine($"Screenshot {W}x{H} (gfx-only) -> {outPath}{(useColor ? "" : " (grayscale; palette unavailable)")}");
     return 0;
+}
+
+// Loads the embedded CP437 charset (slot 0, 2048 bytes = 256 glyphs x 8 rows,
+// MSB = leftmost pixel). Returns null if the resource is missing.
+static byte[]? LoadNovaFont()
+{
+    using var s = System.Reflection.Assembly.GetExecutingAssembly()
+        .GetManifestResourceStream("cp437.bin");
+    if (s is null) return null;
+    byte[] font = new byte[256 * 8];
+    int got = 0, n;
+    while (got < font.Length && (n = s.Read(font, got, font.Length - got)) > 0) got += n;
+    return got == font.Length ? font : null;
+}
+
+// peek_block helper: reads `count` (<=256) contiguous CPU-visible bytes.
+static int[] PeekBlock(Func<string, JsonNode> Send, int address, int count)
+{
+    var r = Send($"{{\"command\":\"peek_block\",\"address\":{address},\"count\":{count}}}");
+    var arr = r["values"] as JsonArray;
+    int[] result = new int[count];
+    if (arr is not null)
+        for (int i = 0; i < count && i < arr.Count; i++)
+            result[i] = arr[i]!.GetValue<int>();
+    return result;
+}
+
+// read_vram helper: reads `length` bytes from a VGC memory space in 256-byte
+// batches. Returns null if the board returns no data for a batch.
+static byte[]? ReadVramRange(Func<string, JsonNode> Send, int space, int length)
+{
+    byte[] buf = new byte[length];
+    int p = 0;
+    for (int a = 0; a < length; a += 256)
+    {
+        int len = Math.Min(256, length - a);
+        var r = Send($"{{\"command\":\"read_vram\",\"space\":{space},\"address\":{a},\"length\":{len}}}");
+        JsonArray? arr = r["data"] as JsonArray;
+        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+        if (arr is null) { Console.Error.WriteLine($"screenshot: no data for space {space} at {a}: {r.ToJsonString()}"); return null; }
+        foreach (var n in arr) buf[p++] = (byte)(n!.GetValue<int>() & 0xFF);
+    }
+    return buf;
+}
+
+// Full composite: replicates EmulatorCanvas.RenderFramebuffer client-side into a
+// 720x480 RGB frame. Reads the VGC registers (peek/peek_block), the char/color/
+// text-attr planes (read_vram spaces 1/2/7), the gfx plane (space 3) and the
+// referenced sprite shapes (space 4), then flattens the layers in the renderer's
+// order. Copper raster lists are NOT replicated (no debug read path); custom/
+// alternate fonts fall back to the embedded CP437 charset.
+static int WriteCompositeScreenshot(Func<string, JsonNode> Send, string outPath, byte[] palBytes, bool useColor)
+{
+    const int NW = 720, NH = 480, OX = 40, OY = 40, GW = 320, GH = 200;
+    const int COLS = 80, ROWS = 50, GLYPH = 8, CELLS = COLS * ROWS;
+
+    // C64 default palette (RGB triples), used when the board palette reads back
+    // empty. Mirrors e6502.Avalonia/Rendering/ColorPalette.cs.
+    byte[] c64 =
+    [
+        0,0,0,        255,255,255,  136,0,0,      170,255,238,
+        204,68,204,   0,204,85,     0,0,170,      238,238,119,
+        221,136,85,   102,68,0,     255,119,119,  51,51,51,
+        119,119,119,  170,255,102,  0,136,255,    187,187,187,
+    ];
+
+    // 16-entry RGB palette: board palette if available, else C64 default.
+    byte[] pr = new byte[16], pg = new byte[16], pb = new byte[16];
+    for (int i = 0; i < 16; i++)
+    {
+        if (useColor) { pr[i] = palBytes[i * 3]; pg[i] = palBytes[i * 3 + 1]; pb[i] = palBytes[i * 3 + 2]; }
+        else { pr[i] = c64[i * 3]; pg[i] = c64[i * 3 + 1]; pb[i] = c64[i * 3 + 2]; }
+    }
+
+    // ---- VGC registers ----
+    int[] core = PeekBlock(Send, 0xA000, 16);   // $A000-$A00F core regs
+    int[] ext = PeekBlock(Send, 0xA0E0, 16);    // $A0E0-$A0EF VRAM port + scroll/dim
+    int[] sreg = PeekBlock(Send, 0xA040, 128);  // $A040-$A0BF sprite registers (16 x 8)
+
+    int mode = core[0x00] & 0xFF;               // RegMode
+    int bgColor = core[0x01] & 0x0F;            // RegBgCol
+    int cursorX = core[0x03] & 0xFF;            // RegCursorX
+    int cursorY = core[0x04] & 0xFF;            // RegCursorY
+    int scrollX = core[0x05] & 0xFF;            // RegScrollX
+    int scrollY = core[0x06] & 0xFF;            // RegScrollY
+    bool cursorOn = (core[0x0A] & 0x01) != 0;   // RegCursorEnable
+    int borderCol = core[0x0D] & 0x0F;          // RegBorder
+
+    int displayDim = ext[0x05] & 0x0F;          // $A0E5 DisplayDim (15 = full brightness)
+    int gfxTrans = ext[0x08] & 0xFF;            // $A0E8 RegGfxTransparentColor
+    int scrollCtl = ext[0x0A] & 0x07;           // $A0EA RegScrollCtl
+    int textTopRow = ext[0x0D] & 0xFF;          // $A0ED RegTextTopRow
+    int textScrStart = ext[0x0E] & 0xFF;        // $A0EE RegTextScrollStart
+    int textScrRows = ext[0x0F] & 0xFF;         // $A0EF RegTextScrollRows
+
+    bool textVisible = mode != 3 && mode != 4;  // ModeGfxOnly/ModeGfxSprites hide text
+    bool gfxUsed = mode >= 1;                    // gfx layer sampled in modes 1-4
+    bool cursorEnabled = cursorOn && textVisible;
+
+    // Scroll decomposition (RenderVideoState).
+    int Norm320(int v) => v >= GW ? v - GW : v;
+    int Norm200(int v) => v >= GH ? v - GH : v;
+    int scrollXFull = Norm320(scrollX | ((scrollCtl & 0x01) != 0 ? 0x100 : 0));
+    int scrollYMod = Norm200(scrollY);
+    int gfxSX = (scrollCtl & 0x02) != 0 ? scrollXFull : 0;
+    int gfxSY = (scrollCtl & 0x02) != 0 ? scrollYMod : 0;
+    int textSX = (scrollCtl & 0x04) != 0 ? scrollXFull : 0;
+    int textSY = (scrollCtl & 0x04) != 0 ? scrollYMod : 0;
+
+    int Wrap320(int v) { if (v >= GW) v -= GW; if (v >= GW) v -= GW; return v; }
+    int Wrap200(int v) { if (v >= GH) v -= GH; if (v >= GH) v -= GH; return v; }
+    int Wrap640(int v) { if (v >= 640) v -= 640; return v; }
+    int Wrap400(int v) { if (v >= 400) v -= 400; if (v >= 400) v -= 400; return v; }
+
+    // ---- Plane memory ----
+    byte[]? chr = null, col = null, attr = null, gfx = null;
+    byte[]? font = LoadNovaFont();
+    if (textVisible)
+    {
+        if (font is null)
+            Console.Error.WriteLine("screenshot: CP437 font resource missing; text layer skipped.");
+        chr = ReadVramRange(Send, 1, CELLS);
+        col = ReadVramRange(Send, 2, CELLS);
+        attr = ReadVramRange(Send, 7, CELLS);
+        if (chr is null || col is null) return 1;
+        attr ??= new byte[CELLS];   // text-attr optional; default plain style
+    }
+    if (gfxUsed)
+    {
+        gfx = ReadVramRange(Send, 3, GW * GH);
+        if (gfx is null) return 1;
+    }
+
+    // ---- Sprite shapes: only the slots referenced by enabled sprites ----
+    var shapes = new Dictionary<int, byte[]>();
+    for (int i = 0; i < 16; i++)
+    {
+        if ((sreg[i * 8 + 5] & 0x80) == 0) continue;   // SprRegFlags bit7 = enable
+        int slot = sreg[i * 8 + 4];                     // SprRegShape
+        if (shapes.ContainsKey(slot)) continue;
+        var sh = ReadVramRangeAt(Send, 4, slot * 128, 128);  // 128 bytes per shape slot
+        if (sh is not null) shapes[slot] = sh;
+    }
+
+    // Per-scanline sprite line buffers (visible canvas is 0..319).
+    byte[] lineBehind = new byte[GW], lineBetween = new byte[GW], lineFront = new byte[GW];
+
+    void RasterizeSprites(int scanY)
+    {
+        Array.Clear(lineBehind); Array.Clear(lineBetween); Array.Clear(lineFront);
+        for (int i = 0; i < 16; i++)
+        {
+            int flags = sreg[i * 8 + 5];
+            if ((flags & 0x80) == 0) continue;                 // enable
+            int sy = sreg[i * 8 + 2];                          // YLo (Y is an unsigned byte)
+            if (scanY < sy || scanY >= sy + 16) continue;
+            int rowInSprite = scanY - sy;
+            bool xFlip = (flags & 0x01) != 0;
+            bool yFlip = (flags & 0x02) != 0;
+            int srcRow = yFlip ? 15 - rowInSprite : rowInSprite;
+            int pri = Math.Min(sreg[i * 8 + 6], 2);
+            byte[] target = pri == 0 ? lineBehind : pri == 1 ? lineBetween : lineFront;
+            int slot = sreg[i * 8 + 4];
+            int transColor = sreg[i * 8 + 7];
+            int spriteX = sreg[i * 8 + 0] | (sreg[i * 8 + 1] << 8);
+            if (!shapes.TryGetValue(slot, out var shape)) continue;
+            int rowBase = srcRow * 8;                          // SpriteBytesPerRow
+            for (int c = 0; c < 16; c++)
+            {
+                int srcCol = xFlip ? 15 - c : c;
+                int byteIdx = rowBase + srcCol / 2;
+                int color = (srcCol % 2 == 0) ? (shape[byteIdx] >> 4) & 0x0F : shape[byteIdx] & 0x0F;
+                if (color == transColor) continue;
+                int sxp = spriteX + c;
+                if ((uint)sxp >= GW) continue;
+                target[sxp] = (byte)color;
+            }
+        }
+    }
+
+    int PhysicalTextRow(int displayRow)
+    {
+        int start = textScrStart;
+        int rows = Math.Max(1, Math.Min(textScrRows, ROWS - start));
+        if (displayRow < start || displayRow >= start + rows) return displayRow;
+        return start + ((displayRow - start + textTopRow) % rows);
+    }
+
+    // Returns true + colour index if the text layer is opaque at this canvas pixel.
+    bool SampleText(int cpx, int cpy, out int idx)
+    {
+        idx = 0;
+        if (font is null) return false;
+        int srcPx = Wrap640(cpx + (textSX << 1));
+        int srcPy = Wrap400(cpy + (textSY << 1));
+        int c = srcPx / GLYPH;
+        int displayRow = srcPy / GLYPH;
+        int row = PhysicalTextRow(displayRow);
+        int cell = row * COLS + c;
+        byte ch = chr![cell];
+        byte colorAttr = col![cell];
+        byte textAttr = attr![cell];
+        int fg = colorAttr & 0x0F;
+        int cellBg = (colorAttr >> 4) & 0x0F;
+        bool reverse = (textAttr & 0x02) != 0;               // TextAttrReverse
+        if (reverse) (fg, cellBg) = (cellBg, fg);
+        bool isCursor = cursorEnabled && c == cursorX && displayRow == cursorY;
+        if (isCursor) (fg, cellBg) = (cellBg, fg);
+        int gx = srcPx % GLYPH, gy = srcPy % GLYPH;
+        int rowBits = font[ch * GLYPH + gy];
+        if ((textAttr & 0x04) != 0) rowBits |= rowBits >> 1; // TextAttrBold
+        bool set = (rowBits & (0x80 >> gx)) != 0;
+        // Flash (TextAttrFlash bit0) is shown lit in a still capture.
+        if (mode == 2 && !set && !isCursor && !reverse && cellBg == bgColor) return false;
+        idx = set ? fg : cellBg;
+        return true;
+    }
+
+    // ---- Compose 720x480 ----
+    byte[] img = new byte[NW * NH * 3];
+
+    void Put(int px, int py, int ci)
+    {
+        int r = pr[ci], g = pg[ci], b = pb[ci];
+        if (displayDim != 15)
+        {
+            if (displayDim == 0) { r = g = b = 0; }
+            else { r = (r * displayDim) >> 4; g = (g * displayDim) >> 4; b = (b * displayDim) >> 4; }
+        }
+        int o = (py * NW + px) * 3;
+        img[o] = (byte)r; img[o + 1] = (byte)g; img[o + 2] = (byte)b;
+    }
+
+    // Border fill (the whole frame; the gfx/text/sprite area overwrites it).
+    for (int py = 0; py < NH; py++)
+        for (int px = 0; px < NW; px++)
+            Put(px, py, borderCol);
+
+    for (int gy = 0; gy < GH; gy++)
+    {
+        RasterizeSprites(gy);
+        for (int gx = 0; gx < GW; gx++)
+        {
+            int spriteBehind = lineBehind[gx];
+            int spriteBetween = lineBetween[gx];
+            int spriteFront = lineFront[gx];
+
+            int gfxColorIndex = 0;
+            bool gfxOpaque = false;
+            if (gfxUsed)
+            {
+                int sgx = Wrap320(gx + gfxSX), sgy = Wrap200(gy + gfxSY);
+                gfxColorIndex = gfx![sgy * GW + sgx];
+                gfxOpaque = gfxColorIndex != gfxTrans;
+            }
+
+            for (int dy = 0; dy < 2; dy++)
+            {
+                int cpy = gy * 2 + dy;
+                int py = OY + cpy;
+                for (int dx = 0; dx < 2; dx++)
+                {
+                    int cpx = gx * 2 + dx;
+                    int px = OX + cpx;
+
+                    int idx = bgColor;
+                    if (spriteBehind != 0) idx = spriteBehind & 0x0F;
+
+                    bool textOpaque = false;
+                    int textIdx = 0;
+                    if (textVisible) textOpaque = SampleText(cpx, cpy, out textIdx);
+
+                    if (mode == 3 || mode == 4)
+                    {
+                        if (gfxOpaque) idx = gfxColorIndex & 0x0F;
+                        if (spriteBetween != 0) idx = spriteBetween & 0x0F;
+                    }
+                    else if (mode == 2)
+                    {
+                        if (gfxOpaque) idx = gfxColorIndex & 0x0F;
+                        if (spriteBetween != 0) idx = spriteBetween & 0x0F;
+                        if (textOpaque) idx = textIdx;
+                    }
+                    else // mode 0 or 1
+                    {
+                        if (textOpaque) idx = textIdx;
+                        if (spriteBetween != 0) idx = spriteBetween & 0x0F;
+                        if (mode >= 1 && gfxOpaque) idx = gfxColorIndex & 0x0F;
+                    }
+
+                    if (spriteFront != 0) idx = spriteFront & 0x0F;
+
+                    Put(px, py, idx);
+                }
+            }
+        }
+    }
+
+    WritePng(outPath, NW, NH, img);
+    string fontNote = font is null ? " (text skipped: font missing)" : "";
+    string palNote = useColor ? "" : " (C64 default palette; board palette unavailable)";
+    Console.WriteLine($"Screenshot {NW}x{NH} composite (mode {mode}) -> {outPath}{palNote}{fontNote}");
+    return 0;
+}
+
+// read_vram helper that starts at an arbitrary space offset (single batch, <=256).
+static byte[]? ReadVramRangeAt(Func<string, JsonNode> Send, int space, int address, int length)
+{
+    var r = Send($"{{\"command\":\"read_vram\",\"space\":{space},\"address\":{address},\"length\":{length}}}");
+    JsonArray? arr = r["data"] as JsonArray;
+    if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+    if (arr is null) return null;
+    byte[] buf = new byte[length];
+    int p = 0;
+    foreach (var n in arr) { if (p >= length) break; buf[p++] = (byte)(n!.GetValue<int>() & 0xFF); }
+    return buf;
 }
 
 // ---- minimal PNG (truecolour 8-bit) ----------------------------------------
@@ -1742,6 +2070,7 @@ static void PrintVmUsage()
     Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
     Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
     Console.Error.WriteLine("  screen [--json]");
+    Console.Error.WriteLine("  screenshot [out.png] [--gfx-only]   (default: full 720x480 composite)");
     Console.Error.WriteLine("  line <row>");
     Console.Error.WriteLine("  cursor");
     Console.Error.WriteLine("  type-text <text>");

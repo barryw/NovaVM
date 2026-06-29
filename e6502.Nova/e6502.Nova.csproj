@@ -24,6 +24,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Default CP437 charset (slot 0), reused from the Avalonia renderer so the
+         CLI composite screenshot can rasterize the text layer client-side. -->
+    <EmbeddedResource Include="Resources\cp437.bin">
+      <LogicalName>cp437.bin</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Melanchall.DryWetMidi" Version="8.0.3" />
   </ItemGroup>
 
