@@ -1,0 +1,27 @@
+# Host is the NovaVM product-site domain. novavm.whi.dev is the assumed
+# subdomain; infra/CEO must confirm the canonical product-site URL (WAL-40
+# tracks site domains) and the cloudflare_zone_id repo secret must point at the
+# zone that owns this host for the deploy-time cache purge to succeed.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: novavm-website
+  namespace: novavm
+  labels:
+    app: novavm-website
+    app.kubernetes.io/name: novavm-website
+    app.kubernetes.io/component: website
+    app.kubernetes.io/part-of: walker-heavy-industries
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: novavm.whi.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: novavm-website
+                port:
+                  number: 80

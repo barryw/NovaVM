@@ -1,0 +1,87 @@
+/*
+ * Walker Heavy Industries — shared "Download latest" control, NovaVM skin.
+ * WAL-39 / WAL-51, Build & Release Standard §6.
+ *
+ * The control's MARKUP, behavior, and JS (brand/js/download-latest.js) are the
+ * shared house implementation, identical on every product site. The visual
+ * tokens live in whi-brand's design system (tokens.css + components.css). The
+ * NovaVM site is a bespoke dark theme, NOT built from the WHI product-site
+ * template, so loading the full whi.css bundle would clobber the whole page.
+ * Instead the handful of `--whi-*` custom properties the control needs are
+ * pinned to their canonical design-system values and SCOPED to `.whi-download`
+ * (they cascade to the button + meta line inside but never leak to the page).
+ * This keeps one shared component without overriding NovaVM's own styling.
+ *
+ * Token values mirror whi-brand web/brand/tokens/tokens.css. The CTA uses the
+ * Nova product line accent (--whi-line-nova) per the house "one accent per
+ * product line" rule.
+ */
+.whi-download {
+  /* Canonical design-system token values (scoped). */
+  --whi-space-2: 0.5rem;
+  --whi-space-3: 0.75rem;
+  --whi-space-6: 1.5rem;
+  --whi-weight-semibold: 600;
+  --whi-radius-md: 8px;
+  --whi-text: #f3f0e6;
+  --whi-text-inverse: #0d1117;
+  --whi-text-muted: #b9b4a6;
+  --whi-line: #53e0d8; /* Nova product line accent */
+  --whi-focus-ring: var(--whi-line);
+  --whi-focus-offset: 2px;
+  --whi-dur-fast: 120ms;
+  --whi-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --whi-text-xs: 0.75rem;
+  --whi-font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace;
+
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--whi-space-2);
+}
+.whi-download--center { align-items: center; text-align: center; }
+
+.whi-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--whi-space-2);
+  font: inherit;
+  font-weight: var(--whi-weight-semibold);
+  padding: var(--whi-space-3) var(--whi-space-6);
+  min-height: 44px; /* §4.1 A11y: ≥44×44 hit target */
+  border-radius: var(--whi-radius-md);
+  border: 1px solid var(--whi-text);
+  background: var(--whi-text);
+  color: var(--whi-text-inverse);
+  text-decoration: none;
+  cursor: pointer;
+  transition: opacity var(--whi-dur-fast) var(--whi-ease-standard),
+              transform var(--whi-dur-fast) var(--whi-ease-standard),
+              border-color var(--whi-dur-fast) var(--whi-ease-standard);
+}
+.whi-btn:hover { opacity: 0.88; text-decoration: none; }
+.whi-btn:active { transform: translateY(1px); opacity: 0.82; }
+.whi-btn:focus-visible {
+  outline: 2px solid var(--whi-focus-ring);
+  outline-offset: var(--whi-focus-offset);
+}
+.whi-btn--line {
+  background: var(--whi-line);
+  border-color: var(--whi-line);
+  color: var(--whi-text-inverse);
+}
+
+.whi-icon {
+  width: 1.25em;
+  height: 1.25em;
+  flex: none;
+}
+
+.whi-download__meta {
+  margin: 0;
+  min-height: 1.1em; /* reserve space so the JS fill-in doesn't shift layout */
+  font-family: var(--whi-font-mono);
+  font-size: var(--whi-text-xs);
+  color: var(--whi-text-muted);
+}

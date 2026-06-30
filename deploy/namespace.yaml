@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: novavm
+  labels:
+    app.kubernetes.io/name: novavm
+    app.kubernetes.io/part-of: walker-heavy-industries

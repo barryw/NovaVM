@@ -1,0 +1,41 @@
+# RBAC for Woodpecker CI to deploy to the novavm namespace.
+# Applied manually once (chicken-and-egg: CI needs it before it can deploy),
+# not via the CI kustomize build — same convention as the WHI house hub.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: woodpecker-deployer
+  namespace: novavm
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: novavm-deployer
+  namespace: novavm
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: woodpecker-deployer-binding
+  namespace: novavm
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: woodpecker
+roleRef:
+  kind: Role
+  name: novavm-deployer
+  apiGroup: rbac.authorization.k8s.io
