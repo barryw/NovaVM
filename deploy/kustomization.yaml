@@ -4,11 +4,12 @@ kind: Kustomization
 namespace: novavm
 
 resources:
-  - namespace.yaml
   - website-deployment.yaml
   - website-service.yaml
   - website-ingress.yaml
-  # ci-rbac.yaml is applied manually, not via CI (chicken-and-egg problem)
+  # namespace.yaml + ci-rbac.yaml are applied manually by infra (bootstrap), NOT via
+  # CI: woodpecker:default can get a namespace but not patch/create it, so including
+  # namespace.yaml here made `kubectl apply -k` fail on the namespace patch (WAL-66).
 
 commonLabels:
   app.kubernetes.io/managed-by: kustomize
