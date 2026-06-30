@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import UniformTypeIdentifiers
+import PixelCanvasKit
 
 extension UTType {
     static let novaDrawProject = UTType(exportedAs: "com.nova.novadraw.project")
@@ -36,7 +37,7 @@ enum ProjectFormat {
     }
 
     @MainActor
-    static func encode(document: NovaDocument) -> Data {
+    static func encode(document: PixelDocument) -> Data {
         let backdropData = document.backdropImage.flatMap(Self.pngData)
         let header = Header(
             width: document.width, height: document.height,
@@ -78,7 +79,7 @@ enum ProjectFormat {
     }
 
     @MainActor
-    static func decode(data: Data) -> NovaDocument? {
+    static func decode(data: Data) -> PixelDocument? {
         if data.starts(with: magic) {
             return decodeCurrent(data: data)
         }
@@ -86,7 +87,7 @@ enum ProjectFormat {
     }
 
     @MainActor
-    private static func decodeCurrent(data: Data) -> NovaDocument? {
+    private static func decodeCurrent(data: Data) -> PixelDocument? {
         let headerLengthOffset = magic.count
         let headerOffset = headerLengthOffset + MemoryLayout<UInt32>.size
         guard data.count >= headerOffset else { return nil }
@@ -107,7 +108,7 @@ enum ProjectFormat {
     }
 
     @MainActor
-    private static func decodeLegacy(data: Data) -> NovaDocument? {
+    private static func decodeLegacy(data: Data) -> PixelDocument? {
         guard let newline = data.firstIndex(of: 0x0A) else { return nil }
         let jsonData = data[data.startIndex..<newline]
         guard let header = try? JSONDecoder().decode(Header.self, from: jsonData) else { return nil }
@@ -117,11 +118,11 @@ enum ProjectFormat {
     }
 
     @MainActor
-    private static func makeDocument(header: Header, payload: Data.SubSequence) -> NovaDocument? {
+    private static func makeDocument(header: Header, payload: Data.SubSequence) -> PixelDocument? {
         guard header.width > 0, header.height > 0 else { return nil }
         let pixelCount = header.width * header.height
         let imageCount = header.imageCount ?? 1
-        guard imageCount > 0, imageCount <= NovaDocument.maximumImageCount else { return nil }
+        guard imageCount > 0, imageCount <= PixelDocument.maximumImageCount else { return nil }
         let pixelDataLength = pixelCount * imageCount
         guard payload.count >= pixelDataLength else { return nil }
 
@@ -137,7 +138,7 @@ enum ProjectFormat {
         if paintedPixelLength > 0 {
             paintedPixelData = Array(payload[paintedPixelStart..<paintedPixelEnd])
         } else {
-            paintedPixelData = NovaDocument.legacyPaintedPixels(from: pixelData)
+            paintedPixelData = PixelDocument.legacyPaintedPixels(from: pixelData)
         }
 
         let backdropStart = paintedPixelEnd
@@ -151,14 +152,14 @@ enum ProjectFormat {
             let imageName = header.imageNames?.indices.contains(index) == true
                 ? header.imageNames?[index] ?? ""
                 : ""
-            return NovaCanvasImage(
-                name: NovaDocument.normalizedImageName(imageName, fallbackIndex: index),
+            return CanvasImage(
+                name: PixelDocument.normalizedImageName(imageName, fallbackIndex: index),
                 pixels: Array(pixelData[start..<end]),
                 paintedPixels: Array(paintedPixelData[start..<end])
             )
         }
 
-        let doc = NovaDocument(width: header.width, height: header.height)
+        let doc = PixelDocument(width: header.width, height: header.height)
         doc.loadImagesRaw(images, selectedIndex: header.selectedImageIndex ?? 0)
         doc.performWithoutMarkingDirty {
             doc.backdropOpacity = header.backdropOpacity
@@ -174,7 +175,7 @@ enum ProjectFormat {
             doc.previousTool = header.previousTool ?? doc.previousTool
             doc.backdropPlacementMode = header.backdropPlacementMode ?? doc.backdropPlacementMode
             if let backdropScale = header.backdropScale, backdropScale.isFinite, backdropScale > 0 {
-                doc.backdropScale = NovaDocument.clampedBackdropScale(CGFloat(backdropScale))
+                doc.backdropScale = PixelDocument.clampedBackdropScale(CGFloat(backdropScale))
             }
             if let backdropOffset = makePanOffset(x: header.backdropOffsetX, y: header.backdropOffsetY) {
                 doc.backdropOffset = backdropOffset

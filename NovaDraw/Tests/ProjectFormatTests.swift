@@ -2,12 +2,13 @@ import AppKit
 import Foundation
 import NovaDrawMCPKit
 import Testing
+import PixelCanvasKit
 @testable import NovaDraw
 
 @MainActor
 @Suite struct ProjectFormatTests {
     @Test func roundTripPreservesCanvasAndProjectSettings() {
-        let doc = NovaDocument(width: 4, height: 3)
+        let doc = PixelDocument(width: 4, height: 3)
         doc.setPixel(1, 0, 0)
         doc.setPixel(0, 0, 1)
         doc.setPixel(3, 2, 9)
@@ -52,7 +53,7 @@ import Testing
     }
 
     @Test func roundTripPreservesBackdropImage() {
-        let doc = NovaDocument(width: 2, height: 2)
+        let doc = PixelDocument(width: 2, height: 2)
         doc.backdropImage = makeImage()
         doc.backdropImageOpacity = 0.42
 
@@ -64,7 +65,7 @@ import Testing
     }
 
     @Test func roundTripPreservesMultipleImages() {
-        let doc = NovaDocument(width: 2, height: 2)
+        let doc = PixelDocument(width: 2, height: 2)
         doc.renameSelectedImage(to: "pawn")
         doc.setPixel(0, 0, 2)
         doc.setPixel(1, 0, 0)
@@ -123,7 +124,7 @@ import Testing
     }
 
     @Test func truncatedProjectReturnsNil() {
-        let doc = NovaDocument(width: 2, height: 2)
+        let doc = PixelDocument(width: 2, height: 2)
         var data = ProjectFormat.encode(document: doc)
         data.removeLast()
 

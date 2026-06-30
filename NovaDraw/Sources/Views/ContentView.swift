@@ -1,8 +1,9 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import PixelCanvasKit
 
 struct ContentView: View {
-    @Binding var document: NovaDocument?
+    @Binding var document: PixelDocument?
     @Binding var toolEngine: ToolEngine?
     let onOpenProject: () -> Void
     @State private var cursorPosition: (x: Int, y: Int)?
@@ -21,7 +22,7 @@ struct ContentView: View {
     // MARK: - Main Editor
 
     @ViewBuilder
-    private func mainEditor(doc: NovaDocument, engine: ToolEngine) -> some View {
+    private func mainEditor(doc: PixelDocument, engine: ToolEngine) -> some View {
         NavigationStack {
         HStack(spacing: 0) {
             PaletteView(document: doc)
@@ -133,7 +134,7 @@ struct ContentView: View {
 
     // MARK: - Helpers
 
-    private func updateViewportForCanvasSize(doc: NovaDocument, size: CGSize) {
+    private func updateViewportForCanvasSize(doc: PixelDocument, size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
         let documentID = ObjectIdentifier(doc)
         if initializedViewportDocumentID != documentID {
@@ -154,7 +155,7 @@ struct ContentView: View {
         }
     }
 
-    private func fitToView(doc: NovaDocument, size: CGSize, markDirty: Bool = true) {
+    private func fitToView(doc: PixelDocument, size: CGSize, markDirty: Bool = true) {
         let applyFit = {
             CanvasViewport.fitToView(document: doc, size: size)
         }
@@ -166,29 +167,29 @@ struct ContentView: View {
         }
     }
 
-    private func setZoom(_ doc: NovaDocument, _ zoom: CGFloat) {
+    private func setZoom(_ doc: PixelDocument, _ zoom: CGFloat) {
         CanvasViewport.applyCenteredZoom(document: doc, size: canvasSize, zoom: zoom)
     }
 
-    private func zoomIn(_ doc: NovaDocument) {
+    private func zoomIn(_ doc: PixelDocument) {
         setZoom(doc, CanvasViewport.nextZoomStop(after: doc.zoom))
     }
 
-    private func zoomOut(_ doc: NovaDocument) {
+    private func zoomOut(_ doc: PixelDocument) {
         setZoom(doc, CanvasViewport.previousZoomStop(before: doc.zoom))
     }
 
     private func createDocument(width: Int, height: Int) {
-        let doc = NovaDocument(width: width, height: height)
+        let doc = PixelDocument(width: width, height: height)
         document = doc
         toolEngine = ToolEngine(document: doc)
     }
 
-    private func selectTool(_ doc: NovaDocument, _ tool: DrawingTool) {
+    private func selectTool(_ doc: PixelDocument, _ tool: DrawingTool) {
         doc.selectTool(tool)
     }
 
-    private func toolPicker(doc: NovaDocument) -> some View {
+    private func toolPicker(doc: PixelDocument) -> some View {
         ForEach(DrawingTool.allCases, id: \.self) { tool in
             Toggle(isOn: Binding(
                 get: { doc.currentTool == tool },
@@ -203,7 +204,7 @@ struct ContentView: View {
     // Bottom status strip — the reference the other editors model on (WAL-29 §4.2).
     // Styled with the shared PixelCanvasUI tokens (JetBrains-Mono / warm neutrals);
     // keeps NovaDraw's richer content (active image label) beyond the shared minimum.
-    private func statusBar(doc: NovaDocument) -> some View {
+    private func statusBar(doc: PixelDocument) -> some View {
         HStack(spacing: PixelCanvasUI.Spacing.md) {
             HStack(spacing: PixelCanvasUI.Spacing.xs) {
                 Image(systemName: "scope")
@@ -251,11 +252,11 @@ struct ContentView: View {
 // MARK: - Focused Value for Menu Commands
 
 struct NovaDocumentKey: FocusedValueKey {
-    typealias Value = NovaDocument
+    typealias Value = PixelDocument
 }
 
 extension FocusedValues {
-    var novaDocument: NovaDocument? {
+    var novaDocument: PixelDocument? {
         get { self[NovaDocumentKey.self] }
         set { self[NovaDocumentKey.self] = newValue }
     }

@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
+import PixelCanvasKit
 
 struct PixelCanvasView: View {
-    let document: NovaDocument
+    let document: PixelDocument
     @Binding var cursorPosition: (x: Int, y: Int)?
     let toolEngine: ToolEngine
 
@@ -169,7 +170,7 @@ struct PixelCanvasView: View {
     ) {
         guard deltaY != 0 else { return }
         if shouldAdjustFloatingBackdrop(modifiers: modifiers) {
-            let factor = NovaDocument.backdropScrollScaleFactor(
+            let factor = PixelDocument.backdropScrollScaleFactor(
                 deltaY: deltaY,
                 hasPreciseScrollingDeltas: hasPreciseScrollingDeltas
             )

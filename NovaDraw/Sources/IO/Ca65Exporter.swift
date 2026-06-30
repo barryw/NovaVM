@@ -1,4 +1,5 @@
 import Foundation
+import PixelCanvasKit
 
 enum Ca65ImageScope: String, CaseIterable, Identifiable, Sendable {
     case selectedImage
@@ -89,8 +90,8 @@ enum Ca65ExportError: LocalizedError, Equatable {
 
 enum Ca65Exporter {
     @MainActor
-    static func encode(document: NovaDocument, options: Ca65ExportOptions) throws -> String {
-        let images: [NovaCanvasImage]
+    static func encode(document: PixelDocument, options: Ca65ExportOptions) throws -> String {
+        let images: [CanvasImage]
         switch options.scope {
         case .selectedImage:
             images = [document.images[document.selectedImageIndex]]
@@ -100,7 +101,7 @@ enum Ca65Exporter {
         return try encode(images: images, width: document.width, height: document.height, options: options)
     }
 
-    static func encode(images: [NovaCanvasImage],
+    static func encode(images: [CanvasImage],
                        width: Int,
                        height: Int,
                        options: Ca65ExportOptions) throws -> String {
@@ -141,7 +142,7 @@ enum Ca65Exporter {
         return output.joined(separator: "\n") + "\n"
     }
 
-    private static func validate(images: [NovaCanvasImage], width: Int, height: Int) throws {
+    private static func validate(images: [CanvasImage], width: Int, height: Int) throws {
         let pixelCount = width * height
         for image in images {
             guard image.pixels.count == pixelCount, image.paintedPixels.count == pixelCount else {
@@ -150,7 +151,7 @@ enum Ca65Exporter {
         }
     }
 
-    private static func emitIndexedBitmap(images: [NovaCanvasImage],
+    private static func emitIndexedBitmap(images: [CanvasImage],
                                           width: Int,
                                           height: Int,
                                           base: String,
@@ -166,7 +167,7 @@ enum Ca65Exporter {
         }
     }
 
-    private static func emitBlitterRectangles(images: [NovaCanvasImage],
+    private static func emitBlitterRectangles(images: [CanvasImage],
                                               width: Int,
                                               height: Int,
                                               base: String,
@@ -196,7 +197,7 @@ enum Ca65Exporter {
         output.append("")
     }
 
-    private static func emitVSpriteRecords(images: [NovaCanvasImage],
+    private static func emitVSpriteRecords(images: [CanvasImage],
                                            width: Int,
                                            height: Int,
                                            base: String,
@@ -217,7 +218,7 @@ enum Ca65Exporter {
         }
     }
 
-    private static func emitHardwareSprites(images: [NovaCanvasImage],
+    private static func emitHardwareSprites(images: [CanvasImage],
                                             width: Int,
                                             height: Int,
                                             base: String,
@@ -244,7 +245,7 @@ enum Ca65Exporter {
         }
     }
 
-    private static func emitBitMasks(images: [NovaCanvasImage],
+    private static func emitBitMasks(images: [CanvasImage],
                                      width: Int,
                                      height: Int,
                                      base: String,
@@ -337,7 +338,7 @@ enum Ca65Exporter {
         }
     }
 
-    private static func pixelRows(for image: NovaCanvasImage,
+    private static func pixelRows(for image: CanvasImage,
                                   width: Int,
                                   height: Int,
                                   unpaintedColor: UInt8) -> [UInt8] {
@@ -348,7 +349,7 @@ enum Ca65Exporter {
         return result
     }
 
-    private static func packedHardwareSpriteRows(for image: NovaCanvasImage,
+    private static func packedHardwareSpriteRows(for image: CanvasImage,
                                                  width: Int,
                                                  height: Int,
                                                  transparentColor: UInt8) -> [UInt8] {
@@ -363,7 +364,7 @@ enum Ca65Exporter {
         return result
     }
 
-    private static func packedPixel(image: NovaCanvasImage,
+    private static func packedPixel(image: CanvasImage,
                                     x: Int,
                                     y: Int,
                                     width: Int,
@@ -375,7 +376,7 @@ enum Ca65Exporter {
         return image.pixels[index] & 0x0F
     }
 
-    private static func bitMaskRows(for image: NovaCanvasImage, width: Int, height: Int) -> [UInt8] {
+    private static func bitMaskRows(for image: CanvasImage, width: Int, height: Int) -> [UInt8] {
         packBitRows(width: width, height: height) { index in
             image.paintedPixels[index] != 0
         }
@@ -398,7 +399,7 @@ enum Ca65Exporter {
         return result
     }
 
-    private static func imageLabels(base: String, images: [NovaCanvasImage]) -> [String] {
+    private static func imageLabels(base: String, images: [CanvasImage]) -> [String] {
         let digits = max(2, String(images.count).count)
         var usedNames: [String: Int] = [:]
         return images.enumerated().map { index, image in

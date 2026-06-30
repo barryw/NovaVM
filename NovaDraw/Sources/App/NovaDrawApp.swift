@@ -1,9 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import PixelCanvasKit
 
 @main
 struct NovaDrawApp: App {
-    @State private var document: NovaDocument?
+    @State private var document: PixelDocument?
     @State private var toolEngine: ToolEngine?
     @State private var showingNewCanvas = false
     @State private var traceImportRequest: TraceSheetImportRequest?
@@ -165,7 +166,7 @@ struct NovaDrawApp: App {
     }
 
     private func createDocument(width: Int, height: Int) {
-        let doc = NovaDocument(width: width, height: height)
+        let doc = PixelDocument(width: width, height: height)
         document = doc
         toolEngine = ToolEngine(document: doc)
         showingNewCanvas = false
@@ -253,7 +254,7 @@ struct NovaDrawApp: App {
         }
     }
 
-    private func writeProject(_ doc: NovaDocument, to url: URL) -> Bool {
+    private func writeProject(_ doc: PixelDocument, to url: URL) -> Bool {
         do {
             try ProjectFormat.encode(document: doc).write(to: url, options: .atomic)
             doc.markSaved(to: url)
@@ -507,7 +508,7 @@ struct NovaDrawApp: App {
             return false
         }
 
-        let doc = NovaDocument(width: settings.outputWidth, height: settings.outputHeight)
+        let doc = PixelDocument(width: settings.outputWidth, height: settings.outputHeight)
         doc.backdropImage = backdrop
         doc.backdropImageOpacity = settings.backdropImageOpacity
         doc.backdropPlacementMode = .fitToCanvas

@@ -8,6 +8,16 @@ when:
       include:
         - NovaDraw/**
         - .woodpecker/build-novadraw.yaml
+  # Validate the editor on pull requests that touch it (the PR event carries a
+  # diff, so the path filter applies) ...
+  - event: pull_request
+    path:
+      include:
+        - NovaDraw/**
+        - .woodpecker/build-novadraw.yaml
+  # ... and on manual runs (which carry no diff, so no path filter) so the macOS
+  # build/test gate can be run on demand before merge (WAL-35).
+  - event: manual
 
 # Route to the local macOS agent (same label the tag/macOS jobs use).
 labels:
@@ -19,7 +29,15 @@ steps:
     environment:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
+      # NovaDraw depends on the private PixelCanvasKit package via SPM. SwiftPM
+      # runs git non-interactively, so give it a credential in a workspace-local
+      # git config (never the shared runner's ~/.gitconfig). Woodpecker masks
+      # the secret value in logs.
+      GITHUB_TOKEN:
+        from_secret: github_token
     commands:
+      - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
+      - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - cd NovaDraw
       - swift build
       - swift test
