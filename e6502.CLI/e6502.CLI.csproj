@@ -24,7 +24,10 @@
       </None>
     </ItemGroup>
 
-    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent">
+    <!-- Set SkipRomBuild=true to compile without the cc65 toolchain (ca65/ld65).
+         Mirrors the gate already honored by e6502.Avalonia so a solution build
+         can succeed on machines that don't have the ROM build tools installed. -->
+    <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" Condition="'$(SkipRomBuild)' != 'true'">
       <Exec Command="make -C $(ProjectDir)../ehbasic" />
       <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
       <Copy SourceFiles="$(ProjectDir)../ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
