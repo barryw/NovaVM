@@ -81,6 +81,21 @@ enum PixelCanvasUI {
         static let lg: CGFloat = 10
     }
 
+    // MARK: - Window (canonical editor scene geometry — WAL-100 / ADR 0006)
+    //
+    // One first-launch footprint for the whole editor family, anchored to the
+    // WAL-25 redline grammar (left rail · center canvas · 260 inspector). New
+    // editors consume these tokens instead of magic numbers so the suite stays
+    // uniform. Governs only the primary editor scene's `.defaultSize`; window-
+    // state restoration and auxiliary windows are unaffected.
+
+    enum Window {
+        static let defaultWidth:  CGFloat = 1280
+        static let defaultHeight: CGFloat = 840
+        static let minWidth:      CGFloat = 1200
+        static let minHeight:     CGFloat = 800
+    }
+
     // MARK: - Hex helper (local, to avoid colliding with per-app Color extensions)
 
     static func hex(_ value: UInt32) -> Color {
