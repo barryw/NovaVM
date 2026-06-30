@@ -1,0 +1,33 @@
+name: CI
+
+# Builds and tests PixelCanvasKit on macOS (the package targets macOS 14 and
+# uses AppKit/SwiftUI/Observation, so it cannot be built on Linux runners).
+# This workflow is rooted in the package directory; it activates once
+# PixelCanvasKit lives in its own repository (see README "Status").
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: sudo xcode-select -switch /Applications/Xcode_16.app
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Build
+        run: swift build -v
+
+      - name: Test
+        run: swift test -v
