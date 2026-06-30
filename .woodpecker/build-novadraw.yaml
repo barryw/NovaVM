@@ -37,6 +37,14 @@ steps:
         from_secret: github_token
     commands:
       - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
+      # Disable the osxkeychain credential helper BEFORE the authenticated SwiftPM
+      # fetch. On the macOS runner, git's `credential approve` after a successful
+      # package resolution makes the helper try to STORE "x-access-token" in the
+      # login keychain; the default keychain has been switched to the locked
+      # ci-build keychain by a prior release run and never restored, so the store
+      # fails and macOS pops a "Keychain Not Found" dialog on the host (WAL-99).
+      # The token is already in the rewritten URL, so no helper is needed.
+      - git config --global credential.helper ""
       - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - cd NovaDraw
       - swift build
