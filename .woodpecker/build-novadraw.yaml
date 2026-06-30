@@ -29,7 +29,15 @@ steps:
     environment:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
+      # NovaDraw depends on the private PixelCanvasKit package via SPM. SwiftPM
+      # runs git non-interactively, so give it a credential in a workspace-local
+      # git config (never the shared runner's ~/.gitconfig). Woodpecker masks
+      # the secret value in logs.
+      GITHUB_TOKEN:
+        from_secret: github_token
     commands:
+      - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
+      - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - cd NovaDraw
       - swift build
       - swift test
