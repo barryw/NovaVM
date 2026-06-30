@@ -1,7 +1,8 @@
 import SwiftUI
+import PixelCanvasKit
 
 struct PaletteView: View {
-    let document: NovaDocument
+    let document: PixelDocument
 
     private let columns = [
         GridItem(.fixed(22), spacing: 2),

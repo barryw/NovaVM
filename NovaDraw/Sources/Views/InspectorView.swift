@@ -1,7 +1,8 @@
 import SwiftUI
+import PixelCanvasKit
 
 struct InspectorView: View {
-    let document: NovaDocument
+    let document: PixelDocument
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -139,7 +140,7 @@ struct InspectorView: View {
     private var backdropScaleBinding: Binding<Double> {
         Binding(
             get: {
-                log2(Double(NovaDocument.clampedBackdropScale(document.backdropScale)))
+                log2(Double(PixelDocument.clampedBackdropScale(document.backdropScale)))
             },
             set: {
                 document.setBackdropScale(CGFloat(pow(2, $0)), around: document.canvasCenter)

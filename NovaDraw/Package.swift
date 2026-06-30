@@ -11,10 +11,14 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.11.0"),
+        .package(url: "https://github.com/barryw/PixelCanvasKit.git", from: "0.1.0"),
     ],
     targets: [
         .executableTarget(
             name: "NovaDraw",
+            dependencies: [
+                .product(name: "PixelCanvasKit", package: "PixelCanvasKit"),
+            ],
             path: "Sources",
             linkerSettings: [
                 .unsafeFlags([
@@ -39,7 +43,11 @@ let package = Package(
         ),
         .testTarget(
             name: "NovaDrawTests",
-            dependencies: ["NovaDraw", "NovaDrawMCPKit"],
+            dependencies: [
+                "NovaDraw",
+                "NovaDrawMCPKit",
+                .product(name: "PixelCanvasKit", package: "PixelCanvasKit"),
+            ],
             path: "Tests"
         ),
         .testTarget(

@@ -1,10 +1,11 @@
 import Testing
 import Foundation
+import PixelCanvasKit
 @testable import NovaDraw
 
 @Suite struct Ca65ExporterTests {
     @Test func blitterRectanglesPreservePaintedBlackAndKeyUnpaintedPixels() throws {
-        let image = NovaCanvasImage(
+        let image = CanvasImage(
             name: "Piece",
             pixels: [0, 1, 2, 3],
             paintedPixels: [1, 1, 0, 1]
@@ -35,7 +36,7 @@ import Foundation
     @Test func blitterRectanglesUseImageNamesForStableLabels() throws {
         let names = ["pawn", "knight", "bishop", "rook", "queen", "king"]
         let images = names.enumerated().map { index, name in
-            NovaCanvasImage(
+            CanvasImage(
                 name: name,
                 pixels: [UInt8](repeating: UInt8(index), count: 20 * 20),
                 paintedPixels: [UInt8](repeating: 255, count: 20 * 20)
@@ -70,7 +71,7 @@ import Foundation
     }
 
     @Test func vSpriteRecordsIncludeDimensionsBeforePixels() throws {
-        let image = NovaCanvasImage(
+        let image = CanvasImage(
             name: "Piece",
             pixels: [4, 5, 6, 7],
             paintedPixels: [1, 1, 1, 1]
@@ -88,7 +89,7 @@ import Foundation
     }
 
     @Test func bitMasksPackPaintedPixelsMostSignificantBitFirst() throws {
-        let image = NovaCanvasImage(
+        let image = CanvasImage(
             name: "Mask",
             pixels: [UInt8](repeating: 0, count: 10),
             paintedPixels: [1, 0, 0, 0, 0, 0, 0, 1, 1, 0]
@@ -107,7 +108,7 @@ import Foundation
     }
 
     @Test func hardwareSpritesPackNibblesAndUseTransparentColorForUnpaintedPixels() throws {
-        let image = NovaCanvasImage(
+        let image = CanvasImage(
             name: "Sprite",
             pixels: [0x0A, 0x0B],
             paintedPixels: [1, 0]
@@ -129,7 +130,7 @@ import Foundation
     }
 
     @Test func hardwareSpritesRejectOversizedCanvas() throws {
-        let image = NovaCanvasImage(
+        let image = CanvasImage(
             name: "Large",
             pixels: [UInt8](repeating: 0, count: 17),
             paintedPixels: [UInt8](repeating: 0, count: 17)

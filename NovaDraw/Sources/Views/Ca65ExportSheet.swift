@@ -1,14 +1,15 @@
 import Foundation
 import SwiftUI
+import PixelCanvasKit
 
 struct Ca65ExportSheet: View {
-    let document: NovaDocument
+    let document: PixelDocument
     let onCancel: () -> Void
     let onExport: (Ca65ExportOptions) -> Bool
 
     @State private var options: Ca65ExportOptions
 
-    init(document: NovaDocument,
+    init(document: PixelDocument,
          onCancel: @escaping () -> Void,
          onExport: @escaping (Ca65ExportOptions) -> Bool) {
         self.document = document

@@ -1,7 +1,8 @@
 import SwiftUI
+import PixelCanvasKit
 
 struct ImageStripView: View {
-    let document: NovaDocument
+    let document: PixelDocument
 
     private let thumbnailSize: CGFloat = 38
 
@@ -49,7 +50,7 @@ struct ImageStripView: View {
         .background(.bar)
     }
 
-    private func imageButton(_ image: NovaCanvasImage, index: Int) -> some View {
+    private func imageButton(_ image: CanvasImage, index: Int) -> some View {
         let isSelected = index == document.selectedImageIndex
         return Button {
             document.selectImage(at: index)
@@ -78,7 +79,7 @@ struct ImageStripView: View {
         .help(image.name)
     }
 
-    private func thumbnail(_ image: NovaCanvasImage) -> some View {
+    private func thumbnail(_ image: CanvasImage) -> some View {
         Canvas(rendersAsynchronously: false) { context, size in
             let scale = min(size.width / CGFloat(document.width),
                             size.height / CGFloat(document.height))
