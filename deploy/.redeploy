@@ -1,0 +1,3 @@
+# CI redeploy marker — kustomize-ignored. Bumped to fire release-static-site after
+# cloudflare_api_token/cloudflare_zone_id repo secrets were provisioned (WAL-66/Keel).
+redeploy: 20260630T160843Z
