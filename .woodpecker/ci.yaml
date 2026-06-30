@@ -27,8 +27,7 @@ steps:
   # (product-ci profile: contents=write,metadata=read) in place of the shared
   # admin PAT. Minter is vendored in the woodpecker-release plugin image; GH_APP_*
   # are org-level Woodpecker secrets. Token (~1h TTL) lands in the shared workspace
-  # and is consumed by `gh` below. (git push continues to use Woodpecker's own
-  # forge credential, unaffected by this change.)
+  # and is consumed by `gh`/`git push` below.
   - name: mint-token
     image: ghcr.io/barryw/woodpecker-release:go
     pull: true
@@ -43,32 +42,24 @@ steps:
       - /plugin/mint-installation-token.sh --profile product-ci > "$CI_WORKSPACE/.ci-token"
       - 'test -s "$CI_WORKSPACE/.ci-token" || { echo "FATAL: empty minted token"; exit 1; }'
 
-  - name: version-and-release
+  # WAL-41: adopt build/release standard — cog bump drives the version tag; the
+  # pushed v tag triggers build-gate -> per-OS publish -> finalize (published Release).
+  - name: version
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - export GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
       - sh .woodpecker/install-linux-ci-deps.sh release
+      - git config user.name "Woodpecker CI"
+      - git config user.email "ci@barrywalker.io"
       - |
-        # Check if a version bump is needed
-        NEW_VERSION=$$(cog bump --auto --dry-run 2>/dev/null || true)
-        if [ -z "$${NEW_VERSION}" ]; then
-          echo "No version bump needed"
-          exit 0
+        # Build & release standard (sec 2): version through `cog bump --auto`.
+        # cog exits non-zero when no conventional commits warrant a bump, so the
+        # release path runs only on a real version change. Pushing the v tag
+        # drives build-gate -> per-OS publish -> finalize (the published Release).
+        if cog bump --auto; then
+          TAG="v$$(cog get-version)"
+          echo "Bumped to $${TAG}"
+          git push origin "$${TAG}"
+        else
+          echo "No conventional commits warrant a release"
         fi
-        echo "Bumping to v$${NEW_VERSION}"
-
-        # Configure git for tagging
-        git config user.name "Woodpecker CI"
-        git config user.email "ci@barrywalker.io"
-
-        # Create and push the tag
-        cog bump --auto
-        TAG="v$$(cog get-version)"
-        git push origin "$${TAG}"
-
-        # Create draft release
-        gh release create "$${TAG}" \
-          --repo "$$CI_REPO" \
-          --draft \
-          --generate-notes \
-          --title "$${TAG}"

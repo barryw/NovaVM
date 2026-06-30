@@ -13,15 +13,21 @@ steps:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - sh .woodpecker/install-linux-ci-deps.sh build
-      - dotnet publish e6502.Avalonia -c Release -r linux-x64 -p:SkipRomBuild=true -o publish/avalonia
-      - dotnet publish e6502.MCP -c Release -r linux-x64 -o publish/mcp
+      # Standard RID matrix (linux side): linux-x64 + linux-arm64, cross-published
+      # on the amd64 runner (no AOT, so cross-RID publish works).
+      - dotnet publish e6502.Avalonia -c Release -r linux-x64   -p:SkipRomBuild=true -o publish/avalonia-linux-x64
+      - dotnet publish e6502.MCP      -c Release -r linux-x64                        -o publish/mcp-linux-x64
+      - dotnet publish e6502.Avalonia -c Release -r linux-arm64 -p:SkipRomBuild=true -o publish/avalonia-linux-arm64
+      - dotnet publish e6502.MCP      -c Release -r linux-arm64                       -o publish/mcp-linux-arm64
 
   - name: package
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - TAG="$$CI_COMMIT_TAG"
-      - tar -czf "nova-vm-$${TAG}-linux-x64.tar.gz" -C publish/avalonia .
-      - tar -czf "nova-mcp-$${TAG}-linux-x64.tar.gz" -C publish/mcp .
+      - tar -czf "nova-vm-$${TAG}-linux-x64.tar.gz"    -C publish/avalonia-linux-x64 .
+      - tar -czf "nova-mcp-$${TAG}-linux-x64.tar.gz"   -C publish/mcp-linux-x64 .
+      - tar -czf "nova-vm-$${TAG}-linux-arm64.tar.gz"  -C publish/avalonia-linux-arm64 .
+      - tar -czf "nova-mcp-$${TAG}-linux-arm64.tar.gz" -C publish/mcp-linux-arm64 .
 
   # WAL-72/WAL-70: mint a short-lived GitHub App installation token (product-ci
   # profile) just before upload in place of the shared admin PAT. See ci.yaml.
@@ -45,4 +51,4 @@ steps:
       - export GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
       - sh .woodpecker/install-linux-ci-deps.sh release
       - TAG="$$CI_COMMIT_TAG"
-      - gh release upload "$${TAG}" "nova-vm-$${TAG}-linux-x64.tar.gz" "nova-mcp-$${TAG}-linux-x64.tar.gz" --repo "$$CI_REPO" --clobber
+      - gh release upload "$${TAG}" "nova-vm-$${TAG}-linux-x64.tar.gz" "nova-mcp-$${TAG}-linux-x64.tar.gz" "nova-vm-$${TAG}-linux-arm64.tar.gz" "nova-mcp-$${TAG}-linux-arm64.tar.gz" --repo "$$CI_REPO" --clobber
