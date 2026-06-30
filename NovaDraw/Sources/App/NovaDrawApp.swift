@@ -22,6 +22,10 @@ struct NovaDrawApp: App {
                 // token set); lock the scene so adaptive panels match the dark
                 // status strip + canvas instead of going light. WAL-100 / ADR 0006.
                 .preferredColorScheme(.dark)
+                // Enforce the canonical grammar floor, not just declare it — a user
+                // can't shrink below the 1200×800 rail+canvas+inspector layout. WAL-100.
+                .frame(minWidth: PixelCanvasUI.Window.minWidth,
+                       minHeight: PixelCanvasUI.Window.minHeight)
                 .onOpenURL { url in
                     openProject(from: url)
                 }
