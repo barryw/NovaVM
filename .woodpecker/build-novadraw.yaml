@@ -8,6 +8,16 @@ when:
       include:
         - NovaDraw/**
         - .woodpecker/build-novadraw.yaml
+  # Validate the editor on pull requests that touch it (the PR event carries a
+  # diff, so the path filter applies) ...
+  - event: pull_request
+    path:
+      include:
+        - NovaDraw/**
+        - .woodpecker/build-novadraw.yaml
+  # ... and on manual runs (which carry no diff, so no path filter) so the macOS
+  # build/test gate can be run on demand before merge (WAL-35).
+  - event: manual
 
 # Route to the local macOS agent (same label the tag/macOS jobs use).
 labels:
