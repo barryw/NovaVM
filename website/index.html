@@ -7,6 +7,8 @@
     <title>NovaVM - 6502/65C02 computer platform</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <!-- WHI shared download-latest control (scoped; WAL-39 / WAL-51) -->
+    <link rel="stylesheet" href="brand/download-latest.css">
 </head>
 <body>
     <header class="site-header" aria-label="Site header">
@@ -206,6 +208,27 @@ cd NovaVM
 dotnet restore e6502.sln
 dotnet run --project e6502.Avalonia</code></pre>
             </div>
+            <div class="quickstart-prebuilt">
+                <p class="eyebrow">Or grab a prebuilt host</p>
+                <!-- WHI shared download-latest control (WAL-39 / WAL-51). PUBLIC
+                     repo; the static link is the no-JS fallback. data-match picks
+                     the self-contained NovaVM desktop-host archive (WAL-41) for
+                     Apple Silicon; the JS surfaces version, size, and date. -->
+                <div class="whi-download" data-whi-download
+                     data-repo="barryw/NovaVM" data-asset="archive"
+                     data-match="^nova-vm-.*osx-arm64"
+                     data-platform="macOS · Apple Silicon" data-product="NovaVM">
+                    <a class="whi-btn whi-btn--line" data-whi-download-link
+                       href="https://github.com/barryw/NovaVM/releases/latest">
+                        <svg class="whi-icon" aria-hidden="true"><use href="brand/icons/icons.svg#whi-download"></use></svg>
+                        <span data-whi-download-label>Download latest</span>
+                    </a>
+                    <p class="whi-download__meta" data-whi-download-meta></p>
+                </div>
+                <p class="prebuilt-platforms">
+                    <a href="https://github.com/barryw/NovaVM/releases/latest">Linux &amp; Windows builds, and all assets →</a>
+                </p>
+            </div>
         </section>
     </main>
 
@@ -215,5 +238,7 @@ dotnet run --project e6502.Avalonia</code></pre>
     </footer>
 
     <script src="script.js"></script>
+    <!-- WHI shared download-latest enhancer — loaded once (WAL-39 / WAL-51) -->
+    <script src="brand/js/download-latest.js" defer></script>
 </body>
 </html>

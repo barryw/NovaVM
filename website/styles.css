@@ -449,6 +449,28 @@ h3 {
     border-top: 1px solid var(--line);
 }
 
+/* Prebuilt-host download (WHI shared control, WAL-51) — full-width row under
+   the clone instructions + code panel. */
+.quickstart-prebuilt {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.prebuilt-platforms {
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.prebuilt-platforms a {
+    color: var(--soft);
+}
+
 .code-panel {
     position: relative;
     border: 1px solid rgba(83, 224, 216, 0.3);
