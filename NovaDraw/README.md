@@ -2,6 +2,8 @@
 
 NovaDraw is a macOS pixel editor for Nova indexed-color assets. Projects are saved as `.novadraw` files and can contain up to 12 images on a shared canvas.
 
+_Part of the WHI Mac-native editor family (NovaDraw · FamiForge · Miggy Draw)._
+
 ## MCP Server
 
 NovaDraw includes a separate stdio MCP server, `NovaDrawMCP`, for AI agents that need to create, inspect, and touch up project images without driving the UI.
