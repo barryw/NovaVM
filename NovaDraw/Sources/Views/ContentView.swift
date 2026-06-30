@@ -50,15 +50,17 @@ struct ContentView: View {
                         .onKeyPress("7") { setZoom(doc, 64); return .handled }
                         .onKeyPress("8") { setZoom(doc, 128); return .handled }
                         .onKeyPress("9") { setZoom(doc, 256); return .handled }
-                        .onKeyPress("g") { doc.gridOn.toggle(); return .handled }
-                        .onKeyPress("p") { selectTool(doc, .pencil); return .handled }
+                        // WHI standard pixel-editor keymap (WAL-29 §4.3).
+                        // Grid moved off `G` (now fill) to `'` per the audit spec.
+                        .onKeyPress("'") { doc.gridOn.toggle(); return .handled }
+                        .onKeyPress("b") { selectTool(doc, .pencil); return .handled }
                         .onKeyPress("e") { selectTool(doc, .eraser); return .handled }
+                        .onKeyPress("g") { selectTool(doc, .fill); return .handled }
+                        .onKeyPress("i") { selectTool(doc, .eyedropper); return .handled }
                         .onKeyPress("l") { selectTool(doc, .line); return .handled }
                         .onKeyPress("r") { selectTool(doc, .rect); return .handled }
-                        .onKeyPress("c") { selectTool(doc, .circle); return .handled }
-                        .onKeyPress("f") { selectTool(doc, .fill); return .handled }
-                        .onKeyPress("i") { selectTool(doc, .eyedropper); return .handled }
-                        .onKeyPress("s") { selectTool(doc, .select); return .handled }
+                        .onKeyPress("o") { selectTool(doc, .circle); return .handled }
+                        .onKeyPress("m") { selectTool(doc, .select); return .handled }
                         .onKeyPress(keys: [.init("z")], phases: .down) { press in
                             let cmd = press.modifiers.contains(.command)
                             let shift = press.modifiers.contains(.shift)
@@ -91,7 +93,7 @@ struct ContentView: View {
                 )) {
                     Image(systemName: "grid")
                 }
-                .help("Toggle Grid (G)")
+                .help("Toggle Grid (')")
 
                 Toggle(isOn: $showInspector) {
                     Image(systemName: "sidebar.trailing")
@@ -198,44 +200,51 @@ struct ContentView: View {
         }
     }
 
+    // Bottom status strip — the reference the other editors model on (WAL-29 §4.2).
+    // Styled with the shared PixelCanvasUI tokens (JetBrains-Mono / warm neutrals);
+    // keeps NovaDraw's richer content (active image label) beyond the shared minimum.
     private func statusBar(doc: NovaDocument) -> some View {
-        HStack(spacing: 12) {
-            if let pos = cursorPosition {
-                Label {
-                    Text("\(pos.x), \(pos.y)")
-                        .monospacedDigit()
-                } icon: {
-                    Image(systemName: "scope")
-                }
-            } else {
-                Label("—", systemImage: "scope")
+        HStack(spacing: PixelCanvasUI.Spacing.md) {
+            HStack(spacing: PixelCanvasUI.Spacing.xs) {
+                Image(systemName: "scope")
+                    .foregroundStyle(PixelCanvasUI.Colors.textFaint)
+                Text(cursorPosition.map { "\($0.x), \($0.y)" } ?? "—")
             }
 
-            Spacer()
+            statusSeparator
 
             Text(doc.currentTool.label)
-                .foregroundStyle(.secondary)
 
-            Divider().frame(height: 12)
+            Spacer(minLength: PixelCanvasUI.Spacing.sm)
 
             Text("Image \(doc.selectedImageLabel)")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
 
-            Divider().frame(height: 12)
+            statusSeparator
+
+            Text("\(Int(doc.zoom * 100))%")
+
+            statusSeparator
 
             Text("\(doc.width)×\(doc.height)")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-
-            Text("\(Int(doc.zoom))×")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
         }
-        .font(.system(size: 11))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(.bar)
+        .font(PixelCanvasUI.Typography.mono(PixelCanvasUI.Typography.statusSize))
+        .foregroundStyle(PixelCanvasUI.Colors.textMuted)
+        .lineLimit(1)
+        .padding(.horizontal, PixelCanvasUI.Spacing.md)
+        .padding(.vertical, PixelCanvasUI.Spacing.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PixelCanvasUI.Colors.surface)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(PixelCanvasUI.Colors.border)
+                .frame(height: 1)
+        }
+    }
+
+    private var statusSeparator: some View {
+        Rectangle()
+            .fill(PixelCanvasUI.Colors.border)
+            .frame(width: 1, height: 11)
     }
 }
 

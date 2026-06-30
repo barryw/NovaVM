@@ -1,0 +1,25 @@
+# NovaDraw (SwiftUI macOS editor) — compile + test on the local macOS agent.
+# Added for WAL-29 (editor convergence): the existing .NET pipelines do not
+# build the Swift editor under NovaDraw/. Runs on the local Apple-silicon agent.
+when:
+  - event: push
+    branch: main
+    path:
+      include:
+        - NovaDraw/**
+        - .woodpecker/build-novadraw.yaml
+
+# Route to the local macOS agent (same label the tag/macOS jobs use).
+labels:
+  platform: darwin/arm64
+
+steps:
+  - name: build-and-test
+    image: bash
+    environment:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    commands:
+      - cd NovaDraw
+      - swift build
+      - swift test

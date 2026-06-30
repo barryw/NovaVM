@@ -16,6 +16,7 @@ struct NovaDrawApp: App {
             ContentView(document: $document,
                         toolEngine: $toolEngine,
                         onOpenProject: openProject)
+                .tint(PixelCanvasUI.accent) // WHI per-product accent (Nova cyan) — WAL-29
                 .onOpenURL { url in
                     openProject(from: url)
                 }
