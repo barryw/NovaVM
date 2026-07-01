@@ -24,7 +24,21 @@ test = { changelog_title = "Tests", bump_patch = true }
 ci = { changelog_title = "CI/CD", bump_patch = true }
 chore = { changelog_title = "Miscellaneous", bump_patch = true }
 build = { changelog_title = "Build", bump_patch = true }
+# WHI custom types already present in main's history since v0.1.0
+# (brand(WAL-40), license(WAL-21)). Registered so cog can categorize the full
+# changelog and `cog bump --auto` succeeds instead of silently no-releasing.
+# No bump directive: these don't force a release on their own.
+brand = { changelog_title = "Branding" }
+license = { changelog_title = "Licensing" }
 
 [changelog]
 path = "CHANGELOG.md"
 authors = []
+
+# Build & release standard (sec 2): enforce conventional commits locally.
+# Run `cog install-hook --all` once to activate.
+[git_hooks.commit-msg]
+script = """#!/bin/sh
+set -e
+cog verify --file $1
+"""

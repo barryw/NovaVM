@@ -40,9 +40,20 @@ steps:
         if gh release view "$${TAG}" --repo "$$CI_REPO" >/dev/null 2>&1; then
           echo "Release $${TAG} already exists, skipping creation"
         else
-          gh release create "$${TAG}" \
-            --repo "$$CI_REPO" \
-            --draft \
-            --generate-notes \
-            --title "$${TAG}"
+          # Release notes from the cog-generated changelog for this version
+          # (build & release standard sec 3); fall back to GitHub auto-notes.
+          cog changelog --at "$${TAG}" > RELEASE_NOTES.md 2>/dev/null || true
+          if [ -s RELEASE_NOTES.md ]; then
+            gh release create "$${TAG}" \
+              --repo "$$CI_REPO" \
+              --draft \
+              --notes-file RELEASE_NOTES.md \
+              --title "$${TAG}"
+          else
+            gh release create "$${TAG}" \
+              --repo "$$CI_REPO" \
+              --draft \
+              --generate-notes \
+              --title "$${TAG}"
+          fi
         fi
