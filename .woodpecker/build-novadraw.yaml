@@ -31,10 +31,21 @@ steps:
       LC_ALL: en_US.UTF-8
       # NovaDraw depends on the private PixelCanvasKit package via SPM. SwiftPM
       # runs git non-interactively, so give it a credential in a workspace-local
-      # git config (never the shared runner's ~/.gitconfig). Woodpecker masks
-      # the secret value in logs.
-      GITHUB_TOKEN:
-        from_secret: github_token
+      # git config (never the shared runner's ~/.gitconfig).
+      #
+      # WAL-123/WAL-70: mint a short-lived, down-scoped GitHub App installation
+      # token instead of the shared admin PAT. ci/mint-token.sh is bash+openssl+
+      # curl only (no jq) so it runs on this darwin/arm64 local backend where the
+      # go plugin image can't. contents=read is enough for the SwiftPM fetch, and
+      # the token is scoped to just the two repos SwiftPM touches. NOTE: the
+      # private PixelCanvasKit repo MUST be added to the WHI GitHub App
+      # installation or the mint 422s (tracked as WAL-124 / blocks this leg).
+      GH_APP_ID:
+        from_secret: gh_app_id
+      GH_APP_INSTALLATION_ID:
+        from_secret: gh_app_installation_id
+      GH_APP_PRIVATE_KEY:
+        from_secret: gh_app_private_key
     commands:
       - export GIT_CONFIG_GLOBAL="$CI_WORKSPACE/.gitconfig.ci"
       # Disable the osxkeychain credential helper BEFORE the authenticated SwiftPM
@@ -45,6 +56,7 @@ steps:
       # fails and macOS pops a "Keychain Not Found" dialog on the host (WAL-99).
       # The token is already in the rewritten URL, so no helper is needed.
       - git config --global credential.helper ""
+      - export GITHUB_TOKEN="$(MINT_REPOS='NovaVM,PixelCanvasKit' MINT_PERMS='contents=read,metadata=read' bash ci/mint-token.sh)"
       - git config --global url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
       - cd NovaDraw
       - swift build
