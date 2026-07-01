@@ -13,6 +13,11 @@ steps:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - sh .woodpecker/install-linux-ci-deps.sh build
+      # Stage ROM/font resources first: the Avalonia publishes use
+      # -p:SkipRomBuild=true and rely on pre-staged resources that only
+      # `make binaries` produces (WAL-162 — nothing generated petscii_*.bin etc).
+      - mkdir -p e6502.CLI/Resources e6502.FPGA/rom
+      - make binaries
       # Standard RID matrix (linux side): linux-x64 + linux-arm64, cross-published
       # on the amd64 runner (no AOT, so cross-RID publish works).
       - dotnet publish e6502.Avalonia -c Release -r linux-x64   -p:SkipRomBuild=true -o publish/avalonia-linux-x64

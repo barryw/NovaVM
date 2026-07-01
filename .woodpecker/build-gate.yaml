@@ -11,8 +11,14 @@ steps:
     commands:
       - sh .woodpecker/install-linux-ci-deps.sh build
       - dotnet workload install wasm-tools
-      - dotnet build -c Release
-      - dotnet test -c Release --verbosity normal
+      # Generate+stage ROM/font resources via the repo's canonical entrypoint
+      # before building, and serialize the project graph. Mirrors ci.yaml — the
+      # tag build path had the same never-exercised gaps (WAL-162): missing
+      # generated resources (petscii_*.bin) and a parallel nova.lib make race.
+      - mkdir -p e6502.CLI/Resources e6502.FPGA/rom
+      - make binaries
+      - dotnet build -c Release -maxcpucount:1
+      - dotnet test -c Release -maxcpucount:1 --verbosity normal
 
   # WAL-72/WAL-70: mint a short-lived GitHub App installation token (product-ci
   # profile) in place of the shared admin PAT. See ci.yaml.
