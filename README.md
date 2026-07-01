@@ -278,8 +278,13 @@ often more accurate than old screenshots or demo programs.
 
 ## License
 
-This project is built on [amensch/e6502](https://github.com/amensch/e6502).
-See [License.txt](License.txt) for details.
+NovaVM is licensed under the **MIT License** — see [License.txt](License.txt).
+It began as a fork of [amensch/e6502](https://github.com/amensch/e6502) (MIT) and
+bundles third-party components (test suites, EhBASIC, FPGA cores) that keep their
+own licenses — see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+This follows the Walker Heavy Industries house licensing policy: MIT is the house
+default for original code (see the suite `LICENSING.md`).
 
 ## Part of the suite
 
