@@ -4,6 +4,8 @@
 
 <h1 align="center">N O V A V M</h1>
 
+_**NovaVM** is a Walker Heavy Industries project._
+
 <p align="center">
   <em>A 6502/65C02 computer implemented as an emulator, an FPGA core, and a host bridge.</em>
 </p>
@@ -278,3 +280,11 @@ often more accurate than old screenshots or demo programs.
 
 This project is built on [amensch/e6502](https://github.com/amensch/e6502).
 See [License.txt](License.txt) for details.
+
+## Part of the suite
+
+NovaVM is part of the **Walker Heavy Industries** retro toolchain —
+modern tools for the retro 8- and 16-bit ecosystem.
+
+- **House hub:** https://whi.dev
+- **Siblings:** VICE Mac · VICE MCP · FamiForge · NESBasic · Novus · Miggy Draw · NovaVM
