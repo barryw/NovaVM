@@ -17,3 +17,5 @@ commonLabels:
 images:
   - name: ghcr.io/barryw/novavm-website
     newTag: latest
+
+# WAL-124: server-side apply migration verification redeploy (Keel, 2026-07-01).
