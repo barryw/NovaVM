@@ -27,6 +27,11 @@ steps:
       # missing them (WAL-162: "CS1566: Could not find petscii_upper.bin"). This
       # target uses only cc65 + python3 + make/cp (all provisioned above); it does
       # not compile rust (stage-web only copies .bin into the web dirs).
+      # Pre-create the staging dirs: `make binaries`' stage-resources `cp`s into
+      # e6502.CLI/Resources and e6502.FPGA/rom, which aren't tracked and don't
+      # exist in a clean checkout (the .csproj <Copy> auto-creates them; the
+      # Makefile cp does not → "cp: cannot create ...: No such file or directory").
+      - mkdir -p e6502.CLI/Resources e6502.FPGA/rom
       - make binaries
       # -maxcpucount:1 serializes the MSBuild project graph. Several projects
       # each shell out to `make -C ehbasic`, which cascades to
