@@ -72,6 +72,13 @@ steps:
       - GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
       - rm -f "$CI_WORKSPACE/.ci-token"
       - git remote set-url origin "https://x-access-token:$GITHUB_TOKEN@github.com/${CI_REPO}.git"
+      # cog bump refuses to run on a dirty tree. `build-and-test` shares this
+      # workspace and `make binaries` leaves untracked build artifacts (.bin,
+      # runtime/asm/build/) plus a regenerated tracked PDF, which made cog error
+      # ("Untracked files") and fall through to the no-op branch (WAL-162). Reset
+      # to a pristine tree — these are all build outputs cog doesn't need.
+      - git checkout -- .
+      - git clean -fd
       - |
         # Build & release standard (sec 2): version through `cog bump --auto`.
         # cog exits non-zero when no conventional commits warrant a bump. Push the
