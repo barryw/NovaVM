@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.1 - 2026-07-01
+#### Miscellaneous
+- (**version**) v0.2.0 - (b313c22) - Woodpecker CI
+
+- - -
+
 ## v0.2.0 - 2026-07-01
 #### Branding
 - (**WAL-19**) add WHI editor-family note to NovaDraw README (#2) - (7fcae78) - Barry Walker
