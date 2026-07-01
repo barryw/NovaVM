@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.5 - 2026-07-01
+#### CI/CD
+- (**release**) WAL-164 — self-provision cc65 on macOS agent (build-macos) - (ef78c1d) - Forge
+
+- - -
+
 ## v0.2.4 - 2026-07-01
 #### Bug Fixes
 - (**release**) stop cog re-bump loop — chore must not bump [skip ci] - (37e45dd) - Keel
