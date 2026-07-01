@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.3 - 2026-07-01
+#### Bug Fixes
+- (**ci**) stage ROM/font resources in tag-release pipelines (build-gate/linux/macos) - (6c8b1b5) - Keel
+
+- - -
+
 ## v0.2.2 - 2026-07-01
 #### Miscellaneous
 - (**version**) v0.2.1 - (dbf373d) - Woodpecker CI
