@@ -80,6 +80,14 @@ steps:
       - git checkout -- .
       - git clean -fd
       - |
+        # Circuit breaker (defense in depth with cog.toml's non-bumping `chore`):
+        # never re-bump on cog's own version commit, or ci.yaml would loop
+        # cutting patch releases (WAL-162).
+        if git log -1 --pretty=%s | grep -qE '^chore\(version\):'; then
+          echo "HEAD is a bot version commit — skipping bump"
+          exit 0
+        fi
+      - |
         # Build & release standard (sec 2): version through `cog bump --auto`.
         # cog exits non-zero when no conventional commits warrant a bump. Push the
         # commit AND lightweight tag explicitly: the CI checkout has no upstream

@@ -22,7 +22,11 @@ docs = { changelog_title = "Documentation", bump_patch = true }
 style = { changelog_title = "Style", bump_patch = true }
 test = { changelog_title = "Tests", bump_patch = true }
 ci = { changelog_title = "CI/CD", bump_patch = true }
-chore = { changelog_title = "Miscellaneous", bump_patch = true }
+# `chore` must NOT bump: cog's own version commit is `chore(version): vX.Y.Z`,
+# so a bumping `chore` makes every release commit re-trigger ci.yaml and cut the
+# next patch — a runaway re-bump loop (WAL-162: v0.2.0→v0.2.1→v0.2.2→…). Keep it
+# changelog-only. feat/fix/perf/etc. still cut releases.
+chore = { changelog_title = "Miscellaneous" }
 build = { changelog_title = "Build", bump_patch = true }
 # WHI custom types already present in main's history since v0.1.0
 # (brand(WAL-40), license(WAL-21)). Registered so cog can categorize the full
