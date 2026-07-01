@@ -47,19 +47,22 @@ steps:
   - name: version
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
-      - export GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
       - sh .woodpecker/install-linux-ci-deps.sh release
+      - git config --global --add safe.directory "$CI_WORKSPACE"
       - git config user.name "Woodpecker CI"
       - git config user.email "ci@barrywalker.io"
+      - GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
+      - rm -f "$CI_WORKSPACE/.ci-token"
+      - git remote set-url origin "https://x-access-token:$GITHUB_TOKEN@github.com/${CI_REPO}.git"
       - |
         # Build & release standard (sec 2): version through `cog bump --auto`.
-        # cog exits non-zero when no conventional commits warrant a bump, so the
-        # release path runs only on a real version change. Pushing the v tag
+        # cog exits non-zero when no conventional commits warrant a bump. Push the
+        # commit AND lightweight tag explicitly: the CI checkout has no upstream
+        # tracking (bare `git push` fatals) and `--follow-tags` refuses to push
+        # cog's lightweight tags, so use `HEAD:main --tags`. Pushing the v tag
         # drives build-gate -> per-OS publish -> finalize (the published Release).
         if cog bump --auto; then
-          TAG="v$$(cog get-version)"
-          echo "Bumped to $${TAG}"
-          git push origin "$${TAG}"
+          git push origin HEAD:main --tags
         else
           echo "No conventional commits warrant a release"
         fi
