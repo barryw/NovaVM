@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.2.4 - 2026-07-01
+#### Bug Fixes
+- (**release**) stop cog re-bump loop — chore must not bump [skip ci] - (37e45dd) - Keel
+#### CI/CD
+- (**release**) WAL-164 — drop AOT-cross arm64 GUI from build-linux matrix - (123f16c) - Forge
+
+- - -
+
 ## v0.2.3 - 2026-07-01
 #### Bug Fixes
 - (**ci**) stage ROM/font resources in tag-release pipelines (build-gate/linux/macos) - (6c8b1b5) - Keel
