@@ -20,8 +20,15 @@ steps:
       - sh .woodpecker/install-linux-ci-deps.sh build
       - cog check || true
       - dotnet workload install wasm-tools
-      - dotnet build -c Release
-      - dotnet test -c Release --verbosity normal
+      # -maxcpucount:1 serializes the MSBuild project graph. Several projects
+      # (e6502.CLI/.Avalonia/.Browser) each shell out to `make -C ehbasic`, which
+      # cascades to `clean-nova-lib: rm -rf build` on the SHARED runtime/asm/build
+      # dir. Parallel project builds race on that dir (WAL-162: "rm: cannot remove
+      # 'build': Directory not empty" → "ar65: Could not open build/audio.o").
+      # This is a CI-side guard; the durable fix is to make the ROM build
+      # concurrency-safe / run once (tracked for the product build owner).
+      - dotnet build -c Release -maxcpucount:1
+      - dotnet test -c Release -maxcpucount:1 --verbosity normal
 
   # WAL-72/WAL-70: mint a short-lived, down-scoped GitHub App installation token
   # (product-ci profile: contents=write,metadata=read) in place of the shared
