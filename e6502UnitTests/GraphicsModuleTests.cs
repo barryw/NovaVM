@@ -156,8 +156,8 @@ namespace e6502UnitTests
         private static (LibLoaderBus bus, ushort entry) SetupLoader()
         {
             var bus = new LibLoaderBus();
-            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
-            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("software", "tests", "asm", "libcall.bin")));
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);
             bus.PokeRam(HOME_BANK, RsBasic);
             bus.PokeRam(RESIDENT, 0x00);
@@ -219,7 +219,7 @@ namespace e6502UnitTests
         private static CompositeBusDevice MakeAxis2Bus()
         {
             var bus = new CompositeBusDevice(enableSound: false);
-            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")));
+            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")));
             bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
             Assert.AreEqual(CompositeBusDevice.ActiveRom.Extension, bus.CurrentRom);
             Assert.AreEqual(0x4C, bus.Read(0xC000), "module $C000 must be JMP (the header trampoline)");
@@ -300,7 +300,7 @@ namespace e6502UnitTests
         public void Axis2_Gcls_ClearsVgcGfxPlane_OnRealHardware()
         {
             using var bus = new CompositeBusDevice(enableSound: false);
-            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")));
+            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")));
 
             // Pre-fill several gfx-plane bytes to nonzero via the real VGC memory API.
             int[] probes = { 0, 1, 100, 1234, 31999, VgcConstants.GfxWidth * VgcConstants.GfxHeight - 1 };

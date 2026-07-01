@@ -1,0 +1,37 @@
+# Zork Zero NZ6 window-op capture script (M2 window-model research).
+# NOT a CI test — feeds the dispatch trace, not assertions. Run with:
+#   make -C software/examples/novaz capture-z6-trace PROJECT=zork-zero
+# Trace lands in build/nz6-trace-zork-zero.log; analysis in
+# docs/plans/2026-06-10-zork-zero-window-ops.md.
+#
+# Bare "!cmd" lines send the command and settle on a fixed step budget instead
+# of waiting for a clean prompt: the M1 stale-prompt bug (text debris after
+# ">") wedges strict ready detection after movement turns, and every
+# prompt-waited turn spins the timed read long enough to fire several NPC
+# interludes, racing the prologue clock toward Megaboz's fireball. Only the
+# first turn (known-clean from smoke.txt) asserts text.
+#
+# The prologue is on a timed-interrupt clock, so exact event turns vary run
+# to run; the servant usually dies in the fireball near the end of this
+# script. That is intentionally kept: the death banner + RESTART/RESTORE menu
+# loop is a layout-reposition redraw the M2 model must handle.
+look=>Banquet Hall
+!inventory
+!wait
+!ne
+!look
+!s
+!inventory
+!n
+!xyzzy frotz
+!look
+!ne
+!s
+!x napkins
+!wait
+!ne
+!look
+!s
+!n
+!w
+!inventory

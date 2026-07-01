@@ -58,7 +58,7 @@ public class EditbufAssemblyRuntimeTests
     private static BusDevice Run(ushort entry)
     {
         byte[] fixture = File.ReadAllBytes(
-            RepoPath("tests", "integration", "fixtures", "editbuf_runtime.bin"));
+            RepoPath("software", "tests", "integration", "fixtures", "editbuf_runtime.bin"));
         var bus = new BusDevice(fixture, 0x4000);
 
         // LDX #$FF; TXS; JSR entry; JMP Done

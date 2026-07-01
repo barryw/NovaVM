@@ -11,7 +11,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void RuntimeBss_ReservesLibCallAndModuleBssBands()
     {
-        string mapPath = RepoPath("examples", "novaz", "build", "runtime.map");
+        string mapPath = RepoPath("software", "examples", "novaz", "build", "runtime.map");
         if (!File.Exists(mapPath))
             Assert.Inconclusive("examples/novaz/build/runtime.map has not been built");
 
@@ -31,7 +31,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void Autoboot_ArmsSharedLibraryAbiForPrimaryRuntime()
     {
-        string autobootPath = RepoPath("examples", "novaz", "build", "AUTOBOOT.bin");
+        string autobootPath = RepoPath("software", "examples", "novaz", "build", "AUTOBOOT.bin");
         if (!File.Exists(autobootPath))
             Assert.Inconclusive("examples/novaz/build/AUTOBOOT.bin has not been built");
 
@@ -48,7 +48,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void SaveLoadOverlay_LoadsAboveV6MemoryAndHasMainEntry()
     {
-        string overlayPath = RepoPath("examples", "novaz", "build", "SAVLOAD.OVL");
+        string overlayPath = RepoPath("software", "examples", "novaz", "build", "SAVLOAD.OVL");
         if (!File.Exists(overlayPath))
             Assert.Inconclusive("examples/novaz/build/SAVLOAD.OVL has not been built");
 
@@ -69,10 +69,10 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void Runtime_RequestsXramThroughMemoryService()
     {
-        string zstory = File.ReadAllText(RepoPath("examples", "novaz", "src", "zstory.s"));
-        string zstoryInc = File.ReadAllText(RepoPath("examples", "novaz", "src", "zstory.inc"));
-        string saveLoad = File.ReadAllText(RepoPath("examples", "novaz", "src", "save_load_overlay.s"));
-        string zvm6 = File.ReadAllText(RepoPath("examples", "novaz", "src", "zvm6.s"));
+        string zstory = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zstory.s"));
+        string zstoryInc = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zstory.inc"));
+        string saveLoad = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "save_load_overlay.s"));
+        string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
 
         StringAssert.Contains(zstory, "MEM_RESET_USAGE");
         StringAssert.Contains(zstory, "MEM_ALLOC");
@@ -123,7 +123,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void V6FlowPicturesClearReservedGfxCellsBeforeTransparentBlit()
     {
-        string zvm6 = File.ReadAllText(RepoPath("examples", "novaz", "src", "zvm6.s"));
+        string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
         string draw = Slice(zvm6, "nz6_pic_draw_current_abs:", "; erase_picture N [y x]");
         string ownership = Slice(draw, "@mark_picture_cells:", "; Compute the 4x4 text-cell rectangle");
         string prefill = Slice(zvm6, "nz6_pic_prefill_flow_cell_rect:", "; erase_picture N [y x]");
@@ -161,7 +161,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void V6MarginReleaseRestylesOnlyReleasedBlankCells()
     {
-        string zvm6 = File.ReadAllText(RepoPath("examples", "novaz", "src", "zvm6.s"));
+        string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
         string setMargins = Slice(zvm6, "nz6_ext_set_margins:", "; Shared tail for move_window/window_size");
         string helper = Slice(zvm6, "nz6_restore_released_margin_spaces:", "; Shared tail for move_window/window_size");
 
@@ -188,7 +188,7 @@ public sealed class NovaZRuntimeLayoutTests
     [TestMethod]
     public void V6CompositeScrollUsesExactGfxWindowAndSnappedTextWindow()
     {
-        string zvm6 = File.ReadAllText(RepoPath("examples", "novaz", "src", "zvm6.s"));
+        string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
         string gfxBuilder = Slice(zvm6, "nz6_build_gfx_region_tmp_win:", "; Freshen the CURRENT window");
         string fullBuilder = Slice(zvm6, "nz6_build_full_region_tmp_win:", "; Pixel-precise graphics rectangle");
         string hook = Slice(zvm6, "nz6_scroll_live_composite:", "; ROM newline hook");

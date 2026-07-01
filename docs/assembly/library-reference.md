@@ -1,7 +1,7 @@
 # Nova Assembly Library Reference
 
 This is the working reference for the reusable ca65 libraries under
-`runtime/asm`. It is intentionally practical: use it to find the right library,
+`software/runtime/asm`. It is intentionally practical: use it to find the right library,
 learn the build pattern, and locate the detailed ABI comments until the full
 programmer's reference guide exists.
 
@@ -12,23 +12,23 @@ before they are folded into the generated reference.
 
 ## Source Layout
 
-The canonical libraries live in `runtime/asm`:
+The canonical libraries live in `software/runtime/asm`:
 
 | Kind | Path pattern | Purpose |
 | --- | --- | --- |
-| Interface | `runtime/asm/name.inc` | Constants, pseudo-register aliases, descriptor layouts, and `.global` declarations. |
-| Implementation | `runtime/asm/name.s` | Code and library-owned BSS/ZEROPAGE state. Include or link this once. |
-| Hardware constants | `runtime/asm/novavm.inc` | Generated hardware constants plus ROM entry labels. |
+| Interface | `software/runtime/asm/name.inc` | Constants, pseudo-register aliases, descriptor layouts, and `.global` declarations. |
+| Implementation | `software/runtime/asm/name.s` | Code and library-owned BSS/ZEROPAGE state. Include or link this once. |
+| Hardware constants | `software/runtime/asm/novavm.inc` | Generated hardware constants plus ROM entry labels. |
 
 Macro-only libraries, such as `math_copro.inc`, `math_fixed8.inc`, and
 `nova.inc`, do not have a matching implementation source file.
 
-For distribution, run `make -C ndk package`. The generated Nova Developer Kit
+For distribution, run `make -C software/ndk package`. The generated Nova Developer Kit
 places these libraries under `dist/nova-ndk/asm` alongside documentation and
 example applications.
 
-Standalone assembly applications live in `assembly/apps`. They use the same
-runtime include root and are built with `make -C assembly`.
+Standalone assembly applications live in `software/assembly/apps`. They use the same
+runtime include root and are built with `make -C software/assembly`.
 
 ## Size-Stripped Runtime Includes
 
@@ -72,7 +72,7 @@ the implementation once after your code:
 Assemble with the shared runtime include root available:
 
 ```sh
-ca65 --cpu 65c02 -I runtime/asm -o myprog.o myprog.s
+ca65 --cpu 65c02 -I software/runtime/asm -o myprog.o myprog.s
 ld65 -C myprog.cfg -o myprog.bin myprog.o
 ```
 

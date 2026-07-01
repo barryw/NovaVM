@@ -15,8 +15,8 @@ Applications should include:
 .include "overlay.s"
 ```
 
-Compatibility wrappers also exist at `ehbasic/overlay.inc` and
-`ehbasic/overlay.s`, but new code should put `runtime/asm` on the ca65 include
+Compatibility wrappers also exist at `software/languages/ehbasic/overlay.inc` and
+`software/languages/ehbasic/overlay.s`, but new code should put `software/runtime/asm` on the ca65 include
 path and include `overlay.inc`/`overlay.s` from there.
 
 ## Overlay File Format

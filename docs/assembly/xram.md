@@ -2,8 +2,8 @@
 
 NovaVM exposes 512 KB of expansion RAM. BASIC presents it as eight 64 KB banks
 selected with `XBANK`; assembly should treat it as one flat 24-bit address
-space and use the shared runtime in `runtime/asm/xram.inc` and
-`runtime/asm/xram.s`.
+space and use the shared runtime in `software/runtime/asm/xram.inc` and
+`software/runtime/asm/xram.s`.
 
 Do not duplicate the XMC, DMA, or FIO register sequences in every program. Link
 or include the shared runtime and call the exported labels below.
@@ -40,14 +40,14 @@ For a small standalone program, include the runtime directly:
 Assemble with the shared runtime include directory on the ca65 path:
 
 ```sh
-ca65 --cpu 65c02 -I runtime/asm -o myprog.o myprog.s
+ca65 --cpu 65c02 -I software/runtime/asm -o myprog.o myprog.s
 ld65 -C myprog.cfg -o myprog.bin myprog.o
 ```
 
-Larger projects can assemble `runtime/asm/xram.s` as a separate object and link it
+Larger projects can assemble `software/runtime/asm/xram.s` as a separate object and link it
 with the rest of the program. The ABI is the same either way.
 
-The named-block/XMC command processor lives in `runtime/asm/xmc.s`. BASIC links
+The named-block/XMC command processor lives in `software/runtime/asm/xmc.s`. BASIC links
 that shared implementation for `XALLOC`, named `STASH`/`FETCH`, `XDIR`, and
 `XDEL`. Assembly programs only need `xmc.s` if they want the same XMC register
 command contract and allocator; flat-address byte, DMA, fill, and file
@@ -175,5 +175,5 @@ clears the CPU destination, then copies the bytes back to `$2310`:
   `docs/programs/xram_window_demo.bas`, `docs/programs/xram_named_demo.bas`,
   and `docs/programs/xram_stream_demo.bas`.
 - Assembly example: `docs/programs/xram_shared_runtime_demo.s`.
-- Assembly integration suite: `tests/integration/xram_asm.6502`.
-- Fixture source: `tests/integration/asm/xram_runtime.s`.
+- Assembly integration suite: `software/tests/integration/xram_asm.6502`.
+- Fixture source: `software/tests/integration/asm/xram_runtime.s`.

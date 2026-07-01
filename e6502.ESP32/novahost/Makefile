@@ -25,13 +25,14 @@ BUILD_FLAGS ?=
 ESPOTA   ?= $(shell find "$$HOME/Library/Arduino15/packages/esp32/hardware/esp32" "$$HOME/.arduino15/packages/esp32/hardware/esp32" -path '*/tools/espota.py' -type f 2>/dev/null | sort | tail -n 1)
 
 REPO_ROOT := $(abspath ../..)
-EHBASIC   := $(REPO_ROOT)/ehbasic
-NOVALOGO  := $(REPO_ROOT)/novalogo
-NOVAFORTH := $(REPO_ROOT)/novaforth
-MODGFX    := $(REPO_ROOT)/modules/graphics
-MODROOT   := $(REPO_ROOT)/modules
+SOFTWARE  := $(REPO_ROOT)/software
+EHBASIC   := $(SOFTWARE)/languages/ehbasic
+NOVALOGO  := $(SOFTWARE)/languages/novalogo
+NOVAFORTH := $(SOFTWARE)/languages/novaforth
+MODGFX    := $(SOFTWARE)/modules/graphics
+MODROOT   := $(SOFTWARE)/modules
 MODULE_LIBS := graphics sound system editor files memory net turtle
-RTASM     := $(REPO_ROOT)/runtime/asm
+RTASM     := $(SOFTWARE)/runtime/asm
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
 HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
 SD_ASSETS := build/sd
@@ -79,7 +80,7 @@ sd-assets: ehbasic novalogo novaforth modules libcall build/f6581_curve.bin
 	@cp build/f6581_curve.bin $(SD_ASSETS)/assets/sid/f6581_curve.bin
 	@cp assets/boot/novavm_logo.nvg $(SD_ASSETS)/assets/boot/novavm_logo.nvg
 	@cp assets/config/boot.json $(SD_ASSETS)/config/boot.json
-	@cp $(REPO_ROOT)/tests/asm/testmod.bin $(SD_ASSETS)/lib/testmod.mod
+	@cp $(SOFTWARE)/tests/asm/testmod.bin $(SD_ASSETS)/lib/testmod.mod
 	@for mod in $(MODULE_LIBS); do \
 		cp $(MODROOT)/$$mod/$$mod.nmod $(SD_ASSETS)/lib/$$mod.nmod; \
 	done

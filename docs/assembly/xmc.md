@@ -33,7 +33,7 @@ only the low 256 KB heap.
 
 ## Shared XRAM Runtime
 
-Assembly code should use `runtime/asm/xram.inc` and `runtime/asm/xram.s` instead of
+Assembly code should use `software/runtime/asm/xram.inc` and `software/runtime/asm/xram.s` instead of
 duplicating XMC/DMA register setup. BASIC still exposes banked 64K offsets with
 `XBANK`, but the shared runtime takes a flat 24-bit address in
 `XRAM_ADDRL/M/H`.

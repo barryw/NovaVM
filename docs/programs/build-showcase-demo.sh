@@ -39,8 +39,8 @@ for dir in featured 2sid sid wts arcade; do
     nova mkdir "$IMAGE" "/$dir"
 done
 
-cp "$ROOT/assembly/apps/demo/demo.bin" "$TMP/AUTOBOOT.bin"
-cp "$ROOT/assembly/apps/keyboard/keyboard.bin" "$TMP/KEYBOARD.bin"
+cp "$ROOT/software/assembly/apps/demo/demo.bin" "$TMP/AUTOBOOT.bin"
+cp "$ROOT/software/assembly/apps/keyboard/keyboard.bin" "$TMP/KEYBOARD.bin"
 import_file "$TMP/AUTOBOOT.bin" /
 import_file "$TMP/KEYBOARD.bin" /
 

@@ -16,7 +16,7 @@ public class OverlayAssemblyRuntimeTests
     [TestMethod]
     public void OverlayAssemblyRuntimeCallsFixedAddressEntries()
     {
-        byte[] fixture = File.ReadAllBytes(RepoPath("tests", "integration", "fixtures", "overlay_runtime.bin"));
+        byte[] fixture = File.ReadAllBytes(RepoPath("software", "tests", "integration", "fixtures", "overlay_runtime.bin"));
         var bus = new BusDevice(fixture, Entry);
 
         // LDX #$FF; TXS; JSR $7000; JMP $0206

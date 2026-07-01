@@ -25,9 +25,9 @@
     </ItemGroup>
 
     <Target Name="AssembleRom" BeforeTargets="PreBuildEvent">
-      <Exec Command="make -C $(ProjectDir)../ehbasic" />
-      <Copy SourceFiles="$(ProjectDir)../ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
-      <Copy SourceFiles="$(ProjectDir)../ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
+      <Exec Command="make -C $(ProjectDir)../software/languages/ehbasic" />
+      <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
+      <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
     </Target>
 
 </Project>

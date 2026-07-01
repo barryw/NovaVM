@@ -363,8 +363,8 @@ module test_novalogo_draw_top;
         dbg_rom_addr  = 0;
         dbg_rom_data  = 0;
 
-        load_rom_file("../novalogo/novalogo.bin", logo_rom);
-        load_rom_file("../novalogo/novalogo_ext.bin", logo_ext_rom);
+        load_rom_file("../software/languages/novalogo/novalogo.bin", logo_rom);
+        load_rom_file("../software/languages/novalogo/novalogo_ext.bin", logo_ext_rom);
 
         repeat(20) @(posedge clk);
         rst = 0;

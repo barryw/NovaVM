@@ -390,7 +390,7 @@ module test_page_in_top;
     endtask
 
     // File descriptors for the bin loads (run dir is e6502.FPGA/ — the test
-    // Makefile cd's to the parent — so the path is ../tests/asm/).
+    // Makefile cd's to the parent — so the path is ../software/tests/asm/).
     int fd_lc, fd_tm;
 
     initial begin
@@ -400,13 +400,13 @@ module test_page_in_top;
         // Load the real loader + module images from disk via $fopen/$fread
         // (same idiom as test_cpu_dormann). $fread of a packed-byte array fills
         // from index 0 and returns the byte count.
-        fd_lc = $fopen("../tests/asm/libcall.bin", "rb");
-        if (fd_lc == 0) $fatal(1, "Could not open ../tests/asm/libcall.bin");
+        fd_lc = $fopen("../software/tests/asm/libcall.bin", "rb");
+        if (fd_lc == 0) $fatal(1, "Could not open ../software/tests/asm/libcall.bin");
         libcall_len = $fread(libcall_img, fd_lc);
         $fclose(fd_lc);
 
-        fd_tm = $fopen("../tests/asm/testmod.bin", "rb");
-        if (fd_tm == 0) $fatal(1, "Could not open ../tests/asm/testmod.bin");
+        fd_tm = $fopen("../software/tests/asm/testmod.bin", "rb");
+        if (fd_tm == 0) $fatal(1, "Could not open ../software/tests/asm/testmod.bin");
         testmod_read = $fread(testmod_img, fd_tm);
         $fclose(fd_tm);
 

@@ -35,7 +35,7 @@ public class VspriteAssemblyRuntimeTests
     private static BusDevice Run()
     {
         byte[] fixture = File.ReadAllBytes(
-            RepoPath("tests", "integration", "fixtures", "vsprite_runtime.bin"));
+            RepoPath("software", "tests", "integration", "fixtures", "vsprite_runtime.bin"));
         var bus = new BusDevice(fixture, Entry);
 
         bus.Write(Harness, 0xA2);

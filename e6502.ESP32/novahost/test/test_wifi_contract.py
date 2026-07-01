@@ -351,18 +351,18 @@ def test_fpga_spi_bridge_contract() -> None:
 
 
 def test_fio_clear_error_contract() -> None:
-    basic = read("ehbasic/basic.asm")
+    basic = read("software/languages/ehbasic/basic.asm")
     # The FIOCLR helper now lives in its own object (fio_clear_error.s) so ROMs
     # that only need FIOCLR avoid pulling the full fio.s body; fio_exec stays in
     # fio.s. The contract therefore spans both files.
-    fio = read("runtime/asm/fio.s") + read("runtime/asm/fio_clear_error.s")
-    nova_inc = read("runtime/asm/nova.inc")
+    fio = read("software/runtime/asm/fio.s") + read("software/runtime/asm/fio_clear_error.s")
+    nova_inc = read("software/runtime/asm/nova.inc")
     dispatcher_h = read("e6502.ESP32/novahost/fio_dispatcher.h")
     dispatcher_cpp = read("e6502.ESP32/novahost/fio_dispatcher.cpp")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
     unit_tests = read("e6502UnitTests/FileIoControllerTests.cs")
-    integration = read("tests/integration/fio.6502")
+    integration = read("software/tests/integration/fio.6502")
 
     checks = {
         "BASIC FIO command ID is reserved": "FIO_CMD_CLEARERR  = $27" in nova_inc,
@@ -398,12 +398,12 @@ def test_fio_sd_dispatch_contract() -> None:
     novahost = read("e6502.ESP32/novahost/novahost.ino")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
-    nova_inc = read("runtime/asm/nova.inc")
-    fio = read("runtime/asm/fio.s")
-    libfiles = read("runtime/asm/libfiles.inc")
-    files_module = read("modules/files/files.s")
-    forth_file = read("novaforth/forth/lib/file.4th")
-    novaforth = read("novaforth/novaforth.s")
+    nova_inc = read("software/runtime/asm/nova.inc")
+    fio = read("software/runtime/asm/fio.s")
+    libfiles = read("software/runtime/asm/libfiles.inc")
+    files_module = read("software/modules/files/files.s")
+    forth_file = read("software/languages/novaforth/forth/lib/file.4th")
+    novaforth = read("software/languages/novaforth/novaforth.s")
 
     for constant in [
         "CMD_GSAVE", "CMD_GLOAD", "CMD_SIDPLAY", "CMD_SIDSTOP", "CMD_MIDPLAY",
@@ -588,9 +588,9 @@ def test_fio_sd_dispatch_contract() -> None:
 
 
 def test_nic_command_sequence_contract() -> None:
-    nova_inc = read("runtime/asm/nova.inc")
-    nic_inc = read("runtime/asm/nic.inc")
-    nic_runtime = read("runtime/asm/nic.s")
+    nova_inc = read("software/runtime/asm/nova.inc")
+    nic_inc = read("software/runtime/asm/nic.inc")
+    nic_runtime = read("software/runtime/asm/nic.s")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     fpga_nic = read("e6502.FPGA/rtl/nic.sv")
     dispatcher_h = read("e6502.ESP32/novahost/nic_dispatcher.h")
@@ -658,10 +658,10 @@ def test_large_ndi_bam_contract() -> None:
 
 
 def test_runtime_autoboot_contract() -> None:
-    nova_inc = read("runtime/asm/nova.inc")
-    basic = read("ehbasic/basic.asm")
-    fio = read("runtime/asm/fio.s")
-    rng = read("runtime/asm/rng.s")
+    nova_inc = read("software/runtime/asm/nova.inc")
+    basic = read("software/languages/ehbasic/basic.asm")
+    fio = read("software/runtime/asm/fio.s")
+    rng = read("software/runtime/asm/rng.s")
     constants = read("e6502.Avalonia/Hardware/VgcConstants.cs")
     controller = read("e6502.Avalonia/Hardware/FileIoController.cs")
     composite = read("e6502.Avalonia/Hardware/CompositeBusDevice.cs")
@@ -682,20 +682,20 @@ def test_runtime_autoboot_contract() -> None:
     unit_dm = read("e6502UnitTests/DeviceManagerTests.cs")
     unit_fio = read("e6502UnitTests/FileIoControllerTests.cs")
     unit_rom = read("e6502UnitTests/RomSwapTests.cs")
-    novaz_make = read("examples/novaz/Makefile")
-    novaz_auto = read("examples/novaz/src/autoboot.s")
-    novaz_runtime = read("examples/novaz/src/runtime.s")
-    novaz_zstory = read("examples/novaz/src/zstory.s")
-    novaz_zstory_inc = read("examples/novaz/src/zstory.inc")
-    novaz_zvm6_inc = read("examples/novaz/src/zvm6.inc")
-    novaz_zvm6 = read("examples/novaz/src/zvm6.s")
-    novaz_save_load = read("examples/novaz/src/save_load_overlay.s")
-    nvg_runtime = read("runtime/asm/nvg.s")
-    nvg_inc = read("runtime/asm/nvg.inc")
-    vgc_palette_inc = read("runtime/asm/vgc_palette.inc")
-    vgc_palette = read("runtime/asm/vgc_palette.s")
-    libabi_inc = read("runtime/asm/libabi.inc")
-    xram_inc = read("runtime/asm/xram.inc")
+    novaz_make = read("software/examples/novaz/Makefile")
+    novaz_auto = read("software/examples/novaz/src/autoboot.s")
+    novaz_runtime = read("software/examples/novaz/src/runtime.s")
+    novaz_zstory = read("software/examples/novaz/src/zstory.s")
+    novaz_zstory_inc = read("software/examples/novaz/src/zstory.inc")
+    novaz_zvm6_inc = read("software/examples/novaz/src/zvm6.inc")
+    novaz_zvm6 = read("software/examples/novaz/src/zvm6.s")
+    novaz_save_load = read("software/examples/novaz/src/save_load_overlay.s")
+    nvg_runtime = read("software/runtime/asm/nvg.s")
+    nvg_inc = read("software/runtime/asm/nvg.inc")
+    vgc_palette_inc = read("software/runtime/asm/vgc_palette.inc")
+    vgc_palette = read("software/runtime/asm/vgc_palette.s")
+    libabi_inc = read("software/runtime/asm/libabi.inc")
+    xram_inc = read("software/runtime/asm/xram.inc")
     type_text = debug.split("void DebugServer::cmdTypeText", 1)[1]
     type_text = type_text.split("void DebugServer::cmdReadScreen", 1)[0]
     novaz_linefeed = novaz_runtime.split("nz_screen_linefeed:", 1)[1].split("nz_screen_flush_word:", 1)[0]
@@ -715,10 +715,10 @@ def test_runtime_autoboot_contract() -> None:
         and "LDA   #FIO_CMD_LOADRUNTIME" in fio,
         "shared RNG library wraps host command": ".export rng_get32" in rng
         and "LDA   #FIO_CMD_RNG" in rng,
-        "shared NVG library exposes native image loader": "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("ehbasic/Makefile")
+        "shared NVG library exposes native image loader": "$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s" in read("software/languages/ehbasic/Makefile")
         and ".export nvg_load" in nvg_runtime
         and ".export nvg_draw" in nvg_runtime,
-        "shared VGC palette library exposes fixed and custom palette helpers": "$(NOVA_ASM)/vgc_palette.inc $(NOVA_ASM)/vgc_palette.s" in read("ehbasic/Makefile")
+        "shared VGC palette library exposes fixed and custom palette helpers": "$(NOVA_ASM)/vgc_palette.inc $(NOVA_ASM)/vgc_palette.s" in read("software/languages/ehbasic/Makefile")
         and "VGC_CUSTOM_PALETTE_BYTES" in vgc_palette_inc
         and ".global vgc_set_palette_c64" in vgc_palette_inc
         and ".global vgc_set_palette_ega" in vgc_palette_inc

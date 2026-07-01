@@ -408,7 +408,7 @@ public class NovaLogoHarnessTests
         var cpu = new Cpu(bus);
         cpu.Boot();
         bus.StageShelfModule(0,
-            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "modules", "graphics", "graphics.bin")),
+            File.ReadAllBytes(Path.Combine(FindRepoRoot(), "software", "modules", "graphics", "graphics.bin")),
             0x01);   // MODULE_ID_GRAPHICS — seed the shelf directory so lib_call scan hits
         var editor = new ScreenEditor(bus.Vgc);
         bus.Vgc.SetScreenEditor(editor);
@@ -434,7 +434,7 @@ public class NovaLogoHarnessTests
     private static IReadOnlySet<string> LoadRegisteredLogoCommands()
     {
         string root = FindRepoRoot();
-        string logoDir = Path.Combine(root, "novalogo");
+        string logoDir = Path.Combine(root, "software", "languages", "novalogo");
         var labels = LoadLogoLabelStrings(logoDir);
         var commands = new HashSet<string>(StringComparer.Ordinal);
 
@@ -497,7 +497,7 @@ public class NovaLogoHarnessTests
         string? dir = AppContext.BaseDirectory;
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir, "novalogo", "builtins.s")))
+            if (File.Exists(Path.Combine(dir, "software", "languages", "novalogo", "builtins.s")))
                 return dir;
             dir = Directory.GetParent(dir)?.FullName;
         }

@@ -4025,14 +4025,14 @@ static NdiFileType ExtensionToFileType(string ext) =>
 
 /// <summary>
 /// Searches upward from the executable directory, then from cwd,
-/// for ehbasic/tokens.json.
+/// for software/languages/ehbasic/tokens.json.
 /// </summary>
 static string? FindTokensJson()
 {
     string? dir = Path.GetDirectoryName(Environment.ProcessPath);
     while (dir is not null)
     {
-        string candidate = Path.Combine(dir, "ehbasic", "tokens.json");
+        string candidate = Path.Combine(dir, "software", "languages", "ehbasic", "tokens.json");
         if (File.Exists(candidate))
             return candidate;
         dir = Path.GetDirectoryName(dir);
@@ -4041,7 +4041,7 @@ static string? FindTokensJson()
     dir = Directory.GetCurrentDirectory();
     while (dir is not null)
     {
-        string candidate = Path.Combine(dir, "ehbasic", "tokens.json");
+        string candidate = Path.Combine(dir, "software", "languages", "ehbasic", "tokens.json");
         if (File.Exists(candidate))
             return candidate;
         string? parent = Path.GetDirectoryName(dir);

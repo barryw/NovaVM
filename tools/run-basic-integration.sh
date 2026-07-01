@@ -226,6 +226,7 @@ target_reachable() {
 normalize_suite() {
     local suite="$1"
 
+    suite="${suite#software/tests/integration/}"
     suite="${suite#tests/integration/}"
     suite="${suite%.6502}"
     printf '%s\n' "$suite"
@@ -315,7 +316,7 @@ echo
 suite_failures=0
 
 for suite in "${SUITES[@]}"; do
-    test_file="$REPO_ROOT/tests/integration/$suite.6502"
+    test_file="$REPO_ROOT/software/tests/integration/$suite.6502"
     [ -f "$test_file" ] || die "suite file not found: $test_file"
 
     echo "===== $suite ====="

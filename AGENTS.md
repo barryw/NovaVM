@@ -14,11 +14,11 @@ This repository is a multi-project .NET solution (`e6502.sln`) centered on a 650
 
 ## Build, Test, and Development Commands
 - `dotnet restore e6502.sln`: restore NuGet packages.
-- `dotnet build e6502.sln -c Release`: compile all projects.
+- `dotnet build e6502.sln -c Release -m:1`: compile all projects. Keep solution builds serialized because multiple projects generate shared ROM/module artifacts.
 - `dotnet test e6502.sln -c Release --no-build`: run all unit tests.
 - `dotnet run --project e6502.Avalonia`: launch the Avalonia app.
 - `dotnet run --project e6502.CLI`: run CLI EhBASIC host.
-- `make -C ehbasic`: build `ehbasic/basic.bin` manually (requires `ca65` and `ld65` on `PATH`).
+- `make -C software/languages/ehbasic`: build `software/languages/ehbasic/basic.bin` manually (requires `ca65` and `ld65` on `PATH`).
 
 Note: `e6502.Avalonia` triggers `make` for EhBASIC during build, so missing cc65 tools will fail that project build.
 
@@ -35,7 +35,7 @@ Tests use MSTest (`[TestClass]`, `[TestMethod]`) in `e6502UnitTests/`.
 
 - Name test classes with `*Tests` suffix (for example, `AvaloniaVgcTests`).
 - Keep deterministic binary-based CPU tests in `e6502UnitTests/Resources/`.
-- Run `dotnet test e6502.sln -c Release` before opening a PR.
+- Run `dotnet test e6502.sln -c Release --no-build` after a serialized Release build before opening a PR.
 - Coverage tooling (`coverlet.collector`) is installed; no enforced threshold is configured, so prioritize coverage for CPU execution, opcodes, and virtual hardware paths.
 
 ## Commit & Pull Request Guidelines

@@ -23,7 +23,7 @@ public class GameServer6502RuntimeIntegrationTests
     [TestMethod]
     public async Task GameServerAssemblyRuntime_TalksToTcpGameServerThroughNic()
     {
-        byte[] fixture = File.ReadAllBytes(RepoPath("tests", "integration", "fixtures", "gameserver_live_runtime.bin"));
+        byte[] fixture = File.ReadAllBytes(RepoPath("software", "tests", "integration", "fixtures", "gameserver_live_runtime.bin"));
         using var bus = new RuntimeBus(fixture, Entry);
         InstallHarness(bus);
 

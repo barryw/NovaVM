@@ -45,7 +45,7 @@ namespace e6502UnitTests
             var cpu = new Cpu(bus, E6502Type.Cmos);
             cpu.Boot();
 
-            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);
             bus.WriteRam(RESIDENT, 0x00);
             bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);   // loader restores the Logo bank
@@ -94,7 +94,7 @@ namespace e6502UnitTests
         {
             using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
             var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
-            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);
             bus.WriteRam(RESIDENT, 0x00);
             bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);
@@ -127,7 +127,7 @@ namespace e6502UnitTests
         {
             using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
             var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
-            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin")),
+            bus.StageShelfModule(2, File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin")),
                                  MODULE_ID_GRAPHICS);
             // Force a known LRU order where slot 2 is at the back.
             bus.WriteRam(0x041C, 0); bus.WriteRam(0x041D, 1); bus.WriteRam(0x041E, 3); bus.WriteRam(0x041F, 2);

@@ -104,7 +104,7 @@ dotnet run --project e6502.Tools -- pack-overlay \
 ```
 
 The packager writes the 32-byte `NOVO` header consumed by
-`runtime/asm/overlay.s`, resolves entry symbols from ld65 `-Ln` files, and
+`software/runtime/asm/overlay.s`, resolves entry symbols from ld65 `-Ln` files, and
 validates that the payload and entry addresses fit the fixed overlay slot.
 
 # Nova FTDI Keyboard

@@ -19,7 +19,7 @@ from novahost_client import DEFAULT_DEBUG_PORT, DEFAULT_HOST, NovaHostClient, No
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-LOGO_ROM = REPO_ROOT / "novalogo/novalogo.bin"
+LOGO_ROM = REPO_ROOT / "software/languages/novalogo/novalogo.bin"
 
 TURTLE_STATE = 0x9F00
 TURTLE_X_FRAC = 0

@@ -84,7 +84,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--symbols",
         type=Path,
-        default=REPO_ROOT / "ehbasic" / "basic.sym",
+        default=REPO_ROOT / "software/languages/ehbasic" / "basic.sym",
         help="cc65 symbol file used to map PC to ROM labels",
     )
     return parser.parse_args()

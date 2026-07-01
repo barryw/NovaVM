@@ -35,8 +35,8 @@ namespace e6502UnitTests
         private static (LibLoaderBus bus, ushort entry) Setup()
         {
             var bus = new LibLoaderBus();
-            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
-            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")), 0x7F);
+            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("software", "tests", "asm", "libcall.bin")));
+            bus.StageShelfModule(0, File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin")), 0x7F);
             bus.PokeRam(HOME_BANK, RsBasic);   // runtime's home ROMSWAP value
             bus.PokeRam(RESIDENT, 0x00);       // nothing resident yet
             return (bus, LibCallEntry);
@@ -73,13 +73,13 @@ namespace e6502UnitTests
             // host store provides the image. Exercises SetModuleStore + DoLoadModule (the FIO
             // mirror) plus the loader's miss → page-in → validate → dispatch tail.
             var bus = new LibLoaderBus();
-            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("tests", "asm", "libcall.bin")));
+            bus.LoadRam(LibCallEntry, File.ReadAllBytes(RepoPath("software", "tests", "asm", "libcall.bin")));
             bus.PokeRam(HOME_BANK, RsBasic);
             bus.PokeRam(RESIDENT, 0x00);
             // shelf_tag[] all empty (default RAM=0); shelf_lru[] identity so shelf_touch resolves.
             for (int i = 0; i < 4; i++) bus.PokeRam((ushort)(0x041C + i), (byte)i);
             // host store has the TEST module under id $7F; NOT staged into any slot.
-            bus.SetModuleStore(0x7F, File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")));
+            bus.SetModuleStore(0x7F, File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin")));
 
             var r = CallLib(bus, LibCallEntry, 0x7F, fn: 1, arg0: 1000, arg1: 337);
 
@@ -179,7 +179,7 @@ namespace e6502UnitTests
         public void BadMagic_SetsStatus_NoDispatch()
         {
             var (bus, entry) = Setup();
-            var bad = (byte[])File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")).Clone();
+            var bad = (byte[])File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin")).Clone();
             bad[3] = 0x00;                        // corrupt 'N'
             bus.LoadXram(ShelfBase, bad);
 
@@ -193,7 +193,7 @@ namespace e6502UnitTests
         public void WrongModuleId_SetsStatus()
         {
             var (bus, entry) = Setup();
-            var bad = (byte[])File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")).Clone();
+            var bad = (byte[])File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin")).Clone();
             bad[5] = 0x02;                        // header claims SOUND, we ask for TEST
             bus.LoadXram(ShelfBase, bad);
 
@@ -207,7 +207,7 @@ namespace e6502UnitTests
         public void BadVersion_SetsStatus()
         {
             var (bus, entry) = Setup();
-            var bad = (byte[])File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin")).Clone();
+            var bad = (byte[])File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin")).Clone();
             bad[6] = 0x02;                        // MOD_VERSION ($C006) claims ABI v2; loader expects v1
             bus.LoadXram(ShelfBase, bad);
 

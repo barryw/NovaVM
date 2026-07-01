@@ -33,7 +33,7 @@ public sealed class AssemblySetup
 
     private static void SeedForthLibraries()
     {
-        string source = FindRepoPath("novaforth", "forth");
+        string source = FindRepoPath("software", "languages", "novaforth", "forth");
         string target = Path.Combine(StorageRoot, "hd0", "forth");
         CopyDirectory(source, target);
     }

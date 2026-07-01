@@ -68,7 +68,7 @@ public class VtextPrintAssemblyRuntimeTests
     public void PrintAtPlacesStringAtCursorCell()
     {
         byte[] fixture = File.ReadAllBytes(
-            RepoPath("tests", "integration", "fixtures", "vtextprint_runtime.bin"));
+            RepoPath("software", "tests", "integration", "fixtures", "vtextprint_runtime.bin"));
         var bus = new VgcVramBus(fixture, Entry);
 
         bus.Write(Harness, 0xA2);

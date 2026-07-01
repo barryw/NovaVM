@@ -48,7 +48,7 @@ public class ShelfMissTests
     public void Fio_LoadModule_StreamsStoreImageIntoSlot()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
-        byte[] gfx = File.ReadAllBytes(RepoPath("modules", "graphics", "graphics.bin"));
+        byte[] gfx = File.ReadAllBytes(RepoPath("software", "modules", "graphics", "graphics.bin"));
         bus.SetShelfModuleStore(new Dictionary<byte, byte[]> { [1] = gfx });
 
         // request LOAD_MODULE(id=1, slot=2). FIO owns its register bank, so params and the
@@ -80,7 +80,7 @@ public class ShelfMissTests
         using var bus = new CompositeBusDevice(enableSound:false, bootRom:CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
         // empty shelf (no StageShelfModule); host store has graphics
-        bus.SetShelfModuleStore(new Dictionary<byte,byte[]>{ [1]=File.ReadAllBytes(RepoPath("modules","graphics","graphics.bin")) });
+        bus.SetShelfModuleStore(new Dictionary<byte,byte[]>{ [1]=File.ReadAllBytes(RepoPath("software", "modules","graphics","graphics.bin")) });
         bus.WriteRam(RESIDENT, 0x00);
         bus.WriteRam(HOME_BANK, VgcConstants.RomSwapLogo);
         // ensure shelf_tag all empty + lru identity
@@ -101,7 +101,7 @@ public class ShelfMissTests
     {
         using var bus = new CompositeBusDevice(enableSound:false, bootRom:CompositeBusDevice.ActiveRom.Logo);
         var cpu = new Cpu(bus, E6502Type.Cmos); cpu.Boot();
-        bus.SetShelfModuleStore(new Dictionary<byte,byte[]>{ [1]=File.ReadAllBytes(RepoPath("modules","graphics","graphics.bin")) });
+        bus.SetShelfModuleStore(new Dictionary<byte,byte[]>{ [1]=File.ReadAllBytes(RepoPath("software", "modules","graphics","graphics.bin")) });
         // fill all 4 slots with dummy ids, lru order [0,1,2,3] => LRU back = slot 3
         for (int i=0;i<4;i++){ bus.WriteRam((ushort)(0x0418+i),(byte)(0x10+i)); bus.WriteRam((ushort)(0x041C+i),(byte)i); }
         bus.WriteRam(RESIDENT, 0x00);
@@ -125,8 +125,8 @@ public class ShelfMissTests
         Directory.CreateDirectory(tmp);
         try
         {
-            File.Copy(RepoPath("modules", "graphics", "graphics.bin"), Path.Combine(tmp, "graphics.bin"));
-            File.Copy(RepoPath("modules", "files", "files.bin"), Path.Combine(tmp, "files.bin"));
+            File.Copy(RepoPath("software", "modules", "graphics", "graphics.bin"), Path.Combine(tmp, "graphics.bin"));
+            File.Copy(RepoPath("software", "modules", "files", "files.bin"), Path.Combine(tmp, "files.bin"));
             File.WriteAllBytes(Path.Combine(tmp, "ehbasic.bin"), new byte[16384]); // non-module: no "NL" magic
 
             var store = CompositeBusDevice.BuildModuleStore(tmp);

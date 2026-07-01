@@ -16,7 +16,7 @@ public class GameServerAssemblyRuntimeTests
     [TestMethod]
     public void GameServerAssemblyRuntimeBuildsAndParsesFrames()
     {
-        byte[] fixture = File.ReadAllBytes(RepoPath("tests", "integration", "fixtures", "gameserver_runtime.bin"));
+        byte[] fixture = File.ReadAllBytes(RepoPath("software", "tests", "integration", "fixtures", "gameserver_runtime.bin"));
         var bus = new BusDevice(fixture, Entry);
 
         // LDX #$FF; TXS; JSR $7000; JMP $0206

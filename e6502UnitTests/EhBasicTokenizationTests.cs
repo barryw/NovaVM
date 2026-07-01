@@ -302,7 +302,7 @@ public class EhBasicTokenizationTests
     public void RuntimeAbiDocsIncludeSharedLibraryLabels()
     {
         string path = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "ehbasic", "runtime_labels.json"));
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "software", "languages", "ehbasic", "runtime_labels.json"));
         string json = File.ReadAllText(path);
 
         foreach (string label in new[]
@@ -2323,7 +2323,7 @@ public class EhBasicTokenizationTests
     private static ushort BasicSymbol(string name)
     {
         string path = Path.GetFullPath(
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "ehbasic", "basic.sym"));
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "software", "languages", "ehbasic", "basic.sym"));
 
         foreach (string line in File.ReadLines(path))
         {

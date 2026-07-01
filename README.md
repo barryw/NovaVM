@@ -109,9 +109,9 @@ of NovaBASIC, not alongside it.
 | Runtime | Status | Notes |
 |---|---|---|
 | **NovaBASIC** | Stable — default runtime | EhBASIC 2.22 extended with Nova hardware commands. Runs on Avalonia and FPGA. The most complete runtime. |
-| **NovaLogo** (`novalogo/`) | Usable — v1.0 | Logo interpreter: turtle graphics, procedures, recursion, lists, and garbage collection. Builds a 16 KB ROM image loaded in place of NovaBASIC. |
-| **NovaForth** (`novaforth/`) | Early — v0.1 | Nova-native threaded Forth with an interactive REPL and dictionary. Builds a 16 KB ROM image. Experimental. |
-| **NovaZ** (`examples/novaz/`) | Playable — Z-machine V3–V6 | Z-machine interpreter for Infocom interactive fiction. Ships as bootable NDI disk images with XRAM-backed story memory. 16 story projects are packaged (Zork I–III, HHGG, Trinity, Beyond Zork, Zork Zero, and more); the V6 path is actively stabilizing. |
+| **NovaLogo** (`software/languages/novalogo/`) | Usable — v1.0 | Logo interpreter: turtle graphics, procedures, recursion, lists, and garbage collection. Builds a 16 KB ROM image loaded in place of NovaBASIC. |
+| **NovaForth** (`software/languages/novaforth/`) | Early — v0.1 | Nova-native threaded Forth with an interactive REPL and dictionary. Builds a 16 KB ROM image. Experimental. |
+| **NovaZ** (`software/examples/novaz/`) | Playable — Z-machine V3–V6 | Z-machine interpreter for Infocom interactive fiction. Ships as bootable NDI disk images with XRAM-backed story memory. 16 story projects are packaged (Zork I–III, HHGG, Trinity, Beyond Zork, Zork Zero, and more); the V6 path is actively stabilizing. |
 
 NovaBASIC is the only runtime currently verified on FPGA hardware. NovaLogo,
 NovaForth, and NovaZ are 65C02 code and are developed against the Avalonia and
@@ -130,23 +130,23 @@ hardware surface:
 - TCP networking commands in the Avalonia host,
 - IRQ/NMI helpers and low-level `PEEK`/`POKE` access.
 
-Assembly code can use the shared XRAM runtime in `runtime/asm/xram.inc` and
-`runtime/asm/xram.s`. BASIC keeps a convenient `XBANK` plus 16-bit offset model,
+Assembly code can use the shared XRAM runtime in `software/runtime/asm/xram.inc` and
+`software/runtime/asm/xram.s`. BASIC keeps a convenient `XBANK` plus 16-bit offset model,
 while assembly routines can treat XRAM as a 24-bit flat address space.
 The optional XMC named-block command processor is shared in
-`runtime/asm/xmc.s`.
+`software/runtime/asm/xmc.s`.
 
-Shared text-region helpers live in `runtime/asm/vtext.inc` and
-`runtime/asm/vtext.s`. They provide reusable VGC text/color/attribute region
+Shared text-region helpers live in `software/runtime/asm/vtext.inc` and
+`software/runtime/asm/vtext.s`. They provide reusable VGC text/color/attribute region
 clear, output, and scroll primitives for assembly programs and language
 runtimes.
 
-The **Nova Developer Kit (NDK)** in `ndk/` packages this developer surface for
-writing Nova software outside the BASIC ROM tree: the shared `runtime/asm/`
+The **Nova Developer Kit (NDK)** in `software/ndk/` packages this developer surface for
+writing Nova software outside the BASIC ROM tree: the shared `software/runtime/asm/`
 libraries, generated hardware constants, assembly documentation, and standalone
 example programs collected into one distributable directory. Standalone 65C02
-applications and demos live in `assembly/`, and loadable runtime modules
-(paged NMOD binaries staged in XRAM) live in `modules/`.
+applications and demos live in `software/assembly/`, and loadable runtime modules
+(paged NMOD binaries staged in XRAM) live in `software/modules/`.
 
 ## FPGA and NovaHost
 
@@ -195,8 +195,8 @@ hardware behavior across all targets.
 
 ```bash
 dotnet restore e6502.sln
-dotnet build e6502.sln -c Release
-dotnet test e6502.sln -c Release
+dotnet build e6502.sln -c Release -m:1
+dotnet test e6502.sln -c Release --no-build
 ```
 
 Useful target-specific commands:
@@ -207,7 +207,7 @@ dotnet run --project e6502.CLI            # Headless BASIC host
 dotnet run --project e6502.MCP            # MCP bridge
 dotnet run --project e6502.Nova           # Nova CLI, development mode
 tools/publish-nova-cli.sh                 # NativeAOT single-binary Nova CLI
-make -C ehbasic                           # Rebuild NovaBASIC ROM artifacts
+make -C software/languages/ehbasic       # Rebuild NovaBASIC ROM artifacts
 make -C e6502.FPGA                        # Build the Verilator simulator
 make -C e6502.FPGA run                    # Run the Verilator simulator
 make -C e6502.FPGA/boards/ulx3s bitstream # Build ULX3S bitstream
@@ -237,21 +237,22 @@ ESP32 NovaHost builds use the Arduino ESP32 toolchain.
 | `e6502Debugger/` | Windows Forms debugger project |
 | `e6502.FPGA/` | SystemVerilog RTL, Verilator simulation, ULX3S build flow, FPGA tests |
 | `e6502.ESP32/novahost/` | ESP32 companion firmware for SD, debug, ROM loading, and host services |
-| `ehbasic/` | NovaBASIC/EhBASIC source, extension ROM, XRAM runtime, token definitions |
-| `novalogo/` | NovaLogo interpreter ROM source |
-| `novaforth/` | NovaForth runtime ROM source |
-| `examples/novaz/` | NovaZ Z-machine runtime, packaged stories, and NDI image build |
-| `ndk/` | Nova Developer Kit: packaged assembly libraries, constants, docs, examples |
-| `runtime/` | Shared 65C02 assembly libraries (XRAM, vtext, NDK primitives) |
-| `modules/` | Loadable runtime modules (paged NMOD binaries staged in XRAM) |
-| `assembly/` | Standalone 65C02 applications and demos |
+| `software/languages/ehbasic/` | NovaBASIC/EhBASIC source, extension ROM, XRAM runtime, token definitions |
+| `software/languages/novalogo/` | NovaLogo interpreter ROM source |
+| `software/languages/novaforth/` | NovaForth runtime ROM source |
+| `software/examples/novaz/` | NovaZ Z-machine runtime, packaged stories, and NDI image build |
+| `software/examples/novachess/` | NovaChess runtime, engine integration, and NDI image build |
+| `software/ndk/` | Nova Developer Kit: packaged assembly libraries, constants, docs, examples |
+| `software/runtime/` | Shared 65C02 assembly libraries (XRAM, vtext, NDK primitives) |
+| `software/modules/` | Loadable runtime modules (paged NMOD binaries staged in XRAM) |
+| `software/assembly/` | Standalone 65C02 applications and demos |
 | `NovaDraw/` | macOS pixel-art editor for Nova sprites/tiles/graphics (with MCP server) |
 | `website/` | Static project site (PDFs, browser emulator, showcase images) |
 | `docker/` | CI build container images |
 | `docs/books/` | PDF book source trees and build entry point |
 | `docs/help/` | User-facing NovaBASIC help content and command reference |
 | `docs/plans/` | Architecture, bring-up, and future feature planning docs |
-| `tests/integration/` | Assembly-level integration suites for simulator/hardware backends |
+| `software/tests/integration/` | Assembly-level integration suites for simulator/hardware backends |
 | `e6502UnitTests/` | MSTest suite for CPU, devices, storage, editors, compiler, and host behavior |
 
 ## Documentation

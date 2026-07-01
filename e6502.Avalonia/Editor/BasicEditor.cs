@@ -303,7 +303,7 @@ public sealed class BasicEditor : ScreenTextEditor
         string? dir = Directory.GetCurrentDirectory();
         while (dir != null)
         {
-            string candidate = Path.Combine(dir, "ehbasic", "tokens.json");
+            string candidate = Path.Combine(dir, "software", "languages", "ehbasic", "tokens.json");
             if (File.Exists(candidate)) return candidate;
             string? parent = Path.GetDirectoryName(dir);
             if (parent == dir) break;

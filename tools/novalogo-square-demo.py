@@ -27,7 +27,7 @@ DEBUG_PORT = 6503
 TIMEOUT = 30.0
 REPO = Path(__file__).resolve().parents[1]
 ROMS = [
-    (REPO / "novalogo/novalogo.bin", "/roms/novalogo.bin"),
+    (REPO / "software/languages/novalogo/novalogo.bin", "/roms/novalogo.bin"),
 ]
 
 VGC_GFX_SPACE = 3

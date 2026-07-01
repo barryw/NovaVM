@@ -100,7 +100,7 @@ def repo_path(path: str) -> Path:
 SMOKES: tuple[HardwareSmoke, ...] = (
     HardwareSmoke(
         name="z3-spec",
-        image=repo_path("examples/novaz/dist/z3-spec/fd0.ndi"),
+        image=repo_path("software/examples/novaz/dist/z3-spec/fd0.ndi"),
         commands=(SmokeCommand("take red,key", ("z3 input ok",)),),
         expected_screens=(
             "addrpaddrA-12",
@@ -113,7 +113,7 @@ SMOKES: tuple[HardwareSmoke, ...] = (
     ),
     HardwareSmoke(
         name="z4-styles",
-        image=repo_path("examples/novaz/dist/z4-styles/fd0.ndi"),
+        image=repo_path("software/examples/novaz/dist/z4-styles/fd0.ndi"),
         screen_only=True,
         expected_screens=("style fixture done",),
         expected_text_colors=(
@@ -128,54 +128,54 @@ SMOKES: tuple[HardwareSmoke, ...] = (
     ),
     HardwareSmoke(
         name="z5-spec",
-        image=repo_path("examples/novaz/dist/z5-spec/fd0.ndi"),
+        image=repo_path("software/examples/novaz/dist/z5-spec/fd0.ndi"),
         commands=(SmokeCommand("take silver,key", ("z5 input ok",)),),
         expected_screens=("z5 spec ok",),
         no_status_line=True,
     ),
     HardwareSmoke(
         name="zork-i",
-        image=repo_path("examples/novaz/dist/zork-i/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/zork-i/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-i/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/zork-i/smoke.txt"),
         expect_more=True,
     ),
     HardwareSmoke(
         name="zork-i-torture",
-        image=repo_path("examples/novaz/dist/zork-i/fd0.ndi"),
-        script=repo_path("examples/novaz/tests/zork-i-torture-smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-i/fd0.ndi"),
+        script=repo_path("software/examples/novaz/tests/zork-i-torture-smoke.txt"),
     ),
     HardwareSmoke(
         name="zork-i-longplay",
-        image=repo_path("examples/novaz/dist/zork-i/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/zork-i/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-i/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/zork-i/longplay.txt"),
     ),
     HardwareSmoke(
         name="zork-ii",
-        image=repo_path("examples/novaz/dist/zork-ii/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/zork-ii/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-ii/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/zork-ii/smoke.txt"),
     ),
     HardwareSmoke(
         name="zork-iii",
-        image=repo_path("examples/novaz/dist/zork-iii/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/zork-iii/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-iii/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/zork-iii/smoke.txt"),
         expect_more=True,
     ),
     HardwareSmoke(
         name="deadline",
-        image=repo_path("examples/novaz/dist/deadline/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/deadline/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/deadline/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/deadline/smoke.txt"),
         expect_time_status=True,
     ),
     HardwareSmoke(
         name="deadline-longplay",
-        image=repo_path("examples/novaz/dist/deadline/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/deadline/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/deadline/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/deadline/longplay.txt"),
         expect_time_status=True,
     ),
     HardwareSmoke(
         name="amfv",
-        image=repo_path("examples/novaz/dist/amfv/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/amfv/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/amfv/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/amfv/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Mode:",),
         expected_rows=(
@@ -189,8 +189,8 @@ SMOKES: tuple[HardwareSmoke, ...] = (
     ),
     HardwareSmoke(
         name="amfv-longplay",
-        image=repo_path("examples/novaz/dist/amfv/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/amfv/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/amfv/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/amfv/longplay.txt"),
         no_status_line=True,
         header_expected_any=("Mode:",),
         expected_rows=(
@@ -204,81 +204,81 @@ SMOKES: tuple[HardwareSmoke, ...] = (
     ),
     HardwareSmoke(
         name="trinity",
-        image=repo_path("examples/novaz/dist/trinity/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/trinity/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/trinity/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/trinity/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Palace Gate", "Broad Walk"),
     ),
     HardwareSmoke(
         name="trinity-longplay",
-        image=repo_path("examples/novaz/dist/trinity/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/trinity/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/trinity/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/trinity/longplay.txt"),
         no_status_line=True,
         header_expected_any=("Palace Gate", "Broad Walk", "Inverness Terrace"),
     ),
     HardwareSmoke(
         name="hhgg",
-        image=repo_path("examples/novaz/dist/hhgg/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/hhgg/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/hhgg/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/hhgg/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Darkness", "Bedroom"),
     ),
     HardwareSmoke(
         name="hhgg-longplay",
-        image=repo_path("examples/novaz/dist/hhgg/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/hhgg/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/hhgg/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/hhgg/longplay.txt"),
         no_status_line=True,
         header_expected_any=("Darkness", "Bedroom"),
     ),
     HardwareSmoke(
         name="beyond-zork",
-        image=repo_path("examples/novaz/dist/beyond-zork/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/beyond-zork/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/beyond-zork/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/beyond-zork/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Hilltop",),
     ),
     HardwareSmoke(
         name="border-zone",
-        image=repo_path("examples/novaz/dist/border-zone/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/border-zone/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/border-zone/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/border-zone/smoke.txt"),
         no_status_line=True,
         header_expected_any=("Your Compartment", "Outside Your Compartment"),
     ),
     HardwareSmoke(
         name="border-zone-longplay",
-        image=repo_path("examples/novaz/dist/border-zone/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/border-zone/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/border-zone/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/border-zone/longplay.txt"),
         no_status_line=True,
         header_expected_any=("Your Compartment", "Outside Your Compartment"),
     ),
     HardwareSmoke(
         name="sherlock",
-        image=repo_path("examples/novaz/dist/sherlock/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/sherlock/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/sherlock/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/sherlock/smoke.txt"),
         no_status_line=True,
         header_expected_any=("221-B Baker Street",),
     ),
     HardwareSmoke(
         name="sherlock-longplay",
-        image=repo_path("examples/novaz/dist/sherlock/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/sherlock/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/sherlock/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/sherlock/longplay.txt"),
         no_status_line=True,
         header_expected_any=("221-B Baker Street",),
     ),
     HardwareSmoke(
         name="ztuu",
-        image=repo_path("examples/novaz/dist/ztuu/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/ztuu/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/ztuu/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/ztuu/smoke.txt"),
     ),
     HardwareSmoke(
         name="ztuu-longplay",
-        image=repo_path("examples/novaz/dist/ztuu/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/ztuu/longplay.txt"),
+        image=repo_path("software/examples/novaz/dist/ztuu/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/ztuu/longplay.txt"),
     ),
     HardwareSmoke(
         name="zork-zero",
-        image=repo_path("examples/novaz/dist/zork-zero/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/zork-zero/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/zork-zero/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/zork-zero/smoke.txt"),
         expected_screens=("Banquet Hall", "platter of hellhound bones"),
         expected_gfx_colors=(
             GfxColorExpectation(0, 0, 0x06),
@@ -292,14 +292,14 @@ SMOKES: tuple[HardwareSmoke, ...] = (
     ),
     HardwareSmoke(
         name="arthur",
-        image=repo_path("examples/novaz/dist/arthur/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/arthur/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/arthur/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/arthur/smoke.txt"),
         no_status_line=True,
     ),
     HardwareSmoke(
         name="journey",
-        image=repo_path("examples/novaz/dist/journey/fd0.ndi"),
-        script=repo_path("examples/novaz/projects/journey/smoke.txt"),
+        image=repo_path("software/examples/novaz/dist/journey/fd0.ndi"),
+        script=repo_path("software/examples/novaz/projects/journey/smoke.txt"),
         expected_screens=("The Party", "Individual Commands", "Start"),
         screen_only=True,
         no_status_line=True,
@@ -367,7 +367,7 @@ def load_commands(smoke: HardwareSmoke) -> list[SmokeCommand]:
 
 def try_read_runtime_symbol(symbol_name: str) -> int | None:
     candidates = [
-        REPO_ROOT / "examples/novaz/build/runtime.sym",
+        REPO_ROOT / "software/examples/novaz/build/runtime.sym",
         REPO_ROOT / "build/runtime.sym",
     ]
     for path in candidates:
@@ -524,7 +524,7 @@ def build_images(selected: list[HardwareSmoke]) -> None:
         targets.append("test-infocom-longplays")
     if not targets:
         return
-    subprocess.run(["make", "-C", str(REPO_ROOT / "examples/novaz"), *targets], check=True)
+    subprocess.run(["make", "-C", str(REPO_ROOT / "software/examples/novaz"), *targets], check=True)
 
 
 def wait_for_screen(

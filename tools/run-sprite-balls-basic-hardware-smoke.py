@@ -16,8 +16,8 @@ from novahost_client import DEFAULT_HOST, NovaHostClient, NovaHostError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PROGRAM = REPO_ROOT / "docs/programs/sprite_balls_basic.bas"
-BASIC_ROM = REPO_ROOT / "ehbasic/basic.bin"
-EXTENSION_ROM = REPO_ROOT / "ehbasic/extension.bin"
+BASIC_ROM = REPO_ROOT / "software/languages/ehbasic/basic.bin"
+EXTENSION_ROM = REPO_ROOT / "software/languages/ehbasic/extension.bin"
 SPRITE_BASE = 0xA040
 SPRITE_STRIDE = 8
 SPR_FLAG_ENABLE = 0x80

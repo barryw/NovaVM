@@ -48,7 +48,7 @@ public class NicDmaAssemblyRuntimeTests
     public void SendSurfacesDmaError()
     {
         byte[] fixture = File.ReadAllBytes(
-            RepoPath("tests", "integration", "fixtures", "nicdma_runtime.bin"));
+            RepoPath("software", "tests", "integration", "fixtures", "nicdma_runtime.bin"));
         var bus = new FaultNicBus(fixture, Entry);
 
         bus.Write(Harness, 0xA2);

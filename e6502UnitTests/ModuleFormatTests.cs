@@ -24,7 +24,7 @@ public class ModuleFormatTests
     [TestMethod]
     public void TestModule_Header_IsWellFormed()
     {
-        byte[] img = File.ReadAllBytes(RepoPath("tests", "asm", "testmod.bin"));
+        byte[] img = File.ReadAllBytes(RepoPath("software", "tests", "asm", "testmod.bin"));
 
         Assert.AreEqual(16384, img.Length);
         Assert.AreEqual(0x4C, img[0]);   // JMP opcode at $C000

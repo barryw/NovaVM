@@ -193,7 +193,7 @@ public class ArtyNovaHostRegressionTests
     [TestMethod]
     public void NovazPack_BundlesSaveLoadOverlay()
     {
-        string mk = File.ReadAllText(RepoPath("examples", "novaz", "Makefile"));
+        string mk = File.ReadAllText(RepoPath("software", "examples", "novaz", "Makefile"));
         StringAssert.Contains(mk, "SAVLOAD.OVL",
             "novaz PACK_ARGS must bundle SAVLOAD.OVL into the .ndi for V6 save/restore.");
     }

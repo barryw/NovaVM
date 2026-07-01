@@ -64,7 +64,7 @@ public class AudioLoadingAssemblyRuntimeTests
     public void FileBackedPlayWaitsForAssetLoad()
     {
         byte[] fixture = File.ReadAllBytes(
-            RepoPath("tests", "integration", "fixtures", "audioload_runtime.bin"));
+            RepoPath("software", "tests", "integration", "fixtures", "audioload_runtime.bin"));
         var bus = new AudioLoadingBus(fixture, Entry);
 
         bus.Write(Harness, 0xA2);

@@ -1,6 +1,6 @@
 # NovaVM VTEXT Runtime
 
-`runtime/asm/vtext.inc` and `runtime/asm/vtext.s` provide a shared ca65 text
+`software/runtime/asm/vtext.inc` and `software/runtime/asm/vtext.s` provide a shared ca65 text
 region layer over the VGC character, color, and text-attribute planes.
 
 VTEXT is deliberately not a window manager. It does not know about BASIC,

@@ -15,7 +15,7 @@ public class EditorModuleTests
     [TestMethod]
     public void EditorModule_Header_IsWellFormed()
     {
-        byte[] img = File.ReadAllBytes(RepoPath("modules", "editor", "editor.bin"));
+        byte[] img = File.ReadAllBytes(RepoPath("software", "modules", "editor", "editor.bin"));
 
         Assert.AreEqual(16384, img.Length, "module image must be exactly 16 KB");
         Assert.AreEqual(0x4C, img[0]);   // JMP opcode at $C000
@@ -31,7 +31,7 @@ public class EditorModuleTests
         string? dir = Directory.GetCurrentDirectory();
         while (dir != null)
         {
-            string candidate = Path.Combine(dir, "runtime", "asm", "libeditor.inc");
+            string candidate = Path.Combine(dir, "software", "runtime", "asm", "libeditor.inc");
             if (File.Exists(candidate))
             {
                 string[] allParts = new string[parts.Length + 1];

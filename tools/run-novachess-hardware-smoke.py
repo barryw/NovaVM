@@ -31,7 +31,7 @@ from novahost_client import (
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_IMAGE = REPO_ROOT / "examples/novachess/dist/mode-test.ndi"
+DEFAULT_IMAGE = REPO_ROOT / "software/examples/novachess/dist/mode-test.ndi"
 DEFAULT_MOUNT_PATH = "/novachess-smoke/mode-test.ndi"
 VGC_PLANE_GFX = 3
 VGC_PLANE_CHAR = 1
@@ -104,7 +104,7 @@ def build_image(image: Path) -> None:
         [
             "make",
             "-C",
-            str(REPO_ROOT / "examples/novachess"),
+            str(REPO_ROOT / "software/examples/novachess"),
             "ndi",
             "BUILD_DIR=build-mode",
             f"IMAGE={image}",

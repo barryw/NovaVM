@@ -35,8 +35,8 @@ do_install() {
     install -m 0644 ${NOVAVM_REPO}/e6502.FPGA/boards/arty_z7/rom/ehbasic.bin        ${NFS}/roms/ehbasic.bin
     install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/config/boot.json     ${NFS}/config/boot.json
     install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/boot/novavm_logo.nvg ${NFS}/assets/boot/novavm_logo.nvg
-    install -m 0644 ${NOVAVM_REPO}/novaforth/novaforth.ndi                          ${NFS}/disks/novaforth.ndi
-    install -m 0644 ${NOVAVM_REPO}/novalogo/novalogo.ndi                            ${NFS}/disks/novalogo.ndi
+    install -m 0644 ${NOVAVM_REPO}/software/languages/novaforth/novaforth.ndi        ${NFS}/disks/novaforth.ndi
+    install -m 0644 ${NOVAVM_REPO}/software/languages/novalogo/novalogo.ndi          ${NFS}/disks/novalogo.ndi
 
     # /data is just a mountpoint for the separate writable ext4 partition
     # (nova-sd.wks). Its fstab entry is added by the base-files bbappend, so it

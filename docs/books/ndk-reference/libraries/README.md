@@ -1,7 +1,7 @@
 # NDK Library Notes
 
 This directory is reserved for authored per-library notes. The generated API
-reference comes from `runtime/asm`; this directory should hold the human
+reference comes from `software/runtime/asm`; this directory should hold the human
 material: overview text, examples, caveats, and design notes.
 
 Current authored chapters:

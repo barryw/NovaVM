@@ -1,6 +1,6 @@
 BOOK = ndk-reference
 ROOT = ../../..
-RUNTIME_DIR = $(ROOT)/runtime/asm
+RUNTIME_DIR = $(ROOT)/software/runtime/asm
 GENERATOR = $(ROOT)/tools/gen_ndk_reference.py
 RUNTIME_SOURCES = $(wildcard $(RUNTIME_DIR)/*.inc $(RUNTIME_DIR)/*.s)
 LIBRARY_CHAPTERS = $(wildcard libraries/*.tex)

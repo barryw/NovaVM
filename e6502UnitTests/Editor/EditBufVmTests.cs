@@ -79,7 +79,7 @@ public class EditBufVmTests
 
     private static void LoadApp(CompositeBusDevice bus)
     {
-        string path = Path.Combine(RepoRoot(), "assembly", "apps", "editbuf_test", "editbuf_test.bin");
+        string path = Path.Combine(RepoRoot(), "software", "assembly", "apps", "editbuf_test", "editbuf_test.bin");
         Assert.IsTrue(File.Exists(path), $"Build the harness first: {path}");
         byte[] prg = File.ReadAllBytes(path);
         ushort load = (ushort)(prg[0] | (prg[1] << 8));
@@ -92,7 +92,7 @@ public class EditBufVmTests
         string? dir = AppContext.BaseDirectory;
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir, "runtime", "asm", "editbuf.s")))
+            if (File.Exists(Path.Combine(dir, "software", "runtime", "asm", "editbuf.s")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }

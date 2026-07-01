@@ -11,7 +11,7 @@ namespace e6502UnitTests;
 
 /// <summary>
 /// Pins the NovaZ PICS.PAK format produced by the packer's BlorbPictures
-/// (examples/novaz/tools/Nova.NovaZ.Packer):
+/// (software/examples/novaz/tools/Nova.NovaZ.Packer):
 ///   "NZPK" ver(1) count(2 LE) release(2 LE) palette[16 RGB triples]
 ///   index[count]: z_number(2) width(2) height(2) flags(1) offset(4) len(4)  (LE)
 ///   data: 4bpp row-packed bitmaps (two pixels/byte, high nibble = left pixel,

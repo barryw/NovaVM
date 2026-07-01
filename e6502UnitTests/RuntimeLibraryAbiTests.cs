@@ -15,7 +15,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void GameServerAssemblyProtocolConstantsMatchServer()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.inc"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "gameserver.inc"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(NovaGameProtocol.ServerProtocolMajor, constants["NGS_SERVER_PROTO_MAJOR"]);
@@ -93,8 +93,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void GameServerAssemblyClientUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "gameserver.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "gameserver.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "gameserver.s"));
 
         string[] stateSymbols =
         [
@@ -206,8 +206,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void EditUiExposesSharedDirtyWorkspaceIndicator()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editui.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editui.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.s"));
         string docs = File.ReadAllText(RepoPath("docs", "assembly", "editui.md"));
 
         StringAssert.Contains(inc, ".global EDITUI_DIRTY");
@@ -220,8 +220,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void EditUiExposesGeneralizedSaveUnderForDialogs()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editui.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editui.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.s"));
 
         // The menu save/restore-under mechanism is generalized into reusable
         // rect-based entry points so dialogs can overlay without clearing.
@@ -235,8 +235,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void EditBufExposesSharedEditingEngine()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "editbuf.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "editbuf.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "editbuf.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "editbuf.s"));
 
         // Public entry points.
         StringAssert.Contains(inc, ".global editbuf_run");
@@ -265,7 +265,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void NovaChessNetworkAdapterConstantsMatchServerChessAdapter()
     {
-        string inc = File.ReadAllText(RepoPath("examples", "novachess", "src", "nchess_net.inc"));
+        string inc = File.ReadAllText(RepoPath("software", "examples", "novachess", "src", "nchess_net.inc"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(ChessGameAdapter.GameId, constants["NCHESS_GAME_ID"]);
@@ -275,7 +275,7 @@ public class RuntimeLibraryAbiTests
         Assert.AreEqual(ChessGameAdapter.ActionResign, constants["NCHESS_ACTION_RESIGN"]);
         Assert.AreEqual(ChessGameAdapter.ActionOfferDraw, constants["NCHESS_ACTION_OFFER_DRAW"]);
 
-        string impl = File.ReadAllText(RepoPath("examples", "novachess", "src", "nchess_net.s"));
+        string impl = File.ReadAllText(RepoPath("software", "examples", "novachess", "src", "nchess_net.s"));
         foreach (string routine in new[]
         {
             "nchess_net_init",
@@ -297,8 +297,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextStateUsesLinkerStorageNotNvrMailbox()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.s"));
 
         string[] stateSymbols =
         [
@@ -329,8 +329,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextExposeGfxSpacesIsPublicAndDocumented()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.s"));
 
         StringAssert.Contains(inc, ".global vtext_expose_gfx_spaces_region");
         StringAssert.Contains(impl, ".export vtext_expose_gfx_spaces_region");
@@ -342,7 +342,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextExposeGfxSpacesPrimesVramReadLatch()
     {
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.s"));
         string routine = Slice(impl, "vtext_expose_gfx_spaces_region:", "; @label VTEXT.CLEAR_LINE");
 
         // VGC VRAM reads are latched. This routine scans the char plane while
@@ -380,7 +380,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextCommitsStylePlanesBeforeGlyphPlanes()
     {
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.s"));
 
         // VTEXT updates are visible to the raster as they happen. Style planes
         // must be committed before the char plane so clears, runs, and scrolls
@@ -440,8 +440,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextAutomaticScrollHookIsOptIn()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vtext.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.s"));
 
         StringAssert.Contains(inc, ".global VTEXT_SCROLL_HOOKL");
         StringAssert.Contains(inc, ".global VTEXT_SCROLL_HOOKH");
@@ -468,8 +468,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VTextMixedExposesPixelPreciseGfxScroll()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vtext.inc"));
-        string mixed = File.ReadAllText(RepoPath("runtime", "asm", "vtext_mixed.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext.inc"));
+        string mixed = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext_mixed.s"));
 
         // Mixed text/gfx runtimes sometimes have a logical pixel window that
         // is wider than the safe text-cell rectangle. The NDK must provide a
@@ -542,8 +542,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void VSpriteRotateAbiUsesCallerOwnedBuffersAndStableRoutineSymbols()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "vsprite.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "vsprite.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vsprite.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "vsprite.s"));
 
         string[] rotateStateSymbols =
         [
@@ -596,8 +596,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void OverlayManagerUsesFixedHeaderAndLinkerStorage()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "overlay.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "overlay.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "overlay.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "overlay.s"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(0x20, constants["OVL_HEADER_SIZE"]);
@@ -671,7 +671,7 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void XmcPrivateStateUsesLinkerStorageNotNvrMailbox()
     {
-        string source = File.ReadAllText(RepoPath("runtime", "asm", "xmc.s"));
+        string source = File.ReadAllText(RepoPath("software", "runtime", "asm", "xmc.s"));
 
         string[] privateStateSymbols =
         [
@@ -707,8 +707,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void TweenStateUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "tween.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "tween.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "tween.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "tween.s"));
 
         string[] stateSymbols =
         [
@@ -764,8 +764,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void MetaSpriteStateUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "msprite.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "msprite.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "msprite.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "msprite.s"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(8, constants["MSPRITE_MAX_OBJECTS"]);
@@ -823,8 +823,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void AnimationStateUsesLinkerStorageAndStableRoutineAbi()
     {
-        string inc = File.ReadAllText(RepoPath("runtime", "asm", "anim.inc"));
-        string impl = File.ReadAllText(RepoPath("runtime", "asm", "anim.s"));
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "anim.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "anim.s"));
         IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
 
         Assert.AreEqual(8, constants["ANIM_MAX_TRACKS"]);
@@ -901,8 +901,8 @@ public class RuntimeLibraryAbiTests
     [TestMethod]
     public void ExtensionRomCodeSegmentUsesLinkerPlacement()
     {
-        string source = File.ReadAllText(RepoPath("ehbasic", "extension.s"));
-        string config = File.ReadAllText(RepoPath("ehbasic", "extension.cfg"));
+        string source = File.ReadAllText(RepoPath("software", "languages", "ehbasic", "extension.s"));
+        string config = File.ReadAllText(RepoPath("software", "languages", "ehbasic", "extension.cfg"));
 
         Assert.IsFalse(
             Regex.IsMatch(source, @"(?im)^\s*\.org\s+\$C000\b"),

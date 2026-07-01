@@ -1,4 +1,8 @@
 <Project>
+  <PropertyGroup>
+    <RestoreBuildInParallel>false</RestoreBuildInParallel>
+  </PropertyGroup>
+
   <!--
     .NET 10 NativeAOT publish hangs on this macOS SDK install when ILLink tasks
     are launched through MSBuild's external TaskHostFactory. Running the same

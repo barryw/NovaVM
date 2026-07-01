@@ -14,7 +14,7 @@ public class BasicTokenizerTests
         string dir = AppContext.BaseDirectory;
         while (dir is not null)
         {
-            string candidate = Path.Combine(dir, "ehbasic", "tokens.json");
+            string candidate = Path.Combine(dir, "software", "languages", "ehbasic", "tokens.json");
             if (File.Exists(candidate))
                 return BasicTokenizer.FromJsonFile(candidate);
             string? parent = Path.GetDirectoryName(dir);

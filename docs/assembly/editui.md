@@ -146,7 +146,7 @@ live at a time, so do not nest an overlay over an already-open dropdown.
 
 ## EDITBUF — shared text editing engine
 
-`EDITBUF` (`runtime/asm/editbuf.s`, `editbuf.inc`) layers a real editable text
+`EDITBUF` (`software/runtime/asm/editbuf.s`, `editbuf.inc`) layers a real editable text
 buffer and a three-choice modal dialog on top of EDITUI. It is **language
 neutral**: it owns cursor movement, insert/delete/backspace (including across
 line boundaries), line navigation, horizontal/vertical scrolling, selection,

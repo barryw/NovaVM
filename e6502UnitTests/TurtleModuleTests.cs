@@ -61,7 +61,7 @@ namespace e6502UnitTests
         private static CompositeBusDevice MakeAxis2Bus()
         {
             var bus = new CompositeBusDevice(enableSound: false);
-            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("modules", "turtle", "turtle.bin")));
+            bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("software", "modules", "turtle", "turtle.bin")));
             bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
             Assert.AreEqual(CompositeBusDevice.ActiveRom.Extension, bus.CurrentRom);
             Assert.AreEqual(0x4C, bus.Read(0xC000), "module $C000 must be JMP (the header trampoline)");

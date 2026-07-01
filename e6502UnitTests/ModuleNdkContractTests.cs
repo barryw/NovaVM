@@ -39,9 +39,9 @@ public class ModuleNdkContractTests
     {
         foreach (var (name, jtable) in Modules)
         {
-            byte[] bin = File.ReadAllBytes(RepoPath("modules", name, name + ".bin"));
+            byte[] bin = File.ReadAllBytes(RepoPath("software", "modules", name, name + ".bin"));
             int header = bin[7];                       // $C007 fn_count
-            int entries = CountJtableEntries(File.ReadAllText(RepoPath("modules", name, name + ".s")), jtable);
+            int entries = CountJtableEntries(File.ReadAllText(RepoPath("software", "modules", name, name + ".s")), jtable);
             Assert.AreEqual(header, entries,
                 $"{name}: binary header fn_count ({header}) != {jtable} entry count ({entries}). " +
                 "The FN_COUNT symbol and the dispatch jtable have drifted.");
@@ -53,7 +53,7 @@ public class ModuleNdkContractTests
     {
         foreach (var (name, _) in Modules)
         {
-            string own = ModuleOwnCode(File.ReadAllText(RepoPath("modules", name, name + ".s")));
+            string own = ModuleOwnCode(File.ReadAllText(RepoPath("software", "modules", name, name + ".s")));
             StringAssert.DoesNotMatch(own, new Regex(@"SID2?_BASE\s*\+"),
                 $"{name}.s pokes SID registers directly — wrap an NDK audio_* routine instead (NDK is source of truth).");
             StringAssert.DoesNotMatch(own, new Regex(@"CMP\s+VGC_FRAME"),
@@ -77,8 +77,8 @@ public class ModuleNdkContractTests
 
         foreach (var (name, jtable) in Modules)
         {
-            string src = File.ReadAllText(RepoPath("modules", name, name + ".s"));
-            var ids = ParseIncIds(File.ReadAllText(RepoPath("runtime", "asm", "lib" + name + ".inc")));
+            string src = File.ReadAllText(RepoPath("software", "modules", name, name + ".s"));
+            var ids = ParseIncIds(File.ReadAllText(RepoPath("software", "runtime", "asm", "lib" + name + ".inc")));
             string[] labels = JtableLabels(src, jtable);
 
             foreach (var (fn, ndk) in NdkMappings(src))
@@ -157,7 +157,7 @@ public class ModuleNdkContractTests
     private static System.Collections.Generic.HashSet<string> NdkRoutineLabels()
     {
         var set = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
-        foreach (string path in Directory.GetFiles(RepoPath("runtime", "asm"), "*.s"))
+        foreach (string path in Directory.GetFiles(RepoPath("software", "runtime", "asm"), "*.s"))
             foreach (Match m in Regex.Matches(File.ReadAllText(path), @"(?m)^([A-Za-z_]\w*):"))
                 set.Add(m.Groups[1].Value);
         return set;

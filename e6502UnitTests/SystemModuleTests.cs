@@ -27,7 +27,7 @@ public class SystemModuleTests
     [TestMethod]
     public void SystemModule_Header_IsWellFormed()
     {
-        byte[] img = File.ReadAllBytes(RepoPath("modules", "system", "system.bin"));
+        byte[] img = File.ReadAllBytes(RepoPath("software", "modules", "system", "system.bin"));
 
         Assert.AreEqual(16384, img.Length, "module image must be exactly 16 KB");
         Assert.AreEqual(0x4C, img[0]);   // JMP opcode at $C000
@@ -69,7 +69,7 @@ public class SystemModuleTests
     private static CompositeBusDevice MakeSystemBus()
     {
         var bus = new CompositeBusDevice(enableSound: false);
-        bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("modules", "system", "system.bin")));
+        bus.LoadExtensionRomBytesForTest(File.ReadAllBytes(RepoPath("software", "modules", "system", "system.bin")));
         bus.Write(VgcConstants.RegRomSwap, VgcConstants.RomSwapExtension);
         Assert.AreEqual(CompositeBusDevice.ActiveRom.Extension, bus.CurrentRom);
         Assert.AreEqual(0x4C, bus.Read(0xC000), "module $C000 must be JMP (the header trampoline)");

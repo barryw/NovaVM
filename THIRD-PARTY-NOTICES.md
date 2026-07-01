@@ -31,7 +31,7 @@ Apache-2.0). None are GPL, so none impose copyleft on NovaVM.
 
 ## Bundled 6502 software (separate ROM artifacts)
 
-- **EhBASIC (Enhanced BASIC)** by Lee Davison (`ehbasic/`) — "free but not
+- **EhBASIC (Enhanced BASIC)** by Lee Davison (`software/languages/ehbasic/`) — "free but not
   copyright free." Non-commercial use requires that any binary image derived
   from it include the string "Derived from EhBASIC" and that human-readable
   distributions carry that acknowledgment. Assembled into a separate ROM image,
