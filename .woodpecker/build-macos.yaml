@@ -15,8 +15,19 @@ steps:
     commands:
       # Stage ROM/font resources first (Avalonia uses -p:SkipRomBuild=true and
       # relies on pre-staged resources). `make binaries` needs cc65 (ca65/ld65)
-      # + python3 + make on the macOS agent — the .csproj already expects brew
-      # cc65; the agent's cc65 must be recent enough for `--cpu w65c02` (WAL-162).
+      # + python3 + make on the macOS agent — the .csproj already expects a
+      # w65c02-capable cc65 (WAL-162).
+      #
+      # WAL-164: the macOS agent had no cc65 on PATH (`ca65: No such file or
+      # directory` killed `make binaries`). Rather than depend on a manual
+      # `brew install cc65` on the agent host (non-reproducible host state), the
+      # agent self-provisions cc65 like the linux leg — see the script for
+      # details. It installs to $HOME/.local (no sudo, persists on the local
+      # backend); we add that bin dir to PATH here for `make binaries`. `$$`
+      # escapes Woodpecker's var substitution so $HOME/$PATH reach the shell.
+      # Fallback escape hatch: `brew install cc65` on the agent.
+      - sh .woodpecker/install-macos-cc65.sh
+      - export PATH="$$HOME/.local/bin:$$PATH"
       - mkdir -p e6502.CLI/Resources e6502.FPGA/rom
       - make binaries
       - dotnet publish e6502.Avalonia -c Release -r osx-arm64 -p:SkipRomBuild=true -o publish/avalonia
