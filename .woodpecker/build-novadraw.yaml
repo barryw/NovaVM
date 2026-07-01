@@ -39,7 +39,7 @@ steps:
       # go plugin image can't. contents=read is enough for the SwiftPM fetch, and
       # the token is scoped to just the two repos SwiftPM touches. NOTE: the
       # private PixelCanvasKit repo MUST be added to the WHI GitHub App
-      # installation or the mint 422s (tracked as WAL-124 / blocks this leg).
+      # installation or the mint 422s (tracked as WAL-136; blocks this leg).
       GH_APP_ID:
         from_secret: gh_app_id
       GH_APP_INSTALLATION_ID:
