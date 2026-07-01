@@ -4,7 +4,9 @@ when:
 depends_on:
   - build-linux
   - build-macos
-  - build-windows
+  # build-windows retired (WAL-123): no windows/amd64 agent exists in the CI
+  # estate, so the leg could never be scheduled and its shared-PAT upload step
+  # could not be minted; dropped in line with the Novus windows-leg precedent.
 
 labels:
   platform: linux/amd64
