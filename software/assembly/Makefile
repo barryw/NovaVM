@@ -10,6 +10,8 @@ TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
 EDITBUF_TEST_DIR := apps/editbuf_test
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
+VGC_VSYNC_OBJ := $(KEYBOARD_DIR)/vgc_vsync.o
+VGC_KEYBOARD_OBJS := $(VGC_WAIT_OBJ) $(VGC_VSYNC_OBJ)
 # Runtime feature archive: ld65 pulls only the referenced members (resolving
 # transitive deps like blitter/vtext) instead of hand-listing individual .o files.
 NOVA_LIB := $(NOVA_ASM)/build/nova.lib
@@ -23,14 +25,14 @@ keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
 keyboard-harness: $(KEYBOARD_DIR)/test_loop.bin $(KEYBOARD_DIR)/test_music_status.bin
 
-$(KEYBOARD_DIR)/keyboard.bin: $(KEYBOARD_DIR)/keyboard.o $(VGC_WAIT_OBJ) $(KEYBOARD_DIR)/keyboard.cfg
-	ld65 -C $(KEYBOARD_DIR)/keyboard.cfg -o $@ $(KEYBOARD_DIR)/keyboard.o $(VGC_WAIT_OBJ)
+$(KEYBOARD_DIR)/keyboard.bin: $(KEYBOARD_DIR)/keyboard.o $(VGC_KEYBOARD_OBJS) $(KEYBOARD_DIR)/keyboard.cfg
+	ld65 -C $(KEYBOARD_DIR)/keyboard.cfg -o $@ $(KEYBOARD_DIR)/keyboard.o $(VGC_KEYBOARD_OBJS)
 
 $(KEYBOARD_DIR)/keyboard.o: $(KEYBOARD_DIR)/keyboard.s $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
-$(KEYBOARD_DIR)/kbdtest.bin: $(KEYBOARD_DIR)/kbdtest.o $(VGC_WAIT_OBJ) $(KEYBOARD_DIR)/keyboard.cfg
-	ld65 -C $(KEYBOARD_DIR)/keyboard.cfg -o $@ $(KEYBOARD_DIR)/kbdtest.o $(VGC_WAIT_OBJ)
+$(KEYBOARD_DIR)/kbdtest.bin: $(KEYBOARD_DIR)/kbdtest.o $(VGC_KEYBOARD_OBJS) $(KEYBOARD_DIR)/keyboard.cfg
+	ld65 -C $(KEYBOARD_DIR)/keyboard.cfg -o $@ $(KEYBOARD_DIR)/kbdtest.o $(VGC_KEYBOARD_OBJS)
 
 $(KEYBOARD_DIR)/kbdtest.o: $(KEYBOARD_DIR)/keyboard.s $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -D KEYBOARD_TEST=1 -I $(NOVA_ASM) $< -o $@
@@ -48,6 +50,9 @@ $(KEYBOARD_DIR)/test_music_status.o: $(KEYBOARD_DIR)/test_music_status.s $(NOVA_
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 $(VGC_WAIT_OBJ): $(NOVA_ASM)/vgc_wait.s $(NOVA_ASM)/vgc.inc $(NOVA_ASM)/nova.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
+
+$(VGC_VSYNC_OBJ): $(NOVA_ASM)/vgc_vsync.s $(NOVA_ASM)/vgc.inc $(NOVA_ASM)/nova.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-keyboard: keyboard
@@ -126,6 +131,7 @@ clean:
 	$(RM) $(KEYBOARD_DIR)/test_loop.o $(KEYBOARD_DIR)/test_loop.bin
 	$(RM) $(KEYBOARD_DIR)/test_music_status.o $(KEYBOARD_DIR)/test_music_status.bin
 	$(RM) $(VGC_WAIT_OBJ)
+	$(RM) $(VGC_VSYNC_OBJ)
 	$(RM) $(DEMO_DIR)/demo.o $(DEMO_DIR)/demo.bin $(DEMO_DIR)/demo.dbg
 	$(RM) $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite_rotate.bin
 	$(RM) $(ROTATE_DIR)/vsprite.o

@@ -10,6 +10,7 @@
 .include "audio.inc"
 
 .import vgc_wait_cmd
+.import vgc_vsync
 
 ; ---------------------------------------------------------------------------
 ; Layout constants
@@ -98,7 +99,6 @@ zp_is_black:    .res 1          ; 1=black key
 zp_paint_col:   .res 1          ; color for flood fill
 zp_str_ptr:     .res 2          ; string pointer
 zp_prev_bar:    .res 2          ; previous bar fill width
-zp_last_frame:  .res 1          ; last frame counter for vsync
 zp_was_playing: .res 1          ; nonzero once music has been detected
 zp_oct_in_row:  .res 1          ; octave within current row
 ; Division
@@ -234,13 +234,9 @@ main:
     jsr init_test_mode
 .endif
 
-    ; Snapshot frame counter
-    lda RegStatus
-    sta zp_last_frame
-
     ; ---- Main loop ----
 @main_loop:
-    jsr wait_vsync
+    jsr vgc_vsync
 .ifdef KEYBOARD_TEST
     jsr update_test_sweep
 .else
@@ -434,18 +430,6 @@ read_input:
     clc
     rts
 
-; =====================================================================
-; Wait for next frame
-; =====================================================================
-wait_vsync:
-@wv:
-    lda RegStatus
-    cmp zp_last_frame
-    beq @wv
-    sta zp_last_frame
-    rts
-
-; =====================================================================
 ; Clear text layer (spaces everywhere)
 ; =====================================================================
 clear_text:

@@ -412,13 +412,6 @@ vtext_gfx_pixels_up:
       JMP   vtext_gfx_fill
 
 vtext_gfx_fill:
-      STZ   BLT_SRCSPACE
-      STZ   BLT_SRCL
-      STZ   BLT_SRCM
-      STZ   BLT_SRCH
-      STZ   BLT_SRCSTRL
-      STZ   BLT_SRCSTRH
-      STZ   BLT_CKEY
       LDA   #BLT_SPACE_VGC_GFX
       STA   BLT_DSTSPACE
       LDA   VTEXT_GFX_DSTL
@@ -439,11 +432,7 @@ vtext_gfx_fill:
       STZ   BLT_HEIGHTH
       LDA   VTEXT_GFX_FILL
       STA   BLT_FILLVALUE
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      JSR   blitter_wait
+      JSR   blitter_fill
       CMP   #BLITTER_RESULT_OK
       BNE   @err
       JMP   vtext_mixed_ok
@@ -541,13 +530,6 @@ vtext_mixed_gfx_up:
       ASL
       ASL
       STA   VTEXT_MIXED_STRIPH
-      STZ   BLT_SRCSPACE
-      STZ   BLT_SRCL
-      STZ   BLT_SRCM
-      STZ   BLT_SRCH
-      STZ   BLT_SRCSTRL
-      STZ   BLT_SRCSTRH
-      STZ   BLT_CKEY
       LDA   #BLT_SPACE_VGC_GFX
       STA   BLT_DSTSPACE
       LDA   VTEXT_MIXED_DSTL
@@ -566,13 +548,9 @@ vtext_mixed_gfx_up:
       LDA   VTEXT_MIXED_STRIPH
       STA   BLT_HEIGHTL
       STZ   BLT_HEIGHTH
-      LDA   #BLT_MODE_FILL
-      STA   BLT_MODE_REG
       LDA   VTEXT_MIXED_FILL
       STA   BLT_FILLVALUE
-      LDA   #BLT_CMD_START
-      STA   BLT_CMD_REG
-      JSR   blitter_wait
+      JSR   blitter_fill
       CMP   #BLITTER_RESULT_OK
       BNE   @err
       JMP   vtext_mixed_ok

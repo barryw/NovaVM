@@ -69,13 +69,13 @@ module test_vgc_text;
         bus_write(REG_FGCOL_A, 8'd2);
         step(2);
         type_char(8'h41);
-        check_eq("normal color attr bg=4 fg=2", peek_color(0), 8'h42);
-        check_eq("normal text attr clear", peek_text_attr(0), 8'h00);
+        check_eq("normal transparent color attr fg=2", peek_color(0), 8'h02);
+        check_eq("normal text attr has transparent bg", peek_text_attr(0), 8'h08);
 
         bus_write(REG_TEXTFLAGS_A, 8'h01);
         step(2);
         type_char(8'h42);
-        check_eq("reverse default swaps bg/fg", peek_color(1), 8'h24);
+        check_eq("reverse default swaps transparent bg/fg", peek_color(1), 8'h20);
 
         bus_write(REG_TEXTREV_A, 8'hA3);
         bus_write(REG_TEXTFLAGS_A, 8'h03);
@@ -86,17 +86,17 @@ module test_vgc_text;
         bus_write(REG_TEXTFLAGS_A, 8'h04);
         step(2);
         type_char(8'h44);
-        check_eq("flash attr recorded", peek_text_attr(3), 8'h01);
+        check_eq("flash attr recorded with transparent bg", peek_text_attr(3), 8'h09);
 
         bus_write(REG_TEXTFLAGS_A, 8'h08);
         step(2);
         type_char(8'h45);
-        check_eq("bold attr recorded", peek_text_attr(4), 8'h04);
+        check_eq("bold attr recorded with transparent bg", peek_text_attr(4), 8'h0C);
 
         bus_write(REG_TEXTFLAGS_A, 8'h00);
         step(2);
         type_char(8'h46);
-        check_eq("style flags off clears future attrs", peek_text_attr(5), 8'h00);
+        check_eq("style flags off leaves only transparent bg", peek_text_attr(5), 8'h08);
     endtask
 
     task automatic test_scrollmixed_command_scrolls_all_planes();

@@ -215,7 +215,7 @@ def test_password_redaction() -> None:
 
 def test_host_status_led_contract() -> None:
     novahost = read("e6502.ESP32/novahost/novahost.ino")
-    fpga = read("e6502.FPGA/fpga/fpga_top.sv")
+    fpga = read("e6502.FPGA/boards/ulx3s/fpga_top.sv")
 
     connected = re.search(r"HOST_STATUS_WIFI_CONNECTED\s*=\s*0x01", novahost)
     configured = re.search(r"HOST_STATUS_WIFI_CONFIGURED\s*=\s*0x40", novahost)
@@ -275,9 +275,9 @@ def test_fpga_spi_bridge_contract() -> None:
     bridge = read("e6502.ESP32/novahost/fpga_bridge.cpp")
     event_reader_h = read("e6502.ESP32/novahost/fio_event_reader.h")
     event_reader = read("e6502.ESP32/novahost/fio_event_reader.cpp")
-    fpga_top = read("e6502.FPGA/fpga/fpga_top.sv")
-    fpga_make = read("e6502.FPGA/fpga/Makefile")
-    lpf = read("e6502.FPGA/fpga/ulx3s.lpf")
+    fpga_top = read("e6502.FPGA/boards/ulx3s/fpga_top.sv")
+    fpga_make = read("e6502.FPGA/boards/ulx3s/Makefile")
+    lpf = read("e6502.FPGA/boards/ulx3s/ulx3s.lpf")
     spi_slave = read("e6502.FPGA/rtl/debug_spi_slave.sv")
     spi_test = read("e6502.FPGA/test/test_debug_spi_slave.sv")
 
@@ -557,7 +557,7 @@ def test_fio_sd_dispatch_contract() -> None:
         and "FioDirTypeForth  = 0x06" in constants,
         "NDK exposes low-level FILE wrappers": "FILE_FOPEN     = $0F" in libfiles
         and "FILE_FRENAME   = $1B" in libfiles
-        and "FILE_FN_COUNT  = $1C" in libfiles
+        and "FILE_FN_COUNT  = $1D" in libfiles
         and "file_fopen" in files_module
         and "file_frename" in files_module
         and "fio_fopen:" in fio

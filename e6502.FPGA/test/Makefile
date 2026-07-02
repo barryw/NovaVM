@@ -10,13 +10,14 @@ TRACE_DEPTH ?= 5
 TRACE_MAX_ARRAY ?= 64
 TRACE_MAX_WIDTH ?= 4096
 CPU_DORMANN_ARGS ?=
-VJOBS ?= 0
+VJOBS ?= 1
 CLEAN_BUILD ?= 0
 TRACE_FILE ?=
 SID_MODE ?= 8580
 SID_FRAME_TICKS ?= 20000
 SID_METRICS ?=
 SID_HDMI_SAMPLE_DIV ?= 21
+TEST_ASM = ../../software/tests/asm
 
 ifeq ($(TRACE),1)
 TRACE_FLAGS = --prefix Vtrace_top --trace-fst --trace-structs --trace-params \
@@ -33,7 +34,7 @@ VFLAGS    = --cc --exe --build -j $(VJOBS) --timing $(TRACE_FLAGS) \
             -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND -Wno-UNUSEDSIGNAL -Wno-UNUSEDPARAM \
             -Wno-CASEINCOMPLETE -Wno-PROCASSWIRE -Wno-UNOPTFLAT -Wno-LATCH \
             -Wno-PINCONNECTEMPTY -Wno-SYNCASYNCNET -Wno-INITIALDLY -Wno-TIMESCALEMOD \
-            -Wno-CASEX -Wno-PINMISSING -Wno-UNSIGNED \
+            -Wno-CASEX -Wno-PINMISSING -Wno-UNSIGNED -Wno-CASEOVERLAP -Wno-BLKANDNBLK \
             -CFLAGS "-O2"
 
 RTL     = ../rtl
@@ -77,6 +78,10 @@ all: $(TESTS)
 # Run from parent dir so $readmemh("rom/cp437.hex") resolves correctly
 RUN = cd .. &&
 PREP_BUILD = @$(if $(filter 1,$(CLEAN_BUILD)),rm -rf $(BD)/$@ && )mkdir -p $(BD)/$@ &&
+
+.PHONY: test_asm_bins
+test_asm_bins:
+	$(MAKE) -C $(TEST_ASM) libcall.bin testmod.bin
 
 test_copper: test_copper.sv $(VGC)
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(VGC) $< && $(RUN) test/$(BD)/$@/$@
@@ -281,7 +286,7 @@ test_debug_bridge: test_debug_bridge.sv $(RTL)/debug_bridge.sv
 # Integrated slave + CDC FIFOs + bridge under a realistic ESP POKE_VGC_BLK
 # burst on an independent spi_sck. Reproduces the chess-splash status-drop bug.
 test_debug_bridge_spi_burst: test_debug_bridge_spi_burst.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_async_byte_fifo.sv $(RTL)/debug_bridge.sv
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-ZERODLY --no-sched-zero-delay --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_async_byte_fifo.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_bridge.sv $< && $(RUN) test/$(BD)/$@/$@
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -Wno-ZERODLY --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/debug_async_byte_fifo.sv $(RTL)/debug_spi_slave.sv $(RTL)/debug_bridge.sv $< && $(RUN) test/$(BD)/$@/$@
 
 # RX FIFO regression for host->bridge SDRAM writes. Proves a full 256-byte
 # debug packet survives while the SDRAM side is backpressured.
@@ -369,7 +374,7 @@ test_novalogo_draw_top: test_novalogo_draw_top.sv $(ROM_LOAD_RTL)
 # XRAM/SDRAM into bank-1 ext_rom. Wires the real top.sv (-DSYNTHESIS) to a real
 # sdram.v + sdram_model oracle, drives the CPU bus to trigger a page-in, and
 # verifies the 16 KB module is resident at $C000 byte-exact after the stall.
-test_page_in_top: test_page_in_top.sv sdram_model.svh $(ROM_LOAD_RTL)
+test_page_in_top: test_page_in_top.sv sdram_model.svh $(ROM_LOAD_RTL) test_asm_bins
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) -DSYNTHESIS -Wno-IMPLICITSTATIC -Wno-SELRANGE -Wno-MULTIDRIVEN -Wno-CMPCONST --top-module $@ --Mdir $(BD)/$@ -o $@ $(ROM_LOAD_RTL) $< && $(RUN) test/$(BD)/$@/$@
 
 # Regression for VGC $A008 frame counter. Before the fix $A008 was mapped

@@ -2924,12 +2924,6 @@ nz6_pic_erase_current_abs:
 @rts:
         RTS
 :
-        STZ BLT_SRCSPACE
-        STZ BLT_SRCL
-        STZ BLT_SRCM
-        STZ BLT_SRCH
-        STZ BLT_SRCSTRL
-        STZ BLT_SRCSTRH
         LDA #NZ6_SPACE_GFX
         STA BLT_DSTSPACE
         LDA nz6_blt_dst_lo
@@ -2948,9 +2942,6 @@ nz6_pic_erase_current_abs:
         LDA nz6_blt_hclip
         STA BLT_HEIGHTL
         STZ BLT_HEIGHTH
-        LDA #BLT_MODE_FILL
-        STA BLT_MODE_REG
-        STZ BLT_CKEY
         LDA nz6_gfx_replay_active
         BEQ @live_fill
         LDA nz6_gfx_replay_fill
@@ -2964,9 +2955,7 @@ nz6_pic_erase_current_abs:
         STA nz6_gfx_replay_fill
 @fill_ready:
         STA BLT_FILLVALUE
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JSR blitter_wait
+        JSR blitter_fill
         JMP nz6_gfx_record_erase_current
 
 ; Resolve the op's window-relative pixel coords + the found picture's dims
@@ -3440,12 +3429,6 @@ nz6_gfx_fill_bg:
 nz6_gfx_clear:
         STA nz6_clr_tmp
         JSR nz6_gfx_note_clear
-        STZ BLT_SRCSPACE
-        STZ BLT_SRCL
-        STZ BLT_SRCM
-        STZ BLT_SRCH
-        STZ BLT_SRCSTRL
-        STZ BLT_SRCSTRH
         LDA #NZ6_SPACE_GFX
         STA BLT_DSTSPACE
         STZ BLT_DSTL
@@ -3460,14 +3443,9 @@ nz6_gfx_clear:
         LDA #NZ6_GFX_ROWS
         STA BLT_HEIGHTL
         STZ BLT_HEIGHTH
-        LDA #BLT_MODE_FILL
-        STA BLT_MODE_REG
-        STZ BLT_CKEY
         LDA nz6_clr_tmp                 ; the fill colour passed in A
         STA BLT_FILLVALUE
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JMP blitter_wait
+        JMP blitter_fill
 
 ; Clear the border frame (header + left/right columns + bottom margin) around
 ; the text window (window 0), leaving the text area untouched. Used on a region
@@ -3604,12 +3582,6 @@ nz6_brd_fill_rect:
         LDA nz6_brd_w_lo
         ORA nz6_brd_w_hi
         BEQ @skip
-        STZ BLT_SRCSPACE
-        STZ BLT_SRCL
-        STZ BLT_SRCM
-        STZ BLT_SRCH
-        STZ BLT_SRCSTRL
-        STZ BLT_SRCSTRH
         LDA #NZ6_SPACE_GFX
         STA BLT_DSTSPACE
         LDA nz6_brd_dst_lo
@@ -3628,14 +3600,9 @@ nz6_brd_fill_rect:
         LDA nz6_brd_h
         STA BLT_HEIGHTL
         STZ BLT_HEIGHTH
-        LDA #BLT_MODE_FILL
-        STA BLT_MODE_REG
-        STZ BLT_CKEY
         LDA nz6_brd_fill
         STA BLT_FILLVALUE
-        LDA #BLT_CMD_START
-        STA BLT_CMD_REG
-        JMP blitter_wait
+        JMP blitter_fill
 @skip:
         RTS
 

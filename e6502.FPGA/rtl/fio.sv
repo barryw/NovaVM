@@ -78,7 +78,7 @@ module fio (
     always_ff @(posedge clk) begin
         if (rst) begin
             for (i = 0; i < SIZE; i = i + 1)
-                bank[i] <= 8'h00;
+                bank[i] = 8'h00;
         end else begin
             if (dbg_we)
                 bank[dbg_addr] <= dbg_wdata;

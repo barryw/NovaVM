@@ -29,6 +29,7 @@
 .forceimport vtext_set_scroll_hook
 .forceimport xram_read8
 .forceimport pager_load_file_page
+.forceimport blitter_fill
 .forceimport blitter_wait
 .forceimport blitter_start_copy
 .forceimport blitter_start_gfx4_unpack

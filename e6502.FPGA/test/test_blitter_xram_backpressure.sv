@@ -65,6 +65,8 @@ module test_blitter_xram_backpressure;
     logic [2:0] xram_read_cnt;
     logic [18:0] xram_read_addr_latch;
     logic xram_read_pending;
+    integer busy_count;
+    integer wait_count;
 
     always_ff @(posedge clk) begin
         if (blt_xram_we && !xram_busy_sim)
@@ -241,15 +243,21 @@ module test_blitter_xram_backpressure;
         fork
             begin
                 // Busy generator — toggles every ~3 cycles for the duration.
-                repeat(3000) begin
+                busy_count = 0;
+                while (busy_count < 3000) begin
                     @(posedge clk);
                     xram_busy_sim <= ($urandom_range(0, 2) == 0);
+                    busy_count = busy_count + 1;
                 end
                 xram_busy_sim <= 0;
             end
             begin
                 run_ram_to_xram_copy(16'h2000, 19'd0, 16'd256);
-                repeat(50) @(posedge clk);
+                wait_count = 0;
+                while (wait_count < 50) begin
+                    @(posedge clk);
+                    wait_count = wait_count + 1;
+                end
             end
         join_any
         disable fork;
@@ -288,15 +296,21 @@ module test_blitter_xram_backpressure;
 
         fork
             begin
-                repeat(3000) begin
+                busy_count = 0;
+                while (busy_count < 3000) begin
                     @(posedge clk);
                     xram_busy_sim <= ($urandom_range(0, 2) == 0);
+                    busy_count = busy_count + 1;
                 end
                 xram_busy_sim <= 0;
             end
             begin
                 run_xram_fill(19'd0, 16'd256, 8'hAA);
-                repeat(50) @(posedge clk);
+                wait_count = 0;
+                while (wait_count < 50) begin
+                    @(posedge clk);
+                    wait_count = wait_count + 1;
+                end
             end
         join_any
         disable fork;

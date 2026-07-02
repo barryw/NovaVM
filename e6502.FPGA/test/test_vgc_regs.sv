@@ -121,9 +121,9 @@ module test_vgc_regs;
         release dut.gfx_b_dout;
     endtask
 
-    task automatic test_mode2_text_background_key_compositor();
+    task automatic test_mode2_text_background_transparency_compositor();
         $display("");
-        $display("Test: mode 2 uses RegBgCol as the transparent text-background key");
+        $display("Test: mode 2 uses text attr bit 3 for transparent text background");
 
         force dut.visible_d2 = 1'b1;
         force dut.in_text_area_d2 = 1'b1;
@@ -135,16 +135,17 @@ module test_vgc_regs;
         force dut.font_pixel_d2 = 3'd0;
         force dut.spr_pixel_hit = 1'b0;
 
-        force dut.attr_b_dout = 8'h00;
-        force dut.color_b_dout = 8'h0F; // bg matches key 0, fg 15
+        force dut.attr_b_dout = 8'h08; // transparent text background
+        force dut.color_b_dout = 8'h0F; // stored bg is ignored when transparent
         force dut.font_b_dout = 8'h00;
         #1;
-        check_eq("matching blank text background falls through to gfx",
+        check_eq("transparent blank text background falls through to gfx",
                  int'(dut.pixel_color_idx), 5);
 
+        force dut.attr_b_dout = 8'h00;
         force dut.color_b_dout = 8'h2F; // bg 2 does not match key 0
         #1;
-        check_eq("non-matching blank text background is opaque",
+        check_eq("opaque blank text background uses stored bg",
                  int'(dut.pixel_color_idx), 2);
 
         force dut.font_b_dout = 8'h80;
@@ -152,11 +153,11 @@ module test_vgc_regs;
         check_eq("set glyph pixel stays on top of gfx",
                  int'(dut.pixel_color_idx), 15);
 
-        force dut.attr_b_dout = 8'h02; // reverse
+        force dut.attr_b_dout = 8'h0A; // reverse + transparent bg bit
         force dut.font_b_dout = 8'h00;
         #1;
-        check_eq("reverse background remains opaque in mode 2",
-                 int'(dut.pixel_color_idx), 15);
+        check_eq("reverse transparent background uses live bg",
+                 int'(dut.pixel_color_idx), 0);
 
         release dut.visible_d2;
         release dut.in_text_area_d2;
@@ -1111,7 +1112,7 @@ module test_vgc_regs;
         test_color_registers();
         test_border_masks_sprites();
         test_gfx_transparent_color_compositor();
-        test_mode2_text_background_key_compositor();
+        test_mode2_text_background_transparency_compositor();
         test_sprite_bg_collision_irq_gated_to_canvas();
         test_sprite_scanline_read_prefetch();
         test_cursor_xy();

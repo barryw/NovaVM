@@ -525,9 +525,8 @@ public class RuntimeLibraryAbiTests
         StringAssert.Contains(implementation, "LDA   #<VTEXT_GFX_ROW_PIXELS");
         StringAssert.Contains(implementation, "LDA   #>VTEXT_GFX_ROW_PIXELS");
         StringAssert.Contains(implementation, "JSR   blitter_start_copy");
-        StringAssert.Contains(implementation, "STA   BLT_MODE_REG");
-        StringAssert.Contains(implementation, "STA   BLT_CMD_REG");
-        StringAssert.Contains(implementation, "JSR   blitter_wait");
+        StringAssert.Contains(implementation, "JSR   blitter_fill");
+        StringAssert.Contains(implementation, "CMP   #BLITTER_RESULT_OK");
 
         static string Slice(string source, string startMarker, string endMarker)
         {

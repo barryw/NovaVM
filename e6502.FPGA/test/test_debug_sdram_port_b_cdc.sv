@@ -45,6 +45,7 @@ module test_debug_sdram_port_b_cdc;
     int pass_count = 0;
     int fail_count = 0;
     int test_num = 0;
+    int wait_count;
 
     task automatic check(input string name, input logic condition);
         test_num++;
@@ -120,7 +121,11 @@ module test_debug_sdram_port_b_cdc;
         fork
             begin
                 pulse_stale_done();
-                repeat (4) @(posedge clk);
+                wait_count = 0;
+                while (wait_count < 4) begin
+                    @(posedge clk);
+                    wait_count = wait_count + 1;
+                end
                 check("write ignored stale done", done_toggle == done_before);
                 complete_real_op(8'h00);
             end
@@ -140,7 +145,11 @@ module test_debug_sdram_port_b_cdc;
         fork
             begin
                 pulse_stale_done();
-                repeat (4) @(posedge clk);
+                wait_count = 0;
+                while (wait_count < 4) begin
+                    @(posedge clk);
+                    wait_count = wait_count + 1;
+                end
                 check("read ignored stale done", done_toggle == done_before);
                 complete_real_op(8'h5C);
             end

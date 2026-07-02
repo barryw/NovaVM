@@ -2973,6 +2973,22 @@ show_game_result:
         LDA #<msg_draw_repeat_auto
         LDY #>msg_draw_repeat_auto
         JMP print_status
+.else
+commit_current_move:
+        RTS
+
+prompt_human_move:
+        LDA #$01
+        RTS
+
+show_game_result:
+        LDA #<msg_game_over
+        LDY #>msg_game_over
+        JMP print_status
+
+input_set_idle_hook:
+input_clear_idle_hook:
+        RTS
 .endif
 
 .if CHESS_CASTLE_TEST || CHESS_SELFPLAY_DEMO

@@ -7369,7 +7369,7 @@
     {
       "label": "VTEXT.WAIT_BLITTER",
       "source": "../../runtime/asm/vtext.s",
-      "line": 1054,
+      "line": 1047,
       "inputs": [],
       "outputs": [
         {

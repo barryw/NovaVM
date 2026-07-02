@@ -351,12 +351,6 @@ nvg_maybe_clear_gfx:
       LDA   #FIO_RESULT_OK
       RTS
 @clear:
-      STZ   BLT_SRCSPACE
-      STZ   BLT_SRCL
-      STZ   BLT_SRCM
-      STZ   BLT_SRCH
-      STZ   BLT_SRCSTRL
-      STZ   BLT_SRCSTRH
       LDA   #BLT_SPACE_VGC_GFX
       STA   BLT_DSTSPACE
       STZ   BLT_DSTL
@@ -375,8 +369,7 @@ nvg_maybe_clear_gfx:
       LDA   #>NVG_GFX_STRIDE
       STA   BLT_DSTSTRH
       STZ   BLT_FILLVALUE
-      STZ   BLT_CKEY
-      JMP   blitter_start_fill
+      JMP   blitter_fill
 
 nvg_load_native_payload:
       CLC

@@ -994,13 +994,6 @@ vtext_scroll_up:
 
 vtext_blt_fill_plane:
       STA   BLT_DSTSPACE
-      STZ   BLT_SRCSPACE
-      STZ   BLT_SRCL
-      STZ   BLT_SRCM
-      STZ   BLT_SRCH
-      STZ   BLT_SRCSTRL
-      STZ   BLT_SRCSTRH
-      STZ   BLT_CKEY
       LDA   VTEXT_ADDRL
       STA   BLT_DSTL
       LDA   VTEXT_ADDRH
@@ -1017,7 +1010,7 @@ vtext_blt_fill_plane:
       STA   BLT_DSTSTRH
       LDA   VTEXT_TMP
       STA   BLT_FILLVALUE
-      JSR   blitter_start_fill
+      JSR   blitter_fill
       JMP   vtext_blitter_result
 
 vtext_blt_copy_up_plane:

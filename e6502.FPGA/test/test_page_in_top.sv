@@ -6,9 +6,10 @@
 //
 //   The CPU resets into a tiny basic_rom trampoline at $C000 that JSRs the real
 //   resident loader `lib_call` (tests/asm/libcall.bin, ORG $9C00, loaded into
-//   main RAM). lib_call reads the mailbox ($0300..), does modtab_lookup
-//   (MODULE_ID_TEST $7F -> SHELF_BASE $060000 + 8192 words), fires the page-in
-//   MMIO ($BA76), and STALLS (pgd_rdy low) while the sdram_clk-domain page_dma
+//   main RAM). The harness mirrors the host boot path by seeding shelf_tag[0]
+//   with MODULE_ID_TEST, so lib_call's modtab_lookup maps $7F to
+//   SHELF_BASE+$0000 and 8192 words, fires the page-in MMIO ($BA76), and STALLS
+//   (pgd_rdy low) while the sdram_clk-domain page_dma
 //   page-mode-streams the 16 KB module image from SDRAM into bank-1 ext_rom.
 //   It then SEI-swaps ROMSWAP_EXTENSION ($04) to validate the "NL" header,
 //   caches LIB_RESIDENT, JSRs the module at $C000 (which dispatches FN 0 ECHO:
@@ -312,7 +313,7 @@ module test_page_in_top;
 
     // The real resident loader, loaded into main RAM at its ORG.
     localparam logic [15:0] LIBCALL_BASE = 16'h9C00;   // libcall.bin ORG
-    localparam int          LIBCALL_MAX  = 512;        // bin is 151 bytes
+    localparam int          LIBCALL_MAX  = 512;
     byte unsigned libcall_img [LIBCALL_MAX];
     int           libcall_len;
 
@@ -324,6 +325,9 @@ module test_page_in_top;
     // Loader's shelf base (libabi.inc SHELF_BASE = $060000). modtab_lookup in
     // libcall.bin programs PGD_SRC* to exactly this byte base for MODULE_ID_TEST.
     localparam logic [24:0] SHELF_BASE   = 25'h060000;
+    localparam logic [15:0] SHELF_TAG    = 16'h0418;
+    localparam logic [15:0] SHELF_LRU    = 16'h041C;
+    localparam logic [7:0]  MODULE_ID_TEST = 8'h7F;
 
     // Distinctive 32-bit ECHO argument. ECHO copies ARG0 -> RESULT, so the
     // stashed RESULT at $0400 must equal this after the whole flow.
@@ -429,12 +433,12 @@ module test_page_in_top;
         repeat (2000) @(posedge sdram_clk);
         check("sdram controller exited reset", sdram_ctrl.reset == 0);
 
-        check("libcall.bin loaded (151 bytes)", libcall_len == 151);
+        check("libcall.bin loaded", (libcall_len > 0) && (libcall_len < LIBCALL_MAX));
         check("testmod.bin loaded (16384 bytes)", testmod_read == TESTMOD_LEN);
         check_eq8("testmod header = JMP ($4C)", testmod_img[0], 8'h4C);
         check_eq8("testmod magic 'N' @ +3",     testmod_img[3], 8'h4E);
         check_eq8("testmod magic 'L' @ +4",     testmod_img[4], 8'h4C);
-        check_eq8("testmod id = $7F @ +5",       testmod_img[5], 8'h7F);
+        check_eq8("testmod id = $7F @ +5",       testmod_img[5], MODULE_ID_TEST);
 
         // Stage the real module image into SDRAM at the loader's shelf base.
         $display("Staging %0d-byte testmod.bin into SDRAM at shelf $%06X...",
@@ -463,6 +467,8 @@ module test_page_in_top;
         //   $0313 LIB_RESULT    = $00000000 (cleared; ECHO must fill it)
         //   $0317 LIB_HOME_BANK = $02  (ROMSWAP_BASIC — caller's home bank)
         //   $0318 LIB_RESIDENT  = $00  (none resident yet)
+        //   $0418 SHELF_TAG[0]  = $7F  (TEST module pre-staged in shelf slot 0)
+        //   $041C SHELF_LRU[]   = 0,1,2,3
         ram_poke(16'h0300, 8'h7F);
         ram_poke(16'h0301, 8'h00);
         ram_poke(16'h0302, 8'hFF);
@@ -476,6 +482,14 @@ module test_page_in_top;
         ram_poke(16'h0316, 8'h00);
         ram_poke(16'h0317, 8'h02);
         ram_poke(16'h0318, 8'h00);
+        ram_poke(SHELF_TAG + 16'd0, MODULE_ID_TEST);
+        ram_poke(SHELF_TAG + 16'd1, 8'h00);
+        ram_poke(SHELF_TAG + 16'd2, 8'h00);
+        ram_poke(SHELF_TAG + 16'd3, 8'h00);
+        ram_poke(SHELF_LRU + 16'd0, 8'h00);
+        ram_poke(SHELF_LRU + 16'd1, 8'h01);
+        ram_poke(SHELF_LRU + 16'd2, 8'h02);
+        ram_poke(SHELF_LRU + 16'd3, 8'h03);
         repeat (4) @(posedge clk);
 
         check_eq8("basic_rom[0] = JSR ($20)", dut.basic_rom_inst.mem[14'h0000], 8'h20);
@@ -484,6 +498,7 @@ module test_page_in_top;
                   dut.main_ram.mem[LIBCALL_BASE], 8'hAD);
         check_eq8("mailbox MOD_ID = $7F", dut.main_ram.mem[16'h0300], 8'h7F);
         check_eq8("mailbox ARG0 lo = $EF", dut.main_ram.mem[16'h0303], 8'hEF);
+        check_eq8("shelf_tag[0] = $7F", dut.main_ram.mem[SHELF_TAG], MODULE_ID_TEST);
 
         // Release the CPU. It resets to $C000, JSRs lib_call, which triggers the
         // page-in, validates, dispatches ECHO, restores the bank, and returns.
@@ -542,7 +557,7 @@ module test_page_in_top;
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
         if (fail_count == 0) $display("ALL TESTS PASSED");
         else                 $display("SOME TESTS FAILED");
-        $finish;
+        $finish(fail_count);
     end
 
     // Global watchdog.
@@ -551,7 +566,7 @@ module test_page_in_top;
         $display("WATCHDOG TIMEOUT");
         $display("=== Results: %0d passed, %0d failed (TIMEOUT) ===", pass_count, fail_count + 1);
         $display("SOME TESTS FAILED");
-        $finish;
+        $finish(1);
     end
 
 endmodule
