@@ -39,11 +39,10 @@ public class EditbufAssemblyRuntimeTests
         int clip = bus.Read(CutResult + 2) | (bus.Read(CutResult + 3) << 8);
         int len = bus.Read(CutResult) | (bus.Read(CutResult + 1) << 8);
 
-        // 300-byte selection, 256-byte clipboard cap -> copy clamps to 255.
-        Assert.AreEqual(255, clip, "clipboard holds the clamped copy length");
-        // Cut must delete exactly what it copied. The bug deletes the whole
-        // selection (len -> 0) while only 255 bytes reach the clipboard: data loss.
-        Assert.AreEqual(300 - 255, len, "buffer keeps bytes that could not be clipped");
+        // XRAM-backed clipboard should hold the full 300-byte selection.
+        Assert.AreEqual(300, clip, "clipboard holds the selected text");
+        // Cut must delete exactly what it copied.
+        Assert.AreEqual(300 - clip, len, "buffer keeps only bytes that could not be clipped");
     }
 
     private static void AssertGoto(BusDevice bus, int slot, int line, string label)

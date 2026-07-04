@@ -253,3 +253,5 @@ xram_file_name:
 xram_file_name_end:
 
 .include "xram.s"
+.include "dma.s"
+.include "fio.s"

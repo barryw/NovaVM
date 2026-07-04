@@ -253,3 +253,4 @@ error_text:
 error_text_end:
 
 .include "gameserver.s"
+.include "nic.s"

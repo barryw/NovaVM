@@ -1,6 +1,8 @@
 # Trinity V4 longplay: V4 save/restore, style-heavy text, object state, events.
 look=>Palace Gate&&Flower Walk
-save
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter
 n=>Broad Walk&&Queen Victoria
 buy crumbs=>seven-sided coin&&score just went up
 take crumbs=>bag of crumbs
@@ -8,5 +10,6 @@ feed birds=>ruby at your feet
 ne=>Inverness Terrace&&soap bubbles
 look=>Inverness Terrace&&young boy
 .reboot
-restore=>Palace Gate
+!restore=>RESTORE GAME
+.key enter=>Palace Gate
 look=>Palace Gate&&Flower Walk

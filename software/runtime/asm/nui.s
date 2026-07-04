@@ -71,6 +71,7 @@ NUI_PRINTH:         .res 1
       .export nui_show_dialog_wait
       .export nui_show_error
       .export nui_read_key
+      .export nui_drain_keys
       .export nui_wait_key
       .export nui_save_under
       .export nui_restore_under
@@ -539,8 +540,9 @@ nui_list_render_buttons:
       LDY   #>nui_list_ok_shadow
       LDX   #6
       JSR   vtext_put_run
-      BNE   @done
-      LDA   NUI_DIALOG_LEFT
+      BEQ   :+
+      JMP   @done
+:     LDA   NUI_DIALOG_LEFT
       CLC
       ADC   NUI_DIALOG_WIDTH
       SEC
@@ -675,6 +677,17 @@ nui_read_key:
       LDA   #NUI_KEY_BACKTAB
       RTS
 
+; @label NUI.DRAIN_KEYS
+; @kind routine
+; @symbol nui_drain_keys
+; @summary Drain pending keyboard bytes before handing focus to a new modal control.
+nui_drain_keys:
+@loop:
+      LDA   VGC_CHARIN
+      BNE   @loop
+      LDA   #NUI_OK
+      RTS
+
 ; @label NUI.PICK_LIST
 ; @kind routine
 ; @symbol nui_pick_list
@@ -684,22 +697,27 @@ nui_read_key:
 nui_pick_list:
       STZ   VGC_CURSEN
       JSR   nui_validate_list
-      BNE   @error
-      STZ   NUI_LIST_FOCUS
+      BEQ   :+
+      JMP   @error
+:     STZ   NUI_LIST_FOCUS
       JSR   nui_show_dialog
-      BNE   @error
-      JSR   nui_list_ensure_visible
-      BNE   @error
-      JSR   nui_list_render
-      BNE   @error
+      BEQ   :+
+      JMP   @error
+:     JSR   nui_list_ensure_visible
+      BEQ   :+
+      JMP   @error
+:     JSR   nui_list_render
+      BEQ   :+
+      JMP   @error
 @key:
       JSR   nui_read_key
       STA   NUI_LIST_TMP
       CMP   #NUI_KEY_ENTER
       BEQ   @enter
       CMP   #NUI_KEY_ESCAPE
-      BEQ   @cancel
-      CMP   #NUI_KEY_TAB
+      BNE   :+
+      JMP   @cancel
+:     CMP   #NUI_KEY_TAB
       BEQ   @focus_next
       CMP   #NUI_KEY_RIGHT
       BEQ   @focus_next
@@ -721,7 +739,7 @@ nui_pick_list:
       BNE   @error
       JSR   nui_list_render
       BNE   @error
-      BRA   @key
+      JMP   @key
 @down:
       LDA   NUI_LIST_SELECTED
       CLC
@@ -751,7 +769,7 @@ nui_pick_list:
       STA   NUI_LIST_FOCUS
       JSR   nui_list_render
       BNE   @error
-      BRA   @key
+      JMP   @key
 @enter:
       LDA   NUI_LIST_FOCUS
       CMP   #NUI_LIST_FOCUS_CANCEL

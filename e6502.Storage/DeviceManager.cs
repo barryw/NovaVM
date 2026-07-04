@@ -1,10 +1,10 @@
 namespace e6502.Storage;
 
 /// <summary>
-/// Manages the 6 named device slots (HD0, HD1, FD0-FD3) and provides
+/// Manages the 6 named NDI-backed device slots (HD0, HD1, FD0-FD3) and provides
 /// filename prefix resolution and autoboot detection.
 /// </summary>
-public sealed class DeviceManager
+public sealed class DeviceManager : IDisposable
 {
     // Ordered slot names used for autoboot scan.
     private static readonly string[] SlotOrder = ["FD0", "FD1", "FD2", "FD3", "HD0", "HD1"];
@@ -18,17 +18,17 @@ public sealed class DeviceManager
     public string DefaultDevice { get; set; } = "HD0";
 
     /// <summary>
-    /// Creates all 6 device slots.
-    ///   HD0 = HostDirectoryDevice(hd0Path)
-    ///   HD1 = HostDirectoryDevice(hd1Path)
-    ///   FD0-FD3 = NdiFloppyDevice (unmounted)
+    /// Creates all 6 device slots. User-visible storage is mounted NDI images;
+    /// the legacy host-directory paths are accepted only to preserve the caller ABI.
     /// </summary>
     public DeviceManager(string hd0Path, string hd1Path, string disksDir)
     {
+        _ = hd0Path;
+        _ = hd1Path;
         _disksDir = disksDir;
 
-        _devices["HD0"] = new HostDirectoryDevice(hd0Path, "HD0");
-        _devices["HD1"] = new HostDirectoryDevice(hd1Path, "HD1");
+        _devices["HD0"] = new NdiFloppyDevice("HD0");
+        _devices["HD1"] = new NdiFloppyDevice("HD1");
         _devices["FD0"] = new NdiFloppyDevice("FD0");
         _devices["FD1"] = new NdiFloppyDevice("FD1");
         _devices["FD2"] = new NdiFloppyDevice("FD2");
@@ -63,21 +63,21 @@ public sealed class DeviceManager
     }
 
     /// <summary>
-    /// Scans disksDir for fd0.ndi through fd3.ndi and mounts any found.
+    /// Scans disksDir for fd0.ndi through fd3.ndi and hd0.ndi through hd1.ndi and mounts any found.
     /// Silently skips failures.
     /// </summary>
     public void AutoMount()
     {
-        for (int i = 0; i <= 3; i++)
+        foreach (string slot in SlotOrder)
         {
-            string imageName = $"fd{i}.ndi";
+            string imageName = $"{slot.ToLowerInvariant()}.ndi";
             string imagePath = Path.Combine(_disksDir, imageName);
             if (!File.Exists(imagePath))
                 continue;
 
             try
             {
-                _devices[$"FD{i}"].Mount(imagePath);
+                _devices[slot].Mount(imagePath);
             }
             catch (Exception)
             {
@@ -153,6 +153,14 @@ public sealed class DeviceManager
     {
         GetDevice(prefix).Unmount();
     }
+
+    public void UnmountAll()
+    {
+        foreach (var device in _devices.Values)
+            device.Unmount();
+    }
+
+    public void Dispose() => UnmountAll();
 
     /// <summary>
     /// Creates a new image in disksDir named prefix.ndi (lowercase), then mounts it.

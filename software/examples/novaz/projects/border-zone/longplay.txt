@@ -1,5 +1,7 @@
 # Border Zone V5 longplay: non-traditional chapter boot, inventory, movement, save/restore.
-save
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter
 look=>Your Compartment&&camera bag&&briefcase
 inventory=>document&&wristwatch&&white carnation
 take briefcase=>Taken.
@@ -8,5 +10,6 @@ open door=>swings open
 e=>passageway&&guards
 look=>Outside Your Compartment&&machine gun
 .reboot
-restore
+!restore=>RESTORE GAME
+.key enter
 look=>Your Compartment&&camera bag&&briefcase

@@ -286,3 +286,4 @@ story_text:
         .byte "LINE100",0
 
 .include "vtext.s"
+.include "blitter.s"

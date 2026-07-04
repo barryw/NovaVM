@@ -614,11 +614,11 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_ForthSourceReportsForthTypeAndFullTextSize()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             byte[] source = Encoding.ASCII.GetBytes(": TEST 123 ;\n");
-            File.WriteAllBytes(Path.Combine(tempDir, "core.4th"), source);
+            WriteMountedFile(dm, "core.4th", source);
 
             SetFilename(fio, "*.4th");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -1757,25 +1757,126 @@ public class FileIoControllerTests
         Assert.AreEqual(".mid", result.ExtFilter);
     }
 
-    private static (FileIoController Fio, byte[] Memory, string TempDir) MakeControllerWithDevice()
+    private static (FileIoController Fio, byte[] Memory, string TempDir, DeviceManager DeviceManager) MakeControllerWithDevice()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "fio_test_" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(tempDir);
+        string hd0 = Path.Combine(tempDir, "hd0");
+        string hd1 = Path.Combine(tempDir, "hd1");
+        string disks = Path.Combine(tempDir, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        NdiImage.CreateFormatted(Path.Combine(disks, "fd0.ndi"), "FD0", 800);
+
         var memory = new byte[65536];
-        var dm = new e6502.Storage.DeviceManager(tempDir, tempDir, tempDir);
-        dm.DefaultDevice = "HD0";
+        var dm = new DeviceManager(hd0, hd1, disks);
+        dm.AutoMount();
+        dm.DefaultDevice = dm.SelectBootDevice();
         var fio = new FileIoController(
             address => memory[address],
             (address, data) => memory[address] = data,
-            tempDir,
+            hd0,
             deviceManager: dm);
-        return (fio, memory, tempDir);
+        return (fio, memory, tempDir, dm);
+    }
+
+    private static void WriteMountedFile(DeviceManager dm, string filename, byte[] data)
+    {
+        string ext = Path.GetExtension(filename);
+        string name = string.IsNullOrEmpty(ext) ? filename : filename[..^ext.Length];
+        dm.GetDevice(dm.DefaultDevice).Save(name, data, ext);
+    }
+
+    private static (FileIoController Fio, byte[] Memory, string RootDir, DeviceManager DeviceManager, string DiskPath) MakeControllerWithMountedFd0()
+    {
+        var rootDir = Path.Combine(Path.GetTempPath(), "fio_test_" + Guid.NewGuid().ToString("N")[..8]);
+        string hd0 = Path.Combine(rootDir, "hd0");
+        string hd1 = Path.Combine(rootDir, "hd1");
+        string disks = Path.Combine(rootDir, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        string diskPath = Path.Combine(disks, "fd0.ndi");
+        NdiImage.CreateFormatted(diskPath, "FD0", 800);
+
+        var memory = new byte[65536];
+        var dm = new DeviceManager(hd0, hd1, disks);
+        dm.AutoMount();
+        dm.DefaultDevice = dm.SelectBootDevice();
+        var fio = new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            hd0,
+            deviceManager: dm);
+        return (fio, memory, rootDir, dm, diskPath);
+    }
+
+    [TestMethod]
+    public void Save_WithoutMountedDisk_ReturnsNotMounted()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "fio_test_" + Guid.NewGuid().ToString("N")[..8]);
+        string hd0 = Path.Combine(tempDir, "hd0");
+        string hd1 = Path.Combine(tempDir, "hd1");
+        string disks = Path.Combine(tempDir, "disks");
+        Directory.CreateDirectory(hd0);
+        Directory.CreateDirectory(hd1);
+        Directory.CreateDirectory(disks);
+        var memory = new byte[65536];
+        var dm = new DeviceManager(hd0, hd1, disks);
+        var fio = new FileIoController(
+            address => memory[address],
+            (address, data) => memory[address] = data,
+            hd0,
+            deviceManager: dm);
+        try
+        {
+            memory[0x2000] = 0x42;
+            SetFilename(fio, "NOPE");
+            WriteWord(fio, VgcConstants.FioSrcL, 0x2000);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2001);
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrNotMounted, fio.Read((ushort)VgcConstants.FioErrCode),
+                "A bare SAVE with no mounted current disk must fail instead of writing to a host fallback path.");
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void Save_ToMissingDirectory_ReturnsNotFoundAndDoesNotCreateIt()
+    {
+        var (fio, memory, rootDir, dm, diskPath) = MakeControllerWithMountedFd0();
+        try
+        {
+            memory[0x2000] = 0x99;
+            SetFilename(fio, "fd0:/missing/TEST");
+            WriteWord(fio, VgcConstants.FioSrcL, 0x2000);
+            WriteWord(fio, VgcConstants.FioEndL, 0x2001);
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdSave);
+
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(VgcConstants.FioErrNotFound, fio.Read((ushort)VgcConstants.FioErrCode),
+                "SAVE should require explicit MKDIR; typos must not create directory trees.");
+
+            dm.GetDevice("FD0").Unmount();
+            using var image = NdiImage.Open(diskPath);
+            Assert.IsFalse(image.ListDirectory(0xFFFF).Any(e => e.IsDirectory && e.Filename == "missing"),
+                "SAVE must not auto-create missing parent directories.");
+        }
+        finally
+        {
+            try { dm.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(rootDir, true);
+        }
     }
 
     [TestMethod]
     public void DirOpen_SourceFilesReportLanguageTypesAndRawSizes()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             (string DiskName, string Filter, byte Type, byte[] Bytes)[] cases =
@@ -1787,7 +1888,7 @@ public class FileIoControllerTests
             ];
 
             foreach (var source in cases)
-                File.WriteAllBytes(Path.Combine(tempDir, source.DiskName), source.Bytes);
+                WriteMountedFile(dm, source.DiskName, source.Bytes);
 
             foreach (var source in cases)
             {
@@ -1812,13 +1913,13 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_FilteredByExtension_OnlyReturnsMid()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
-            File.WriteAllBytes(Path.Combine(tempDir, "song1.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
-            File.WriteAllBytes(Path.Combine(tempDir, "song2.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
-            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
-            File.WriteAllBytes(Path.Combine(tempDir, "tune.sid"), new byte[124]);
+            WriteMountedFile(dm, "song1.mid", new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            WriteMountedFile(dm, "song2.mid", new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            WriteMountedFile(dm, "prog.bas", new byte[] { 0x00, 0x00 });
+            WriteMountedFile(dm, "tune.sid", new byte[124]);
 
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -1841,12 +1942,12 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_FilteredByNameGlob()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
-            File.WriteAllBytes(Path.Combine(tempDir, "bach-fugue.mid"), new byte[4]);
-            File.WriteAllBytes(Path.Combine(tempDir, "bach-sonata.mid"), new byte[4]);
-            File.WriteAllBytes(Path.Combine(tempDir, "mozart-sonata.mid"), new byte[4]);
+            WriteMountedFile(dm, "bach-fugue.mid", new byte[4]);
+            WriteMountedFile(dm, "bach-sonata.mid", new byte[4]);
+            WriteMountedFile(dm, "mozart-sonata.mid", new byte[4]);
 
             SetFilename(fio, "bach*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -1868,11 +1969,11 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_UnfilteredBackwardCompatible()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
-            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
-            File.WriteAllBytes(Path.Combine(tempDir, "tune.sid"), new byte[124]);
+            WriteMountedFile(dm, "prog.bas", new byte[] { 0x00, 0x00 });
+            WriteMountedFile(dm, "tune.sid", new byte[124]);
 
             fio.Write((ushort)VgcConstants.FioNameLen, 0);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -1888,10 +1989,10 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_NoMatches_ReturnsEndOfDir()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
-            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
+            WriteMountedFile(dm, "prog.bas", new byte[] { 0x00, 0x00 });
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
@@ -1905,7 +2006,7 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_SidMetadata_PopulatesBuffer()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             var sid = new byte[124];
@@ -1923,7 +2024,7 @@ public class FileIoControllerTests
             Array.Copy(title, 0, sid, 22, title.Length);
             var author = Encoding.ASCII.GetBytes("Test Author");
             Array.Copy(author, 0, sid, 54, author.Length);
-            File.WriteAllBytes(Path.Combine(tempDir, "mysong.sid"), sid);
+            WriteMountedFile(dm, "mysong.sid", sid);
 
             SetFilename(fio, "*.sid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -1949,10 +2050,10 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_BinMetadata_PopulatesLoadAddress()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
-            File.WriteAllBytes(Path.Combine(tempDir, "prog.bin"), new byte[] { 0x00, 0x90, 0xEA, 0xEA });
+            WriteMountedFile(dm, "prog.bin", new byte[] { 0x00, 0x90, 0xEA, 0xEA });
             SetFilename(fio, "*.bin");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
@@ -1968,7 +2069,7 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirRead_Filtered_PopulatesMetadataEachEntry()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             var sid1 = new byte[124];
@@ -1981,8 +2082,8 @@ public class FileIoControllerTests
             Array.Clear(sid2, 22, 32);
             var t2 = Encoding.ASCII.GetBytes("Second Song");
             Array.Copy(t2, 0, sid2, 22, t2.Length);
-            File.WriteAllBytes(Path.Combine(tempDir, "aaa.sid"), sid1);
-            File.WriteAllBytes(Path.Combine(tempDir, "bbb.sid"), sid2);
+            WriteMountedFile(dm, "aaa.sid", sid1);
+            WriteMountedFile(dm, "bbb.sid", sid2);
 
             SetFilename(fio, "*.sid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -2001,7 +2102,7 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirRead_Unfiltered_DoesNotPopulateMetadata()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             var sid = new byte[124];
@@ -2009,7 +2110,7 @@ public class FileIoControllerTests
             sid[4] = 0x00; sid[5] = 0x02; sid[6] = 0x00; sid[7] = 0x7C;
             var t = Encoding.ASCII.GetBytes("Should Not Appear");
             Array.Copy(t, 0, sid, 22, t.Length);
-            File.WriteAllBytes(Path.Combine(tempDir, "test.sid"), sid);
+            WriteMountedFile(dm, "test.sid", sid);
 
             fio.Write((ushort)VgcConstants.FioNameLen, 0);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
@@ -2025,7 +2126,7 @@ public class FileIoControllerTests
     [TestMethod]
     public void FilteredEnumeration_EndToEnd_MixedFileTypes()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             // Create a mix of files
@@ -2035,9 +2136,9 @@ public class FileIoControllerTests
             sid[6] = 0x00; sid[7] = 0x7C;
             var title = Encoding.ASCII.GetBytes("Cool SID Tune");
             Array.Copy(title, 0, sid, 22, title.Length);
-            File.WriteAllBytes(Path.Combine(tempDir, "cool.sid"), sid);
-            File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
-            File.WriteAllBytes(Path.Combine(tempDir, "app.bin"), new byte[] { 0x00, 0x80, 0xEA });
+            WriteMountedFile(dm, "cool.sid", sid);
+            WriteMountedFile(dm, "prog.bas", new byte[] { 0x00, 0x00 });
+            WriteMountedFile(dm, "app.bin", new byte[] { 0x00, 0x80, 0xEA });
 
             // Filter *.sid — should only get the SID file
             SetFilename(fio, "*.sid");
@@ -2083,7 +2184,7 @@ public class FileIoControllerTests
     [TestMethod]
     public void DirOpen_MidiMetadata_PopulatesBuffer()
     {
-        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
         try
         {
             var trackChunk = new TrackChunk(
@@ -2097,7 +2198,9 @@ public class FileIoControllerTests
                     (SevenBitNumber)0) { DeltaTime = 480 }
             );
             var midi = new MidiFile(trackChunk);
-            midi.Write(Path.Combine(tempDir, "test.mid"));
+            string midiPath = Path.Combine(tempDir, "test.mid");
+            midi.Write(midiPath);
+            WriteMountedFile(dm, "test.mid", File.ReadAllBytes(midiPath));
 
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);

@@ -111,7 +111,7 @@ Message-oriented TCP networking at $A100-$A13F. 4 connection slots, each support
 
 ### FileIoController (`Hardware/FileIoController.cs`)
 
-6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, MidPlay/MidStop (MIDI file playback), and music/sound forwarding to MusicEngine. Save directory: `~/e6502-programs`.
+6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, MidPlay/MidStop (MIDI file playback), and music/sound forwarding to MusicEngine. User-visible files live on mounted NDI devices; no mounted disk means file commands return a not-mounted error.
 
 ### TCP Server & MCP
 

@@ -22,7 +22,7 @@ $(FIXTURE_DIR)/vtextprint_runtime.bin: vtextprint_runtime.s vtextprint_runtime.c
 	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/vtextprint_runtime.o vtextprint_runtime.s
 	$(LD65) -C vtextprint_runtime.cfg -m $(BUILD_DIR)/vtextprint_runtime.map -Ln $(BUILD_DIR)/vtextprint_runtime.sym -o $@ $(BUILD_DIR)/vtextprint_runtime.o
 
-$(FIXTURE_DIR)/editbuf_runtime.bin: editbuf_runtime.s editbuf_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/editbuf.inc $(NOVA_LIB)/editbuf.s $(NOVA_LIB)/editui.inc $(NOVA_LIB)/editui.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s | $(BUILD_DIR) $(FIXTURE_DIR)
+$(FIXTURE_DIR)/editbuf_runtime.bin: editbuf_runtime.s editbuf_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/editbuf.inc $(NOVA_LIB)/editbuf.s $(NOVA_LIB)/editui.inc $(NOVA_LIB)/editui.s $(NOVA_LIB)/nui.inc $(NOVA_LIB)/nui_state.s $(NOVA_LIB)/nui_dialog.s $(NOVA_LIB)/nui_input.s $(NOVA_LIB)/nui_text.s $(NOVA_LIB)/textsvc.inc $(NOVA_LIB)/textsvc.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s $(NOVA_LIB)/xram.inc $(NOVA_LIB)/xram.s $(NOVA_LIB)/dma.inc $(NOVA_LIB)/dma.s $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s | $(BUILD_DIR) $(FIXTURE_DIR)
 	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/editbuf_runtime.o editbuf_runtime.s
 	$(LD65) -C editbuf_runtime.cfg -m $(BUILD_DIR)/editbuf_runtime.map -Ln $(BUILD_DIR)/editbuf_runtime.sym -o $@ $(BUILD_DIR)/editbuf_runtime.o
 

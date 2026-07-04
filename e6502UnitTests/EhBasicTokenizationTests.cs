@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
+using e6502.Storage;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -144,16 +145,16 @@ public class EhBasicTokenizationTests
 
         try
         {
-            string hd0 = Path.Combine(root, "hd0");
-            Directory.CreateDirectory(hd0);
-            Directory.CreateDirectory(Path.Combine(root, "hd1"));
-            Directory.CreateDirectory(Path.Combine(root, "disks"));
-
-            File.WriteAllBytes(Path.Combine(hd0, "AUTOBOOT.bin"),
-                [0x00, 0x40, 0x4C, 0x00, 0x40]); // load at $4000, JMP $4000
+            string disks = Path.Combine(root, "disks");
+            Directory.CreateDirectory(disks);
+            string hd0 = Path.Combine(disks, "hd0.ndi");
+            NdiImage.CreateFormatted(hd0, "AUTOBOOT", 800);
+            using (var image = NdiImage.Open(hd0))
+                image.WriteFile("AUTOBOOT.bin", NdiFileType.Bin, 0xFFFF,
+                    [0x00, 0x40, 0x4C, 0x00, 0x40]); // load at $4000, JMP $4000
 
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
-            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", "1");
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
             Environment.SetEnvironmentVariable("NOAUTO", null);
 
             bus = new CompositeBusDevice(enableSound: false);

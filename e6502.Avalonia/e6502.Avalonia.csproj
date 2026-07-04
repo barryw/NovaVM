@@ -59,7 +59,6 @@
         <Exec Command="make -C $(ProjectDir)../software/languages/ehbasic" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
-        <Copy SourceFiles="$(ProjectDir)../software/assembly/apps/keyboard/keyboard.bin" DestinationFiles="$(HOME)/e6502-programs/keyboard.bin" />
         <!-- Shared-library modules: rebuild + stage their 16K images into Resources so
              CompositeBusDevice pre-stages them into the XRAM shelf at boot. -->
         <Exec Command="make -C $(ProjectDir)../software/modules/graphics" />
@@ -98,7 +97,6 @@
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/novaforth/novaforth.bin" DestinationFiles="$(ProjectDir)Resources/novaforth.bin" />
-        <Copy SourceFiles="$(ProjectDir)../software/assembly/apps/keyboard/keyboard.bin" DestinationFiles="$(USERPROFILE)/e6502-programs/keyboard.bin" />
     </Target>
 
     <!-- Generate the PDF user guide (POSIX) -->

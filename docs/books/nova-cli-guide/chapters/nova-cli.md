@@ -1152,13 +1152,13 @@ nova arty make-boot-bin
 `e6502.FPGA/boards/arty_z7/build/BOOT.bin` after refreshing embedded 6502
 payloads.
 
-`nova arty deploy-editor-demo` uploads the editor demo as
-`/data/nova/programs/AUTOBOOT.BIN` and clears mounted drive slots before
-restarting NovaVM, so a previously mounted floppy or hard-drive image cannot
-steal the boot path. The deploy path also passes the current `nova` binary into
-nested Makefiles as `NOVA_CLI`, avoiding stale or environment-specific
-`dotnet run` calls while refreshing payloads. After installing the Linux host,
-the command restarts NovaVM and waits for the management port before returning.
+`nova arty deploy-editor-demo` packages the editor demo as a bootable
+`editor-demo.ndi`, uploads it to `/data/nova/disks/floppy`, clears mounted
+drive slots, and mounts it as `fd0` before restarting NovaVM. The deploy path
+also passes the current `nova` binary into nested Makefiles as `NOVA_CLI`,
+avoiding stale or environment-specific `dotnet run` calls while refreshing
+payloads. After installing the Linux host, the command restarts NovaVM and
+waits for the management port before returning.
 
 ## Runtime Configuration Commands
 

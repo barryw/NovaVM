@@ -652,7 +652,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | --- | --- | --- |
 | $01 | FioCmdSave | Save bytes from `FioSrcL/H` to `FioEndL/H` (exclusive) to disk; prepends a 2-byte load-address. |
 | $02 | FioCmdLoad | Load file into RAM at `FioSrcL/H`; skips the 2-byte load-address prefix; sets `FioSizeL/H`. |
-| $03 | FioCmdDirOpen | Open the program directory; populates `FioName`, `FioSizeL/H/2`, and `FioDirType` with the first entry. |
+| $03 | FioCmdDirOpen | Open the current mounted disk directory; populates `FioName`, `FioSizeL/H/2`, and `FioDirType` with the first entry. |
 | $04 | FioCmdDirRead | Advance to the next directory entry; populates `FioName`, `FioSizeL/H/2`, and `FioDirType`. |
 | $05 | FioCmdDelete | Delete the named program from disk. |
 | $06 | FioCmdGSave | Save VGC memory space to a `.gfx` file. FioGSpace=space, FioGAddrL/H=offset, FioGLenL/H=length. |

@@ -157,6 +157,84 @@ public class DeviceManagerTests
         }
     }
 
+    [TestMethod]
+    public void Dispose_ReleasesMountedNdiImages()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        try
+        {
+            string ndiPath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(ndiPath, "TEST", 800);
+
+            using (var dm = new DeviceManager(hd0, hd1, disks))
+            {
+                dm.AutoMount();
+                Assert.IsTrue(dm.GetDevice("FD0").IsMounted);
+            }
+
+            using var image = NdiImage.Open(ndiPath);
+            Assert.IsTrue(image.FreeSectors > 0,
+                "Disposing DeviceManager must unmount NDI images so the next bus/test can mount the same disk.");
+        }
+        finally
+        {
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            try { Directory.Delete(disks, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void Devices_StartUnmounted_WhenNoNdiImagesExist()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        try
+        {
+            var dm = new DeviceManager(hd0, hd1, disks);
+
+            foreach (string prefix in new[] { "FD0", "FD1", "FD2", "FD3", "HD0", "HD1" })
+                Assert.IsFalse(dm.GetDevice(prefix).IsMounted,
+                    $"{prefix} must not be an implicit host directory; user files live on mounted NDI images only.");
+        }
+        finally
+        {
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            Directory.Delete(disks, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void AutoMount_MountsExistingHardDiskNdi()
+    {
+        string hd0 = MakeTempDir();
+        string hd1 = MakeTempDir();
+        string disks = MakeTempDir();
+        DeviceManager? dm = null;
+        try
+        {
+            string ndiPath = Path.Combine(disks, "hd0.ndi");
+            NdiImage.CreateFormatted(ndiPath, "HDTEST", 800);
+
+            dm = new DeviceManager(hd0, hd1, disks);
+            dm.AutoMount();
+
+            Assert.IsTrue(dm.GetDevice("HD0").IsMounted,
+                "HD0 should mount hd0.ndi; it must not be a raw host fallback path.");
+        }
+        finally
+        {
+            try { dm?.GetDevice("HD0").Unmount(); } catch { }
+            Directory.Delete(hd0, recursive: true);
+            Directory.Delete(hd1, recursive: true);
+            try { Directory.Delete(disks, recursive: true); } catch { }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // 6. FindAutoboot_ReturnsFirstMatch
     // -------------------------------------------------------------------------
@@ -167,12 +245,16 @@ public class DeviceManagerTests
         string hd0 = MakeTempDir();
         string hd1 = MakeTempDir();
         string disks = MakeTempDir();
+        DeviceManager? dm = null;
         try
         {
-            // Put AUTOBOOT.bas in HD0 dir
-            File.WriteAllBytes(Path.Combine(hd0, "AUTOBOOT.bas"), [0x01, 0x02]);
+            string hd0Path = Path.Combine(disks, "hd0.ndi");
+            NdiImage.CreateFormatted(hd0Path, "BOOTHD", 800);
+            using (var img = NdiImage.Open(hd0Path))
+                img.WriteFile("AUTOBOOT.bas", NdiFileType.Bas, 0xFFFF, [0x01, 0x02]);
 
-            var dm = new DeviceManager(hd0, hd1, disks);
+            dm = new DeviceManager(hd0, hd1, disks);
+            dm.AutoMount();
             var result = dm.FindAutoboot();
 
             Assert.IsNotNull(result, "FindAutoboot should return a match");
@@ -182,9 +264,10 @@ public class DeviceManagerTests
         }
         finally
         {
+            try { dm?.GetDevice("HD0").Unmount(); } catch { }
             Directory.Delete(hd0, recursive: true);
             Directory.Delete(hd1, recursive: true);
-            Directory.Delete(disks, recursive: true);
+            try { Directory.Delete(disks, recursive: true); } catch { }
         }
     }
 
@@ -197,7 +280,10 @@ public class DeviceManagerTests
         DeviceManager? dm = null;
         try
         {
-            File.WriteAllBytes(Path.Combine(hd0, "AUTOBOOT.bas"), [0x01, 0x02]);
+            string hd0Path = Path.Combine(disks, "hd0.ndi");
+            NdiImage.CreateFormatted(hd0Path, "BOOTHD", 800);
+            using (var img = NdiImage.Open(hd0Path))
+                img.WriteFile("AUTOBOOT.bas", NdiFileType.Bas, 0xFFFF, [0x01, 0x02]);
 
             string fd0Path = Path.Combine(disks, "fd0.ndi");
             NdiImage.CreateFormatted(fd0Path, "BOOTFD", 800);
@@ -220,6 +306,8 @@ public class DeviceManagerTests
             {
                 if (dm?.GetDevice("FD0") is NdiFloppyDevice fd0 && fd0.IsMounted)
                     fd0.Unmount();
+                if (dm?.GetDevice("HD0") is NdiFloppyDevice hd0dev && hd0dev.IsMounted)
+                    hd0dev.Unmount();
             }
             catch { }
 

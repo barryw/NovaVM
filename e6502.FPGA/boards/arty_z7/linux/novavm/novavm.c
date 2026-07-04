@@ -2,7 +2,7 @@
  *
  * Loads the EHBASIC ROM through the fio_bridge, releases the 6502 (cold-starts
  * to NovaBASIC), then runs the FIO service loop: file LOAD/SAVE/DIR mapped to
- * the Linux nova-fs, and the autoboot probe (LOAD "AUTOBOOT" -> not found ->
+ * mounted NDI disks, and the autoboot probe (LOAD "AUTOBOOT" -> not found ->
  * BASIC drops to Ready). Talks to the PL via an mmap'd register window.
  *
  * Ported faithfully from ps_fio/src/main.c (same FIO protocol, same poke/peek).
@@ -16,9 +16,7 @@
 #include <strings.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <dirent.h>
 #include <sys/mman.h>
-#include <sys/stat.h>
 #include <pthread.h>
 #include "loader_bin.h"     /* LOADER_BIN[248]: resident lib_call loader, staged @ $0320 */
 #include "modules_embedded.h" /* EMBEDDED_MOD[1..8], 16KB each (3=MOD_SYSTEM: line input) */
@@ -97,11 +95,6 @@
 #define FIO_CMD_DEVSTATUS   0x3A
 #define FIO_ERR_NOTFOUND 1
 #define FIO_ERR_IO 2
-#define FIO_ERR_EOD 3
-#define DT_BAS 0
-#define DT_BIN 2
-
-#define PROG_DIR "/data/nova/programs"
 
 volatile uint32_t *g_reg;   /* non-static: shared with naudio.c/nservers.c/nkbd.c via novavm.h */
 volatile uint8_t  *g_xram;  /* mmap'd PS-DDR XRAM shelf (nfio.c uses it), NULL if unreserved */
@@ -111,8 +104,6 @@ void audio_init(void); void audio_start(void);              /* naudio.c */
 void fio_volume(void); void fio_midplay(void); void fio_midstop(void); void fio_sfload(void);
 void servers_init(void);    /* nservers.c: mgmt 6504 / debug 6503 / upload 6502 */
 void boot_splash(void);     /* nsplash.c: render boot.json logo + fade (6502 held) */
-static unsigned char g_fbuf[0x10000 + 4];
-static DIR *g_dir;
 
 /* NOTE: there used to be a set_fclk0_125mhz() here that poked the PS SLCR to
  * retune FCLK0. It is GONE: the PL design is clocked from the board's clean H16
@@ -146,23 +137,12 @@ static int fio_read_name(char *out, int maxlen) {
     return n;
 }
 
-/* "<name>" -> /data/nova/programs/<name> (+ .bas if no extension). */
-static void fio_path(const char *name, char *path, int sz) {
-    if (strrchr(name, '.')) snprintf(path, sz, "%s/%s", PROG_DIR, name);
-    else snprintf(path, sz, "%s/%s.bas", PROG_DIR, name);
-}
-
-static int has_ext(const char *p, const char *ext) {
-    const char *d = strrchr(p, '.');
-    return d && !strcasecmp(d, ext);
-}
-
 /* Set by the OSD "reboot to BASIC" action; fio_load consumes it once to refuse
  * the autoboot probe so the next cold start lands at the BASIC prompt. */
 static volatile int g_boot_to_basic = 0;
 
 static void fio_load(void) {
-    char name[80], path[160];
+    char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
 
     /* OSD "reboot to BASIC": refuse the autoboot probe once, regardless of what
@@ -173,97 +153,30 @@ static void fio_load(void) {
         return;
     }
 
-    /* A mounted .ndi boot image takes priority (games/runtimes): resolve the name
-     * inside it first; nfio_image_load loads + sets FIO_SRC/SIZE/DIRTYPE on a hit.
-     * -1 = nothing mounted or not in the image -> fall through to the SD load. */
-    /* User filesystem first: drive-prefix / CWD / subdir paths (exact name+type). */
-    if (nfio_disk_active() && nfio_disk_load(name) == 0) { fio_ok(); return; }
-
+    if (!nfio_disk_active()) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    if (nfio_disk_load(name) == 0) { fio_ok(); return; }
     if (nfio_image_load(name) == 0) { fio_ok(); return; }
-
-    /* AUTOBOOT contract: bare "AUTOBOOT" -> AUTOBOOT.BIN then AUTOBOOT.BAS. */
-    if (strlen(name) == 8 && !strcasecmp(name, "AUTOBOOT")) {
-        char t[160];
-        snprintf(t, sizeof t, "%s/AUTOBOOT.BIN", PROG_DIR);
-        if (access(t, R_OK) == 0) strcpy(name, "AUTOBOOT.BIN");
-        else strcpy(name, "AUTOBOOT.BAS");
-    }
-
-    fio_path(name, path, sizeof path);
-    int is_bin = has_ext(path, ".bin");
-
-    FILE *f = fopen(path, "rb");
-    if (!f) { fio_fail(FIO_ERR_NOTFOUND); return; }
-    size_t br = fread(g_fbuf, 1, sizeof g_fbuf, f);
-    fclose(f);
-    if (br < 2) { fio_fail(FIO_ERR_IO); return; }
-
-    unsigned dst = is_bin ? (g_fbuf[0] | (g_fbuf[1] << 8))
-                          : (peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8));
-    unsigned len = (unsigned)br - 2;
-    if (dst + len > 0x10000) { fio_fail(FIO_ERR_IO); return; }
-    for (unsigned i = 0; i < len; i++) poke((dst + i) & 0xFFFF, g_fbuf[2 + i]);
-    if (is_bin) { poke(FIO_SRC_LO, dst & 0xFF); poke(FIO_SRC_HI, (dst >> 8) & 0xFF); }
-    poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF);
-    poke(FIO_DIRTYPE, is_bin ? DT_BIN : DT_BAS);
-    printf("[fio] LOAD %s -> $%04x (%u bytes)\n", path, dst, len);
-    fio_ok();
+    fio_fail(FIO_ERR_NOTFOUND);
 }
 
 static void fio_save(void) {
-    if (nfio_disk_active()) { nfio_disk_save(); return; }   /* a disk is mounted */
-    char name[80], path[160];
-    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    fio_path(name, path, sizeof path);
-    int len = nfio_stage_save(g_fbuf, sizeof g_fbuf);   /* shared 2-byte-header staging */
-    if (len < 0) { fio_fail(FIO_ERR_IO); return; }
-    mkdir(PROG_DIR, 0775);
-    FILE *f = fopen(path, "wb");
-    if (!f) { fio_fail(FIO_ERR_IO); return; }
-    size_t bw = fwrite(g_fbuf, 1, (size_t)len + 2, f);
-    fclose(f);
-    if (bw != (size_t)len + 2) { fio_fail(FIO_ERR_IO); return; }
-    unsigned src = g_fbuf[0] | (g_fbuf[1] << 8);
-    printf("[fio] SAVE %s ($%04x-$%04x, %d bytes)\n", path, src, src + len, len);
-    fio_ok();
+    if (!nfio_disk_active()) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    nfio_disk_save();
 }
 
 static void fio_diropen(void) {
-    if (nfio_disk_active()) { nfio_disk_diropen(); return; }
-    if (g_dir) closedir(g_dir);
-    g_dir = opendir(PROG_DIR);
-    if (!g_dir) { fio_fail(FIO_ERR_IO); return; }
-    fio_ok();
+    if (!nfio_disk_active()) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    nfio_disk_diropen();
 }
 
 static void fio_dirread(void) {
-    if (nfio_disk_active()) { nfio_disk_dirread(); return; }
-    if (!g_dir) { fio_fail(FIO_ERR_EOD); return; }
-    struct dirent *de;
-    while ((de = readdir(g_dir))) {
-        if (de->d_name[0] == '.') continue;
-        char disp[64]; int dl = 0;
-        for (; de->d_name[dl] && dl < 63; dl++) disp[dl] = de->d_name[dl];
-        disp[dl] = 0;
-        int type = has_ext(disp, ".bin") ? DT_BIN : DT_BAS;
-        char *dot = strrchr(disp, '.'); if (dot) { *dot = 0; dl = (int)(dot - disp); }
-        poke(FIO_DIRTYPE, type);
-        poke(FIO_NAMELEN, dl);
-        for (int i = 0; i < dl; i++) poke(FIO_NAME + i, disp[i]);
-        fio_ok();
-        return;
-    }
-    closedir(g_dir); g_dir = NULL;
-    fio_fail(FIO_ERR_EOD);
+    if (!nfio_disk_active()) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    nfio_disk_dirread();
 }
 
 static void fio_delete(void) {
-    if (nfio_disk_active()) { nfio_disk_delete(); return; }
-    char name[80], path[160];
-    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    fio_path(name, path, sizeof path);
-    if (unlink(path) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
-    fio_ok();
+    if (!nfio_disk_active()) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    nfio_disk_delete();
 }
 
 static void dump_screen(void) {
@@ -424,8 +337,6 @@ int main(int argc, char **argv) {
         }
         return 0;
     }
-    mkdir("/data/nova/programs", 0775);
-
     /* Map the PS-DDR XRAM shelf (DT reserved-memory @ XRAM_DDR_BASE). NULL if the
      * reserve is absent -> nfio.c's XRAM commands return FIO_ERR instead of
      * scribbling on kernel RAM. */
@@ -445,7 +356,7 @@ int main(int argc, char **argv) {
     servers_init();                /* nservers.c: mgmt/debug/upload servers for the nova CLI */
     nfio_init();                   /* nfio.c: XRAM/file/.ndi-drive command state */
     osd_init();                    /* nosd.c: OSD config menu (no-op until OSD-compositor bitstream) */
-    printf("[novavm] 6502 released; VGC on; audio+keyboard+mouse+servers live; servicing FIO (programs -> %s)\n", PROG_DIR);
+    printf("[novavm] 6502 released; VGC on; audio+keyboard+mouse+servers live; servicing FIO from mounted NDI disks\n");
 
     for (;;) {
         if (!fio_pending()) { usleep(300); continue; }

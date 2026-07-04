@@ -816,7 +816,7 @@ RomSwapForth                        = $06
 
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                            = $C000
-V_INPT                              = $E99F
-V_OUTP                              = $E9A2
-V_LOAD                              = $E9A5
-V_SAVE                              = $E9A8
+V_INPT                              = $E9B6
+V_OUTP                              = $E9B9
+V_LOAD                              = $E9BC
+V_SAVE                              = $E9BF

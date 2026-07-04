@@ -58,7 +58,6 @@
 #define FIO_ERR_EOD      3
 
 #define NOVA_FS_ROOT  "/data/nova"
-#define PROG_DIR      "/data/nova/programs"
 
 /* ---- PS-DDR XRAM shelf: the 6502's 512KB expansion RAM (DT reserved-memory) ----
  * The PL axi_xram master maps the 6502 XMC window into PS DDR at XRAM_DDR_BASE;

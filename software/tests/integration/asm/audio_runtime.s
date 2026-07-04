@@ -130,3 +130,4 @@ mml_line:
 mml_line_end:
 
 .include "audio.s"
+.include "fio.s"

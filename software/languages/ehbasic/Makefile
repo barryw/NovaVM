@@ -76,7 +76,8 @@ keyboard.bin: ../../assembly/apps/keyboard/keyboard.bin
 	$(MAKE) -C ../../assembly keyboard
 
 install-keyboard: keyboard.bin
-	cp ../../assembly/apps/keyboard/keyboard.bin ~/e6502-programs/keyboard.bin
+	@echo "install-keyboard no longer writes to a host fallback; use nova create/import to place keyboard.bin on an NDI image." >&2
+	@false
 
 demo: demo.bin
 
@@ -86,7 +87,8 @@ demo.bin: ../../assembly/apps/demo/demo.bin
 	$(MAKE) -C ../../assembly demo
 
 install-demo: demo.bin
-	cp ../../assembly/apps/demo/demo.bin ~/e6502-programs/demo.bin
+	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2
+	@false
 
 clean:
 	$(RM) *.o *.lst *.map *.bin *.sym

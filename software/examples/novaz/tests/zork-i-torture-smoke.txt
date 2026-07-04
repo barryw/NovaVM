@@ -7,11 +7,12 @@ y=>West of House&&small mailbox
 
 open mailbox=>reveals a leaflet
 take leaflet=>Taken.
-!save=>SAVE / RESTORE
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
 .key enter=>Ok.
 drop leaflet=>Dropped.
 .reboot
-!restore=>SAVE / RESTORE
+!restore=>RESTORE GAME
 .key enter=>Ok.
 inventory=>A leaflet
 

@@ -33,6 +33,11 @@ SAVE_LOAD_DIALOG_TOP    = 13
 SAVE_LOAD_DIALOG_WIDTH  = 28
 SAVE_LOAD_DIALOG_HEIGHT = 16
 
+SAVE_LOAD_TEXT_DIALOG_LEFT   = 21
+SAVE_LOAD_TEXT_DIALOG_TOP    = 15
+SAVE_LOAD_TEXT_DIALOG_WIDTH  = 38
+SAVE_LOAD_TEXT_DIALOG_HEIGHT = 12
+
 ; NUI chrome shadows extend outside the dialog box by a few graphics pixels.
 ; Save one extra text cell right/down so restore-under also clears the shadow.
 SAVE_LOAD_UNDER_LEFT   = SAVE_LOAD_DIALOG_LEFT
@@ -40,9 +45,10 @@ SAVE_LOAD_UNDER_TOP    = SAVE_LOAD_DIALOG_TOP
 SAVE_LOAD_UNDER_WIDTH  = SAVE_LOAD_DIALOG_WIDTH + 1
 SAVE_LOAD_UNDER_HEIGHT = SAVE_LOAD_DIALOG_HEIGHT + 1
 
-SAVE_LOAD_DESC_COL  = SAVE_LOAD_DIALOG_LEFT + 2
-SAVE_LOAD_DESC_ROW  = SAVE_LOAD_DIALOG_TOP + 4
-SAVE_LOAD_DESC_ADDR = SAVE_LOAD_DESC_ROW * VTEXT_SCREEN_COLS + SAVE_LOAD_DESC_COL
+SAVE_LOAD_TEXT_UNDER_LEFT   = SAVE_LOAD_TEXT_DIALOG_LEFT
+SAVE_LOAD_TEXT_UNDER_TOP    = SAVE_LOAD_TEXT_DIALOG_TOP
+SAVE_LOAD_TEXT_UNDER_WIDTH  = SAVE_LOAD_TEXT_DIALOG_WIDTH + 1
+SAVE_LOAD_TEXT_UNDER_HEIGHT = SAVE_LOAD_TEXT_DIALOG_HEIGHT + 1
 
 ZVM_SAVE_HEADER_SIZE       = $40
 ZVM_SAVE_PREFIX_SIZE       = $06
@@ -88,8 +94,6 @@ ZVM_SAVE_NZ6_STATE_SIZE    = NZ6_SAVE_STATE_SIZE
 ZVM_SAVE_TEXT_BYTES        = VTEXT_SCREEN_COLS * VTEXT_SCREEN_ROWS
 ZVM_SAVE_TEXT_SCRATCH_SIZE = ZVM_SAVE_TEXT_BYTES
 
-SAVE_LOAD_DESC_FIELD_WIDTH = ZVM_SAVE_DESC_MAX
-SAVE_LOAD_DESC_CURSOR_MAX  = SAVE_LOAD_DESC_FIELD_WIDTH - 1
 SAVE_LOAD_DIALOG_SHADOW = $00
 SAVE_LOAD_DIALOG_BORDER = $0F
 SAVE_LOAD_DIALOG_PANEL  = $0C
@@ -103,19 +107,25 @@ save_load_selected: .res 1
 save_load_command:  .res 1
 save_load_under_config: .res 16
 save_load_picker_config: .res 13
+save_load_desc_config: .res 13
 save_load_rows: .res SAVE_LOAD_ROW_WIDTH * SAVE_LOAD_ROW_COUNT
 save_load_slot_map: .res SAVE_LOAD_ROW_COUNT
 save_load_row_count: .res 1
 save_load_row_offset: .res 1
 save_load_slot_index: .res 1
-save_load_desc: .res ZVM_SAVE_DESC_MAX
+save_load_desc: .res ZVM_SAVE_DESC_MAX + 1
 save_load_desc_len: .res 1
-save_load_desc_offset: .res 1
 save_load_saved_vtext: .res ZVM_SAVE_VTEXT_STATE_SIZE
 save_load_text_xaddr_l: .res 1
 save_load_text_xaddr_m: .res 1
 save_load_text_xaddr_h: .res 1
 save_load_text_scratch_valid: .res 1
+save_load_return_branch_if: .res 1
+save_load_return_branch_off_h: .res 1
+save_load_return_branch_off_l: .res 1
+save_load_return_pc_b: .res 1
+save_load_return_pc_h: .res 1
+save_load_return_pc_l: .res 1
 
 .segment "CODE"
 
@@ -125,6 +135,7 @@ novaz_save_load_overlay_main:
         LDA #SAVE_LOAD_ERROR
         STA zvm_save_result
 
+        JSR save_load_capture_return_state
         JSR save_load_capture_vtext
         JSR save_load_set_dialog_style
         JSR save_load_pick_slot
@@ -135,6 +146,10 @@ novaz_save_load_overlay_main:
         CMP #SAVE_LOAD_MODE_RESTORE
         BEQ @restore
 
+        JSR save_load_drain_keys
+        BEQ :+
+        JMP @done
+:
         JSR save_load_prompt_description
         BEQ :+
         JMP @done
@@ -160,7 +175,45 @@ novaz_save_load_overlay_main:
 @restore_entry_vtext:
         JSR save_load_restore_entry_vtext
 @return:
+        LDA zvm_save_overlay_mode
+        CMP #SAVE_LOAD_MODE_RESTORE
+        BNE @restore_return_state
+        LDA zvm_save_result
+        BEQ @return_ok
+@restore_return_state:
+        JSR save_load_restore_return_state
+@return_ok:
         LDA #$00
+        RTS
+
+save_load_capture_return_state:
+        LDA zvm_branch_if
+        STA save_load_return_branch_if
+        LDA zvm_branch_off_h
+        STA save_load_return_branch_off_h
+        LDA zvm_branch_off_l
+        STA save_load_return_branch_off_l
+        LDA zvm_pc_b
+        STA save_load_return_pc_b
+        LDA zvm_pc_h
+        STA save_load_return_pc_h
+        LDA zvm_pc_l
+        STA save_load_return_pc_l
+        RTS
+
+save_load_restore_return_state:
+        LDA save_load_return_branch_if
+        STA zvm_branch_if
+        LDA save_load_return_branch_off_h
+        STA zvm_branch_off_h
+        LDA save_load_return_branch_off_l
+        STA zvm_branch_off_l
+        LDA save_load_return_pc_b
+        STA zvm_pc_b
+        LDA save_load_return_pc_h
+        STA zvm_pc_h
+        LDA save_load_return_pc_l
+        STA zvm_pc_l
         RTS
 
 save_load_capture_vtext:
@@ -194,6 +247,11 @@ save_load_pick_slot:
         BRA @cancel
 
 @picker_ready:
+        JSR save_load_drain_keys
+        BEQ :+
+        JSR save_load_restore_under
+        BRA @cancel
+:
         LDA #<save_load_picker_config
         STA LIB_ARG0
         LDA #>save_load_picker_config
@@ -448,6 +506,18 @@ save_load_restore_under:
         LDX #SYS_NUI_RESTORE_UNDER_FULL
         JMP save_load_lib_call
 
+save_load_save_text_under:
+        JSR save_load_set_text_under_args
+        LDA #MODULE_ID_SYSTEM
+        LDX #SYS_NUI_SAVE_UNDER_FULL
+        JMP save_load_lib_call
+
+save_load_restore_text_under:
+        JSR save_load_set_text_under_args
+        LDA #MODULE_ID_SYSTEM
+        LDX #SYS_NUI_RESTORE_UNDER_FULL
+        JMP save_load_lib_call
+
 save_load_set_dialog_style:
         LDA #SAVE_LOAD_DIALOG_SHADOW
         STA LIB_ARG0 + 0
@@ -505,6 +575,19 @@ save_load_set_under_args:
         STA save_load_under_config + 2
         LDA #SAVE_LOAD_UNDER_HEIGHT
         STA save_load_under_config + 3
+        BRA save_load_set_under_storage_args
+
+save_load_set_text_under_args:
+        LDA #SAVE_LOAD_TEXT_UNDER_LEFT
+        STA save_load_under_config + 0
+        LDA #SAVE_LOAD_TEXT_UNDER_TOP
+        STA save_load_under_config + 1
+        LDA #SAVE_LOAD_TEXT_UNDER_WIDTH
+        STA save_load_under_config + 2
+        LDA #SAVE_LOAD_TEXT_UNDER_HEIGHT
+        STA save_load_under_config + 3
+
+save_load_set_under_storage_args:
         LDA zstory_cache_base_l
         STA save_load_under_config + 4
         STA save_load_under_config + 7
@@ -600,130 +683,91 @@ save_load_show_no_saves:
 
 save_load_prompt_description:
         JSR save_load_init_description
-        JSR save_load_save_under
+        JSR save_load_save_text_under
         BEQ :+
         JMP @cancel
 :
-        LDA #<save_load_desc_title
+        JSR save_load_init_desc_config
+        LDA #<save_load_desc_config
         STA LIB_ARG0
-        LDA #>save_load_desc_title
+        LDA #>save_load_desc_config
         STA LIB_ARG0 + 1
-        LDA #<save_load_desc_msg
-        STA LIB_ARG1
-        LDA #>save_load_desc_msg
-        STA LIB_ARG1 + 1
-        LDA #<save_load_footer
-        STA LIB_ARG2
-        LDA #>save_load_footer
-        STA LIB_ARG2 + 1
-        LDA #SAVE_LOAD_DIALOG_LEFT
-        STA LIB_ARG3 + 0
-        LDA #SAVE_LOAD_DIALOG_TOP
-        STA LIB_ARG3 + 1
-        LDA #SAVE_LOAD_DIALOG_WIDTH
-        STA LIB_ARG3 + 2
-        LDA #$09
-        STA LIB_ARG3 + 3
+        STZ LIB_ARG0 + 2
+        STZ LIB_ARG0 + 3
         LDA #MODULE_ID_SYSTEM
-        LDX #SYS_DIALOG
+        LDX #SYS_NUI_TEXT_INPUT
         JSR save_load_lib_call
-        BEQ :+
-        JMP @restore_cancel
-:
-        JSR save_load_draw_description
-@key:
-        LDA #MODULE_ID_SYSTEM
-        LDX #SYS_WAIT_KEY
-        JSR save_load_lib_call
-        BEQ :+
-        JMP @restore_cancel
-:
+        STA save_load_status
         LDA LIB_RESULT
-        CMP #NUI_KEY_ENTER
-        BNE :+
-        JMP @ok
+        STA save_load_desc_len
+        LDA LIB_RESULT + 1
+        STA save_load_command
+        JSR save_load_restore_text_under
+        LDA save_load_status
+        BNE @cancel
+        LDA save_load_command
+        CMP #NUI_RESULT_OK
+        BNE @cancel
+        LDA save_load_desc_len
+        CMP #ZVM_SAVE_DESC_MAX + 1
+        BCC :+
+        LDA #ZVM_SAVE_DESC_MAX
+        STA save_load_desc_len
 :
-        CMP #NUI_KEY_ESCAPE
+        LDA save_load_desc_len
         BNE :+
-        JMP @restore_cancel
-:
-        CMP #$08
-        BEQ @backspace
-        CMP #$7F
-        BEQ @backspace
-        CMP #$20
-        BCC @key
-        CMP #$7F
-        BCS @key
-        STA save_load_tmp
-        LDX save_load_desc_len
-        CPX #ZVM_SAVE_DESC_MAX
-        BCS @key
-        LDA save_load_desc_offset
-        PHA
-        LDA save_load_tmp
-        STA save_load_desc,X
-        INC save_load_desc_len
-        JSR save_load_calc_desc_offset
-        PLA
-        CMP save_load_desc_offset
-        BNE @redraw
-        LDA save_load_desc_len
-        SEC
-        SBC #$01
-        SEC
-        SBC save_load_desc_offset
-        TAX
-        LDA save_load_tmp
-        JSR save_load_write_description_cell
-        JSR save_load_sync_description_cursor
-        JMP @key
-@backspace:
-        LDX save_load_desc_len
-        BEQ @key
-        LDA save_load_desc_offset
-        PHA
-        DEX
-        STX save_load_desc_len
-        LDA #' '
-        STA save_load_desc,X
-        JSR save_load_calc_desc_offset
-        PLA
-        CMP save_load_desc_offset
-        BNE @redraw
-        LDA save_load_desc_len
-        SEC
-        SBC save_load_desc_offset
-        TAX
-        LDA #' '
-        JSR save_load_write_description_cell
-        JSR save_load_sync_description_cursor
-        JMP @key
-@redraw:
-        JSR save_load_draw_description
-        JMP @key
-@ok:
-        LDA save_load_desc_len
-        BNE @restore_ok
         JSR save_load_use_default_desc
-@restore_ok:
-        JSR save_load_restore_under
+        BRA @ok
+:
+        JSR save_load_pad_description
+@ok:
         LDA #$00
         RTS
-@restore_cancel:
-        JSR save_load_restore_under
 @cancel:
         LDA #$01
+        RTS
+
+save_load_init_desc_config:
+        LDA #<save_load_desc_title
+        STA save_load_desc_config + 0
+        LDA #>save_load_desc_title
+        STA save_load_desc_config + 1
+        LDA #<save_load_desc_label
+        STA save_load_desc_config + 2
+        LDA #>save_load_desc_label
+        STA save_load_desc_config + 3
+        LDA #<save_load_desc
+        STA save_load_desc_config + 4
+        LDA #>save_load_desc
+        STA save_load_desc_config + 5
+        LDA #ZVM_SAVE_DESC_MAX + 1
+        STA save_load_desc_config + 6
+        LDA #SAVE_LOAD_TEXT_DIALOG_LEFT
+        STA save_load_desc_config + 7
+        LDA #SAVE_LOAD_TEXT_DIALOG_TOP
+        STA save_load_desc_config + 8
+        LDA #SAVE_LOAD_TEXT_DIALOG_WIDTH
+        STA save_load_desc_config + 9
+        LDA #SAVE_LOAD_TEXT_DIALOG_HEIGHT
+        STA save_load_desc_config + 10
+        LDA #<save_load_footer
+        STA save_load_desc_config + 11
+        LDA #>save_load_footer
+        STA save_load_desc_config + 12
         RTS
 
 save_load_init_description:
         JSR save_load_clear_description
         LDA zvm_save_slot
         JSR save_load_scan_slot_header
-        BNE @done
+        BNE @default
         JSR save_load_copy_header_desc_to_desc
+        LDA save_load_desc_len
+        BNE @done
+@default:
+        JSR save_load_use_default_desc
 @done:
-        RTS
+        JMP save_load_terminate_description
 
 save_load_clear_description:
         STZ save_load_desc_len
@@ -734,6 +778,7 @@ save_load_clear_description:
         INX
         CPX #ZVM_SAVE_DESC_MAX
         BCC @loop
+        STZ save_load_desc + ZVM_SAVE_DESC_MAX
         RTS
 
 save_load_copy_header_desc_to_desc:
@@ -750,7 +795,7 @@ save_load_copy_header_desc_to_desc:
         INX
         CPX #ZVM_SAVE_DESC_MAX
         BCC @loop
-        RTS
+        JMP save_load_terminate_description
 
 save_load_use_default_desc:
         LDA #ZVM_SAVE_DESC_DEFAULT_LEN
@@ -762,80 +807,30 @@ save_load_use_default_desc:
         INX
         CPX #ZVM_SAVE_DESC_MAX
         BCC @loop
-        RTS
+        JMP save_load_terminate_description
 
-save_load_draw_description:
-        JSR save_load_calc_desc_offset
-        LDA #VGC_PLANE_CHAR
-        STA VGC_VPLANE
-        LDA #<SAVE_LOAD_DESC_ADDR
-        STA VGC_VADDRL
-        LDA #>SAVE_LOAD_DESC_ADDR
-        STA VGC_VADDRH
-        LDA #VGC_VRAM_AUTOINC
-        STA VGC_VCTRL
-        LDX #$00
-@loop:
-        TXA
-        CLC
-        ADC save_load_desc_offset
-        TAY
-        CPY save_load_desc_len
-        BCS @space
-        LDA save_load_desc,Y
-        BRA @write
-@space:
-        LDA #' '
-@write:
-        STA VGC_VDATA
-        INX
-        CPX #SAVE_LOAD_DESC_FIELD_WIDTH
-        BCC @loop
-        STZ VGC_VCTRL
-        JMP save_load_sync_description_cursor
-
-save_load_calc_desc_offset:
-        STZ save_load_desc_offset
-        LDA save_load_desc_len
-        CMP #(SAVE_LOAD_DESC_FIELD_WIDTH + 1)
-        BCC @done
-        SEC
-        SBC #SAVE_LOAD_DESC_FIELD_WIDTH
-        STA save_load_desc_offset
-@done:
-        RTS
-
-save_load_write_description_cell:
-        STA save_load_tmp
-        TXA
-        CLC
-        ADC #<SAVE_LOAD_DESC_ADDR
-        STA VGC_VADDRL
-        LDA #>SAVE_LOAD_DESC_ADDR
-        ADC #$00
-        STA VGC_VADDRH
-        LDA #VGC_PLANE_CHAR
-        STA VGC_VPLANE
-        LDA #VGC_VRAM_AUTOINC
-        STA VGC_VCTRL
-        LDA save_load_tmp
-        STA VGC_VDATA
-        STZ VGC_VCTRL
-        RTS
-
-save_load_sync_description_cursor:
-        LDA save_load_desc_len
-        SEC
-        SBC save_load_desc_offset
-        CMP #SAVE_LOAD_DESC_FIELD_WIDTH
+save_load_terminate_description:
+        LDX save_load_desc_len
+        CPX #ZVM_SAVE_DESC_MAX + 1
         BCC :+
-        LDA #SAVE_LOAD_DESC_CURSOR_MAX
+        LDX #ZVM_SAVE_DESC_MAX
+        STX save_load_desc_len
 :
-        CLC
-        ADC #SAVE_LOAD_DESC_COL
-        STA VGC_CURSX
-        LDA #SAVE_LOAD_DESC_ROW
-        STA VGC_CURSY
+        STZ save_load_desc,X
+        RTS
+
+save_load_pad_description:
+        LDX save_load_desc_len
+        CPX #ZVM_SAVE_DESC_MAX
+        BCS @terminate
+        LDA #' '
+@loop:
+        STA save_load_desc,X
+        INX
+        CPX #ZVM_SAVE_DESC_MAX
+        BCC @loop
+@terminate:
+        STZ save_load_desc + ZVM_SAVE_DESC_MAX
         RTS
 
 save_load_lib_call:
@@ -844,6 +839,11 @@ save_load_lib_call:
         JSR LIB_LOADER_BAND
         LDA LIB_STATUS
         RTS
+
+save_load_drain_keys:
+        LDA #MODULE_ID_SYSTEM
+        LDX #SYS_NUI_DRAIN_KEYS
+        JMP save_load_lib_call
 
 save_load_save_game:
         JSR save_load_fill_header
@@ -1437,17 +1437,17 @@ save_load_fill_header:
         STA zvm_save_header + ZVM_SAVE_CHECKSUM_HI
         LDA zstory_checksum_lo
         STA zvm_save_header + ZVM_SAVE_CHECKSUM_LO
-        LDA zvm_branch_if
+        LDA save_load_return_branch_if
         STA zvm_save_header + ZVM_SAVE_BRANCH_IF
-        LDA zvm_branch_off_h
+        LDA save_load_return_branch_off_h
         STA zvm_save_header + ZVM_SAVE_BRANCH_OFF_H
-        LDA zvm_branch_off_l
+        LDA save_load_return_branch_off_l
         STA zvm_save_header + ZVM_SAVE_BRANCH_OFF_L
-        LDA zvm_pc_b
+        LDA save_load_return_pc_b
         STA zvm_save_header + ZVM_SAVE_PC_B
-        LDA zvm_pc_h
+        LDA save_load_return_pc_h
         STA zvm_save_header + ZVM_SAVE_PC_H
-        LDA zvm_pc_l
+        LDA save_load_return_pc_l
         STA zvm_save_header + ZVM_SAVE_PC_L
         LDA zvm_save_return_kind
         STA zvm_save_header + ZVM_SAVE_RETURN_KIND
@@ -1542,8 +1542,8 @@ save_load_title_restore:
 save_load_desc_title:
         .byte "DESCRIPTION", 0
 
-save_load_desc_msg:
-        .byte "Description:", 0
+save_load_desc_label:
+        .byte "Desc:   "
 
 save_load_footer:
         .byte "ENTER OK  ESC CANCEL", 0

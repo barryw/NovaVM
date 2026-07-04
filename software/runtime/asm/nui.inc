@@ -116,6 +116,7 @@ NUI_TEXT_SHADOW  = $00
 .global nui_show_dialog_wait
 .global nui_show_error
 .global nui_read_key
+.global nui_drain_keys
 .global nui_wait_key
 .global nui_save_under
 .global nui_restore_under

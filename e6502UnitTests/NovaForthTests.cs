@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
+using e6502.Storage;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -349,9 +350,7 @@ public class NovaForthTests
     [TestMethod]
     public void IncludedPicturedNumericLoopPreservesStack()
     {
-        string path = Hd0Path("gp5-include.4th");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllLines(path, new[]
+        WriteFd0Text("gp5-include.4th", string.Join('\n', new[]
         {
             ": S=",
             " >R SWAP R@ = IF",
@@ -376,7 +375,7 @@ public class NovaForthTests
             " I 0 <# #S #> S\" 10\" S= AND",
             " LOOP",
             " SWAP BASE ! ;"
-        });
+        }) + "\n");
 
         try
         {
@@ -398,15 +397,14 @@ public class NovaForthTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("gp5-include.4th");
         }
     }
 
     [TestMethod]
     public void EditCreatesAndSavesForthSourceFile()
     {
-        string path = Hd0Path("forth-edit-test.4th");
-        File.Delete(path);
+        DeleteFd0File("forth-edit-test.4th");
 
         try
         {
@@ -424,8 +422,8 @@ public class NovaForthTests
             QueueAltX(editor);
             RunUntilForthIdle(cpu, bus, editor, 120_000_000);
 
-            Assert.IsTrue(File.Exists(path), "EDIT should create missing .4th files when the user saves.");
-            StringAssert.Contains(File.ReadAllText(path), ": EDITED 777 ;");
+            Assert.IsTrue(MountedFileExists(bus, "forth-edit-test.4th"), "EDIT should create missing .4th files when the user saves.");
+            StringAssert.Contains(ReadMountedText(bus, "forth-edit-test.4th"), ": EDITED 777 ;");
 
             QueueLine(editor, "INCLUDE forth-edit-test.4th");
             RunUntilForthIdle(cpu, bus, editor, 120_000_000);
@@ -439,15 +437,14 @@ public class NovaForthTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("forth-edit-test.4th");
         }
     }
 
     [TestMethod]
     public void EditUsesForthSyntaxHighlighting()
     {
-        string path = Hd0Path("forth-highlight-test.4th");
-        File.WriteAllText(path, ": HILITE DUP 123 ; \\ comment\n");
+        WriteFd0Text("forth-highlight-test.4th", ": HILITE DUP 123 ; \\ comment\n");
 
         try
         {
@@ -479,15 +476,14 @@ public class NovaForthTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("forth-highlight-test.4th");
         }
     }
 
     [TestMethod]
     public void EditUsesForthAutoIndent()
     {
-        string path = Hd0Path("forth-indent-test.4th");
-        File.Delete(path);
+        DeleteFd0File("forth-indent-test.4th");
 
         try
         {
@@ -510,11 +506,11 @@ public class NovaForthTests
             QueueAltX(editor);
             RunUntilForthIdle(cpu, bus, editor, 120_000_000);
 
-            StringAssert.Contains(File.ReadAllText(path), ": INDENT\n  DUP\n");
+            StringAssert.Contains(ReadMountedText(bus, "forth-indent-test.4th"), ": INDENT\n  DUP\n");
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("forth-indent-test.4th");
         }
     }
 
@@ -690,9 +686,7 @@ public class NovaForthTests
     [TestMethod]
     public void IncludeLoadsForthSourceFromStorage()
     {
-        string path = Hd0Path("FORTH-TEST.4TH");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, ": FROMFILE 77 ;\n");
+        WriteFd0Text("FORTH-TEST.4TH", ": FROMFILE 77 ;\n");
 
         try
         {
@@ -706,21 +700,19 @@ public class NovaForthTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("FORTH-TEST.4TH");
         }
     }
 
     [TestMethod]
     public void IncludeLoadsForthSourceLargerThanOldRamStagingBuffer()
     {
-        string path = Hd0Path("bigforth.4th");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var source = new StringBuilder();
         for (int i = 0; i < 180; i++)
             source.Append("\\ filler line ").Append(i.ToString("D3")).Append(" 0123456789 0123456789 0123456789 0123456789\n");
         source.Append(": BIGINCLUDE 4321 ;\n");
         Assert.IsTrue(Encoding.ASCII.GetByteCount(source.ToString()) > 8192);
-        File.WriteAllText(path, source.ToString(), Encoding.ASCII);
+        WriteFd0Text("bigforth.4th", source.ToString());
 
         try
         {
@@ -744,15 +736,14 @@ public class NovaForthTests
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("bigforth.4th");
         }
     }
 
     [TestMethod]
     public void SaveForthWritesSourceThatCanBeIncluded()
     {
-        string path = Hd0Path("SAVED.4TH");
-        File.Delete(path);
+        DeleteFd0File("SAVED.4TH");
 
         try
         {
@@ -762,21 +753,20 @@ public class NovaForthTests
                 "SAVED .");
 
             Assert.IsTrue(screen.Contains("5 ", StringComparison.Ordinal), screen);
-            Assert.AreEqual(": SAVED 5 ;", File.ReadAllText(path));
+            Assert.AreEqual(": SAVED 5 ;", ReadFd0Text("SAVED.4TH"));
             Assert.IsFalse(screen.Contains("INCLUDE FAILED", StringComparison.Ordinal), screen);
             Assert.IsFalse(screen.Contains("UNKNOWN WORD", StringComparison.Ordinal), screen);
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("SAVED.4TH");
         }
     }
 
     [TestMethod]
     public void FileAccessWordsUseSharedFilesModule()
     {
-        string path = Hd0Path("fstream.txt");
-        File.Delete(path);
+        DeleteFd0File("fstream.txt");
 
         try
         {
@@ -792,11 +782,11 @@ public class NovaForthTests
             Assert.IsTrue(screen.Contains("Alpha", StringComparison.Ordinal), screen);
             Assert.IsFalse(screen.Contains("UNKNOWN WORD", StringComparison.Ordinal), screen);
             Assert.IsFalse(screen.Contains("STACK UNDERFLOW", StringComparison.Ordinal), screen);
-            Assert.IsFalse(File.Exists(path), "DELETE-FILE should remove the file created by CREATE-FILE.");
+            Assert.IsFalse(Fd0FileExists("fstream.txt"), "DELETE-FILE should remove the file created by CREATE-FILE.");
         }
         finally
         {
-            File.Delete(path);
+            DeleteFd0File("fstream.txt");
         }
     }
 
@@ -805,18 +795,16 @@ public class NovaForthTests
     {
         string[] files =
         [
-            Hd0Path("nraw.bin"),
-            Hd0Path("npage.bin"),
-            Hd0Path("ngfx.bin"),
-            Hd0Path("nhandle.txt"),
-            Hd0Path("nrenamed.txt")
+            "nraw.bin",
+            "npage.bin",
+            "ngfx.bin",
+            "nhandle.txt",
+            "nrenamed.txt"
         ];
-        string dir = Hd0Path("ndkdir");
 
         foreach (string file in files)
-            File.Delete(file);
-        if (Directory.Exists(dir))
-            Directory.Delete(dir, recursive: true);
+            DeleteFd0File(file);
+        RemoveFd0Directory("ndkdir");
 
         try
         {
@@ -894,26 +882,20 @@ public class NovaForthTests
         finally
         {
             foreach (string file in files)
-                File.Delete(file);
-            if (Directory.Exists(dir))
-                Directory.Delete(dir, recursive: true);
+                DeleteFd0File(file);
+            RemoveFd0Directory("ndkdir");
         }
     }
 
     [TestMethod]
     public void BootAutoloadsCoreAndAutoexecLibrariesWhenPresent()
     {
-        string libDir = Hd0Path("forth", "lib");
-        Directory.CreateDirectory(libDir);
-        string corePath = Path.Combine(libDir, "core.4th");
-        string coreExtPath = Path.Combine(libDir, "core-ext.4th");
-        string autoexecPath = Hd0Path("forth", "autoexec.4th");
-        string? oldCore = File.Exists(corePath) ? File.ReadAllText(corePath) : null;
-        string? oldCoreExt = File.Exists(coreExtPath) ? File.ReadAllText(coreExtPath) : null;
-        string? oldAutoexec = File.Exists(autoexecPath) ? File.ReadAllText(autoexecPath) : null;
-        File.WriteAllText(corePath, ": AUTOCORE 123 ;\n");
-        File.WriteAllText(coreExtPath, ": AUTOEXT 456 ;\n");
-        File.WriteAllText(autoexecPath, "INCLUDE forth/lib/core-ext.4th\n");
+        string? oldCore = ReadFd0TextOrNull("forth/lib/core.4th");
+        string? oldCoreExt = ReadFd0TextOrNull("forth/lib/core-ext.4th");
+        string? oldAutoexec = ReadFd0TextOrNull("forth/autoexec.4th");
+        WriteFd0Text("forth/lib/core.4th", ": AUTOCORE 123 ;\n");
+        WriteFd0Text("forth/lib/core-ext.4th", ": AUTOEXT 456 ;\n");
+        WriteFd0Text("forth/autoexec.4th", "INCLUDE forth/lib/core-ext.4th\n");
 
         try
         {
@@ -926,9 +908,9 @@ public class NovaForthTests
         }
         finally
         {
-            RestoreFile(corePath, oldCore);
-            RestoreFile(coreExtPath, oldCoreExt);
-            RestoreFile(autoexecPath, oldAutoexec);
+            RestoreFd0Text("forth/lib/core.4th", oldCore);
+            RestoreFd0Text("forth/lib/core-ext.4th", oldCoreExt);
+            RestoreFd0Text("forth/autoexec.4th", oldAutoexec);
         }
     }
 
@@ -1021,7 +1003,7 @@ public class NovaForthTests
         RunUntilForthIdle(cpu, bus, editor, 40_000_000);
         QueueLine(editor, "INCLUDE forth/test/hayes-core/core-05-flow-defining.4th");
         RunUntilForthIdle(cpu, bus, editor, 40_000_000);
-        QueueLine(editor, "INCLUDE forth/test/hayes-core/core-06-evaluate-pictured-move.4th");
+        QueueLine(editor, "INCLUDE forth/test/hayes-core/core-06-eval-pictured-move.4th");
         RunUntilForthIdle(cpu, bus, editor, 80_000_000);
         QueueLine(editor, "INCLUDE forth/test/hayes-core/core-07-search-finish.4th");
         RunUntilForthIdle(cpu, bus, editor, 40_000_000);
@@ -1474,19 +1456,196 @@ public class NovaForthTests
         return SnapshotScreen(bus.Vgc);
     }
 
-    private static string Hd0Path(params string[] parts)
+    private static string TestDiskImagePath()
     {
         string? root = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         Assert.IsFalse(string.IsNullOrWhiteSpace(root), "AssemblySetup must set NOVA_STORAGE_ROOT.");
-        return Path.Combine([root!, "hd0", .. parts]);
+        return Path.Combine(root!, "disks", "fd0.ndi");
     }
 
-    private static void RestoreFile(string path, string? contents)
+    private static void WriteFd0Text(string path, string contents)
+        => WithFd0Device(device =>
+        {
+            SelectDeviceDirectory(device, GetDirectory(path), create: true);
+            var (name, ext) = SplitStorageFilename(path);
+            device.Save(name, Encoding.ASCII.GetBytes(contents), ext);
+        });
+
+    private static string ReadFd0Text(string path)
+    {
+        string? text = ReadFd0TextOrNull(path);
+        Assert.IsNotNull(text, $"Expected {path} to exist on fd0.ndi.");
+        return text;
+    }
+
+    private static string? ReadFd0TextOrNull(string path)
+    {
+        string? text = null;
+        WithFd0Device(device =>
+        {
+            try
+            {
+                SelectDeviceDirectory(device, GetDirectory(path), create: false);
+                var (name, ext) = SplitStorageFilename(path);
+                text = Encoding.ASCII.GetString(device.Load(name, ext));
+            }
+            catch (FileNotFoundException)
+            {
+                text = null;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                text = null;
+            }
+        });
+        return text;
+    }
+
+    private static void RestoreFd0Text(string path, string? contents)
     {
         if (contents is null)
-            File.Delete(path);
+            DeleteFd0File(path);
         else
-            File.WriteAllText(path, contents);
+            WriteFd0Text(path, contents);
+    }
+
+    private static void DeleteFd0File(string path)
+        => WithFd0Device(device =>
+        {
+            try
+            {
+                SelectDeviceDirectory(device, GetDirectory(path), create: false);
+                var (name, ext) = SplitStorageFilename(path);
+                device.Delete(name, ext);
+            }
+            catch (FileNotFoundException)
+            {
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+        });
+
+    private static bool Fd0FileExists(string path)
+    {
+        bool exists = false;
+        WithFd0Device(device =>
+        {
+            try
+            {
+                SelectDeviceDirectory(device, GetDirectory(path), create: false);
+                var (name, ext) = SplitStorageFilename(path);
+                exists = device.FileExists(name, ext);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                exists = false;
+            }
+        });
+        return exists;
+    }
+
+    private static void RemoveFd0Directory(string path)
+        => WithFd0Device(device =>
+        {
+            string parent = GetDirectory(path);
+            string name = Path.GetFileName(path.Replace('\\', '/'));
+            try
+            {
+                SelectDeviceDirectory(device, parent, create: false);
+                device.RemoveDirectory(name);
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+            catch (FileNotFoundException)
+            {
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        });
+
+    private static bool MountedFileExists(CompositeBusDevice bus, string path)
+    {
+        var device = bus.DeviceManager.GetDevice("FD0");
+        string saved = device.CurrentDirectory;
+        try
+        {
+            SelectDeviceDirectory(device, GetDirectory(path), create: false);
+            var (name, ext) = SplitStorageFilename(path);
+            return device.FileExists(name, ext);
+        }
+        finally
+        {
+            device.CurrentDirectory = saved;
+        }
+    }
+
+    private static string ReadMountedText(CompositeBusDevice bus, string path)
+    {
+        var device = bus.DeviceManager.GetDevice("FD0");
+        string saved = device.CurrentDirectory;
+        try
+        {
+            SelectDeviceDirectory(device, GetDirectory(path), create: false);
+            var (name, ext) = SplitStorageFilename(path);
+            return Encoding.ASCII.GetString(device.Load(name, ext));
+        }
+        finally
+        {
+            device.CurrentDirectory = saved;
+        }
+    }
+
+    private static void WithFd0Device(Action<IStorageDevice> action)
+    {
+        var device = new NdiFloppyDevice("FD0");
+        device.Mount(TestDiskImagePath());
+        try
+        {
+            action(device);
+        }
+        finally
+        {
+            device.Unmount();
+        }
+    }
+
+    private static void SelectDeviceDirectory(IStorageDevice device, string directory, bool create)
+    {
+        device.CurrentDirectory = "/";
+        string[] parts = directory.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        string current = "";
+        foreach (string part in parts)
+        {
+            bool exists = Array.Exists(device.ListDirectory(null),
+                entry => entry.IsDirectory && string.Equals(entry.Filename, part, StringComparison.OrdinalIgnoreCase));
+            if (!exists)
+            {
+                if (!create)
+                    throw new DirectoryNotFoundException($"Directory '{part}' not found.");
+                device.MakeDirectory(part);
+            }
+
+            current = current.Length == 0 ? part : current + "/" + part;
+            device.CurrentDirectory = current;
+        }
+    }
+
+    private static string GetDirectory(string path)
+    {
+        string normalized = path.Replace('\\', '/');
+        int slash = normalized.LastIndexOf('/');
+        return slash < 0 ? "" : normalized[..slash];
+    }
+
+    private static (string Name, string Ext) SplitStorageFilename(string path)
+    {
+        string fileName = Path.GetFileName(path.Replace('\\', '/'));
+        string ext = Path.GetExtension(fileName);
+        string name = ext.Length == 0 ? fileName : fileName[..^ext.Length];
+        return (name, ext);
     }
 
     private static byte GfxPixel(CompositeBusDevice bus, int x, int y)

@@ -21,8 +21,7 @@
  *   FIO_CMD_FSEEK       0x32 -> fio_fseek()
  *   FIO_CMD_FTELL       0x33 -> fio_ftell()
  *   FIO_CMD_FSIZE       0x34 -> fio_fsize()
- * (FIO_CMD_LOAD 0x02 stays in novavm.c — call nfio_image_load() first, then its
- *  existing /data/nova/programs fallback. See nfio_image_load() below.)
+ * (FIO_CMD_LOAD 0x02 stays in novavm.c — mounted NDI disks only.)
  * ===========================================================================
  *
  * Cross-compile (clean):
@@ -71,7 +70,6 @@
 #define FIO_TARGET_MASK 0x30   /* FREAD/FWRITE target high bits */
 #define FIO_TARGET_XRAM 0x10   /* 0x00 = CPU RAM, 0x10 = XRAM   */
 
-#define FIO_ERR_NOTMOUNTED 5
 #ifndef FIO_ERR_DISKFULL
 #define FIO_ERR_DISKFULL   4
 #endif
@@ -676,8 +674,7 @@ int nfio_image_load(const char *name) {
 
 /* ===========================================================================
  *  DRIVE-AWARE SAVE / LOAD / DIR / DELETE / CD / PWD — the user filesystem.
- *  novavm.c's FIO handlers route here whenever a disk is mounted; otherwise they
- *  keep their local /data/nova/programs behaviour (the no-disk fallback).
+ *  User-visible files live only on mounted NDI disks.
  * =========================================================================== */
 
 /* Create a directory entry (no data sectors). Returns its slot, or -1. */
@@ -806,7 +803,7 @@ void nfio_disk_save(void) {
     ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
     if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
     uint16_t parent; char fname[NDI_MAX_NAME + 1];
-    if (ndi_walk(img, path, 1, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_IO); return; }
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
     int len = nfio_stage_save(g_wbuf, WBUF_BYTES);
     if (len < 0) { fio_fail(FIO_ERR_IO); return; }
     uint8_t type = peek(FIO_DIRTYPE);
@@ -977,9 +974,7 @@ void nfio_devstatus(void) {
  *  memory save/load. Ports of the desktop FileIoController DoMkdir / DoRmdir /
  *  DoGSave / DoGLoad (e6502.Avalonia/Hardware/FileIoController.cs). Each owns
  *  the FIO mailbox (reads its params via peek(), reports via fio_ok/fio_fail);
- *  novavm.c just adds the matching `case FIO_CMD_*:` entries. When a disk is
- *  mounted they act on the .ndi image; otherwise they fall back to the flat
- *  /data/nova/programs store (mirrors fio_delete/fio_save's no-disk path).
+ *  novavm.c just adds the matching `case FIO_CMD_*:` entries.
  * =========================================================================== */
 
 /* ---- graphics-memory ABI registers (the FILE_GSAVE/GLOAD wire layout from
@@ -1014,13 +1009,6 @@ static int vgc_space_len(unsigned space) {
     }
 }
 
-/* "<name>" -> /data/nova/programs/<name> (+ .gfx if no extension). The flat
- * (no-disk) .gfx store, mirroring fio_path() for .bas. */
-static void gfx_flat_path(const char *name, char *path, int sz) {
-    if (strrchr(name, '.')) snprintf(path, sz, "%s/%s", PROG_DIR, name);
-    else                    snprintf(path, sz, "%s/%s.gfx", PROG_DIR, name);
-}
-
 /* Store a raw blob as (name + DT_GFX) on the mounted drive. 0 ok, else an
  * FIO_ERR_* code (port of nfio_disk_save without the 2-byte load-addr header —
  * a .gfx file is raw VGC bytes, matching DoGSave's File.WriteAllBytes). */
@@ -1030,7 +1018,7 @@ static int ndi_gfx_store(const char *name, const unsigned char *data, unsigned l
     ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
     if (!img) return FIO_ERR_NOTMOUNTED;
     uint16_t parent; char fname[NDI_MAX_NAME + 1];
-    if (ndi_walk(img, path, 1, &parent, fname, sizeof fname) != 0) return FIO_ERR_IO;
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) return FIO_ERR_NOTFOUND;
     if (ndi_find(img, fname, parent) >= 0) ndi_delete(img, fname, parent);  /* overwrite */
     int idx = ndi_create(img, fname, DT_GFX, parent, len);
     if (idx < 0) return FIO_ERR_DISKFULL;
@@ -1070,20 +1058,8 @@ void nfio_gsave(void) {
     }
     for (unsigned i = 0; i < len; i++) g_fbuf[i] = vgc_mem_read(space, addr + i);
 
-    if (nfio_disk_active()) {
-        int rc = ndi_gfx_store(name, g_fbuf, len);
-        if (rc != 0) { fio_fail(rc); return; }
-    } else {
-        char path[200];
-        gfx_flat_path(name, path, sizeof path);
-        mkdir(PROG_DIR, 0775);
-        FILE *f = fopen(path, "wb");
-        if (!f) { fio_fail(FIO_ERR_IO); return; }
-        size_t bw = fwrite(g_fbuf, 1, len, f);
-        fclose(f);
-        if (bw != len) { fio_fail(FIO_ERR_IO); return; }
-        printf("[fio] GSAVE %s (%u bytes)\n", path, len);
-    }
+    int rc = ndi_gfx_store(name, g_fbuf, len);
+    if (rc != 0) { fio_fail(rc); return; }
     poke(FIO_SIZE_LO, len & 0xFF);
     poke(FIO_SIZE_HI, (len >> 8) & 0xFF);
     fio_ok();
@@ -1099,18 +1075,8 @@ void nfio_gload(void) {
     unsigned reqlen = peek(FIO_GLEN_LO)  | (peek(FIO_GLEN_HI)  << 8);
 
     int n;
-    if (nfio_disk_active()) {
-        n = ndi_gfx_fetch(name, g_fbuf, sizeof g_fbuf);
-        if (n < 0) { fio_fail(-n); return; }
-    } else {
-        char path[200];
-        gfx_flat_path(name, path, sizeof path);
-        FILE *f = fopen(path, "rb");
-        if (!f) { fio_fail(FIO_ERR_NOTFOUND); return; }
-        n = (int)fread(g_fbuf, 1, sizeof g_fbuf, f);
-        fclose(f);
-        if (n < 0) { fio_fail(FIO_ERR_IO); return; }
-    }
+    n = ndi_gfx_fetch(name, g_fbuf, sizeof g_fbuf);
+    if (n < 0) { fio_fail(-n); return; }
 
     unsigned len = (reqlen > 0 && (unsigned)n > reqlen) ? reqlen : (unsigned)n;
     int spacelen = vgc_space_len(space);
@@ -1128,22 +1094,15 @@ void nfio_gload(void) {
 void nfio_mkdir(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    if (nfio_disk_active()) {
-        char path[200];
-        int slot = nfio_resolve(name, path, sizeof path);
-        ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
-        if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
-        uint16_t parent; char fname[NDI_MAX_NAME + 1];
-        if (ndi_walk(img, path, 1, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_IO); return; }
-        if (ndi_find(img, fname, parent) >= 0) { fio_fail(FIO_ERR_IO); return; }  /* already exists */
-        if (ndi_mkdir(img, fname, parent) < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
-        printf("[fio] MKDIR(ndi) %s:%s\n", drive_slot_name(slot), path);
-        fio_ok();
-        return;
-    }
-    char dpath[200];
-    snprintf(dpath, sizeof dpath, "%s/%s", PROG_DIR, name);
-    if (mkdir(dpath, 0775) != 0) { fio_fail(FIO_ERR_IO); return; }
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    if (ndi_find(img, fname, parent) >= 0) { fio_fail(FIO_ERR_IO); return; }  /* already exists */
+    if (ndi_mkdir(img, fname, parent) < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
+    printf("[fio] MKDIR(ndi) %s:%s\n", drive_slot_name(slot), path);
     fio_ok();
 }
 
@@ -1174,23 +1133,16 @@ static int ndi_rmdir(ndi_t *m, const char *name, uint16_t parent) {
 void nfio_rmdir(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    if (nfio_disk_active()) {
-        char path[200];
-        int slot = nfio_resolve(name, path, sizeof path);
-        ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
-        if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
-        uint16_t parent; char fname[NDI_MAX_NAME + 1];
-        if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
-        int rc = ndi_rmdir(img, fname, parent);
-        if (rc != 0) { fio_fail(rc); return; }
-        ndi_flush(img);
-        printf("[fio] RMDIR(ndi) %s:%s\n", drive_slot_name(slot), path);
-        fio_ok();
-        return;
-    }
-    char dpath[200];
-    snprintf(dpath, sizeof dpath, "%s/%s", PROG_DIR, name);
-    if (rmdir(dpath) != 0) { fio_fail(FIO_ERR_IO); return; }
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    int rc = ndi_rmdir(img, fname, parent);
+    if (rc != 0) { fio_fail(rc); return; }
+    ndi_flush(img);
+    printf("[fio] RMDIR(ndi) %s:%s\n", drive_slot_name(slot), path);
     fio_ok();
 }
 

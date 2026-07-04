@@ -1,9 +1,9 @@
 // Host-side unit test for ndi_image.cpp.
 // Compiles with clang++ on macOS — no Arduino, no SD_MMC.
 //
-// Backs the IStream interface with a stdio FILE* and runs the parser
-// against /Users/barry/Git/e6502/docs/programs/demo.ndi when it has been
-// regenerated as NDI v2. Write-side tests create fresh v2 images via the CLI.
+// Backs the IStream interface with a stdio FILE* and runs the parser against
+// docs/programs/demo.ndi when it has been regenerated as NDI v2. Write-side
+// tests create fresh v2 images via the CLI.
 
 #include "../ndi_image.h"
 
@@ -66,7 +66,7 @@ static void check_eq_int(const char* name, long a, long b) {
 // Tests
 // ---------------------------------------------------------------------------
 static const char* DEMO_PATH =
-    "/Users/barry/Git/e6502/docs/programs/demo.ndi";
+    "../../../docs/programs/demo.ndi";
 
 static void test_open_and_header() {
     printf("\nTest: open demo.ndi + header parse\n");
@@ -217,9 +217,9 @@ static void test_write_read_roundtrip() {
     // file ops, not initial format).
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label TEST > /dev/null",
+        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label TEST > /dev/null 2>&1",
         path);
-    if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); return; }
+    if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
     {
         FILE* f = fopen(path, "rb+");
@@ -274,9 +274,9 @@ static void test_delete_roundtrip() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label DEL > /dev/null",
+        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label DEL > /dev/null 2>&1",
         path);
-    if (system(cmd) != 0) return;
+    if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
     FILE* f = fopen(path, "rb+");
     FileStream stream(f);
@@ -306,9 +306,9 @@ static void test_mkdir_rmdir() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "cd /Users/barry/Git/e6502/e6502.Nova && dotnet run -- create %s --size 64 --label DIRT > /dev/null",
+        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label DIRT > /dev/null 2>&1",
         path);
-    if (system(cmd) != 0) return;
+    if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
     FILE* f = fopen(path, "rb+");
     FileStream stream(f);

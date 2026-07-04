@@ -94,8 +94,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
         // Browser: use a temporary in-memory directory structure
         string tempDir = Path.GetTempPath();
-        string hd0 = Path.Combine(tempDir, "e6502-programs");
-        string hd1 = Path.Combine(tempDir, "e6502-data");
+        string hd0 = Path.Combine(tempDir, "e6502-hd0");
+        string hd1 = Path.Combine(tempDir, "e6502-hd1");
         string disks = Path.Combine(tempDir, "e6502-disks");
         _deviceManager = new DeviceManager(hd0, hd1, disks);
 

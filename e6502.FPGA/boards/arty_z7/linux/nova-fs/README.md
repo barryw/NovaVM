@@ -11,7 +11,7 @@ fds/         floppy images (.ndi)           -> `nova drive mount <x>` resolves h
 soundfonts/  WTS soundfonts (.sf2)          -> `nova soundfont <x>` uploads/loads here
 roms/        system ROMs                    -> ehbasic.bin (always loaded into basic_rom @ boot),
                                                F6581.BIN (SID filter curve -> XRAM)
-programs/    BASIC program saves (.bas)     -> SAVE/LOAD (replaces ~/e6502-programs)
+disks/       mounted NDI images             -> SAVE/LOAD/DIR operate inside mounted disks
 assets/      boot assets                    -> novavm_logo.nvg (boot splash)
 config/      host state                     -> drive-mount table (which .ndi is in which slot)
 ```

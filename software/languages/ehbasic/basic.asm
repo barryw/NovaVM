@@ -698,7 +698,16 @@ TabLoop
       STZ   IrqBase           ; clear IRQ handler enabled flag
       STZ   FAC1_o            ; clear FAC1 overflow byte
       STZ   last_sh           ; clear descriptor stack top item pointer high byte
-      JSR   LAB_BOOT_SCREEN_CLEAR
+      LDA   #VCMD_GCLS        ; clear stale graphics from prior language/runtime
+      STA   VGC_CMD
+      STZ   VGC_BGCOL         ; black background
+      LDA   #$0F              ; light grey text
+      STA   VGC_FGCOL
+      LDA   #$0B              ; dark grey border
+      STA   VGC_BORDER
+      STZ   VGC_MODE          ; mode 0: text only
+      LDA   #$0C              ; clear text layer and home cursor
+      JSR   V_OUTP
 
       LDA   #$0E              ; set default tab size
       STA   TabSiz            ; save it
@@ -9046,20 +9055,6 @@ PG2_TABE
 ; --- Nova hardware constants live in runtime/asm/nova.inc ---
 
 ; --- VGC command handlers ---
-
-; draw a text-only cold-start splash screen
-
-LAB_BOOT_SCREEN_CLEAR
-      STZ   VGC_BGCOL         ; black background
-      LDA   #$0F              ; light grey text
-      STA   VGC_FGCOL
-      LDA   #$0B              ; dark grey border
-      STA   VGC_BORDER
-      STZ   VGC_MODE          ; mode 0: text only
-
-      LDA   #$0C              ; clear text layer and home cursor
-      JSR   V_OUTP
-      RTS
 
 ; position the text cursor: A = column, Y = row. Shared by the splash lines below
 ; (factored out to reclaim ROM — the BASIC ROM is essentially full).

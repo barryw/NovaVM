@@ -23,15 +23,11 @@ nt_tmp:   .res 1
 ; @requires NUI_TITLEL/H NUI_FOOTERL/H NUI_DIALOG_* NUI_INPUT_OUTL/H NUI_INPUT_OUT_MAX NUI_INPUT_LABELL/H
 ; @out A: 0 on success, 1 on error. NUI_RESULT = OK/CANCEL; NUI_INPUT_OUT_LEN = typed text length.
 nui_text_input:
-      STZ   NUI_INPUT_OUT_LEN
       LDA   NUI_INPUT_OUT_MAX
       BNE   :+
       LDA   #NUI_ERR
       RTS
-:     JSR   nui_text_output_ptr
-      LDY   #0
-      TYA
-      STA   (NUI_PRINTL),Y
+:     JSR   nui_text_init_output_len
       STZ   nt_focus
       JSR   nui_show_dialog
       BEQ   :+
@@ -121,6 +117,28 @@ nui_text_output_ptr:
       STA   NUI_PRINTL
       LDA   NUI_INPUT_OUTH
       STA   NUI_PRINTH
+      RTS
+
+nui_text_init_output_len:
+      JSR   nui_text_output_ptr
+      LDA   NUI_INPUT_OUT_MAX
+      SEC
+      SBC   #1
+      STA   nt_tmp
+      STZ   NUI_INPUT_OUT_LEN
+      LDY   #0
+@loop:
+      CPY   nt_tmp
+      BCS   @terminate
+      LDA   (NUI_PRINTL),Y
+      BEQ   @done
+      INY
+      BRA   @loop
+@terminate:
+      LDA   #0
+      STA   (NUI_PRINTL),Y
+@done:
+      STY   NUI_INPUT_OUT_LEN
       RTS
 
 nui_text_render:

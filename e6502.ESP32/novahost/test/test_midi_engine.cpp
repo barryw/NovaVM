@@ -211,9 +211,9 @@ static void test_rejects_smpte_timing() {
     check("error mentions timing", strstr(err, "timing") != nullptr);
 }
 
-static void test_stars_and_stripes_if_available() {
-    printf("\nTest: Sousa Stars and Stripes fixture when available\n");
-    const char* path = "/Users/barry/e6502-programs/Sousa_StarsAndStripesForever.mid";
+static void test_repo_midi_fixture_if_available() {
+    printf("\nTest: repo MIDI fixture when available\n");
+    const char* path = "../../../docs/programs/midi/sousa-stars-stripes.mid";
     FILE* f = fopen(path, "rb");
     if (!f) {
         printf("  SKIP  %s not present\n", path);
@@ -309,7 +309,7 @@ int main() {
     test_running_status();
     test_program_change_uses_event_time_program();
     test_rejects_smpte_timing();
-    test_stars_and_stripes_if_available();
+    test_repo_midi_fixture_if_available();
     printf("\n=== Results: %d passed, %d failed ===\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

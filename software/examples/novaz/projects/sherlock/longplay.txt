@@ -1,9 +1,12 @@
 # Sherlock V5 longplay: time advancement and save/restore.
-save
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter
 look=>221-B Baker Street&&gas streetlight
 wait=>Time passes
 n=>no light
 s=>no light
 .reboot
-restore
+!restore=>RESTORE GAME
+.key enter
 look=>221-B Baker Street&&door to the house

@@ -110,6 +110,7 @@ SYS_NUI_RESTORE_UNDER_FULL = $17 ; (configptr) -> restore text + graphics planes
 SYS_NUI_SET_STYLE          = $18 ; (shadow,border,panel,text) -> set NUI chrome/text colors
 SYS_NUI_FILE_PICKER        = $19 ; (configptr) reporter -> RESULT b0 namelen, b1 OK/CANCEL
 SYS_NUI_TEXT_INPUT         = $1A ; (configptr) reporter -> RESULT b0 textlen, b1 OK/CANCEL
+SYS_NUI_DRAIN_KEYS         = $1B ; () -> drain pending modal keyboard bytes
 
 ; =====================================================================
 ; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
@@ -154,6 +155,6 @@ SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer f
 
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $1B
+SYS_FN_COUNT  = $1C
 
 .endif

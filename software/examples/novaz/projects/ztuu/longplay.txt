@@ -1,10 +1,13 @@
 # ZTUU V5 longplay: save/restore around early-map movement.
-save
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter
 look=>New Excavation&&narrow&&tunnel
 inventory=>cheaply-made sword&&brass lantern
 ne=>Tunnel&&trapped
 ne=>Cultural Complex&&Convention Center
 look=>Cultural Complex&&Royal Theater
 .reboot
-restore
+!restore=>RESTORE GAME
+.key enter
 look=>New Excavation&&narrow&&tunnel

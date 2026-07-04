@@ -110,3 +110,5 @@ overlay_main_count:
         .byte $00
 
 .include "overlay.s"
+.include "pager.s"
+.include "fio.s"

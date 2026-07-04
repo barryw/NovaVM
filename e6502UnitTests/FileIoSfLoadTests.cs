@@ -124,7 +124,7 @@ public class FileIoSfLoadTests
             File.WriteAllBytes(Path.Combine(sfDir, "test.sf2"), sf2);
 
             // Create a standalone controller with the temp directory instead of using
-            // CompositeBusDevice (which would use the real ~/e6502-programs path)
+            // CompositeBusDevice's host-asset fallback.
             var wts = new WavetableSynth();
             var memory = new byte[65536];
             var fio = new FileIoController(

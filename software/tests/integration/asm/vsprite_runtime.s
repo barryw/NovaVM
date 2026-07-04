@@ -71,3 +71,4 @@ clear_x:
         rts
 
 .include "vsprite.s"
+.include "blitter.s"

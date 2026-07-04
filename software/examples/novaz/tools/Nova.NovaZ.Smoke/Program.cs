@@ -233,7 +233,7 @@ try
         else if (command.Mode == SmokeInputMode.Key)
             SendKey(cpu, bus, editor, ParseSmokeKey(command.Text));
         else
-            SendLine(cpu, bus, editor, command.Text);
+            SendLine(cpu, bus, editor, command.Text, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
 
         if (command.WaitForPrompt)
         {
@@ -1273,7 +1273,39 @@ static void YieldHostHardware(int step)
         Thread.Sleep(0);
 }
 
-static void SendLine(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
+static void SendLine(
+    Cpu cpu,
+    CompositeBusDevice bus,
+    ScreenEditor editor,
+    string text,
+    int? rawInputModeAddress,
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
+{
+    if (rawInputModeAddress is null || readKeyLoopAddress is null)
+    {
+        SendLineFixed(cpu, bus, editor, text);
+        return;
+    }
+
+    Nz6Trace.Marker($"--- turn: {text}");
+    bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
+    foreach (char ch in text)
+    {
+        WaitForLineInputReady(cpu, bus, editor, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+        editor.QueueInput((byte)ch);
+        RunUntilInputDequeued(cpu, bus, editor);
+        if (traceInput)
+            Console.Error.WriteLine($"input '{ch}': {FormatZvmState(cpu, bus)} {FormatParserState(bus)}");
+    }
+    WaitForLineInputReady(cpu, bus, editor, rawInputModeAddress, readKeyLoopAddress, readTimedLoopAddress);
+    editor.QueueInput(0x0D);
+    RunUntilInputDequeued(cpu, bus, editor);
+    if (traceInput)
+        Console.Error.WriteLine($"input CR: {FormatZvmState(cpu, bus)} {FormatParserState(bus)}");
+}
+
+static void SendLineFixed(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string text)
 {
     Nz6Trace.Marker($"--- turn: {text}");
     bool traceInput = Environment.GetEnvironmentVariable("NOVAZ_SMOKE_TRACE_INPUT") == "1";
@@ -1307,7 +1339,56 @@ static void SendKey(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, byte k
 {
     Nz6Trace.Marker($"--- key: ${key:X2}");
     editor.QueueInput(key);
-    RunForSteps(cpu, bus, 50_000);
+    RunUntilInputDequeued(cpu, bus, editor);
+}
+
+static void WaitForLineInputReady(
+    Cpu cpu,
+    CompositeBusDevice bus,
+    ScreenEditor editor,
+    int? rawInputModeAddress,
+    int? readKeyLoopAddress,
+    int? readTimedLoopAddress)
+{
+    if (rawInputModeAddress is not int rawAddress || readKeyLoopAddress is not int keyLoopAddress)
+    {
+        RunForSteps(cpu, bus, 50_000);
+        return;
+    }
+
+    for (int i = 0; i < 1_000_000; i++)
+    {
+        if (!editor.HasQueuedInput &&
+            bus.Read((ushort)rawAddress) != 0 &&
+            IsAtReadLoop(cpu, keyLoopAddress, readTimedLoopAddress))
+            return;
+
+        int cycles = cpu.ClocksForNext();
+        cpu.ExecuteNext();
+        bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
+    }
+
+    throw new TimeoutException($"Timed out waiting for NovaZ line input readiness. {FormatZvmState(cpu, bus)}\n{SnapshotScreen(bus.Vgc)}");
+}
+
+static void RunUntilInputDequeued(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor)
+{
+    for (int i = 0; i < 100_000; i++)
+    {
+        if (!editor.HasQueuedInput)
+        {
+            RunForSteps(cpu, bus, 8_000);
+            return;
+        }
+
+        int cycles = cpu.ClocksForNext();
+        cpu.ExecuteNext();
+        bus.AdvanceCycles(cycles);
+        Nz6Trace.Sample(cpu, bus);
+    }
+
+    throw new TimeoutException($"Timed out waiting for queued input to be consumed. {FormatZvmState(cpu, bus)}\n{SnapshotScreen(bus.Vgc)}");
 }
 
 static byte ParseSmokeKey(string text)
@@ -1344,7 +1425,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     if (screen.Contains("Is this a VT220", StringComparison.OrdinalIgnoreCase) ||
         screen.Contains("Please type YES or NO", StringComparison.OrdinalIgnoreCase))
     {
-        SendLine(cpu, bus, editor, "NO");
+        SendLine(cpu, bus, editor, "NO", null, null, null);
         return true;
     }
 
@@ -1353,7 +1434,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     {
         if (screen.Contains(">n", StringComparison.OrdinalIgnoreCase))
             return false;
-        SendLine(cpu, bus, editor, "N");
+        SendLine(cpu, bus, editor, "N", null, null, null);
         return true;
     }
 
@@ -1376,7 +1457,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     {
         if (screen.Contains(">begin", StringComparison.OrdinalIgnoreCase))
             return false;
-        SendLine(cpu, bus, editor, "BEGIN");
+        SendLine(cpu, bus, editor, "BEGIN", null, null, null);
         return true;
     }
 
@@ -1384,7 +1465,7 @@ static bool HandleStartupPrompt(string screen, Cpu cpu, CompositeBusDevice bus, 
     {
         if (screen.Contains(">1", StringComparison.OrdinalIgnoreCase))
             return false;
-        SendLine(cpu, bus, editor, "1");
+        SendLine(cpu, bus, editor, "1", null, null, null);
         return true;
     }
 
@@ -2003,20 +2084,21 @@ static bool SettledAtReadLoop(
 
 static bool HasCursorBarePrompt(VirtualGraphicsController vgc, string[] lines)
 {
-    // A bare prompt is '>' immediately left of the cursor with the rest of
-    // the cursor row blank. The '>' is not anchored to column 0: V6 windows
-    // put the prompt at the playfield's left edge (e.g. Zork Zero's inset
-    // playfield starts at column 5). The PC-at-read-loop and raw-input-mode
-    // gates in the callers carry the real "waiting for input" signal; this
-    // check only confirms the prompt has finished drawing.
+    // A bare prompt is one '>' before the cursor with the rest of the cursor
+    // row blank. The cursor may sit one blank cell after the prompt.
     int actualX = vgc.GetCursorX();
     int actualY = vgc.GetCursorY();
     if (actualX < 1 || actualY < 0 || actualY >= Math.Min(lines.Length, VgcConstants.ScreenRows))
         return false;
     string line = lines[actualY];
-    if (actualX > line.Length || line[actualX - 1] != '>')
+    if (actualX > line.Length)
         return false;
-    return line[..(actualX - 1)].All(ch => ch == ' ') && line[actualX..].All(ch => ch == ' ');
+    int promptX = line.LastIndexOf('>', Math.Min(actualX - 1, line.Length - 1), actualX);
+    if (promptX < 0)
+        return false;
+    return line[..promptX].All(ch => ch == ' ') &&
+        line[(promptX + 1)..actualX].All(ch => ch == ' ') &&
+        line[actualX..].All(ch => ch == ' ');
 }
 
 static string FormatPromptDiagnostics(VirtualGraphicsController vgc, string screen)

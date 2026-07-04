@@ -18,9 +18,12 @@ are set in surrounding registers \emph{before} the command write.  After
 execution, the status register at \$B9A1 reports success or failure, and the
 error code register at \$B9A2 provides detail.
 
-Files are stored in the save directory (\texttt{\textasciitilde/e6502-programs}
-by default).  The FIO automatically appends the appropriate file extension
-(\texttt{.bas}, \texttt{.sid}, \texttt{.gfx}, etc.) based on the command.
+Files are stored on mounted Nova Disk Image (NDI) devices such as
+\texttt{FD0:}, \texttt{FD1:}, \texttt{HD0:}, and \texttt{HD1:}.  Bare filenames
+use the current device and directory.  If no disk is mounted, file commands fail
+with a not-mounted error instead of falling back to a host directory.  The FIO
+automatically appends the appropriate file extension (\texttt{.bas},
+\texttt{.sid}, \texttt{.gfx}, etc.) based on the command.
 
 
 % ═══════════════════════════════════════════════════════════════════════════════

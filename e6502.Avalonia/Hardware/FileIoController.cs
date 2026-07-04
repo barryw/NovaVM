@@ -93,8 +93,9 @@ public sealed partial class FileIoController
         _zsound = zsound;
         _deviceManager = deviceManager;
         _saveDir = saveDir ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "e6502-programs");
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "NovaVM",
+            "host-assets");
 
         // Wire up auto-soundfont loading for MML playback with WTS voices
         if (_musicEngine is not null && _wts is not null)
@@ -370,6 +371,33 @@ public sealed partial class FileIoController
             device.CurrentDirectory = savedDir;
     }
 
+    private void SetFileIoError(Exception ex)
+    {
+        if (ex is DirectoryNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+            return;
+        }
+
+        if (IsNotMountedException(ex))
+        {
+            SetError(VgcConstants.FioErrNotMounted);
+            return;
+        }
+
+        if (ex is FileNotFoundException)
+        {
+            SetError(VgcConstants.FioErrNotFound);
+            return;
+        }
+
+        SetError(VgcConstants.FioErrIo);
+    }
+
+    private static bool IsNotMountedException(Exception ex) =>
+        ex is InvalidOperationException && ex.Message.Contains("not mounted", StringComparison.OrdinalIgnoreCase) ||
+        ex is IOException && ex.Message.Contains("No disk image is mounted", StringComparison.OrdinalIgnoreCase);
+
     // -------------------------------------------------------------------------
     // File I/O commands
     // -------------------------------------------------------------------------
@@ -481,9 +509,9 @@ public sealed partial class FileIoController
             SetOk();
             ProgramSaved?.Invoke(filename, isNewDocFallback);
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -682,9 +710,9 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrNotFound);
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -777,7 +805,16 @@ public sealed partial class FileIoController
             // shipped on the mounted floppy (the AUTOBOOT contract) win. The host
             // <saveDir>/roms/ library (mirrors NovaHost's SD /roms/) is the fallback
             // for runtimes not on the inserted disk.
-            byte[]? data = LoadDataFile(filename, ".bin", out bool notFound);
+            byte[]? data = null;
+            bool notFound = true;
+            try
+            {
+                data = LoadDataFile(filename, ".bin", out notFound);
+            }
+            catch (Exception ex) when (IsNotMountedException(ex))
+            {
+                notFound = true;
+            }
             if (data is null && notFound)
             {
                 var (baseName, extension) = SplitDataFilename(filename, ".bin");
@@ -800,9 +837,9 @@ public sealed partial class FileIoController
             SetTransferSize(data.Length);
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -935,9 +972,9 @@ public sealed partial class FileIoController
             _dirIndex = 0;
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1030,9 +1067,9 @@ public sealed partial class FileIoController
 
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1094,9 +1131,9 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrNotFound);
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1117,9 +1154,9 @@ public sealed partial class FileIoController
             _openFiles[fileId - 1] = null;
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1341,9 +1378,9 @@ public sealed partial class FileIoController
             }
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1368,9 +1405,9 @@ public sealed partial class FileIoController
             _regs[VgcConstants.FioSrcH - VgcConstants.FioBase] = 0;
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1397,9 +1434,9 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrNotFound);
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1436,9 +1473,9 @@ public sealed partial class FileIoController
         {
             SetError(VgcConstants.FioErrNotFound);
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -1501,9 +1538,9 @@ public sealed partial class FileIoController
             _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((len >> 8) & 0xFF);
             SetOk();
         }
-        catch
+        catch (Exception ex)
         {
-            SetError(VgcConstants.FioErrIo);
+            SetFileIoError(ex);
         }
     }
 
@@ -2474,7 +2511,7 @@ public sealed partial class FileIoController
             _deviceManager.DefaultDevice = device.Prefix;
             SetOk();
         }
-        catch { SetError(VgcConstants.FioErrIo); }
+        catch (Exception ex) { SetFileIoError(ex); }
     }
 
     private void DoMkdir()
@@ -2485,12 +2522,20 @@ public sealed partial class FileIoController
             string? raw = ReadFilenameRaw();
             if (raw is null) { SetError(VgcConstants.FioErrIo); return; }
 
-            var (device, name) = _deviceManager.ResolveFilename(raw);
-            if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
-            device.MakeDirectory(name);
+            var resolved = ResolveDevice(raw);
+            if (resolved is null) { SetError(VgcConstants.FioErrIo); return; }
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                device.MakeDirectory(name);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
             SetOk();
         }
-        catch { SetError(VgcConstants.FioErrIo); }
+        catch (Exception ex) { SetFileIoError(ex); }
     }
 
     private void DoRmdir()
@@ -2501,12 +2546,20 @@ public sealed partial class FileIoController
             string? raw = ReadFilenameRaw();
             if (raw is null) { SetError(VgcConstants.FioErrIo); return; }
 
-            var (device, name) = _deviceManager.ResolveFilename(raw);
-            if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
-            device.RemoveDirectory(name);
+            var resolved = ResolveDevice(raw);
+            if (resolved is null) { SetError(VgcConstants.FioErrIo); return; }
+            var (device, name, savedDir) = resolved.Value;
+            try
+            {
+                device.RemoveDirectory(name);
+            }
+            finally
+            {
+                RestoreDir(device, savedDir);
+            }
             SetOk();
         }
-        catch { SetError(VgcConstants.FioErrIo); }
+        catch (Exception ex) { SetFileIoError(ex); }
     }
 
     private void DoFormat()

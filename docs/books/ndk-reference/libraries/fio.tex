@@ -223,10 +223,13 @@ entry. BASIC and BIN sizes exclude the two-byte load-address prefix. \\
 
 \novacode{fio\_pwd}, \novacode{fio\_cd}, \novacode{fio\_mkdir}, and
 \novacode{fio\_rmdir} use the same filename buffer. \novacode{fio\_delete}
-routes through the host's program/file delete path; on hosted BASIC program
-files it also removes the companion \novacode{.md} document when present. Host
-directory devices allow paths and mounted-device prefixes; invalid names or
-missing mounted media report through the normal error registers.
+routes through the mounted disk file delete path. File commands operate on the
+current mounted NDI device, or on an explicit prefix such as \novacode{FD1:} or
+\novacode{HD0:}. If no disk is mounted, the host reports
+\novacode{FIO\_ERR\_NOTMOUNTED}; if a parent directory is missing, it reports
+\novacode{FIO\_ERR\_NOTFOUND}. \novacode{fio\_mkdir} and
+\novacode{fio\_rmdir} are the directory-creation/removal operations; saves do
+not create missing parent directories implicitly.
 
 \section{Runtime Services}
 

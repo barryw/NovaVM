@@ -29,6 +29,10 @@
 #ifndef NFIO_H
 #define NFIO_H
 
+#ifndef FIO_ERR_NOTMOUNTED
+#define FIO_ERR_NOTMOUNTED 5
+#endif
+
 /* ---- lifecycle ------------------------------------------------------------ */
 /* Reset module state (file handles, write staging, cached boot image, mount
  * table reload flag). Call once at boot from novavm.c before the service loop.
@@ -57,9 +61,8 @@ void fio_fsize(void);         /* FIO_CMD_FSIZE       0x34: report handle size   
  * load it into 6502 RAM exactly as the bare-metal fio_load() does for an image
  * hit: writes the bytes via poke(), updates FIO_SRC (for .bin), FIO_SIZE and
  * FIO_DIRTYPE. Returns 0 on a successful image load (caller should then
- * fio_ok()), -1 if nothing is mounted or the name is not in the image (caller
- * falls through to its SD/programs LOAD). Does NOT itself call fio_ok/fio_fail —
- * the caller owns the mailbox result. See nfio.c for the exact wiring snippet. */
+ * fio_ok()), -1 if nothing is mounted or the name is not in the image. Does
+ * NOT itself call fio_ok/fio_fail; the caller owns the mailbox result. */
 int  nfio_image_load(const char *name);
 
 /* ---- drive-aware user filesystem (SAVE/LOAD/DIR/DELETE/CD/PWD) -------------
@@ -80,8 +83,8 @@ void nfio_devstatus(void);      /* FIO_CMD_DEVSTATUS: mounted slot probe        
 
 /* ---- directory create/remove + VGC graphics-memory save/load --------------
  * Ports of the desktop FileIoController DoMkdir/DoRmdir/DoGSave/DoGLoad. Each
- * reads the FIO mailbox + owns fio_ok()/fio_fail(). They act on the mounted
- * .ndi when a disk is current, else on the flat /data/nova/programs store. */
+ * reads the FIO mailbox + owns fio_ok()/fio_fail(). They require a mounted
+ * .ndi disk and report FIO_ERR_NOTMOUNTED when no current disk is active. */
 void nfio_mkdir(void);          /* FIO_CMD_MKDIR 0x21: create a directory        */
 void nfio_rmdir(void);          /* FIO_CMD_RMDIR 0x22: remove an empty directory */
 void nfio_gsave(void);          /* FIO_CMD_GSAVE 0x06: VGC plane region -> .gfx   */

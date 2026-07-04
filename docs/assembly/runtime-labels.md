@@ -1043,7 +1043,7 @@ Clear the host-visible FIO status and error latch.
 
 - Kind: `routine`
 - Symbol: `fio_clear_error`
-- Address: `$FFC4`
+- Address: `$FFC5`
 
 Outputs:
 - `A`: 0 on success.
@@ -2033,6 +2033,13 @@ Set the standard centered modal-dialog geometry.
 
 - Kind: `routine`
 - Symbol: `nui_dialog_defaults`
+
+## NUI.DRAIN_KEYS
+
+Drain pending keyboard bytes before handing focus to a new modal control.
+
+- Kind: `routine`
+- Symbol: `nui_drain_keys`
 
 ## NUI.PICK_LIST
 

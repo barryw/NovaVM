@@ -1,7 +1,7 @@
 SIM6502_IMAGE ?= ghcr.io/barryw/sim6502:latest
 SIM6502_PULL ?= always
-CA65 ?= /Users/barry/Git/cc65/bin/ca65
-LD65 ?= /Users/barry/Git/cc65/bin/ld65
+CA65 ?= ca65
+LD65 ?= ld65
 PYTHON ?= python3
 
 BUILD_DIR := build

@@ -282,7 +282,7 @@ reset:
         JSR demo_piece_suite
 .else
         JSR init_game_defaults
-        JSR title_flow
+        JSR setup_new_game
         JSR load_selected_engine_or_halt
         JSR init_engine_game
         JSR start_game_screen
@@ -1719,7 +1719,7 @@ show_engine_error_dialog:
         STA NUI_MSGL
         LDA #>msg_engine_error_body
         STA NUI_MSGH
-        JMP nui_show_error
+        JMP show_dialog_wait_local
 
 load_full_engine:
         LDA #<engine_full_name
@@ -1767,9 +1767,6 @@ init_game_defaults:
         STA selected_difficulty
         RTS
 
-title_flow:
-        JMP setup_new_game
-
 show_menu_backdrop:
         ; Menu entry always reloads the splash so a cleared graphics plane
         ; cannot leave the menu blank.
@@ -1789,10 +1786,15 @@ wait_key:
 @loop:
         LDA VGC_CHARIN
         BEQ @loop
-        PHA
-        STZ VGC_CURSEN
-        PLA
         JMP to_upper
+
+show_dialog_wait_local:
+        JSR nui_show_dialog
+        BNE @done
+        JSR wait_key
+        LDA #NUI_OK
+@done:
+        RTS
 
 to_upper:
         CMP #'a'
@@ -2877,7 +2879,7 @@ show_network_error_dialog:
         STA NUI_MSGL
         LDA #>msg_net_error_body
         STA NUI_MSGH
-        JMP nui_show_error
+        JMP show_dialog_wait_local
 
 show_network_module_error_dialog:
         JSR set_status_network_error
@@ -2898,7 +2900,7 @@ show_network_module_error_dialog:
         STA NUI_MSGL
         LDA #>msg_net_module_body
         STA NUI_MSGH
-        JMP nui_show_error
+        JMP show_dialog_wait_local
 
 selfplay_loop:
 @loop:

@@ -319,8 +319,14 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     rc = DoArtyBuildLinuxHost(repo, []);
     if (rc != 0) return rc;
 
-    string programs = editorDemo ? " /data/nova/programs" : "";
-    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy" + programs);
+    using TempFile? editorDemoImage = editorDemo ? TempFile.Create(".ndi") : null;
+    if (editorDemoImage is not null)
+    {
+        rc = CreateEditorDemoImage(repo, editorDemoImage.Path);
+        if (rc != 0) return rc;
+    }
+
+    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy");
     if (rc != 0) return rc;
 
     rc = RunScp(host, Path.Combine(hostDir, "novavm"), "/run/novavm.new");
@@ -337,10 +343,13 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
 
     if (editorDemo)
     {
-        rc = RunScp(host, Path.Combine(repo, "software", "assembly", "apps", "editbuf_demo", "editbuf_demo.bin"), "/data/nova/programs/AUTOBOOT.BIN");
+        rc = RunScp(host, editorDemoImage!.Path, "/data/nova/disks/floppy/editor-demo.ndi");
         if (rc != 0) return rc;
 
         rc = UnmountAllBootDrives(host);
+        if (rc != 0) return rc;
+
+        rc = DoDriveMount(["fd0", "/disks/floppy/editor-demo.ndi"], host);
         if (rc != 0) return rc;
     }
 
@@ -372,6 +381,24 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     }
 
     return 0;
+}
+
+static int CreateEditorDemoImage(string repo, string imagePath)
+{
+    try
+    {
+        NdiImage.CreateFormatted(imagePath, "EDITDEMO", 800);
+        using var image = NdiImage.Open(imagePath);
+        byte[] autoboot = File.ReadAllBytes(
+            Path.Combine(repo, "software", "assembly", "apps", "editbuf_demo", "editbuf_demo.bin"));
+        image.WriteFile("AUTOBOOT.BIN", NdiFileType.Bin, 0xFFFF, autoboot);
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"editor demo image: {ex.Message}");
+        return 1;
+    }
 }
 
 static int WaitForRemotePort(string host, int port, TimeSpan timeout)

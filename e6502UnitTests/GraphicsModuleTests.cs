@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Rendering;
+using e6502.Storage;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -2289,20 +2290,11 @@ namespace e6502UnitTests
         // MEMWRITE/MEMREAD/VPOKE/VPEEK are proven end-to-end against the real VGC
         // memory spaces (Axis 2). GSAVE/GLOAD and NVGLOAD are proven end-to-end
         // through the real FileIoController, which is wired into the test bus with
-        // the VGC read/write/length accessors and a hermetic per-assembly save
-        // directory (AssemblySetup sets NOVA_STORAGE_ROOT; HD0 is always mounted).
+        // the VGC read/write/length accessors and the auto-mounted test fd0.ndi.
         // =====================================================================
 
-        // The HD0 host directory the FileIoController saves into (NOVA_STORAGE_ROOT
-        // is set by AssemblySetup to a unique per-run temp dir).
-        private static string Hd0Dir()
-        {
-            string? root = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
-            Assert.IsNotNull(root, "AssemblySetup must set NOVA_STORAGE_ROOT");
-            string dir = Path.Combine(root!, "hd0");
-            Directory.CreateDirectory(dir);
-            return dir;
-        }
+        private static IStorageDevice MountedTestDisk(CompositeBusDevice bus)
+            => bus.DeviceManager.GetDevice("FD0");
 
         private static byte[] BuildNvg2(int width, int height, byte[] pixels)
         {
@@ -2427,9 +2419,8 @@ namespace e6502UnitTests
             RunFn(bus, GFN_GSAVE);   // RunFn asserts STATUS = OK
             Assert.AreEqual(0u, GetResult(bus), "GSAVE must report driver result 0 (OK)");
 
-            // The .gfx file must exist on HD0.
-            Assert.IsTrue(File.Exists(Path.Combine(Hd0Dir(), "GMEMTEST.gfx")),
-                "GSAVE must write the .gfx file to the host save directory");
+            Assert.IsTrue(MountedTestDisk(bus).FileExists("GMEMTEST", ".gfx"),
+                "GSAVE must write the .gfx file to the mounted test disk");
 
             // Clobber the gfx region.
             for (int i = 0; i < len; i++) SetGfxByte(bus, addr + i, 0xFF);
@@ -2475,7 +2466,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGFIX.NVG"), BuildNvg2(4, 2, pixels));
+            MountedTestDisk(bus).Save("NVGFIX", BuildNvg2(4, 2, pixels), ".nvg");
 
             // Stage filename "NVGFIX"; NVGLOAD reads FIO_NAME via the BYTES arg.
             const ushort nameAddr = 0x0500;
@@ -2501,7 +2492,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x0A, 0x0B, 0x0C, 0x0D };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGAT.NVG"), BuildNvg2(4, 1, pixels));
+            MountedTestDisk(bus).Save("NVGAT", BuildNvg2(4, 1, pixels), ".nvg");
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGAT");
@@ -2525,7 +2516,7 @@ namespace e6502UnitTests
             using var bus = MakeAxis2Bus();
 
             byte[] pixels = { 0x09, 0x08, 0x07, 0x06 };
-            File.WriteAllBytes(Path.Combine(Hd0Dir(), "NVGNAMED.NVG"), BuildNvg2(4, 1, pixels));
+            MountedTestDisk(bus).Save("NVGNAMED", BuildNvg2(4, 1, pixels), ".nvg");
 
             const ushort nameAddr = 0x0500;
             byte[] name = System.Text.Encoding.ASCII.GetBytes("NVGNAMED");

@@ -171,6 +171,12 @@ sys_ptr2H:         .res 1
 ;@ret void
 ;@status LERR_OK
 ;
+;@fn SYS_NUI_DRAIN_KEYS
+;@ndk nui_drain_keys
+;@brief Drain pending modal keyboard bytes before handing focus to another NUI control.
+;@ret void
+;@status LERR_OK
+;
 ; --- fixed-address overlay manager (overlay.s) ---
 ;@fn SYS_OVL_LOAD
 ;@ndk overlay_load_fixed
@@ -272,6 +278,7 @@ sys_jtable:
       .word   sys_nui_set_style-1      ; $18 SYS_NUI_SET_STYLE
       .word   sys_nui_file_picker-1    ; $19 SYS_NUI_FILE_PICKER
       .word   sys_nui_text_input-1     ; $1A SYS_NUI_TEXT_INPUT
+      .word   sys_nui_drain_keys-1     ; $1B SYS_NUI_DRAIN_KEYS
 
 sys_no_fn:
       lda     #LERR_NO_FN
@@ -470,6 +477,11 @@ sys_wait_key:
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
+
+; --- $1B SYS_NUI_DRAIN_KEYS: drain pending modal keyboard bytes ---
+sys_nui_drain_keys:
+      JSR   nui_drain_keys
+      JMP   sys_finish_status
 
 sys_marshal_nui_save:
       LDA   LIB_ARG0+0

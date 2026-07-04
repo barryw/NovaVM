@@ -1516,7 +1516,7 @@
       "kind": "routine",
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
-      "address": "$FFC4"
+      "address": "$FFC5"
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -2993,7 +2993,7 @@
     {
       "label": "NUI.DIALOG_DEFAULTS",
       "source": "../../runtime/asm/nui.s",
-      "line": 91,
+      "line": 92,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3002,9 +3002,20 @@
       "summary": "Set the standard centered modal-dialog geometry."
     },
     {
+      "label": "NUI.DRAIN_KEYS",
+      "source": "../../runtime/asm/nui.s",
+      "line": 680,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "nui_drain_keys",
+      "summary": "Drain pending keyboard bytes before handing focus to a new modal control."
+    },
+    {
       "label": "NUI.PICK_LIST",
       "source": "../../runtime/asm/nui.s",
-      "line": 678,
+      "line": 691,
       "inputs": [],
       "outputs": [
         {
@@ -3028,7 +3039,7 @@
     {
       "label": "NUI.RESTORE_UNDER",
       "source": "../../runtime/asm/nui.s",
-      "line": 256,
+      "line": 257,
       "inputs": [],
       "outputs": [
         {
@@ -3052,7 +3063,7 @@
     {
       "label": "NUI.RESTORE_UNDER_FULL",
       "source": "../../runtime/asm/nui.s",
-      "line": 309,
+      "line": 310,
       "inputs": [],
       "outputs": [
         {
@@ -3076,7 +3087,7 @@
     {
       "label": "NUI.SAVE_UNDER",
       "source": "../../runtime/asm/nui.s",
-      "line": 225,
+      "line": 226,
       "inputs": [],
       "outputs": [
         {
@@ -3100,7 +3111,7 @@
     {
       "label": "NUI.SAVE_UNDER_FULL",
       "source": "../../runtime/asm/nui.s",
-      "line": 289,
+      "line": 290,
       "inputs": [],
       "outputs": [
         {
@@ -3124,7 +3135,7 @@
     {
       "label": "NUI.SHOW_DIALOG",
       "source": "../../runtime/asm/nui.s",
-      "line": 1203,
+      "line": 1221,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3135,7 +3146,7 @@
     {
       "label": "NUI.SHOW_DIALOG_WAIT",
       "source": "../../runtime/asm/nui.s",
-      "line": 1220,
+      "line": 1238,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3146,7 +3157,7 @@
     {
       "label": "NUI.SHOW_ERROR",
       "source": "../../runtime/asm/nui.s",
-      "line": 1232,
+      "line": 1250,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3157,7 +3168,7 @@
     {
       "label": "NUI.WAIT_KEY",
       "source": "../../runtime/asm/nui.s",
-      "line": 1244,
+      "line": 1262,
       "inputs": [],
       "outputs": [],
       "requires": [],

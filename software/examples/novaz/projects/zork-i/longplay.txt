@@ -5,10 +5,13 @@ y=>West of House&&small mailbox
 
 open mailbox=>reveals a leaflet
 take leaflet=>Taken.
-save=>Ok.
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter=>Ok.
 drop leaflet=>Dropped.
 .reboot
-restore=>Ok.
+!restore=>RESTORE GAME
+.key enter=>Ok.
 inventory=>A leaflet
 
 n=>North of House

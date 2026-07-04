@@ -35,3 +35,4 @@ run_send:
         rts
 
 .include "gameserver.s"
+.include "nic.s"

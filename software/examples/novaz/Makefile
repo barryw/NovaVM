@@ -29,6 +29,8 @@ JUKEBOX_SRC := $(JUKEBOX) tools/Nova.NovaZ.Jukebox/Program.cs
 SMOKE_BUILD_ARGS ?= --no-restore /nr:false
 SMOKE_ARGS ?=
 PROJECT_SMOKE_ARGS ?= --generic-boot
+SYSTEM_MODULE_DIR := ../../modules/system
+SYSTEM_MODULE_RESOURCE := ../../../e6502.Avalonia/Resources/system.bin
 AUTOBOOT := $(BUILD_DIR)/AUTOBOOT.bin
 RUNTIME := $(BUILD_DIR)/novaz.bin
 NOVAZ6_BIN := $(BUILD_DIR)/novaz6.bin
@@ -129,6 +131,9 @@ all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(SAVE_LOAD_OVERLAY)
 $(NOVA_LIB_FILE): FORCE
 	$(MAKE) -C $(NOVA_LIB) clean-nova-lib build/nova.lib
 
+$(SYSTEM_MODULE_RESOURCE): FORCE
+	$(MAKE) -C $(SYSTEM_MODULE_DIR) install
+
 $(AUTOBOOT): src/autoboot.s src/autoboot.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/libabi.inc $(NOVA_LIB_FILE) | $(BUILD_DIR)
 	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/autoboot.o src/autoboot.s
 	$(LD65) -C src/autoboot.cfg -m $(BUILD_DIR)/autoboot.map -Ln $(BUILD_DIR)/autoboot.sym -o $@ $(BUILD_DIR)/autoboot.o $(NOVA_LIB_FILE)
@@ -162,7 +167,7 @@ $(SAVE_LOAD_OVERLAY): $(SAVE_LOAD_OVERLAY_PAYLOAD) $(OVERLAY_PACKER_DLL)
 
 ndi: $(IMAGE)
 
-$(SMOKE_DLL): $(SMOKE_SRC) $(SMOKE_HOST_SRC)
+$(SMOKE_DLL): $(SMOKE_SRC) $(SMOKE_HOST_SRC) $(SYSTEM_MODULE_RESOURCE)
 	$(DOTNET) build $(SMOKE) -c Release $(SMOKE_BUILD_ARGS)
 
 smoke: $(IMAGE) $(SMOKE_DLL)

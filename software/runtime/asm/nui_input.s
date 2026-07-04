@@ -78,3 +78,14 @@ nui_read_key:
 @ansi_backtab:
       LDA   #NUI_KEY_BACKTAB
       RTS
+
+; @label NUI.DRAIN_KEYS
+; @kind routine
+; @symbol nui_drain_keys
+; @summary Drain pending keyboard bytes before handing focus to a new modal control.
+nui_drain_keys:
+@loop:
+      LDA   VGC_CHARIN
+      BNE   @loop
+      LDA   #NUI_OK
+      RTS

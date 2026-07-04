@@ -229,3 +229,4 @@ table_name:
 table_name_end:
 
 .include "gameserver.s"
+.include "nic.s"

@@ -131,8 +131,8 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         else
         {
             string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            hd0 = Path.Combine(userProfile, "e6502-programs");
-            hd1 = Path.Combine(userProfile, "e6502-data");
+            hd0 = Path.Combine(userProfile, "e6502-hd0");
+            hd1 = Path.Combine(userProfile, "e6502-hd1");
             disks = Path.Combine(userProfile, "e6502-disks");
         }
 
@@ -441,6 +441,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
 
     public void Dispose()
     {
+        _deviceManager.Dispose();
         _nic.Dispose();
         _sid.Dispose();
         _sid2.Dispose();

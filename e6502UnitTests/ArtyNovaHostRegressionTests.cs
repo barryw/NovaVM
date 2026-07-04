@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace e6502UnitTests;
@@ -261,6 +262,21 @@ public class ArtyNovaHostRegressionTests
             "nfio_disk_save must delete the just-created NDI entry if payload write fails, or BASIC DIR shows phantom zero-byte files.");
         StringAssert.Contains(src, "if (ndi_zero_tail(img, idx) != 0)",
             "nfio_disk_save must zero-fill the allocated sector tail and treat that as part of the atomic save.");
+    }
+
+    [TestMethod]
+    public void LinuxNfioSaveAndMkdir_DoNotAutoCreateParentDirectories()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+
+        StringAssert.Contains(src, "ndi_walk(img, path, 0, &parent, fname, sizeof fname)",
+            "SAVE must require existing parent directories; missing dirs should be created only by MKDIR.");
+        StringAssert.DoesNotMatch(src, new Regex(@"void nfio_disk_save[\s\S]*?ndi_walk\(img, path, 1, &parent, fname, sizeof fname\)"),
+            "nfio_disk_save must not auto-create missing parent directories.");
+        StringAssert.DoesNotMatch(src, new Regex(@"static int ndi_gfx_store[\s\S]*?ndi_walk\(img, path, 1, &parent, fname, sizeof fname\)"),
+            "GSAVE must not auto-create missing parent directories.");
+        StringAssert.DoesNotMatch(src, new Regex(@"void nfio_mkdir[\s\S]*?ndi_walk\(img, path, 1, &parent, fname, sizeof fname\)"),
+            "MKDIR may create the named leaf, but it must not recursively create missing parents.");
     }
 
     [TestMethod]

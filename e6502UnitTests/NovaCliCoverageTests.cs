@@ -74,7 +74,8 @@ namespace e6502UnitTests
             StringAssert.Contains(program, "MakeArgsWithCurrentNova");
             StringAssert.Contains(program, "WaitForRemotePort(host, 6504");
             StringAssert.Contains(program, "pidof novavm");
-            StringAssert.Contains(guide, "clears mounted drive slots");
+            StringAssert.Contains(guide, "editor-demo.ndi");
+            StringAssert.Contains(guide, "mounts it as `fd0`");
         }
 
         [TestMethod]
@@ -87,8 +88,11 @@ namespace e6502UnitTests
                 "RunScp(host, Path.Combine(repo, \"software\", \"languages\", \"ehbasic\", \"basic.bin\"), \"/data/nova/roms/ehbasic.bin\")",
                 "deploy-linux-host must use SSH/SCP for the base ROM so it can recover when the management service is down.");
             StringAssert.Contains(program,
-                "RunScp(host, Path.Combine(repo, \"software\", \"assembly\", \"apps\", \"editbuf_demo\", \"editbuf_demo.bin\"), \"/data/nova/programs/AUTOBOOT.BIN\")",
-                "deploy-editor-demo must use SSH/SCP for AUTOBOOT.BIN before management is known healthy.");
+                "RunScp(host, editorDemoImage!.Path, \"/data/nova/disks/floppy/editor-demo.ndi\")",
+                "deploy-editor-demo must upload a bootable NDI over SSH/SCP before restarting NovaVM.");
+            StringAssert.Contains(program,
+                "DoDriveMount([\"fd0\", \"/disks/floppy/editor-demo.ndi\"], host)",
+                "deploy-editor-demo must mount the uploaded NDI as fd0 instead of using a host fallback path.");
         }
 
         [TestMethod]

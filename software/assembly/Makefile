@@ -57,7 +57,8 @@ $(VGC_VSYNC_OBJ): $(NOVA_ASM)/vgc_vsync.s $(NOVA_ASM)/vgc.inc $(NOVA_ASM)/nova.i
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-keyboard: keyboard
-	cp $(KEYBOARD_DIR)/keyboard.bin ~/e6502-programs/keyboard.bin
+	@echo "install-keyboard no longer writes to a host fallback; use nova create/import to place keyboard.bin on an NDI image." >&2
+	@false
 
 demo: $(DEMO_DIR)/demo.bin
 
@@ -68,7 +69,8 @@ $(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-demo: demo
-	cp $(DEMO_DIR)/demo.bin ~/e6502-programs/demo.bin
+	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2
+	@false
 
 vsprite-rotate: $(ROTATE_DIR)/vsprite_rotate.bin
 
@@ -82,7 +84,8 @@ $(ROTATE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_AS
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-vsprite-rotate: vsprite-rotate
-	cp $(ROTATE_DIR)/vsprite_rotate.bin ~/e6502-programs/vsprite_rotate.bin
+	@echo "install-vsprite-rotate no longer writes to a host fallback; use nova create/import to place vsprite_rotate.bin on an NDI image." >&2
+	@false
 
 turtle: $(TURTLE_DIR)/turtle.bin
 
@@ -96,7 +99,8 @@ $(TURTLE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_AS
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-turtle: turtle
-	cp $(TURTLE_DIR)/turtle.bin ~/e6502-programs/turtle.bin
+	@echo "install-turtle no longer writes to a host fallback; use nova create/import to place turtle.bin on an NDI image." >&2
+	@false
 
 editui-shell: $(EDITUI_SHELL_DIR)/editui_shell.bin
 
@@ -110,7 +114,8 @@ $(EDITUI_SHELL_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 install-editui-shell: editui-shell
-	cp $(EDITUI_SHELL_DIR)/editui_shell.bin ~/e6502-programs/editui_shell.bin
+	@echo "install-editui-shell no longer writes to a host fallback; use nova create/import to place editui_shell.bin on an NDI image." >&2
+	@false
 
 editbuf-test: $(EDITBUF_TEST_DIR)/editbuf_test.bin
 

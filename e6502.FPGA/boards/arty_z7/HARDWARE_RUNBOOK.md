@@ -49,10 +49,11 @@ That command:
 - rebuilds all 6502 payloads through `nova arty sync-payloads`
 - rebuilds the Linux `novavm` host
 - stages `novavm` in `/run` while SSH is still healthy
-- copies `ehbasic.bin` and `editbuf_demo.bin` under `/data/nova`
+- copies `ehbasic.bin` and the language/editor demo disk images under `/data/nova`
 - remounts `/` writable, installs `novavm` to `/usr/bin/novavm`, then
   remounts `/` read-only
-- installs `editbuf_demo.bin` as `/data/nova/programs/AUTOBOOT.BIN`
+- packages `editbuf_demo.bin` into `/data/nova/disks/floppy/editor-demo.ndi`
+  and mounts it as `fd0`
 - restarts `novavm` in the final remote command and tails `/run/novavm.log`
 
 Stage files before stopping/restarting `novavm`. On 2026-07-02 the board

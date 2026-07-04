@@ -62,3 +62,4 @@ msg:
         .byte "HI", 0
 
 .include "vtext.s"
+.include "blitter.s"

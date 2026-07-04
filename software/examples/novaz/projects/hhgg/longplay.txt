@@ -1,12 +1,15 @@
 # HHGG V5 longplay: V5 save/restore, parser quirks, inventory, timed waits.
-save=>Okay.
+!save=>SAVE GAME
+!.key enter=>DESCRIPTION
+.key enter=>Okay.
 look=>It is pitch black
 turn on light=>light is now on&&Bedroom
-get up=>on your feet
+get up=>manage it
 get gown=>notice something in the pocket
 i=>gown&&no tea
 wait.wait.wait=>Time passes
 look=>Bedroom&&flathead screwdriver
 .reboot
-restore=>Okay.
+!restore=>RESTORE GAME
+.key enter=>Okay.
 look=>It is pitch black

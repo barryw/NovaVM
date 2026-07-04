@@ -31,8 +31,9 @@ Soundfont loading is initiated through the FileIO controller using command \$15
   \item Poll \texttt{WtsSoundfontStatus} at \addr{A183} until loading completes.
 \end{enumerate}
 
-The file must be located in the \texttt{{\raise.17ex\hbox{$\scriptstyle\sim$}}/e6502-programs}
-directory (the same directory used for BASIC program files).
+On hardware, the file must be located under \texttt{/data/nova/soundfonts}.  In
+the desktop host, place it in the \texttt{soundfonts} directory under the NovaVM
+host asset root.
 
 \begin{lstlisting}
 10 REM load a General MIDI soundfont

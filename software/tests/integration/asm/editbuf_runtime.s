@@ -99,7 +99,7 @@ store_goto:
 
 ; ---------------------------------------------------------------------
 ; cut: fill a 300-byte buffer, select all, cut. A cut must never delete
-; more text than it places on the (256-byte) clipboard.
+; more text than it places on the shared XRAM-backed clipboard.
 ; ---------------------------------------------------------------------
 run_cut:
         lda #<testbuf
@@ -144,11 +144,15 @@ run_cut:
         sta EDITBUF_INDENT_VECL
         sta EDITBUF_HILITE_VECL
         sta EDITBUF_MENU_VECL
+        sta EDITBUF_COMMAND_VECL
+        sta EDITBUF_CHANGED_VECL
         lda #>safe_rts
         sta EDITBUF_SAVE_VECH
         sta EDITBUF_INDENT_VECH
         sta EDITBUF_HILITE_VECH
         sta EDITBUF_MENU_VECH
+        sta EDITBUF_COMMAND_VECH
+        sta EDITBUF_CHANGED_VECH
         lda #<empty_str
         sta EDITBUF_TITLEL
         sta EDITBUF_TYPEL
@@ -171,9 +175,9 @@ run_cut:
         sta CUT_RESULT
         lda EDITBUF_LENH
         sta CUT_RESULT + 1
-        lda EDITBUF_CLIPLENL
+        lda TEXTSVC_CLIPLENL
         sta CUT_RESULT + 2
-        lda EDITBUF_CLIPLENH
+        lda TEXTSVC_CLIPLENH
         sta CUT_RESULT + 3
         lda #$AA
         sta CUT_RESULT + 4
@@ -197,5 +201,13 @@ testbuf: .res 512
 
 .include "editbuf.s"
 .include "editui.s"
+.include "nui_state.s"
+.include "nui_dialog.s"
+.include "nui_input.s"
+.include "nui_text.s"
+.include "textsvc.s"
+.include "vtext.s"
 .include "blitter.s"
 .include "xram.s"
+.include "dma.s"
+.include "fio.s"

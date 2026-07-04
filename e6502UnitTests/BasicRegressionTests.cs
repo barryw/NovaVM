@@ -1482,9 +1482,8 @@ public class BasicRegressionTests
             $"proving FILE_SAVE (range -> ARG2/ARG3, name -> ARG0/ARG1) and FILE_LOAD " +
             $"(dest -> ARG2) round-tripped the program through the FILES module.\n{screen}");
 
-        // The on-disk artifact must really exist under the FILES-module save path.
-        Assert.IsTrue(File.Exists(Path.Combine(temp.Hd0, "RTTEST.bas")),
-            "SAVE \"RTTEST\" must write RTTEST.bas under the program directory.");
+        Assert.IsTrue(bus.DeviceManager.GetDevice("FD0").FileExists("RTTEST", ".bas"),
+            "SAVE \"RTTEST\" must write RTTEST.bas to the current mounted disk.");
     }
 
     // --- DMA/BLIT controller-error -> BASIC ?FC (Function call) ----------------
@@ -1611,15 +1610,15 @@ public class BasicRegressionTests
             $"10 PRINT \"{command}ME\"",
             $"SAVE \"{command}TEST\"",
         ]);
-        string path = Path.Combine(temp.Hd0, $"{command}TEST.bas");
-        Assert.IsTrue(File.Exists(path), $"SAVE \"{command}TEST\" must create {command}TEST.bas first.");
+        Assert.IsTrue(bus.DeviceManager.GetDevice("FD0").FileExists($"{command}TEST", ".bas"),
+            $"SAVE \"{command}TEST\" must create {command}TEST.bas on the mounted disk first.");
 
         EnterProgramLines(cpu, bus, editor, [$"{command} \"{command}TEST\""]);
 
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
             $"{command} \"{command}TEST\" must complete without a BASIC error.\n{screen}");
-        Assert.IsFalse(File.Exists(path),
+        Assert.IsFalse(bus.DeviceManager.GetDevice("FD0").FileExists($"{command}TEST", ".bas"),
             $"{command} \"{command}TEST\" must remove {command}TEST.bas via FILE_DELETE.");
     }
 
@@ -1759,8 +1758,8 @@ public class BasicRegressionTests
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
             $"GSAVE/GLOAD must complete without an I/O error.\n{screen}");
-        Assert.IsTrue(File.Exists(Path.Combine(temp.Hd0, "GFXTEST.gfx")),
-            "GSAVE \"GFXTEST\",3,0,256 must write GFXTEST.gfx under the program directory.");
+        Assert.IsTrue(bus.DeviceManager.GetDevice("FD0").FileExists("GFXTEST", ".gfx"),
+            "GSAVE \"GFXTEST\",3,0,256 must write GFXTEST.gfx to the current mounted disk.");
 
         // GCLS zeroes space 3; the pixel restored by GLOAD must be the nonzero color
         // we plotted (space 3, offset 0), proving FILE_GSAVE captured + FILE_GLOAD
@@ -1773,26 +1772,36 @@ public class BasicRegressionTests
             "gfx registers through the FILES module.");
     }
 
-    // Points NOVA_STORAGE_ROOT at a throwaway directory so file-op tests never touch
-    // the developer's ~/e6502-programs. hd0 (the program/save device) lands under it.
+    // Points NOVA_STORAGE_ROOT at a throwaway directory with an auto-mounted
+    // fd0.ndi so file-op tests exercise disk-backed storage only.
     private sealed class TempStorageRoot : IDisposable
     {
-        private readonly string? _previous;
+        private readonly string? _previousStorageRoot;
+        private readonly string? _previousNoAutoMount;
         public string Root { get; }
         public string Hd0 { get; }
+        public string Disks { get; }
+        public string Fd0Image { get; }
 
         public TempStorageRoot()
         {
-            _previous = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+            _previousStorageRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+            _previousNoAutoMount = Environment.GetEnvironmentVariable("NOVA_NO_AUTOMOUNT");
             Root = Path.Combine(Path.GetTempPath(), "e6502-filestest-" + Guid.NewGuid().ToString("N"));
             Hd0 = Path.Combine(Root, "hd0");
+            Disks = Path.Combine(Root, "disks");
+            Fd0Image = Path.Combine(Disks, "fd0.ndi");
             Directory.CreateDirectory(Hd0);
+            Directory.CreateDirectory(Disks);
+            NdiImage.CreateFormatted(Fd0Image, "BASIC", 800);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", Root);
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
         }
 
         public void Dispose()
         {
-            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", _previous);
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", _previousNoAutoMount);
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", _previousStorageRoot);
             try { Directory.Delete(Root, recursive: true); } catch { /* best effort */ }
         }
     }

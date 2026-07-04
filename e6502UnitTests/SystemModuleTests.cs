@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
+using e6502.Storage;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -14,10 +15,10 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($1B  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($1C  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
 ///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE +
-///                              NUI save-under/picker/full save-under/style/file picker/text input)
+///                              NUI save-under/picker/full save-under/style/file picker/text input/drain)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging SYSTEM.
 /// </summary>
@@ -35,7 +36,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x1B, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style + file picker + text input)
+        Assert.AreEqual(0x1C, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style + file picker + text input + drain)
     }
 
     // =====================================================================
@@ -57,7 +58,7 @@ public class SystemModuleTests
     private const byte   SYS_NUI_PICK_LIST = 0x15;
     private const byte   SYS_NUI_SAVE_UNDER_FULL = 0x16, SYS_NUI_RESTORE_UNDER_FULL = 0x17;
     private const byte   SYS_NUI_SET_STYLE = 0x18;
-    private const byte   SYS_NUI_FILE_PICKER = 0x19, SYS_NUI_TEXT_INPUT = 0x1A;
+    private const byte   SYS_NUI_FILE_PICKER = 0x19, SYS_NUI_TEXT_INPUT = 0x1A, SYS_NUI_DRAIN_KEYS = 0x1B;
     private const byte   LERR_OK = 0x00;
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
@@ -183,6 +184,21 @@ public class SystemModuleTests
 
         RunFn(bus, SYS_WAIT_KEY);
         Assert.AreEqual((byte)'b', bus.ReadRam(RESULT), "second wait-key call must return the next queued byte");
+    }
+
+    [TestMethod]
+    public void NuiDrainKeys_ConsumesPendingKeyboardBytes()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        QueueKeys(editor, 0x0D, 0x1B);
+        RunFn(bus, SYS_NUI_DRAIN_KEYS);
+
+        Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), "drain_keys must report success.");
+        Assert.IsFalse(editor.HasQueuedInput,
+            "drain_keys must consume pending modal-transition keys before the next control receives focus.");
     }
 
     private static void WriteRamBytes(CompositeBusDevice bus, ushort address, ReadOnlySpan<byte> bytes)
@@ -578,12 +594,14 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        string hd0 = Path.Combine(root, "hd0");
         try
         {
-            Directory.CreateDirectory(Path.Combine(hd0, "SRC"));
-            File.WriteAllText(Path.Combine(hd0, "ROOT.4th"), ": ROOT ;");
-            File.WriteAllText(Path.Combine(hd0, "SKIP.bas"), "10 PRINT 1");
+            CreateFd0Image(root, image =>
+            {
+                CreateImageDirectory(image, 0xFFFF, "SRC");
+                WriteImageText(image, 0xFFFF, "ROOT.4th", ": ROOT ;");
+                WriteImageText(image, 0xFFFF, "SKIP.bas", "10 PRINT 1");
+            });
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -653,16 +671,17 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        string hd0 = Path.Combine(root, "hd0");
         try
         {
-            Directory.CreateDirectory(hd0);
-            File.WriteAllText(Path.Combine(hd0, "UNIT1.pas"), "program Unit1;\n");
-            File.WriteAllText(Path.Combine(hd0, "TURTLE.logo"), "TO SQUARE\nEND\n");
-            File.WriteAllText(Path.Combine(hd0, "WORDS.4th"), ": SQUARE DUP * ;\n");
-            File.WriteAllText(Path.Combine(hd0, "MAIN.asm"), ".byte $EA\n");
-            File.WriteAllText(Path.Combine(hd0, "SKIP.bas"), "10 PRINT 1\n");
-            File.WriteAllText(Path.Combine(hd0, "TUNE.sid"), "sid\n");
+            CreateFd0Image(root, image =>
+            {
+                WriteImageText(image, 0xFFFF, "MAIN.asm", ".byte $EA\n");
+                WriteImageText(image, 0xFFFF, "TURTLE.logo", "TO SQUARE\nEND\n");
+                WriteImageText(image, 0xFFFF, "UNIT1.pas", "program Unit1;\n");
+                WriteImageText(image, 0xFFFF, "WORDS.4th", ": SQUARE DUP * ;\n");
+                WriteImageText(image, 0xFFFF, "SKIP.bas", "10 PRINT 1\n");
+                WriteImageText(image, 0xFFFF, "TUNE.sid", "sid\n");
+            });
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -724,13 +743,14 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        string hd0 = Path.Combine(root, "hd0");
         try
         {
-            Directory.CreateDirectory(hd0);
-            File.WriteAllText(Path.Combine(hd0, "ALPHA.bas"), "10 PRINT 1\n");
-            File.WriteAllText(Path.Combine(hd0, "BETA.sid"), "sid\n");
-            File.WriteAllText(Path.Combine(hd0, "MAIN.asm"), ".byte $EA\n");
+            CreateFd0Image(root, image =>
+            {
+                WriteImageText(image, 0xFFFF, "ALPHA.bas", "10 PRINT 1\n");
+                WriteImageText(image, 0xFFFF, "BETA.sid", "sid\n");
+                WriteImageText(image, 0xFFFF, "MAIN.asm", ".byte $EA\n");
+            });
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -783,12 +803,13 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        string hd0 = Path.Combine(root, "hd0");
         try
         {
-            Directory.CreateDirectory(hd0);
-            for (int i = 0; i < 20; i++)
-                File.WriteAllText(Path.Combine(hd0, $"FILE{i:00}.4th"), ": X ;");
+            CreateFd0Image(root, image =>
+            {
+                for (int i = 0; i < 20; i++)
+                    WriteImageText(image, 0xFFFF, $"FILE{i:00}.4th", ": X ;");
+            });
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -833,11 +854,13 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        string hd0 = Path.Combine(root, "hd0");
         try
         {
-            Directory.CreateDirectory(Path.Combine(hd0, "SRC"));
-            File.WriteAllText(Path.Combine(hd0, "SRC", "NEST.4th"), ": NEST ;");
+            CreateFd0Image(root, image =>
+            {
+                ushort src = CreateImageDirectory(image, 0xFFFF, "SRC");
+                WriteImageText(image, src, "NEST.4th", ": NEST ;");
+            });
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -883,9 +906,9 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "hd0"));
         try
         {
+            CreateFd0Image(root);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -935,9 +958,9 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "hd0"));
         try
         {
+            CreateHd0Image(root);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -992,9 +1015,9 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "hd0"));
         try
         {
+            CreateFd0Image(root);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -1038,9 +1061,9 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "hd0"));
         try
         {
+            CreateFd0Image(root);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -1089,9 +1112,9 @@ public class SystemModuleTests
     {
         string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
         string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "hd0"));
         try
         {
+            CreateFd0Image(root);
             Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
 
             using var bus = MakeSystemBus();
@@ -1175,6 +1198,44 @@ public class SystemModuleTests
         string bottomRow = ReadScreenWindowRow(bus, 23, 14, 52);
         Assert.IsFalse(bottomRow.Contains("TAB NEXT", StringComparison.Ordinal),
             "text input must not print footer help text inside the dialog frame");
+    }
+
+    [TestMethod]
+    public void NuiTextInput_AcceptsInitialOutputText()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x1000;
+        const ushort title = 0x1100;
+        const ushort label = 0x1120;
+        const ushort output = 0x1140;
+        const ushort footer = 0x1160;
+
+        WriteRamString(bus, title, "Description");
+        WriteRamString(bus, label, "Text:   ");
+        WriteRamString(bus, output, "SAVED");
+        WriteRamString(bus, footer, "TAB NEXT  ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(label & 0xFF), (byte)(label >> 8),
+            (byte)(output & 0xFF), (byte)(output >> 8),
+            32, 14, 12, 52, 12,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        QueueKeys(editor, 0x09, 0x0D, 0x1B);
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_TEXT_INPUT);
+
+        Assert.AreEqual(5, bus.ReadRam(RESULT),
+            "text input must preserve and return a caller-seeded default value.");
+        Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)),
+            "Enter on OK must accept a caller-seeded default value.");
+        Assert.AreEqual("SAVED", ReadRamAscii(bus, output, 5),
+            "text input must not erase the caller's initial output text.");
     }
 
     [TestMethod]
@@ -1595,5 +1656,42 @@ public class SystemModuleTests
         string root = Path.GetFullPath(Path.Combine(
             AppContext.BaseDirectory, "..", "..", "..", ".."));
         return Path.Combine([root, .. parts]);
+    }
+
+    private static void CreateFd0Image(string root, Action<NdiImage>? seed = null)
+        => CreateDiskImage(root, "fd0.ndi", "FD0", seed);
+
+    private static void CreateHd0Image(string root, Action<NdiImage>? seed = null)
+        => CreateDiskImage(root, "hd0.ndi", "HD0", seed);
+
+    private static void CreateDiskImage(string root, string imageName, string label, Action<NdiImage>? seed)
+    {
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        string imagePath = Path.Combine(disks, imageName);
+        NdiImage.CreateFormatted(imagePath, label, 800);
+        if (seed is null)
+            return;
+
+        using var image = NdiImage.Open(imagePath);
+        seed(image);
+    }
+
+    private static ushort CreateImageDirectory(NdiImage image, ushort parent, string name)
+        => (ushort)image.MakeDirectory(name, parent);
+
+    private static void WriteImageText(NdiImage image, ushort parent, string filename, string text)
+        => image.WriteFile(filename, ImageTypeFor(filename), parent, System.Text.Encoding.ASCII.GetBytes(text));
+
+    private static NdiFileType ImageTypeFor(string filename)
+    {
+        string ext = Path.GetExtension(filename);
+        if (ext.Equals(".bas", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Bas;
+        if (ext.Equals(".pas", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Pascal;
+        if (ext.Equals(".logo", StringComparison.OrdinalIgnoreCase) || ext.Equals(".lgo", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Logo;
+        if (ext.Equals(".4th", StringComparison.OrdinalIgnoreCase) || ext.Equals(".fth", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Forth;
+        if (ext.Equals(".asm", StringComparison.OrdinalIgnoreCase) || ext.Equals(".s", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Assembly;
+        if (ext.Equals(".sid", StringComparison.OrdinalIgnoreCase)) return NdiFileType.Sid;
+        return NdiFileType.Bin;
     }
 }
