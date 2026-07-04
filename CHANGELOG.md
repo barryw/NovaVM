@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.3.0 - 2026-07-04
+#### Features
+- build native editor runtime - (a3ce3b4) - Barry Walker
+
+- - -
+
 ## v0.2.6 - 2026-07-02
 #### Refactoring
 - share 6502 runtime helpers - (86499c4) - Barry Walker
