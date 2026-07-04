@@ -69,7 +69,7 @@ public static class VgcConstants
     public const int FioGAddrH         = 0xB9AC;   // graphics/XRAM offset high
     public const int FioGLenL          = 0xB9AD;   // graphics/XRAM transfer length low
     public const int FioGLenH          = 0xB9AE;   // graphics/XRAM transfer length high
-    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH
+    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH, 7=LOGO, 8=PASCAL, 9=ASM
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
 
@@ -124,6 +124,7 @@ public static class VgcConstants
     public const byte FioCmdFStatus    = 0x37;     // low-level file status
     public const byte FioCmdFDelete    = 0x38;     // low-level exact delete
     public const byte FioCmdFRename    = 0x39;     // low-level exact rename
+    public const byte FioCmdDevStatus  = 0x3A;     // device prefix mounted/status probe
 
     // Dynamic module shelf geometry (libabi.inc): SHELF_N cache slots at
     // ShelfBaseAddr + i*ShelfSlotBytes in linear XRAM.
@@ -149,6 +150,8 @@ public static class VgcConstants
     public const byte FioDirTypeDir    = 0x05;
     public const byte FioDirTypeForth  = 0x06;
     public const byte FioDirTypeLogo   = 0x07;
+    public const byte FioDirTypePascal = 0x08;
+    public const byte FioDirTypeAsm    = 0x09;
     public const byte FioErrDiskFull   = 0x04;
     public const byte FioErrNotMounted = 0x05;
 
@@ -794,6 +797,29 @@ public static class VgcConstants
     public const int ShapeSlotCount   = 256;
     public const int ShapeRamSize     = ShapeSlotCount * SpriteShapeSize;  // 32768
 
+    // Dedicated mouse cursor block. Software writes pending state here; VGC
+    // commits it to visible cursor state at vblank.
+    public const int MouseRegBase     = 0xA0D0;
+    public const int MouseRegEnd      = 0xA0DF;
+    public const int RegMouseXLo      = 0xA0D0;
+    public const int RegMouseXHi      = 0xA0D1;   // bit 0 gives X bit 8
+    public const int RegMouseY        = 0xA0D2;
+    public const int RegMouseButtons  = 0xA0D3;
+    public const int RegMouseCtrl     = 0xA0D4;
+    public const int RegMouseColor    = 0xA0D5;
+    public const int RegMouseShape    = 0xA0D6;
+    public const int RegMouseHotX     = 0xA0D7;
+    public const int RegMouseHotY     = 0xA0D8;
+
+    public const byte MouseButtonLeft   = 0x01;
+    public const byte MouseButtonRight  = 0x02;
+    public const byte MouseButtonMiddle = 0x04;
+    public const byte MouseButtonMask   = 0x07;
+
+    public const byte MouseCtrlEnable       = 0x01;
+    public const byte MouseCtrlAutoContrast = 0x02;
+    public const byte MouseCtrlColorize     = 0x04;
+
     // VDC-style VRAM port registers ($A0E0-$A0E4). This is the only CPU-visible
     // path for text/color/gfx/sprite/text-attribute memory; direct text/color windows are gone.
     public const int VramRegBase       = 0xA0E0;
@@ -1008,33 +1034,4 @@ public static class VgcConstants
     public const byte RomSwapForth    = 0x06;   // switch to Forth ROM
     public const byte RomSwapPrimary  = RomSwapBasic; // switch to the active primary runtime ROM
 
-    // -------------------------------------------------------------------------
-    // Compiler Controller registers ($A031-$A03E)
-    // -------------------------------------------------------------------------
-
-    public const int CmpBase          = 0xA031;
-    public const int CmpEnd           = 0xA03E;
-
-    public const int CmpCmd           = 0xA031;  // write triggers command
-    public const int CmpStatus        = 0xA032;  // 0=idle, 1=compiling, 2=ok, 3=error
-    public const int CmpErrCount      = 0xA033;  // number of errors
-    public const int CmpWarnCount     = 0xA034;  // number of warnings
-    public const int CmpErrLineL      = 0xA035;  // current error line low
-    public const int CmpErrLineH      = 0xA036;  // current error line high
-    public const int CmpCodeSizeL     = 0xA037;  // compiled code size low
-    public const int CmpCodeSizeH     = 0xA038;  // compiled code size high
-    public const int CmpErrMsg        = 0xA039;  // read error message byte-by-byte
-    public const int CmpErrIdx        = 0xA03A;  // current error index (write to select)
-    public const int CmpSrcAddrL      = 0xA03B;  // source XRAM address low
-    public const int CmpSrcAddrM      = 0xA03C;  // source XRAM address mid
-    public const int CmpSrcAddrH      = 0xA03D;  // source XRAM address high
-
-    public const byte CmpCmdCompile   = 0x01;   // compile source from XRAM
-    public const byte CmpCmdGetError  = 0x02;   // populate error fields for CmpErrIdx
-    public const byte CmpCmdGetWarn   = 0x03;   // populate warning fields for CmpErrIdx
-
-    public const byte CmpStatusIdle      = 0x00;
-    public const byte CmpStatusCompiling = 0x01;
-    public const byte CmpStatusOk        = 0x02;
-    public const byte CmpStatusError     = 0x03;
 }

@@ -77,10 +77,10 @@ VSPRITE_SCENE_WORKSTRL: .res 1
 VSPRITE_SCENE_WORKSTRH: .res 1
 VSPRITE_SCENE_OFFL:     .res 1
 VSPRITE_SCENE_OFFH:     .res 1
+VSPRITE_TMP:            .res 1
 
       .segment "ZEROPAGE"
 
-VSPRITE_TMP:            .res 1
 VSPRITE_DESC_PTR:       .res 2
 
       .segment "CODE"

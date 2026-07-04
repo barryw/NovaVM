@@ -590,6 +590,9 @@ public class FileIoControllerTests
                 VgcConstants.FioStatusOk,
                 fio.Read((ushort)VgcConstants.FioStatus),
                 $"err={fio.Read((ushort)VgcConstants.FioErrCode)}");
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("alpha", ReadFilename(fio));
             Assert.AreEqual(1, ReadSize(fio));
 
@@ -621,6 +624,8 @@ public class FileIoControllerTests
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
 
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("core", ReadFilename(fio));
             Assert.AreEqual(VgcConstants.FioDirTypeForth, fio.Read((ushort)VgcConstants.FioDirType),
                 "Forth source must have a distinct directory type so the Forth loader does not treat it as a load-addressed binary.");
@@ -649,6 +654,8 @@ public class FileIoControllerTests
             var fio = MakeController(dir);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
 
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("stars", ReadFilename(fio));
             Assert.AreEqual(midi.Length & 0xFFFF, ReadSize(fio));
@@ -1766,6 +1773,43 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void DirOpen_SourceFilesReportLanguageTypesAndRawSizes()
+    {
+        var (fio, memory, tempDir) = MakeControllerWithDevice();
+        try
+        {
+            (string DiskName, string Filter, byte Type, byte[] Bytes)[] cases =
+            [
+                ("unit1.pas", "*.pas", VgcConstants.FioDirTypePascal, Encoding.ASCII.GetBytes("program Unit1;\n")),
+                ("turtle.logo", "*.logo", VgcConstants.FioDirTypeLogo, Encoding.ASCII.GetBytes("TO SQUARE\nEND\n")),
+                ("words.4th", "*.4th", VgcConstants.FioDirTypeForth, Encoding.ASCII.GetBytes(": SQUARE DUP * ;\n")),
+                ("module.asm", "*.asm", VgcConstants.FioDirTypeAsm, Encoding.ASCII.GetBytes(".byte $EA\n")),
+            ];
+
+            foreach (var source in cases)
+                File.WriteAllBytes(Path.Combine(tempDir, source.DiskName), source.Bytes);
+
+            foreach (var source in cases)
+            {
+                SetFilename(fio, source.Filter);
+                fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+
+                Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+                fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+                Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+                Assert.AreEqual(Path.GetFileNameWithoutExtension(source.DiskName), ReadFilename(fio));
+                Assert.AreEqual(source.Type, fio.Read((ushort)VgcConstants.FioDirType),
+                    $"{source.DiskName} must report its language-specific FIO directory type.");
+                Assert.AreEqual(source.Bytes.Length, ReadSize(fio),
+                    $"{source.DiskName} must report raw source size, not a load-addressed payload size.");
+                Assert.AreEqual(source.Type, memory[VgcConstants.MetaType],
+                    $"{source.DiskName} filtered metadata must preserve the language file type.");
+            }
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
     public void DirOpen_FilteredByExtension_OnlyReturnsMid()
     {
         var (fio, memory, tempDir) = MakeControllerWithDevice();
@@ -1778,6 +1822,8 @@ public class FileIoControllerTests
 
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("song1", ReadFilename(fio));
 
@@ -1805,6 +1851,8 @@ public class FileIoControllerTests
             SetFilename(fio, "bach*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("bach-fugue", ReadFilename(fio));
 
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
@@ -1829,6 +1877,8 @@ public class FileIoControllerTests
             fio.Write((ushort)VgcConstants.FioNameLen, 0);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             var name = ReadFilename(fio);
             Assert.IsTrue(name.Length > 0);
         }
@@ -1844,6 +1894,8 @@ public class FileIoControllerTests
             File.WriteAllBytes(Path.Combine(tempDir, "prog.bas"), new byte[] { 0x00, 0x00 });
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
         }
@@ -1876,6 +1928,8 @@ public class FileIoControllerTests
             SetFilename(fio, "*.sid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(1, memory[VgcConstants.MetaType]);
             var titleBytes = new byte[9];
             Array.Copy(memory, VgcConstants.MetaTitle, titleBytes, 0, 9);
@@ -1901,6 +1955,8 @@ public class FileIoControllerTests
             File.WriteAllBytes(Path.Combine(tempDir, "prog.bin"), new byte[] { 0x00, 0x90, 0xEA, 0xEA });
             SetFilename(fio, "*.bin");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(2, memory[VgcConstants.MetaType]);
             Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
@@ -1931,6 +1987,8 @@ public class FileIoControllerTests
             SetFilename(fio, "*.sid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("First Song", Encoding.ASCII.GetString(memory, VgcConstants.MetaTitle, 10));
 
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
@@ -1955,6 +2013,8 @@ public class FileIoControllerTests
 
             fio.Write((ushort)VgcConstants.FioNameLen, 0);
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(0, memory[VgcConstants.MetaType]);
             Assert.AreEqual(0, memory[VgcConstants.MetaTitle]);
@@ -1983,6 +2043,8 @@ public class FileIoControllerTests
             SetFilename(fio, "*.sid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("cool", ReadFilename(fio));
             Assert.AreEqual(1, memory[VgcConstants.MetaType]); // SID
 
@@ -1994,6 +2056,8 @@ public class FileIoControllerTests
             SetFilename(fio, "*.bin");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual("app", ReadFilename(fio));
             Assert.AreEqual(2, memory[VgcConstants.MetaType]); // BIN
             Assert.AreEqual(0x00, memory[VgcConstants.MetaLoadL]);
@@ -2003,7 +2067,7 @@ public class FileIoControllerTests
             SetFilename(fio, "*");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
-            int count = 1;
+            int count = 0;
             while (true)
             {
                 fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
@@ -2037,6 +2101,8 @@ public class FileIoControllerTests
 
             SetFilename(fio, "*.mid");
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(3, memory[VgcConstants.MetaType]); // MID
             Assert.AreEqual("Test MIDI Song", Encoding.ASCII.GetString(memory, VgcConstants.MetaTitle, 14));

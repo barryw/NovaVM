@@ -183,7 +183,7 @@ public class EmulatorCanvas : Control
                 e.Handled = true;
                 break;
             case Key.Home:
-                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x80 : (byte)0x02);
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x80 : (byte)0x83);
                 e.Handled = true;
                 break;
             case Key.End:
@@ -196,6 +196,14 @@ public class EmulatorCanvas : Control
                 break;
             case Key.PageDown:
                 _editor.QueueInput(0x12);
+                e.Handled = true;
+                break;
+            case Key.F3:
+                _editor.QueueInput(0x82);
+                e.Handled = true;
+                break;
+            case Key.F6:
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? (byte)0x85 : (byte)0x84);
                 e.Handled = true;
                 break;
             case Key.Enter:
@@ -326,6 +334,11 @@ public class EmulatorCanvas : Control
     private static bool TryMapAltMenuKey(Key key, out byte ch)
     {
         ch = 0;
+        if (key == Key.D0 || key == Key.NumPad0)
+        {
+            ch = (byte)'0';
+            return true;
+        }
         if (key is < Key.A or > Key.Z)
             return false;
 
@@ -384,6 +397,7 @@ public class EmulatorCanvas : Control
         if (_vgc.SnapshotSpriteShapes(_shapeRamSnapshot) || !_shapeRamInitialized)
             _shapeRamInitialized = true;
         ReadOnlySpan<byte> shapeRam = _shapeRamSnapshot;
+        var mouseCursor = _vgc.GetMouseCursorState();
         int cursorX = _vgc.GetCursorX();
         int cursorY = _vgc.GetCursorY();
         bool cursorEnabled = _cursorVisible && _vgc.IsCursorVisibleInCurrentMode;
@@ -493,6 +507,9 @@ public class EmulatorCanvas : Control
 
                         if (spriteFront != 0)
                             pixel = palette[spriteFront & 0x0F];
+
+                        if (MouseCursorRenderer.TrySample(mouseCursor, shapeRam, x, y, 0, out byte mouseColor))
+                            pixel = palette[mouseColor & 0x0F];
 
                         if (state.DisplayDim != 15)
                             pixel = DimColor(pixel, state.DisplayDim);

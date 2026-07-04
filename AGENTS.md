@@ -22,6 +22,13 @@ This repository is a multi-project .NET solution (`e6502.sln`) centered on a 650
 
 Note: `e6502.Avalonia` triggers `make` for EhBASIC during build, so missing cc65 tools will fail that project build.
 
+## Nova CLI Required Reading & Documentation
+At the start of every substantive task in this repo, read `docs/books/nova-cli-guide/chapters/nova-cli.md` before choosing or inventing any workflow. Repo operations belong in `nova`; do not create ad hoc shell or Python scripts.
+
+If a change touches scripts, CI, build/deploy, hardware checks, docs generation, image conversion, or NovaHost operations, also read `docs/script-inventory.md`.
+
+Every Nova CLI command change must update the command's `help` output, `docs/books/nova-cli-guide/chapters/nova-cli.md`, and the focused CLI coverage in `e6502UnitTests/NovaCliCoverageTests.cs`.
+
 ## Coding Style & Naming Conventions
 Use C# conventions already present in the codebase:
 

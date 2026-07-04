@@ -169,6 +169,12 @@ ndi::FileType file_type_for_name(const char* name) {
     const char* ext = strrchr(name, '.');
     if (!ext) return ndi::FT_BAS;
     if      (strcasecmp(ext, ".bas")  == 0) return ndi::FT_BAS;
+    else if (strcasecmp(ext, ".pas")  == 0) return ndi::FT_PASCAL;
+    else if (strcasecmp(ext, ".logo") == 0) return ndi::FT_LOGO;
+    else if (strcasecmp(ext, ".lgo")  == 0) return ndi::FT_LOGO;
+    else if (strcasecmp(ext, ".s")    == 0) return ndi::FT_ASM;
+    else if (strcasecmp(ext, ".asm")  == 0) return ndi::FT_ASM;
+    else if (strcasecmp(ext, ".inc")  == 0) return ndi::FT_ASM;
     else if (strcasecmp(ext, ".sid")  == 0) return ndi::FT_SID;
     else if (strcasecmp(ext, ".bin")  == 0) return ndi::FT_BIN;
     else if (strcasecmp(ext, ".xram") == 0) return ndi::FT_BIN;
@@ -811,6 +817,7 @@ void FioDispatcher::handle_event() {
         case CMD_FORMAT:   handle_unsupported_sd_command("FORMAT");  break;
         case CMD_MOUNT:    handle_mount();    break;
         case CMD_UNMOUNT:  handle_unmount();  break;
+        case CMD_DEVSTATUS: handle_devstatus(); break;
         case CMD_PWD:      handle_pwd();      break;
         case CMD_CLEARERR: handle_clear_error(); break;
         case CMD_LOADRUNTIME: handle_load_runtime(); break;
@@ -5336,6 +5343,17 @@ void FioDispatcher::handle_unmount() {
     int slot = DeviceManager::slot_for_prefix(name);
     if (slot < 0) { respond_err(ERR_IO); return; }
     _dm.unmount(slot);
+    respond_ok();
+}
+
+void FioDispatcher::handle_devstatus() {
+    char name[64];
+    copy_filename(name);
+    char* colon = strchr(name, ':');
+    if (colon) *colon = 0;
+    int slot = DeviceManager::slot_for_prefix(name);
+    if (slot < 0) { respond_err(ERR_IO); return; }
+    if (!_dm.is_mounted(slot)) { respond_err(ERR_NO_MOUNT); return; }
     respond_ok();
 }
 

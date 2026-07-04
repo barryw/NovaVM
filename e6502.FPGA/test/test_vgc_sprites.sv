@@ -29,11 +29,17 @@ module test_vgc_sprites;
     localparam logic [7:0] CMD_SPRDIS  = 8'h16;
     localparam logic [7:0] CMD_SPRFLIP = 8'h17;
     localparam logic [7:0] CMD_SPRPRI  = 8'h18;
+    localparam logic [15:0] MOUSE_XL_A    = 16'hA0D0;
+    localparam logic [15:0] MOUSE_XH_A    = 16'hA0D1;
+    localparam logic [15:0] MOUSE_Y_A     = 16'hA0D2;
+    localparam logic [15:0] MOUSE_BTN_A   = 16'hA0D3;
+    localparam logic [15:0] MOUSE_CTRL_A  = 16'hA0D4;
+    localparam logic [15:0] MOUSE_SHAPE_A = 16'hA0D6;
 
     // Stand-alone PIXIE instance used for pixel/scanline-buffer regressions.
     // The top-level VGC tests above exercise command wiring; this instance
     // lets us drive exact VGA line starts and verify PIXIE itself.
-    logic [10:0] probe_spr_a_addr = 0;
+    logic [14:0] probe_spr_a_addr = 0;
     logic [7:0]  probe_spr_a_din = 0;
     logic        probe_spr_a_we = 0;
     wire [7:0]   probe_spr_a_dout;
@@ -50,12 +56,20 @@ module test_vgc_sprites;
     logic [15:0]      probe_spr_flip_h_flat = 0;
     logic [15:0]      probe_spr_flip_v_flat = 0;
     logic [16*2-1:0]  probe_spr_pri_flat = 0;
-    logic [16*4-1:0]  probe_spr_shape_flat = 0;
+    logic [16*8-1:0]  probe_spr_shape_flat = 0;
     logic [16*4-1:0]  probe_spr_trans_flat = 0;
+    logic [8:0]        probe_mouse_x = 0;
+    logic [7:0]        probe_mouse_y = 0;
+    logic              probe_mouse_enable = 0;
+    logic [7:0]        probe_mouse_shape = 0;
+    logic [3:0]        probe_mouse_hot_x = 0;
+    logic [3:0]        probe_mouse_hot_y = 0;
     wire [3:0]        probe_spr_pixel;
     wire [1:0]        probe_spr_pixel_pri;
     wire              probe_spr_pixel_hit;
     wire [3:0]        probe_spr_pixel_owner;
+    wire [3:0]        probe_mouse_cursor_pixel;
+    wire              probe_mouse_cursor_hit;
     wire [15:0]       probe_collision_ss_bits;
 
     vgc_sprites sprite_probe (
@@ -80,10 +94,18 @@ module test_vgc_sprites;
         .spr_pri_flat(probe_spr_pri_flat),
         .spr_shape_flat(probe_spr_shape_flat),
         .spr_trans_flat(probe_spr_trans_flat),
+        .mouse_x(probe_mouse_x),
+        .mouse_y(probe_mouse_y),
+        .mouse_enable(probe_mouse_enable),
+        .mouse_shape(probe_mouse_shape),
+        .mouse_hot_x(probe_mouse_hot_x),
+        .mouse_hot_y(probe_mouse_hot_y),
         .spr_pixel(probe_spr_pixel),
         .spr_pixel_pri(probe_spr_pixel_pri),
         .spr_pixel_hit(probe_spr_pixel_hit),
         .spr_pixel_owner(probe_spr_pixel_owner),
+        .mouse_cursor_pixel(probe_mouse_cursor_pixel),
+        .mouse_cursor_hit(probe_mouse_cursor_hit),
         .collision_ss_bits(probe_collision_ss_bits)
     );
 
@@ -176,13 +198,25 @@ module test_vgc_sprites;
         step(2);
     endtask
 
-    task automatic wait_shape_sync_done();
+    task automatic wait_vblank_start();
         int timeout = 0;
-        while (dut.sprite_inst.shape_sync_busy && timeout < 20000) begin
+        while (!(dut.h_count == 10'd0 && dut.v_count == 10'd480) &&
+               timeout < 500000) begin
             @(posedge clk);
             timeout++;
         end
-        check("sprite shape background sync completed", timeout < 20000);
+        check("reached vblank start", timeout < 500000);
+        @(posedge clk);
+        step(2);
+    endtask
+
+    task automatic wait_shape_sync_done();
+        int timeout = 0;
+        while (dut.sprite_inst.shape_sync_busy && timeout < 150000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check("sprite shape background sync completed", timeout < 150000);
     endtask
 
     task automatic probe_clear_line_buffers();
@@ -205,7 +239,7 @@ module test_vgc_sprites;
         probe_spr_y_flat[0 +: 16] = 16'(y);
         probe_spr_enable_flat[0] = 1'b1;
         probe_spr_pri_flat[0 +: 2] = 2'd2;
-        probe_spr_shape_flat[0 +: 4] = 4'd0;
+        probe_spr_shape_flat[0 +: 8] = 8'd0;
         probe_spr_trans_flat[0 +: 4] = 4'd0;
 
         for (int row = 0; row < 16; row++)
@@ -241,7 +275,7 @@ module test_vgc_sprites;
         probe_spr_y_flat[0 +: 16] = 16'(y);
         probe_spr_enable_flat[0] = 1'b1;
         probe_spr_pri_flat[0 +: 2] = 2'd2;
-        probe_spr_shape_flat[0 +: 4] = 4'd0;
+        probe_spr_shape_flat[0 +: 8] = 8'd0;
         probe_spr_trans_flat[0 +: 4] = 4'd0;
 
         for (int row = 0; row < 16; row++) begin
@@ -270,14 +304,14 @@ module test_vgc_sprites;
         probe_spr_y_flat[sprite_base * 16 +: 16] = 16'(y);
         probe_spr_enable_flat[sprite_base] = 1'b1;
         probe_spr_pri_flat[sprite_base * 2 +: 2] = 2'd1;
-        probe_spr_shape_flat[sprite_base * 4 +: 4] = 4'd0;
+        probe_spr_shape_flat[sprite_base * 8 +: 8] = 8'd0;
         probe_spr_trans_flat[sprite_base * 4 +: 4] = 4'd0;
 
         probe_spr_x_flat[(sprite_base + 1) * 16 +: 16] = 16'd8;
         probe_spr_y_flat[(sprite_base + 1) * 16 +: 16] = 16'(y);
         probe_spr_enable_flat[sprite_base + 1] = 1'b1;
         probe_spr_pri_flat[(sprite_base + 1) * 2 +: 2] = 2'd1;
-        probe_spr_shape_flat[(sprite_base + 1) * 4 +: 4] = 4'd1;
+        probe_spr_shape_flat[(sprite_base + 1) * 8 +: 8] = 8'd1;
         probe_spr_trans_flat[(sprite_base + 1) * 4 +: 4] = 4'd0;
 
         for (int row = 0; row < 16; row++) begin
@@ -299,6 +333,14 @@ module test_vgc_sprites;
         @(posedge clk);
         hit = int'(probe_spr_pixel_hit);
         color = int'(probe_spr_pixel);
+    endtask
+
+    task automatic probe_sample_mouse_pixel(input int x, output int hit, output int color);
+        probe_sprite_x_d2 <= x[8:0];
+        @(posedge clk);
+        @(posedge clk);
+        hit = int'(probe_mouse_cursor_hit);
+        color = int'(probe_mouse_cursor_pixel);
     endtask
 
     task automatic probe_prepare_then_display(input int prep_v, input int display_v);
@@ -366,20 +408,20 @@ module test_vgc_sprites;
         $display("Test: SPRCLR zeros all 128 bytes of a sprite");
         // Pre-dirty sprite 3 with arbitrary data
         for (int i = 0; i < 128; i++)
-            poke_spr_pending_addr(11'(3 * 128 + i), 8'hAA);
+            poke_spr_pending_addr(15'(3 * 128 + i), 8'hAA);
         spr_clr(3);
         begin
             int nz = 0;
             for (int i = 0; i < 128; i++)
-                if (peek_spr_pending_addr(11'(3 * 128 + i)) != 8'h00) nz++;
+                if (peek_spr_pending_addr(15'(3 * 128 + i)) != 8'h00) nz++;
             check_eq("SPRCLR: sprite 3 is all zeros", nz, 0);
         end
         // Sprite 4 must be untouched (still 0 from reset; pre-dirty it too)
         for (int i = 0; i < 128; i++)
-            poke_spr_pending_addr(11'(4 * 128 + i), 8'h77);
+            poke_spr_pending_addr(15'(4 * 128 + i), 8'h77);
         spr_clr(3);  // clear 3 again, check 4 stays dirty
         check_eq("SPRCLR: sprite 4 untouched",
-                 int'(peek_spr_pending_addr(11'(4 * 128))), 8'h77);
+                 int'(peek_spr_pending_addr(15'(4 * 128))), 8'h77);
     endtask
 
     task automatic test_sprrow();
@@ -428,7 +470,7 @@ module test_vgc_sprites;
     endtask
 
     task automatic test_shape_write_on_publish_cycle_defers();
-        logic [10:0] addr;
+        logic [14:0] addr;
 
         $display("");
         $display("Test: sprite shape write on publish cycle defers bank flip");
@@ -461,6 +503,40 @@ module test_vgc_sprites;
         wait_sprite_frame_commit();
         check_eq("deferred publish updates active bank next frame",
                  int'(peek_spr_active_addr(addr)), 8'hEE);
+    endtask
+
+    task automatic test_shape_write_during_sync_mirrors_banks();
+        logic [14:0] addr;
+
+        $display("");
+        $display("Test: sprite shape write during background sync mirrors both banks");
+        addr = spr_byte_addr(10, 3, 0);
+
+        wait_shape_sync_done();
+        poke_spr_pending_addr(addr, 8'h11);
+        dut.sprite_inst.shape_pending_dirty = 1'b1;
+        wait_sprite_frame_commit();
+        step(4);
+        check("background shape sync is active", dut.sprite_inst.shape_sync_busy);
+        check_eq("precondition: active bank has published byte",
+                 int'(peek_spr_active_addr(addr)), 8'h11);
+
+        tb_blt_space <= 3'd4;
+        tb_blt_addr  <= {1'b0, addr};
+        tb_blt_wdata <= 8'h55;
+        tb_blt_we    <= 1'b1;
+        @(posedge clk);
+        tb_blt_we    <= 1'b0;
+        tb_blt_space <= 3'd0;
+        step(3);
+
+        check_eq("sync-time write updates pending bank",
+                 int'(peek_spr_pending_addr(addr)), 8'h55);
+        check_eq("sync-time write also mirrors active bank to avoid a dirty bitmap",
+                 int'(peek_spr_active_addr(addr)), 8'h55);
+        wait_shape_sync_done();
+        check_eq("mirrored byte survives background sync completion",
+                 int'(peek_spr_pending_addr(addr)), 8'h55);
     endtask
 
     task automatic test_sprpos();
@@ -557,8 +633,8 @@ module test_vgc_sprites;
         begin
             int diffs = 0;
             for (int i = 0; i < 128; i++) begin
-                if (peek_spr_pending_addr(11'(9 * 128 + i)) !=
-                    peek_spr_pending_addr(11'(2 * 128 + i))) diffs++;
+                if (peek_spr_pending_addr(15'(9 * 128 + i)) !=
+                    peek_spr_pending_addr(15'(2 * 128 + i))) diffs++;
             end
             check_eq("SPRCOPY: all 128 bytes match source", diffs, 0);
         end
@@ -713,6 +789,63 @@ module test_vgc_sprites;
         check_eq("overlapping sprite 8/9 set both collision bits", mask, 16'h0300);
     endtask
 
+    task automatic test_mouse_registers_commit_at_vblank();
+        logic [7:0] readback;
+
+        $display("");
+        $display("Test: VGC mouse registers commit visible state at vblank");
+
+        bus_write(MOUSE_XL_A, 8'd42);
+        bus_write(MOUSE_XH_A, 8'd1);
+        bus_write(MOUSE_Y_A, 8'd99);
+        bus_write(MOUSE_BTN_A, 8'h07);
+        bus_write(MOUSE_SHAPE_A, 8'd255);
+        bus_write(MOUSE_CTRL_A, 8'h01);
+
+        bus_read(MOUSE_XL_A, readback);
+        check_eq("mouse pending X low is CPU-readable", int'(readback), 42);
+        check_eq("mouse active X unchanged before vblank", int'(dut.mouse_active_x), 0);
+        check_eq("mouse active ctrl unchanged before vblank", int'(dut.mouse_active_ctrl), 0);
+
+        wait_vblank_start();
+
+        check_eq("mouse active X committed at vblank", int'(dut.mouse_active_x), 298);
+        check_eq("mouse active Y committed at vblank", int'(dut.mouse_active_y), 99);
+        check_eq("mouse active buttons committed at vblank", int'(dut.mouse_active_buttons), 7);
+        check_eq("mouse active shape committed at vblank", int'(dut.mouse_active_shape), 255);
+        check_eq("mouse active ctrl committed at vblank", int'(dut.mouse_active_ctrl), 1);
+    endtask
+
+    task automatic test_mouse_probe_reads_shape_slot();
+        int hit;
+        int color;
+        int base = 255 * 128;
+
+        $display("");
+        $display("Test: PIXIE samples dedicated mouse cursor shape slot");
+
+        probe_clear_line_buffers();
+        if (sprite_probe.active_shape_bank)
+            sprite_probe.spr_mem1.mem[base] = 8'hD0;
+        else
+            sprite_probe.spr_mem0.mem[base] = 8'hD0;
+
+        probe_mouse_x = 9'd6;
+        probe_mouse_y = 8'd0;
+        probe_mouse_enable = 1'b1;
+        probe_mouse_shape = 8'd255;
+        probe_mouse_hot_x = 4'd0;
+        probe_mouse_hot_y = 4'd0;
+
+        probe_prepare_then_display(39, 40);
+        probe_sample_mouse_pixel(6, hit, color);
+        check_eq("mouse cursor pixel hits from slot 255", hit, 1);
+        check_eq("mouse cursor pixel color from high nibble", color, 13);
+
+        probe_sample_mouse_pixel(7, hit, color);
+        check_eq("mouse cursor transparent low nibble does not hit", hit, 0);
+    endtask
+
     task automatic test_top_sprite_read_uses_canvas_x();
         $display("");
         $display("Test: top-level VGC samples sprite buffer in Nova canvas X coordinates");
@@ -735,6 +868,7 @@ module test_vgc_sprites;
         test_sprrow();
         test_shape_publish_at_frame_boundary();
         test_shape_write_on_publish_cycle_defers();
+        test_shape_write_during_sync_mirrors_banks();
         test_sprpos();
         test_sprena_dis();
         test_sprflip();
@@ -746,6 +880,8 @@ module test_vgc_sprites;
         test_sprite_probe_covers_full_sprite_plane();
         test_sprite_probe_reads_shape_bytes_in_order();
         test_sprite_probe_reports_sprite_sprite_collision_mask();
+        test_mouse_registers_commit_at_vblank();
+        test_mouse_probe_reads_shape_slot();
         test_top_sprite_read_uses_canvas_x();
 
         summary();

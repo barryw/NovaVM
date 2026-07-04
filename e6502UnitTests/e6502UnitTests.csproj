@@ -30,6 +30,10 @@
     <ProjectReference Include="..\software\examples\novaz\tools\Nova.NovaZ.Packer\Nova.NovaZ.Packer.csproj" />
   </ItemGroup>
 
+  <Target Name="BuildEditBufTestHarness" BeforeTargets="Build" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+    <Exec Command="make -C $(MSBuildProjectDirectory)/../software/runtime/asm clean-nova-lib build/nova.lib" />
+    <Exec Command="make -C $(MSBuildProjectDirectory)/../software/assembly editbuf-test" />
+  </Target>
 
   <ItemGroup>
     <None Update="Resources\AllSuiteA.bin">
@@ -50,6 +54,14 @@
     </None>
     <None Update="..\e6502.Avalonia\Resources\novaforth.bin">
       <Link>Resources\novaforth.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\e6502.Avalonia\Resources\novalogo.bin">
+      <Link>Resources\novalogo.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\e6502.Avalonia\Resources\LOGOHK.BIN">
+      <Link>Resources\LOGOHK.BIN</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="..\e6502.Avalonia\Resources\cp437.bin">

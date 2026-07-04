@@ -708,9 +708,7 @@ load_all_dirs:
     sta FioCmd
 
     ; Read directory entries
-    ; DirOpen auto-populates entry 0, so process it first, then loop DirRead
     stz zp_count                        ; file count for this category
-    bra @lad_check_entry                ; process entry 0 from DirOpen
 
 @lad_read_loop:
     lda #FioCmdDirRead

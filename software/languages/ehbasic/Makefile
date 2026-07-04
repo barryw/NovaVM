@@ -5,6 +5,8 @@ CC65_CFG ?= $(shell dirname $(shell which ld65))/../cfg
 NOVA_ASM := ../../runtime/asm
 NOVAVM_INC := $(NOVA_ASM)/novavm.inc
 NOVA_LIB_FILE := $(NOVA_ASM)/build/nova.lib
+NOVA_CLI := dotnet run --project ../../../e6502.Nova -c Release --
+NOVA_CLI_SOURCES := ../../../e6502.Nova/Program.cs ../../../e6502.Nova/BuildTools.cs
 
 all: basic.bin extension.bin ../../runtime/asm/runtime_labels.inc ../../assembly/apps/keyboard/keyboard.bin ../../assembly/apps/demo/demo.bin tokens.json
 
@@ -13,6 +15,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s \
 	$(NOVA_ASM)/nic.inc $(NOVA_ASM)/nic.s \
 	$(NOVA_ASM)/gameserver.inc $(NOVA_ASM)/gameserver.s \
+	$(NOVA_ASM)/mouse.inc $(NOVA_ASM)/mouse.s \
 	$(NOVA_ASM)/vgc.inc $(NOVA_ASM)/vgc.s \
 	$(NOVA_ASM)/vgc_palette.inc $(NOVA_ASM)/vgc_palette.s \
 	$(NOVA_ASM)/sprite.inc $(NOVA_ASM)/sprite.s \
@@ -27,6 +30,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s $(NOVA_ASM)/vtext_mixed.s \
 	$(NOVA_ASM)/nui.inc $(NOVA_ASM)/nui.s \
 	$(NOVA_ASM)/replline.inc $(NOVA_ASM)/replline.s \
+	$(NOVA_ASM)/textsvc.inc $(NOVA_ASM)/textsvc.s \
 	$(NOVA_ASM)/tween.inc $(NOVA_ASM)/tween.s \
 	$(NOVA_ASM)/xmc.inc $(NOVA_ASM)/xmc.s
 
@@ -48,17 +52,17 @@ extension.o: extension.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/au
 	ca65 --cpu w65c02 -I $(NOVA_ASM) extension.s -o extension.o
 
 # Token table extraction
-tokens.json: basic.asm ../../../tools/gen_tokens.py
-	python3 ../../../tools/gen_tokens.py basic.asm -o tokens.json
+tokens.json: basic.asm $(NOVA_CLI_SOURCES)
+	$(NOVA_CLI) codegen tokens basic.asm -o tokens.json
 
-runtime_labels.json ../../../docs/assembly/runtime-labels.md ../../runtime/asm/runtime_labels.inc: basic.sym $(ABI_SOURCES) ../../../tools/gen_runtime_abi_docs.py
-	python3 ../../../tools/gen_runtime_abi_docs.py $(ABI_SOURCES) --sym basic.sym --json runtime_labels.json --md ../../../docs/assembly/runtime-labels.md --asm ../../runtime/asm/runtime_labels.inc
+runtime_labels.json ../../../docs/assembly/runtime-labels.md ../../runtime/asm/runtime_labels.inc: basic.sym $(ABI_SOURCES) $(NOVA_CLI_SOURCES)
+	$(NOVA_CLI) codegen runtime-abi $(ABI_SOURCES) --sym basic.sym --json runtime_labels.json --md ../../../docs/assembly/runtime-labels.md --asm ../../runtime/asm/runtime_labels.inc
 
 runtime-labels: runtime_labels.json ../../../docs/assembly/runtime-labels.md ../../runtime/asm/runtime_labels.inc
 
 # Auto-generate hardware constants include
-$(NOVAVM_INC): ../../../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym ../../../tools/gen_novavm_inc.py
-	python3 ../../../tools/gen_novavm_inc.py ../../../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym -o $(NOVAVM_INC)
+$(NOVAVM_INC): ../../../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym $(NOVA_CLI_SOURCES)
+	$(NOVA_CLI) codegen novavm-inc ../../../e6502.Avalonia/Hardware/VgcConstants.cs basic.sym -o $(NOVAVM_INC)
 
 novavm.inc: $(NOVAVM_INC)
 	@echo "novavm.inc is generated at $(NOVAVM_INC)"

@@ -34,7 +34,8 @@ MODROOT   := $(SOFTWARE)/modules
 MODULE_LIBS := graphics sound system editor files memory net turtle
 RTASM     := $(SOFTWARE)/runtime/asm
 FPGA_ROM  := $(REPO_ROOT)/e6502.FPGA/rom
-HEX16TOBIN:= python3 $(REPO_ROOT)/tools/hex16_to_bin.py
+NOVA      := dotnet run --project $(REPO_ROOT)/e6502.Nova -c Release --
+HEX16TOBIN:= $(NOVA) convert hex16-to-bin
 SD_ASSETS := build/sd
 
 COMPACT_BUILD ?= build/compact

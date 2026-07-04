@@ -34,6 +34,7 @@
 #define CTRL_CPU_RESET 0x1u
 #define CTRL_SYS_RESET 0x2u
 #define VGC_SPACE_CHAR 1u
+#define VGC_SPACE_SPRITE 4u
 
 /* ---- FIO mailbox in 6502 RAM ($B9A0+) ---- */
 #define FIO_CMD        0xB9A0
@@ -78,5 +79,7 @@ static inline unsigned char peek(unsigned a)      { wr(R_PEEK_ADDR, a & 0xFFFFu)
 static inline void     cpu_hold(int h)            { wr(R_CTRL, h ? CTRL_CPU_RESET : 0u); }
 static inline void     fio_ok(void)               { poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK); poke(FIO_CMD, 0); }
 static inline void     fio_fail(int c)            { poke(FIO_ERRCODE, c); poke(FIO_STATUS, FIO_ERR); poke(FIO_CMD, 0); }
+
+void host_reboot_vm(void);
 
 #endif /* NOVAVM_H */

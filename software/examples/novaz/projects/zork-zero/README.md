@@ -74,7 +74,7 @@ e6502.Nova/bin/Release/net10.0/osx-arm64/nova keyboard \
 
 Do not use HDMI capture while judging live display corruption unless that is the
 thing being tested; it can disturb the display path. For text-plane checks, use
-`tools/snapshot-novavm-state.py --host 192.168.1.65 --no-hdmi --no-pause`.
+`dotnet run --project e6502.Nova -c Release -- vm --remote 192.168.1.65 screen`.
 
 ## Manual `answer time` Route
 

@@ -40,6 +40,9 @@ cold_start:
       LDA   #MODULE_ID_NONE
       STA   LIB_RESIDENT
 
+      LDA   #VCMD_GCLS
+      STA   VGC_CMD
+
       ; Zero NovaLogo turtle/graphics state ($9F00..$9F1F) so each session starts
       ; in a known mode. The extension pins its turtle state here (extension.s
       ; TURTLE_STATE_BASE=$9F00); RAM is stale across soft-reboot on HW, and a

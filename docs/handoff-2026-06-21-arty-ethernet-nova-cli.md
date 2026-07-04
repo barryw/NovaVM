@@ -23,17 +23,16 @@ Symptom going in: TX flowed but RX received zero frames, DHCP never completed. T
 **Verified on HW:** `[net] DHCP IP: 192.168.1.213`, `ping` 0% loss, 128 KB file streamed to TCP 6502 → `upload complete` on the SD.
 
 ### Tests + tooling added (committed)
-- `e6502.FPGA/boards/arty_z7/net_smoke.sh` — HW-in-the-loop smoke (ping + TCP-6502 upload roundtrip). Run: `./net_smoke.sh 192.168.1.213`.
+- Arty hardware checks now run through `nova`: use `nova device status
+  --remote <ip>`, `nova get`/`nova put` for TCP file roundtrips, and
+  `nova check spi-bridge --remote <ip>` for SDRAM bridge stress.
 - `e6502.FPGA/boards/arty_z7/boot_fio_noreset.tcl` — gentle boot (processor-only reset; `boot_fio_por.tcl`'s `rst -srst` flaps the PHY link).
 - `e6502UnitTests/ArtyEthernetRegressionTests.cs` — CI guard asserting both fixes stay in source. Run: `dotnet test e6502UnitTests/e6502UnitTests.csproj -c Release -p:SkipRomBuild=true --filter "FullyQualifiedName~ArtyEthernet"` (2/2 pass).
 
-### Python-tool review (task #23) — review delivered, migration NOT started
-Thorough catalog of all 50 repo `.py` files (36 in `tools/`). Buckets:
-- **DELETE (duplicate):** `tools/novahostctl.py` (thin NovaHost-client wrapper; `nova vm`/`device` cover it). Referenced by `tools/flash-ulx3s-stack.sh` (`reload-rom`) + `tools/run-basic-integration.sh` (`raw` → `nova vm raw`). Redirect both, then delete.
-- **MIGRATE → nova (~18):** `nova smoke <name>` ← 13× `run-*-hardware-smoke.py` + `ulx3s/smoke_test.py`; `nova check <thing>` ← `check-{vgc-reset,nic,spi-bridge}.py`; `nova convert <fmt>` ← `ly2mml.py`/`xml2mml.py`/`score2bas.py`; `nova keyboard ftdi` ← `nova-ftdi-keyboard.py`; `nova snapshot` ← `snapshot-novavm-state.py` (514 lines).
-- **KEEP (~24):** build-codegen (`bin2header`, `hex16_to_bin`, `gen_*`, `nmod_pack`, `make_petscii_font`, the Vitis/board build scripts), CI validators (`check-bitstream-freshness`, `check-fpga-timing`), docs tooling, and `novahost_client.py` (the shared client **library** the tests import — keep).
-
-**Decision (user):** do **unique tools first** (convert/snapshot/keyboard) before the smoke-test family.
+### Script cleanup status
+This earlier Python-tool review is obsolete. Repo operations now belong in
+`nova`; the remaining allowed Python hooks are documented in
+`docs/script-inventory.md`.
 
 ---
 
@@ -41,9 +40,7 @@ Thorough catalog of all 50 repo `.py` files (36 in `tools/`). Buckets:
 
 ```bash
 # Build the PS firmware (regenerates BSP + applies the physpeed patch)
-cd e6502.FPGA/boards/arty_z7
-rm -rf /tmp/nova_fio_ws
-/tools/Xilinx/Vitis/2024.2/bin/vitis -s vitis/build_ps_fio.py    # ~3 min
+nova arty build-ps-fio                                           # ~3 min
 ls /tmp/nova_fio_ws/ps_fio/build/ps_fio.elf                       # the ELF
 
 # Boot it (FPGA loads over JTAG; FPGA is blank after a power cycle)
@@ -54,8 +51,9 @@ ls /tmp/nova_fio_ws/ps_fio/build/ps_fio.elf                       # the ELF
 stty -F /dev/ttyUSB1 115200 cs8 -cstopb -parenb -crtscts raw -echo
 timeout 30 cat /dev/ttyUSB1 | tr -d '\r' | grep -E 'DHCP IP|NVLANDISC|link='
 
-# Network smoke + ping (sudo tcpdump etc. need dangerouslyDisableSandbox in this harness)
-./net_smoke.sh 192.168.1.213
+# Network checks
+nova device status --remote 192.168.1.213
+nova check spi-bridge --remote 192.168.1.213
 ```
 Notes: U-Boot oracle at `/tmp/u-boot-xlnx/u-boot.elf` (`boot_uboot_net.tcl`) RXes on this board — the ground-truth reference used to crack the bug. The DHCP IP can change; read it from the serial.
 

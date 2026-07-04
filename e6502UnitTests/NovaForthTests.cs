@@ -14,11 +14,11 @@ public class NovaForthTests
     private const ushort ReservedStart = 0x0300;
     private const ushort ReservedEnd = 0x0900;
     private const byte Sentinel = 0x5A;
-    private const byte CtrlK = 0x0B;
+    private const byte CtrlS = 0x13;
     private const byte KeyEsc = 0x1B;
-    private const byte SyntaxKeyword = 0x03;
-    private const byte SyntaxNumber = 0x07;
-    private const byte SyntaxComment = 0x0C;
+    private const byte SyntaxKeyword = 0x63;
+    private const byte SyntaxNumber = 0x67;
+    private const byte SyntaxComment = 0x6C;
 
     [TestMethod]
     public void BootShowsBannerAndPrompt()
@@ -464,15 +464,15 @@ public class NovaForthTests
 
             Assert.AreEqual((byte)':', bus.Vgc.GetScreenChar(0, 1), SnapshotScreen(bus.Vgc));
             Assert.AreEqual(SyntaxKeyword, bus.Vgc.GetScreenColor(0, 1),
-                "The Forth profile should color definition punctuation so definitions are visually scannable.");
+                "The Forth hook should color definition punctuation so definitions are visually scannable.");
             Assert.AreEqual(SyntaxKeyword, bus.Vgc.GetScreenColor(9, 1),
-                "The Forth profile should color known core words from its token table.");
+                "The Forth hook should color Forth words.");
             Assert.AreEqual(SyntaxNumber, bus.Vgc.GetScreenColor(13, 1),
-                "The Forth profile should color numeric literals.");
+                "The Forth hook should color numeric literals.");
             Assert.AreEqual(SyntaxKeyword, bus.Vgc.GetScreenColor(17, 1),
-                "The Forth profile should color semicolon definition terminators.");
+                "The Forth hook should color semicolon definition terminators.");
             Assert.AreEqual(SyntaxComment, bus.Vgc.GetScreenColor(19, 1),
-                "The Forth profile should color backslash comments through end-of-line.");
+                "The Forth hook should color backslash comments through end-of-line.");
 
             QueueAltX(editor);
             RunUntilForthIdle(cpu, bus, editor, 80_000_000);
@@ -1509,8 +1509,7 @@ public class NovaForthTests
 
     private static void QueueSave(ScreenEditor editor)
     {
-        editor.QueueInput(CtrlK);
-        editor.QueueInput((byte)'s');
+        editor.QueueInput(CtrlS);
     }
 
     private static void QueueAltX(ScreenEditor editor)

@@ -8,7 +8,7 @@
 #   make clean-binaries remove the generated binaries (git-tracked fixtures are kept)
 #
 # Dependency order: software/runtime/asm (nova.lib) -> ehbasic (generates novavm.inc) ->
-# everything else. Toolchain: cc65 (ca65/ld65), python3.
+# everything else. Toolchain: cc65 (ca65/ld65).
 
 AVRES   := e6502.Avalonia/Resources
 CLIRES  := e6502.CLI/Resources
@@ -27,7 +27,6 @@ binaries:
 	$(MAKE) -C software/languages/novalogo install
 	@for m in $(MODULES); do $(MAKE) -C software/modules/$$m install || exit 1; done
 	$(MAKE) -C software/assembly                       # apps (keyboard, demo, turtle, ...)
-	python3 tools/make_petscii_font.py $(AVRES)
 	$(MAKE) stage-resources
 	$(MAKE) stage-web
 	@echo "=== binaries: all deployable artifacts built + staged from source ==="

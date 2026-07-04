@@ -1,19 +1,23 @@
-# build_ps_fio.py — Vitis 2024.2 build of the NovaVM PS FIO host.
-#   vitis -s build_ps_fio.py
+# build_ps_fio.py — Vitis 2024.2 hook for `nova arty build-ps-fio`.
 #
 # Builds a standalone platform from the full integration XSA (PS7 + fio_bridge),
 # enables the xilffs (FatFs) library for microSD access, and compiles the ps_fio
-# app (boards/arty_z7/ps_fio/src) -> ELF. Use a FRESH workspace dir.
+# app (boards/arty_z7/ps_fio/src) -> ELF. Use a FRESH workspace dir. Run this
+# through the Nova CLI so payload sync happens before Vitis takes over.
 #
 # Prereq: build/arty_z7_full.xsa (from build_full.tcl).
 
 import vitis, glob, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
 WS   = os.environ.get("PS_WS", "/tmp/nova_fio_ws")
 XSA  = os.path.abspath(os.path.join(HERE, "..", "build", "arty_z7_full.xsa"))
 SRC  = os.path.abspath(os.path.join(HERE, "..", "ps_fio", "src"))
 DOMAIN = "standalone_ps7_cortexa9_0"
+
+if os.environ.get("NOVA_ARTY_SYNC_PAYLOADS_DONE") != "1":
+    raise SystemExit("Run this through `nova arty build-ps-fio`; Nova syncs payloads before Vitis runs.")
 
 client = vitis.create_client()
 client.set_workspace(WS)

@@ -6,3 +6,7 @@ CONFIG_UIO_PDRV_GENIRQ=y
 # FPGA manager so U-Boot/Linux can load the PL bitstream.
 CONFIG_FPGA=y
 CONFIG_FPGA_MGR_ZYNQ_FPGA=y
+# USB HID keyboard input for novavm/nkbd.c.
+CONFIG_INPUT_EVDEV=y
+CONFIG_USB_HID=y
+CONFIG_USB_CHIPIDEA_HOST=y

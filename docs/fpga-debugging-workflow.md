@@ -41,9 +41,9 @@ answer the question.
    thing you think it inferred. This is much cheaper than full place-and-route.
 
    ```bash
-   tools/beast-synth.sh diag
-   tools/beast-synth.sh diag-vgc
-   tools/beast-synth.sh diag-sprites
+   make -C e6502.FPGA/boards/ulx3s diag
+   make -C e6502.FPGA/boards/ulx3s diag-vgc
+   make -C e6502.FPGA/boards/ulx3s diag-sprites
    ```
 
 4. **Full bitstream**
@@ -52,8 +52,8 @@ answer the question.
    SDRAM pins, ESP/FPGA UART, reset behavior, or the physical board.
 
    ```bash
-   tools/beast-synth.sh bitstream label
-   openFPGALoader --board ulx3s -f e6502.FPGA/fpga/bit_backups/e6502.label_*.bit
+   make -C e6502.FPGA/boards/ulx3s bitstream
+   openFPGALoader --board ulx3s -f e6502.FPGA/boards/ulx3s/build/e6502.bit
    ```
 
 5. **Hardware diagnostic through NovaHost**
@@ -65,42 +65,17 @@ answer the question.
    For BASIC-visible behavior, prefer typing real BASIC commands through the
    bridge instead of poking registers. That tests the same path users exercise.
 
-   The standard live-board BASIC integration command is:
+   Run live-board debug checks through the Nova CLI:
 
    ```bash
-   tools/run-basic-integration.sh
-   ```
-
-   It defaults to the static NovaHost address `192.168.1.65`, checks HTTP,
-   checks the debug bridge, verifies the SD card, reloads ROMs from SD, cold
-   starts BASIC, applies a per-suite timeout, and writes a timestamped log under
-   `/tmp`. To run a subset:
-
-   ```bash
-   tools/run-basic-integration.sh text sprites sd
+   dotnet run --project e6502.Nova -c Release -- check spi-bridge --remote 192.168.1.65
+   dotnet run --project e6502.Nova -c Release -- check vgc-reset-stale --remote 192.168.1.65
+   dotnet run --project e6502.Nova -c Release -- vm --remote 192.168.1.65 screen
    ```
 
    Use the static IP for normal hardware testing. mDNS (`novahost.local`) is
    convenient when it works, but it is not reliable enough for the standard test
-   path. Override host/timeout behavior only when needed:
-
-   ```bash
-   NOVAHOST=192.168.1.65 SUITE_TIMEOUT=240 tools/run-basic-integration.sh
-   ```
-
-   On failure, the runner captures a hardware snapshot under `/tmp`. The
-   snapshot freezes the CPU briefly, records boot status, CPU registers/PC,
-   a ROM-symbol lookup for PC, screen text, zero page, stack page, nearby
-   instruction bytes, VGC IRQ state, breakpoint state, the last CPU trace
-   records, and an HDMI frame, then resumes the CPU so later suites can
-   continue.
-
-   To capture one manually:
-
-   ```bash
-   tools/snapshot-novavm-state.py
-   tools/snapshot-novavm-state.py --label hung-math --resume
-   ```
+   path.
 
    The hardware debug bridge also exposes interactive commands on TCP port
    `6503`:
@@ -125,16 +100,16 @@ answer the question.
    monitor or capture device actually sees.
 
    ```bash
-   tools/capture-hdmi-frame.sh
-   tools/capture-hdmi-frame.sh screenshots/hardware/current.png
-   tools/capture-hdmi-frame.sh --list
+   dotnet run --project e6502.Nova -c Release -- capture hdmi
+   dotnet run --project e6502.Nova -c Release -- capture hdmi screenshots/hardware/current.png
+   dotnet run --project e6502.Nova -c Release -- capture hdmi --list
    ```
 
    The default input is AVFoundation device `0:none`, which is the Cam Link 4K
    on the current Mac. Override it if device ordering changes:
 
    ```bash
-   HDMI_DEVICE='1:none' tools/capture-hdmi-frame.sh
+   HDMI_DEVICE='1:none' dotnet run --project e6502.Nova -c Release -- capture hdmi
    ```
 
 ## What GTKWave Is Good For

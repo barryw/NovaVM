@@ -46,7 +46,7 @@ RUNTIME_SYM := $(BUILD_DIR)/runtime.sym
 NOVA_LIB_FILE := $(NOVA_LIB)/build/nova.lib
 ENGINE := $(BUILD_DIR)/CHESSENG.BIN
 RULES_ENGINE := $(BUILD_DIR)/CHESSRUL.BIN
-SPLASH_NVG := $(BUILD_DIR)/SPLASH.NVG
+SPLASH_NVG := assets/SPLASH.NVG
 NETWORK_OVERLAY_PAYLOAD := $(BUILD_DIR)/netgame.bin
 NETWORK_OVERLAY := $(BUILD_DIR)/NETGAME.OVL
 NETWORK_OVERLAY_SYM := $(BUILD_DIR)/netgame.sym
@@ -64,7 +64,6 @@ RULES_ENGINE_NAME ?= CHESSRUL.BIN
 SPLASH_NVG_NAME ?= SPLASH.NVG
 NETWORK_OVERLAY_NAME ?= NETGAME.OVL
 SPLASH_SOURCE := assets/NovaChessSplashSource.png
-SPLASH_SCRIPT := tools/make_splash_nvg.py
 SPLASH_PREVIEW := $(BUILD_DIR)/SPLASH.png
 SPLASH_PROJECT := $(BUILD_DIR)/NovaChessSplash.novadraw
 ENGINE_VENDOR := vendor/chess6502-engine
@@ -105,9 +104,6 @@ $(ENGINE): $(ENGINE_SOURCES) | $(BUILD_DIR)
 $(RULES_ENGINE): $(RULES_ENGINE_SOURCES) | $(BUILD_DIR)
 	$(CA65) $(ENGINE_CA65FLAGS) --cpu w65c02 -I $(NOVA_LIB) -I src -I $(ENGINE_VENDOR)/src -I $(ENGINE_VENDOR)/src/engine -I $(ENGINE_VENDOR)/src/ai -o $(BUILD_DIR)/rules_nova.o src/rules_nova.s
 	$(LD65) -C src/engine_nova.cfg -m $(BUILD_DIR)/rules_nova.map -Ln $(BUILD_DIR)/rules_nova.sym -o $@ $(BUILD_DIR)/rules_nova.o
-
-$(SPLASH_NVG): $(SPLASH_SOURCE) $(SPLASH_SCRIPT) | $(BUILD_DIR)
-	$(PYTHON) "$(SPLASH_SCRIPT)" "$(SPLASH_SOURCE)" "$@" --format nvg --forbid-color 9 --normalize-family 5,13 --erase-rect 48,174,224,20 --preview "$(SPLASH_PREVIEW)" --novadraw "$(SPLASH_PROJECT)"
 
 $(ENGINE_LABELS): $(ENGINE) | $(BUILD_DIR)
 	awk 'BEGIN { map["nova_chess_engine_start"]="ENGINE_START"; map["nova_chess_init_piece_lists"]="ENGINE_CHESS_INIT_PIECE_LISTS"; map["nova_chess_generate_legal_moves"]="ENGINE_CHESS_GENERATE_LEGAL_MOVES"; map["nova_chess_find_best_move"]="ENGINE_CHESS_FIND_BEST_MOVE"; map["nova_chess_make_move"]="ENGINE_CHESS_MAKE_MOVE"; map["nova_chess_begin_game"]="ENGINE_CHESS_BEGIN_GAME"; map["nova_chess_commit_move"]="ENGINE_CHESS_COMMIT_MOVE"; map["nova_chess_unmake_move"]="ENGINE_CHESS_UNMAKE_MOVE"; map["nova_chess_is_square_attacked"]="ENGINE_CHESS_IS_SQUARE_ATTACKED"; map["nova_chess_check_king_in_check"]="ENGINE_CHESS_CHECK_KING_IN_CHECK"; map["nova_chess_record_position"]="ENGINE_CHESS_RECORD_POSITION"; map["nova_chess_clear_position_history"]="ENGINE_CHESS_CLEAR_POSITION_HISTORY"; map["nova_chess_check_repetition"]="ENGINE_CHESS_CHECK_REPETITION"; map["nova_chess_check_game_state"]="ENGINE_CHESS_CHECK_GAME_STATE"; map["nova_chess_tt_clear"]="ENGINE_TT_CLEAR"; map["Board88"]="ENGINE_BOARD88"; map["BestMoveFrom"]="ENGINE_BEST_MOVE_FROM"; map["BestMoveTo"]="ENGINE_BEST_MOVE_TO"; map["MoveCount"]="ENGINE_MOVE_COUNT"; map["MoveListFrom"]="ENGINE_MOVE_LIST_FROM"; map["MoveListTo"]="ENGINE_MOVE_LIST_TO"; map["currentplayer"]="ENGINE_CURRENTPLAYER"; map["difficulty"]="ENGINE_DIFFICULTY"; } $$3 ~ /^\./ { sym = substr($$3, 2); if (sym in map) printf "%-36s = $$%s\n", map[sym], $$2; }' "$(ENGINE_SYM)" > $@

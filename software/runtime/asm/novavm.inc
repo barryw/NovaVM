@@ -1,6 +1,6 @@
 ; novavm.inc -- auto-generated, DO NOT EDIT
 ; Sources: VgcConstants.cs, basic.sym
-; Regenerate: python3 tools/gen_novavm_inc.py
+; Regenerate: nova codegen novavm-inc
 
 
 ; --- Memory map ---
@@ -99,6 +99,7 @@ FioCmdFFlush                        = $36
 FioCmdFStatus                       = $37
 FioCmdFDelete                       = $38
 FioCmdFRename                       = $39
+FioCmdDevStatus                     = $3A
 ShelfBaseAddr                       = $60000
 ShelfSlotBytes                      = $4000
 ShelfN                              = $04
@@ -120,6 +121,8 @@ FioDirTypeGfx                       = $04
 FioDirTypeDir                       = $05
 FioDirTypeForth                     = $06
 FioDirTypeLogo                      = $07
+FioDirTypePascal                    = $08
+FioDirTypeAsm                       = $09
 FioErrDiskFull                      = $04
 FioErrNotMounted                    = $05
 MusicStatus                         = $BA50
@@ -635,6 +638,24 @@ SprFlagYFlip                        = $02
 SprFlagFlipMask                     = $03
 SprFlagEnable                       = $80
 ShapeSlotCount                      = $0100
+MouseRegBase                        = $A0D0
+MouseRegEnd                         = $A0DF
+RegMouseXLo                         = $A0D0
+RegMouseXHi                         = $A0D1
+RegMouseY                           = $A0D2
+RegMouseButtons                     = $A0D3
+RegMouseCtrl                        = $A0D4
+RegMouseColor                       = $A0D5
+RegMouseShape                       = $A0D6
+RegMouseHotX                        = $A0D7
+RegMouseHotY                        = $A0D8
+MouseButtonLeft                     = $01
+MouseButtonRight                    = $02
+MouseButtonMiddle                   = $04
+MouseButtonMask                     = $07
+MouseCtrlEnable                     = $01
+MouseCtrlAutoContrast               = $02
+MouseCtrlColorize                   = $04
 VramRegBase                         = $A0E0
 VramRegEnd                          = $A0E4
 VramPlane                           = $A0E0
@@ -793,33 +814,9 @@ RomSwapExtension                    = $04
 RomSwapLogo                         = $05
 RomSwapForth                        = $06
 
-; --- Compiler Controller registers ($A031-$A03E) ---
-CmpBase                             = $A031
-CmpEnd                              = $A03E
-CmpCmd                              = $A031
-CmpStatus                           = $A032
-CmpErrCount                         = $A033
-CmpWarnCount                        = $A034
-CmpErrLineL                         = $A035
-CmpErrLineH                         = $A036
-CmpCodeSizeL                        = $A037
-CmpCodeSizeH                        = $A038
-CmpErrMsg                           = $A039
-CmpErrIdx                           = $A03A
-CmpSrcAddrL                         = $A03B
-CmpSrcAddrM                         = $A03C
-CmpSrcAddrH                         = $A03D
-CmpCmdCompile                       = $01
-CmpCmdGetError                      = $02
-CmpCmdGetWarn                       = $03
-CmpStatusIdle                       = $00
-CmpStatusCompiling                  = $01
-CmpStatusOk                         = $02
-CmpStatusError                      = $03
-
 ; --- ROM Entry Points (from basic.sym) ---
 LAB_COLD                            = $C000
-V_INPT                              = $E99C
-V_OUTP                              = $E99F
-V_LOAD                              = $E9A2
-V_SAVE                              = $E9A5
+V_INPT                              = $E99F
+V_OUTP                              = $E9A2
+V_LOAD                              = $E9A5
+V_SAVE                              = $E9A8

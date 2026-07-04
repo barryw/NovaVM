@@ -28,7 +28,8 @@
  *                      mirroring novavm.c's dump_screen()/vmem_read().
  *   - poke/peek     -> 6502 RAM
  *   - key inject    -> R_KEY
- *   - vm reset      -> R_CTRL (pulse CTRL_CPU_RESET; cold == full sys reset)
+ *   - vm reset      -> R_CTRL (pulse CTRL_CPU_RESET)
+ *   - cold start    -> novavm.c host_reboot_vm() (reload ROM/loader, autoboot)
  *   - file mgmt     -> POSIX under /data/nova (was xilffs f_open/f_read).
  *
  * Cross-compile check (must be clean):
@@ -101,11 +102,15 @@ static unsigned char vmem_read(unsigned sp, unsigned a) {
 
 /* VM reset over R_CTRL. cold==1 also pulses the custom-chip (system) reset, the
  * same combination novavm.c uses at boot. The 6502 re-runs its cold start. */
-static void vm_reset_ctrl(int cold) {
-    BRIDGE_LOCK();
+static void vm_reset_ctrl_locked(int cold) {
     if (cold) { wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET); usleep(150000); }
     else      { wr(R_CTRL, CTRL_CPU_RESET); usleep(2000); }
     wr(R_CTRL, 0u);
+}
+
+static void vm_reset_ctrl(int cold) {
+    BRIDGE_LOCK();
+    vm_reset_ctrl_locked(cold);
     BRIDGE_UNLOCK();
 }
 
@@ -960,8 +965,22 @@ static void do_read_vram(dbg_ctx *c, const char *s) {
 static void do_send_key(dbg_ctx *c, const char *s) {
     char key[24];
     json_str(s, "key", key, sizeof key);
+    if (!strncasecmp(key, "ALT-", 4) && key[4] && !key[5]) {
+        char ch = key[4];
+        if (ch >= 'A' && ch <= 'Z') ch = (char)(ch + 0x20);
+        if (ch >= 'a' && ch <= 'z') {
+            kb_emit(0x1B);
+            usleep(20000);
+            kb_emit((unsigned char)ch);
+            usleep(20000);
+            dbg_respond_ok(c);
+            return;
+        }
+    }
     int code = key_code(key);
-    if (code >= 0) kb_emit((unsigned char)code);
+    if (code < 0) { dbg_respond_err(c, "Unknown key"); return; }
+    kb_emit((unsigned char)code);
+    usleep(20000);
     dbg_respond_ok(c);
 }
 
@@ -974,6 +993,7 @@ static void do_type_text(dbg_ctx *c, const char *s) {
         if (ch == '\n') { if (prev_cr) { prev_cr = 0; continue; } ch = '\r'; }
         prev_cr = (ch == '\r');
         kb_emit((unsigned char)ch);
+        usleep(20000);
     }
     dbg_respond_ok(c);
 }
@@ -1011,11 +1031,14 @@ static void do_get_cursor(dbg_ctx *c) {
     dbg_respond(c, b);
 }
 
-static void do_reset(dbg_ctx *c, int cold) {
-    vm_reset_ctrl(cold);
-    char b[64];
-    snprintf(b, sizeof b, "{\"ok\":true,\"%s\":true}", cold ? "cold_start" : "reset");
-    dbg_respond(c, b);
+static void do_reset(dbg_ctx *c) {
+    vm_reset_ctrl_locked(0);
+    dbg_respond(c, "{\"ok\":true,\"reset\":true}");
+}
+
+static void do_cold_start(dbg_ctx *c) {
+    host_reboot_vm();
+    dbg_respond(c, "{\"ok\":true,\"cold_start\":true}");
 }
 
 /* dispatch one JSON line. BRIDGE_LOCK serialises all machine access. */
@@ -1033,8 +1056,8 @@ static void dbg_dispatch(dbg_ctx *c, const char *line) {
     else if (!strcmp(cmd, "read_screen")) do_read_screen(c);
     else if (!strcmp(cmd, "read_line"))   do_read_line(c, line);
     else if (!strcmp(cmd, "get_cursor"))  do_get_cursor(c);
-    else if (!strcmp(cmd, "vm_reset"))    do_reset(c, 0);
-    else if (!strcmp(cmd, "cold_start"))  do_reset(c, 1);
+    else if (!strcmp(cmd, "vm_reset"))    do_reset(c);
+    else if (!strcmp(cmd, "cold_start"))  do_cold_start(c);
     else if (!strcmp(cmd, "wait_ready"))  dbg_respond_ok(c);   /* not pollable; best-effort */
     /* read_xram: bare-metal read XRAM from PS DDR; no PS-DDR XRAM mirror on the
      * Linux host (XRAM lives in the PL), so report unsupported.  TODO: expose

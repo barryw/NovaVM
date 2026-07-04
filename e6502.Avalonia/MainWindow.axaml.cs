@@ -50,6 +50,7 @@ public partial class MainWindow : Window
         bool turboMode = RuntimeOptions.GetFlagFromEnvironment("NOVA_TURBO");
         bool timingLog = RuntimeOptions.GetFlagFromEnvironment("NOVA_TIMING_LOG");
         var bootRom = ParseBootRom(Environment.GetEnvironmentVariable("NOVA_BOOT_ROM"));
+        string? demo = Environment.GetEnvironmentVariable("NOVA_DEMO");
 
         _bus = new CompositeBusDevice(
             enableSound: true,
@@ -57,8 +58,13 @@ public partial class MainWindow : Window
             frameRateHz: VgcConstants.FrameRateHz,
             bootRom: bootRom);
         _cpu = new Cpu(_bus);
-        _cpu.Boot();
-        _bus.RomSwapRequested += (_, _) => _cpu.Boot();
+        if (!TryBootDemo(demo))
+            _cpu.Boot();
+        _bus.RomSwapRequested += (_, _) =>
+        {
+            if (!TryBootDemo(demo))
+                _cpu.Boot();
+        };
 
         _editor = new ScreenEditor(_bus.Vgc);
         _bus.Vgc.SetScreenEditor(_editor);
@@ -266,6 +272,33 @@ public partial class MainWindow : Window
             "forth" or "novaforth" => CompositeBusDevice.ActiveRom.Forth,
             _ => CompositeBusDevice.ActiveRom.Basic
         };
+    }
+
+    private bool TryBootDemo(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "editor" or "editbuf" or "novapascal-editor" => BootPrgResource("editbuf_demo.bin"),
+            _ => throw new InvalidOperationException($"Unknown NOVA_DEMO value: {value}")
+        };
+    }
+
+    private bool BootPrgResource(string name)
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "Resources", name);
+        byte[] prg = File.ReadAllBytes(path);
+        if (prg.Length < 2)
+            throw new InvalidOperationException($"{name} is not a PRG image.");
+
+        ushort load = (ushort)(prg[0] | (prg[1] << 8));
+        for (int i = 2; i < prg.Length; i++)
+            _bus.WriteRam((ushort)(load + i - 2), prg[i]);
+
+        _cpu.Boot(load);
+        return true;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

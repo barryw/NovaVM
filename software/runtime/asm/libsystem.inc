@@ -73,6 +73,26 @@ SYS_RNG32       = $06   ; ()  reporter     -> RESULT b0..3    = 32 random bits
 ;     +7 u8 left            +8 u8 top            +9 u8 width
 ;    +10 u8 height         +11 u16 footer ptr
 ;   Out: RESULT b0 = selected row, RESULT b1 = NUI_RESULT_OK/CANCEL
+; File picker uses the same NUI chrome, owns its rows, and returns the selected
+; filename into caller RAM. Type mask bits follow FIO_TYPE_* ids: bit0 BAS,
+; bit1 SID, bit2 BIN, bit3 MID, bit4 GFX, bit5 DIR, bit6 FORTH, bit7 LOGO,
+; bit8 PASCAL, bit9 ASM.
+; Directories/drives/parent are always shown for navigation; mask=0 shows all
+; files.
+;   ARG0 b0/b1 = config ptr
+;     +0 u16 title ptr      +2 u16 output buffer ptr
+;     +4 u8 output max      +5 u8 mode (0=open/select, 1=save-as prompt)
+;     +6 u16 file type mask +8 u8 selected       +9..+11 ignored
+;    +12 u16 footer ptr    +14 u16 row buffer ptr
+;   Row buffer must hold 24 rows * 48 bytes = 1152 bytes.
+;   Out: RESULT b0 = selected filename length, RESULT b1 = NUI_RESULT_OK/CANCEL
+; Text input uses a caller-owned config struct:
+;   ARG0 b0/b1 = config ptr
+;     +0 u16 title ptr      +2 u16 label ptr (8 bytes, space-padded)
+;     +4 u16 output ptr     +6 u8 output max
+;     +7 u8 left            +8 u8 top            +9 u8 width
+;    +10 u8 height         +11 u16 footer ptr
+;   Out: RESULT b0 = typed text length, RESULT b1 = NUI_RESULT_OK/CANCEL
 ; UI style is caller-controlled palette indexes:
 ;   ARG0 b0=shadow, b1=top/left border, b2=panel,
 ;        b3=packed text color (bg/fg).
@@ -88,6 +108,8 @@ SYS_NUI_PICK_LIST     = $15 ; (configptr) reporter -> RESULT b0 selected, b1 OK/
 SYS_NUI_SAVE_UNDER_FULL    = $16 ; (configptr) -> save text + graphics planes into XRAM
 SYS_NUI_RESTORE_UNDER_FULL = $17 ; (configptr) -> restore text + graphics planes from XRAM
 SYS_NUI_SET_STYLE          = $18 ; (shadow,border,panel,text) -> set NUI chrome/text colors
+SYS_NUI_FILE_PICKER        = $19 ; (configptr) reporter -> RESULT b0 namelen, b1 OK/CANCEL
+SYS_NUI_TEXT_INPUT         = $1A ; (configptr) reporter -> RESULT b0 textlen, b1 OK/CANCEL
 
 ; =====================================================================
 ; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
@@ -132,6 +154,6 @@ SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer f
 
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $19
+SYS_FN_COUNT  = $1B
 
 .endif

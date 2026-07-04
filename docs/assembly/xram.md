@@ -101,6 +101,17 @@ issue multiple calls and advance `XRAM_ADDRL/M/H` between chunks.
 leave that window mapped to the last accessed page. If your program also uses
 window 3 directly, remap it after calling the byte helpers.
 
+## Platform-Owned Ranges
+
+Applications should treat `$000000-$03FFFF` as allocator-managed heap and should
+request storage through `MEM_ALLOC` or `xmc_alloc_block`. The platform currently
+owns `$040000-$047FFF` for shared text undo snapshots, `$048000-$04FFFF` for
+redo snapshots, `$050000-$053FFF` for the shared clipboard, `$054000-$054EFF`
+for editui menu save-under scratch, `$055000-$05CFFF` for shared editor
+document buffers, `$05D000-$05FFFF` for remaining editor/NUI scratch,
+`$060000-$06FFFF` for the paged module shelf,
+`$070000-$07F9FF` for NVG staging, and `$07FA00-$07FEFF` for XMC metadata.
+
 ## File Streaming ABI
 
 `xram_xload` and `xram_xsave` use the same flat XRAM address registers plus a

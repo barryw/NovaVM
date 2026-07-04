@@ -201,13 +201,15 @@ This keeps the ULX3S viable for the synth feature.
 
 ### Define-only bitstream builds could reuse stale synthesis netlists
 
-Files: `e6502.FPGA/fpga/Makefile`, `tools/beast-synth.sh`
+Files: `e6502.FPGA/fpga/Makefile`, `e6502.FPGA/boards/ulx3s/Makefile`
 
 The Beast wrapper deleted `build/e6502.bit` and `build/e6502.config`, but left `build/e6502.json`. The Makefile also did not track `EXTRA_DEFINES` as an input to synthesis. That meant a build whose only change was a define, such as HDMI phase/test-path selection, could rerun place-and-route against an old netlist and produce a misleading bitstream.
 
 Mitigation added:
 
-- `tools/beast-synth.sh` now removes the full remote `build/` directory before running, saves a timestamped log and manifest, records commit/dirty state, and includes seconds in artifact names.
+- The old Beast shell wrapper has been retired. Current ULX3S synthesis goes
+  through `make -C e6502.FPGA/boards/ulx3s ...`, with timing checks exposed as
+  `nova fpga check-timing`.
 - `e6502.FPGA/fpga/Makefile` now writes `build/build_args.txt` and makes synthesis/place-and-route depend on it, so local incremental builds notice changes to `EXTRA_DEFINES`, device/package, pin file, and nextpnr flags.
 
 Retest impact:

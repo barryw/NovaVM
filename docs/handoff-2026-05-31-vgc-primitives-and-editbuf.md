@@ -113,8 +113,9 @@ the whole "hardware does the work for developers" intent
 - Rebuild editor harness after editing editbuf.s: `cd assembly && make editbuf-test`.
 - FPGA Verilator: `cd e6502.FPGA/test && make test_vgc_top_row` /
   `make test_vgc_screen_window` / `make test_vgc_regs` etc.
-- FPGA synth on beast: `tools/beast-synth.sh diag <label>` or
-  `tools/beast-synth.sh bitstream <label>` (auto seed-sweeps; saves to bit_backups).
+- FPGA synth: `make -C e6502.FPGA/boards/ulx3s diag` for diagnostics or
+  `make -C e6502.FPGA/boards/ulx3s bitstream` for the full bitstream. Use
+  `nova fpga check-timing <nextpnr-report.json>` for the timing gate.
 
 ## Gotchas / decisions (from memory)
 - VRAM auto-increment is now usable from CPU loops (CPU fix). The editor's

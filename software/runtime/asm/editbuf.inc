@@ -1,17 +1,21 @@
 ; editbuf.inc — shared text-editing engine for Nova native tools.
 ;
 ; editbuf layers a real editable text buffer (cursor movement, insert/delete,
-; line navigation, selection, cut/copy/paste, scrolling) and a three-choice
-; status-line dirty-exit prompt on top of the EDITUI chrome shell. It is intentionally
-; LANGUAGE-NEUTRAL: it knows nothing about Logo, BASIC, or any document model.
+; line navigation, selection, cut/copy/paste, scrolling) and modal NUI prompts
+; on top of the EDITUI chrome shell. It is intentionally LANGUAGE-NEUTRAL: it
+; knows nothing about Logo, BASIC, Pascal, files, or any document model.
 ;
 ; Anything language-specific is supplied by the host through HOOK VECTORS:
-;   - SAVE hook   : invoked on Ctrl+K S (and the dialog "Save First" choice).
+;   - SAVE hook   : invoked on Ctrl-S (and the dialog "Save First" choice).
 ;                   The host validates/saves/installs and returns a status.
 ;   - INDENT hook : invoked after Enter. The host returns how many leading
 ;                   spaces the new line should start with (auto-indent).
 ;   - HILITE hook : invoked per visible line during render. The host fills a
 ;                   per-character color buffer (syntax highlighting).
+;   - COMMAND hook: invoked for document-level commands that editbuf cannot own
+;                   generically (New/Open/Save As). A = EDITUI_CMD_*.
+;   - CHANGED hook: invoked after buffer bytes/metadata change. Hosts with
+;                   XRAM-backed documents use this to sync the active document.
 ; Every hook defaults to a no-op, so editbuf works as a plain editor with no
 ; host wiring at all.
 ;
@@ -36,8 +40,8 @@ EDITBUF_VIEW_TOP    = 1                               ; first text row (below me
 EDITBUF_VIEW_COLS   = EDITUI_SCREEN_COLS              ; 80 visible columns
 EDITBUF_VIEW_ROWS   = EDITUI_SCREEN_ROWS - 2          ; 48 (menu bar + status bar reserved)
 
-; Clipboard capacity (bytes). Lives in editbuf BSS.
-EDITBUF_CLIP_CAP    = 256
+; Clipboard and undo/redo payloads are owned by TEXTSVC in platform-managed
+; XRAM so every language editor gets the same behavior.
 
 ; ---------------------------------------------------------------------
 ; Exit reason returned in A by editbuf_run (also stored in EDITBUF_RESULT).
@@ -54,8 +58,9 @@ EDITBUF_EXIT_DISCARD = $02      ; left via dialog "Exit Anyway" (draft preserved
 EDITBUF_SAVE_OK      = $00      ; saved + installed: clears dirty
 EDITBUF_SAVE_DRAFT   = $01      ; draft kept but not usable: stays "dirty"-ish
 EDITBUF_SAVE_ERROR   = $02      ; rejected: stays dirty
-; The host may point EDITBUF_STATUS at a message string before returning; the
-; editor redraws the status bar with it.
+; The host may point EDITBUF_STATUS at a message string before returning. The
+; editor consumes/clears that pointer, shows the text as a transient status
+; message, then restores the normal cursor/size/line/type metadata bar.
 
 ; ---------------------------------------------------------------------
 ; INDENT hook contract.
@@ -76,21 +81,25 @@ EDITBUF_SAVE_ERROR   = $02      ; rejected: stays dirty
 ; ---------------------------------------------------------------------
 
 ; Default editor colors (bg = high nibble, fg = low nibble; Nova/C64 palette).
-EDITBUF_COLOR_TEXT   = $01      ; white on black body
-EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
+EDITBUF_COLOR_TEXT   = $61      ; white on blue body
+EDITBUF_COLOR_SEL    = $30      ; selection: black on cyan
 
 ; --- Config (host sets before editbuf_run) -------------------------------
 .global EDITBUF_BUFL          ; pointer to text buffer
 .global EDITBUF_BUFH
 .global EDITBUF_CAPL          ; capacity in bytes (16-bit)
 .global EDITBUF_CAPH
+.global EDITBUF_UNDOBUFL      ; legacy config bytes; ignored by TEXTSVC-backed undo
+.global EDITBUF_UNDOBUFH
+.global EDITBUF_REDOBUFL      ; legacy config bytes; ignored by TEXTSVC-backed redo
+.global EDITBUF_REDOBUFH
 .global EDITBUF_LENL          ; current length in bytes (16-bit)
 .global EDITBUF_LENH
 .global EDITBUF_TITLEL        ; NUL-terminated title string
 .global EDITBUF_TITLEH
 .global EDITBUF_TYPEL         ; NUL-terminated file type string
 .global EDITBUF_TYPEH
-.global EDITBUF_STATUSL       ; NUL-terminated status message (may be 0)
+.global EDITBUF_STATUSL       ; transient NUL-terminated status message (may be 0)
 .global EDITBUF_STATUSH
 .global EDITBUF_SAVE_VECL     ; SAVE hook vector
 .global EDITBUF_SAVE_VECH
@@ -100,6 +109,10 @@ EDITBUF_COLOR_SEL    = $1F      ; selection: white bg, grey text
 .global EDITBUF_HILITE_VECH
 .global EDITBUF_MENU_VECL     ; MENU-config hook vector
 .global EDITBUF_MENU_VECH
+.global EDITBUF_COMMAND_VECL  ; document-command hook vector (A=EDITUI_CMD_*)
+.global EDITBUF_COMMAND_VECH
+.global EDITBUF_CHANGED_VECL  ; called after edits/save dirty-state changes
+.global EDITBUF_CHANGED_VECH
 
 ; --- Result / observable state ------------------------------------------
 .global EDITBUF_RESULT

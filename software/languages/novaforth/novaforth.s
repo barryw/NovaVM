@@ -33,6 +33,21 @@ ENV_KIND_DOUBLE = 2
 ENV_KIND_FLAG   = 3
 FORTH_XRAM_STAGE_L = $00
 FORTH_XRAM_STAGE_M = $00
+EDITOR_HOOK_WORK = $9800
+editor_hooks     = EDITOR_HOOK_WORK
+editor_type      = EDITOR_HOOK_WORK + $10
+editor_hook_code = EDITOR_HOOK_WORK + $30
+editor_hook_tmp0 = EDITOR_HOOK_WORK + $03F0
+editor_hook_tmp1 = EDITOR_HOOK_WORK + $03F1
+editor_hook_tmp2 = EDITOR_HOOK_WORK + $03F2
+editor_hook_tmp3 = EDITOR_HOOK_WORK + $03F3
+editor_hook_tmp4 = EDITOR_HOOK_WORK + $03F4
+editor_hook_tmp5 = EDITOR_HOOK_WORK + $03F5
+editor_hook_tmp6 = EDITOR_HOOK_WORK + $03F6
+editor_hook_tmp7 = EDITOR_HOOK_WORK + $03F7
+EDITOR_HOOK_COLOR_WORD    = $63
+EDITOR_HOOK_COLOR_NUMBER  = $67
+EDITOR_HOOK_COLOR_COMMENT = $6C
 .ifndef XRAM_WIN3_ENABLE
 XRAM_WIN3_ENABLE = $08
 .endif
@@ -171,6 +186,9 @@ cold_start:
       STA   LIB_HOME_BANK
       LDA   #MODULE_ID_NONE
       STA   LIB_RESIDENT
+
+      LDA   #VCMD_GCLS
+      STA   VGC_CMD
 
       STZ   VGC_CURSEN
       STZ   state
@@ -2921,6 +2939,338 @@ code_include:
 @need_name:
       JMP   need_word_name
 
+editor_install_hooks:
+      LDA   #<editor_hook_code_start
+      STA   ptr_lo
+      LDA   #>editor_hook_code_start
+      STA   ptr_hi
+      LDA   #<editor_hook_code
+      STA   tmp_lo
+      LDA   #>editor_hook_code
+      STA   tmp_hi
+      LDA   #<editor_hook_code_size
+      STA   value_lo
+      LDA   #>editor_hook_code_size
+      STA   value_hi
+      LDY   #0
+@copy_code:
+      LDA   (ptr_lo),Y
+      STA   (tmp_lo),Y
+      INC   ptr_lo
+      BNE   :+
+      INC   ptr_hi
+:     INC   tmp_lo
+      BNE   :+
+      INC   tmp_hi
+:     LDA   value_lo
+      BNE   :+
+      DEC   value_hi
+:     DEC   value_lo
+      LDA   value_lo
+      ORA   value_hi
+      BNE   @copy_code
+
+      LDX   #0
+@copy_type:
+      LDA   editor_type_text,X
+      STA   editor_type,X
+      BEQ   @type_done
+      INX
+      BRA   @copy_type
+@type_done:
+      LDX   #0
+      LDA   #0
+@clear_hooks:
+      STA   editor_hooks,X
+      INX
+      CPX   #EDITOR_HOOKS_SIZE
+      BNE   @clear_hooks
+
+      LDA   #<editor_type
+      STA   editor_hooks+EDITOR_HOOKS_TYPEL
+      LDA   #>editor_type
+      STA   editor_hooks+EDITOR_HOOKS_TYPEH
+      LDA   #<editor_hook_save
+      STA   editor_hooks+EDITOR_HOOKS_SAVE_VECL
+      LDA   #>editor_hook_save
+      STA   editor_hooks+EDITOR_HOOKS_SAVE_VECH
+      LDA   #<editor_hook_indent
+      STA   editor_hooks+EDITOR_HOOKS_INDENT_VECL
+      LDA   #>editor_hook_indent
+      STA   editor_hooks+EDITOR_HOOKS_INDENT_VECH
+      LDA   #<editor_hook_hilite
+      STA   editor_hooks+EDITOR_HOOKS_HILITE_VECL
+      LDA   #>editor_hook_hilite
+      STA   editor_hooks+EDITOR_HOOKS_HILITE_VECH
+      LDA   #<editor_hook_noop
+      STA   editor_hooks+EDITOR_HOOKS_MENU_VECL
+      STA   editor_hooks+EDITOR_HOOKS_COMMAND_VECL
+      STA   editor_hooks+EDITOR_HOOKS_CHANGED_VECL
+      LDA   #>editor_hook_noop
+      STA   editor_hooks+EDITOR_HOOKS_MENU_VECH
+      STA   editor_hooks+EDITOR_HOOKS_COMMAND_VECH
+      STA   editor_hooks+EDITOR_HOOKS_CHANGED_VECH
+      RTS
+
+editor_type_text:
+      .byte "Forth", 0
+
+editor_hook_save = editor_hook_code + (editor_hook_save_rom - editor_hook_code_start)
+editor_hook_indent = editor_hook_code + (editor_hook_indent_rom - editor_hook_code_start)
+editor_hook_hilite = editor_hook_code + (editor_hook_hilite_rom - editor_hook_code_start)
+editor_hook_noop = editor_hook_code + (editor_hook_noop_rom - editor_hook_code_start)
+editor_hook_load_from_offset = editor_hook_code + (editor_hook_load_from_offset_rom - editor_hook_code_start)
+editor_hl_color_to_eol = editor_hook_code + (editor_hl_color_to_eol_rom - editor_hook_code_start)
+editor_hl_color_token = editor_hook_code + (editor_hl_color_token_rom - editor_hook_code_start)
+editor_hl_is_delim = editor_hook_code + (editor_hl_is_delim_rom - editor_hook_code_start)
+editor_hl_is_digit = editor_hook_code + (editor_hl_is_digit_rom - editor_hook_code_start)
+editor_hl_is_alpha = editor_hook_code + (editor_hl_is_alpha_rom - editor_hook_code_start)
+editor_hook_code_size = editor_hook_code_end - editor_hook_code_start
+.assert editor_hook_code_size <= $0400, error, "NovaForth editor hook code must fit the editor hook workspace"
+
+editor_hook_code_start:
+editor_hook_save_rom:
+      LDA   #0
+      RTS
+
+editor_hook_noop_rom:
+      RTS
+
+editor_hook_indent_rom:
+      LDA   EDITOR_HOOK_ABI_CURL
+      ORA   EDITOR_HOOK_ABI_CURL+1
+      BNE   :+
+      LDA   #0
+      RTS
+:     LDA   EDITOR_HOOK_ABI_CURL
+      STA   editor_hook_tmp2
+      LDA   EDITOR_HOOK_ABI_CURL+1
+      STA   editor_hook_tmp3
+      LDA   editor_hook_tmp2
+      BNE   :+
+      DEC   editor_hook_tmp3
+:     DEC   editor_hook_tmp2
+      LDA   editor_hook_tmp2
+      ORA   editor_hook_tmp3
+      BNE   :+
+      LDA   #0
+      RTS
+:     STZ   editor_hook_tmp0
+      STZ   editor_hook_tmp1
+      STZ   editor_hook_tmp4
+      STZ   editor_hook_tmp5
+@find_line:
+      LDA   editor_hook_tmp0
+      CMP   editor_hook_tmp2
+      BNE   :+
+      LDA   editor_hook_tmp1
+      CMP   editor_hook_tmp3
+      BEQ   @count_indent
+:     JSR   editor_hook_load_from_offset
+      CMP   #$0A
+      BNE   @advance_find
+      LDA   editor_hook_tmp0
+      CLC
+      ADC   #1
+      STA   editor_hook_tmp4
+      LDA   editor_hook_tmp1
+      ADC   #0
+      STA   editor_hook_tmp5
+@advance_find:
+      INC   editor_hook_tmp0
+      BNE   @find_line
+      INC   editor_hook_tmp1
+      BRA   @find_line
+@count_indent:
+      LDA   editor_hook_tmp4
+      STA   editor_hook_tmp0
+      LDA   editor_hook_tmp5
+      STA   editor_hook_tmp1
+      STZ   editor_hook_tmp4          ; last non-space char
+      STZ   editor_hook_tmp6          ; indent count
+      STZ   editor_hook_tmp7          ; first non-space char
+@count_loop:
+      LDA   editor_hook_tmp0
+      CMP   editor_hook_tmp2
+      BNE   :+
+      LDA   editor_hook_tmp1
+      CMP   editor_hook_tmp3
+      BEQ   @indent_done
+:     JSR   editor_hook_load_from_offset
+      CMP   #' '
+      BNE   @nonspace
+      LDA   editor_hook_tmp7
+      BNE   @advance_count
+      LDA   editor_hook_tmp6
+      CMP   #16
+      BCS   @advance_count
+      INC   editor_hook_tmp6
+      BRA   @advance_count
+@nonspace:
+      CMP   #$09
+      BEQ   @advance_count
+      LDX   editor_hook_tmp7
+      BNE   :+
+      STA   editor_hook_tmp7
+:     STA   editor_hook_tmp4
+@advance_count:
+      INC   editor_hook_tmp0
+      BNE   @count_loop
+      INC   editor_hook_tmp1
+      BRA   @count_loop
+@indent_done:
+      LDA   editor_hook_tmp7
+      CMP   #':'
+      BNE   @maybe_dedent
+      LDA   editor_hook_tmp6
+      CLC
+      ADC   #2
+      CMP   #17
+      BCC   :+
+      LDA   #16
+:     STA   editor_hook_tmp6
+@maybe_dedent:
+      LDA   editor_hook_tmp4
+      CMP   #';'
+      BNE   @return_indent
+      LDA   editor_hook_tmp6
+      CMP   #2
+      BCC   @zero_indent
+      SEC
+      SBC   #2
+      RTS
+@zero_indent:
+      LDA   #0
+      RTS
+@return_indent:
+      LDA   editor_hook_tmp6
+      RTS
+
+editor_hook_hilite_rom:
+      LDY   #0
+@hl_loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCC   :+
+      RTS
+:     LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #' '
+      BEQ   @hl_advance
+      CMP   #$09
+      BEQ   @hl_advance
+      CMP   #$5C
+      BEQ   @hl_comment
+      CMP   #':'
+      BEQ   @hl_punct
+      CMP   #';'
+      BEQ   @hl_punct
+      JSR   editor_hl_is_digit
+      BCS   @hl_number
+      JSR   editor_hl_is_alpha
+      BCS   @hl_word
+@hl_advance:
+      INY
+      BRA   @hl_loop
+@hl_punct:
+      LDA   #EDITOR_HOOK_COLOR_WORD
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @hl_loop
+@hl_word:
+      LDA   #EDITOR_HOOK_COLOR_WORD
+      JSR   editor_hl_color_token
+      BRA   @hl_loop
+@hl_number:
+      LDA   #EDITOR_HOOK_COLOR_NUMBER
+      JSR   editor_hl_color_token
+      BRA   @hl_loop
+@hl_comment:
+      LDA   #EDITOR_HOOK_COLOR_COMMENT
+      JMP   editor_hl_color_to_eol
+
+editor_hook_load_from_offset_rom:
+      LDA   EDITOR_HOOK_ABI_BUFL
+      CLC
+      ADC   editor_hook_tmp0
+      STA   LIB_ZP
+      LDA   EDITOR_HOOK_ABI_BUFL+1
+      ADC   editor_hook_tmp1
+      STA   LIB_ZP+1
+      LDY   #0
+      LDA   (LIB_ZP),Y
+      RTS
+
+editor_hl_color_to_eol_rom:
+      STA   editor_hook_tmp0
+@loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   editor_hook_tmp0
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @loop
+@done:
+      RTS
+
+editor_hl_color_token_rom:
+      STA   editor_hook_tmp0
+@loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      JSR   editor_hl_is_delim
+      BCS   @done
+      LDA   editor_hook_tmp0
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @loop
+@done:
+      RTS
+
+editor_hl_is_delim_rom:
+      CMP   #' '
+      BEQ   @yes
+      CMP   #$09
+      BEQ   @yes
+      CMP   #'['
+      BEQ   @yes
+      CMP   #']'
+      BEQ   @yes
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+editor_hl_is_digit_rom:
+      CMP   #'0'
+      BCC   @no
+      CMP   #'9' + 1
+      BCC   @yes
+@no:
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+editor_hl_is_alpha_rom:
+      CMP   #'A'
+      BCC   @lower
+      CMP   #'Z' + 1
+      BCC   @yes
+@lower:
+      CMP   #'a'
+      BCC   @no
+      CMP   #'z' + 1
+      BCC   @yes
+@no:
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+editor_hook_code_end:
+
 code_edit:
       JSR   parse_raw_name
       BCS   @have_name
@@ -2969,10 +3319,14 @@ code_edit:
       STA   LIB_ARG1+0
       LDA   FIO_SIZEH
       STA   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
       BRA   @run_editor
 @new_file:
       STZ   LIB_ARG1+0
       STZ   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
 
 @run_editor:
       LDA   here_lo
@@ -2981,13 +3335,18 @@ code_edit:
       STA   LIB_ARG0+1
       STZ   LIB_ARG0+2
       STZ   LIB_ARG0+3
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
       LDA   #<word_buf
       STA   LIB_ARG3+0
       LDA   #>word_buf
       STA   LIB_ARG3+1
-      LDA   #EDITOR_EDIT_PROFILE_FORTH
+
+      JSR   editor_install_hooks
+      LDA   #<editor_hooks
       STA   LIB_ARG3+2
-      STZ   LIB_ARG3+3
+      LDA   #>editor_hooks
+      STA   LIB_ARG3+3
       LDA   #MODULE_ID_EDITOR
       STA   LIB_MOD_ID
       LDA   #EDITOR_FN_EDIT

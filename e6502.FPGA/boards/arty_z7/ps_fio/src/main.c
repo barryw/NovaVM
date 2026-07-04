@@ -80,7 +80,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define FIO_SIZE_LO  0xB9A8
 #define FIO_SIZE_HI  0xB9A9
 #define FIO_SIZE2    0xB9AA   // FioGSpace: dir size byte 2
-#define FIO_DIRTYPE  0xB9AF   // 0=BAS 1=SID 2=BIN 3=MID 4=GFX 5=DIR 6=FORTH
+#define FIO_DIRTYPE  0xB9AF   // 0=BAS 1=SID 2=BIN 3=MID 4=GFX 5=DIR 6=FORTH 7=LOGO 8=PASCAL 9=ASM
 #define FIO_NAME     0xB9B0   // 64-byte filename buffer
 #define FIO_GSPACE   0xB9AA   // XRAM addr high byte (also size byte2)
 #define FIO_GADDR_LO 0xB9AB   // XRAM addr low
@@ -105,6 +105,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define FIO_CMD_FSEEK    0x32
 #define FIO_CMD_FTELL    0x33
 #define FIO_CMD_FSIZE    0x34
+#define FIO_CMD_DEVSTATUS 0x3A
 #define FIO_CMD_VOLUME   0x0C      // set audio master gain (FIO_SRC_LO 0-255)
 #define FIO_CMD_MIDPLAY  0x13      // play a raw .mid from SD through the wavetable
 #define FIO_CMD_MIDSTOP  0x14
@@ -122,6 +123,9 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define DT_GFX 4
 #define DT_DIR 5
 #define DT_FORTH 6
+#define DT_LOGO 7
+#define DT_PASCAL 8
+#define DT_ASM 9
 
 // ---- XRAM (PS DDR3) library shelf ------------------------------------------
 #define XRAM_DDR_BASE  0x10000000u
@@ -439,6 +443,24 @@ static int fio_read_name(char *out, int maxlen) {
     return n;
 }
 
+static void fio_devstatus(void) {
+    char name[64];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    char *colon = strchr(name, ':');
+    if (colon) *colon = 0;
+    int slot = drive_slot_index(name);
+    if (slot < 0) { fio_fail(FIO_ERR_IO); return; }
+    const char *p = drive_path(slot);
+    if (!p || !p[0]) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+
+    char full[200];
+    snprintf(full, sizeof full, "0:%s", p);
+    FIL f;
+    if (f_open(&f, full, FA_READ) != FR_OK) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    f_close(&f);
+    fio_ok();
+}
+
 // Build "0:/<name>" -- append .bas if the name has no extension (BASIC default).
 static void fio_path(const char *name, char *path, int sz) {
     if (strrchr(name, '.')) snprintf(path, sz, "0:/%s", name);
@@ -450,6 +472,12 @@ static int fio_dirtype_for(const FILINFO *fno) {
     const char *d = strrchr(fno->fname, '.');
     if (!d) return DT_BIN;
     if (!strncasecmp(d, ".bas", 5)) return DT_BAS;
+    if (!strncasecmp(d, ".pas", 5)) return DT_PASCAL;
+    if (!strncasecmp(d, ".logo", 6)) return DT_LOGO;
+    if (!strncasecmp(d, ".lgo", 5)) return DT_LOGO;
+    if (!strncasecmp(d, ".s", 3)) return DT_ASM;
+    if (!strncasecmp(d, ".asm", 5)) return DT_ASM;
+    if (!strncasecmp(d, ".inc", 5)) return DT_ASM;
     if (!strncasecmp(d, ".bin", 5)) return DT_BIN;
     if (!strncasecmp(d, ".sid", 5)) return DT_SID;
     if (!strncasecmp(d, ".mid", 5)) return DT_MID;
@@ -723,6 +751,12 @@ static uint8_t fio_name_type(const char *name) {
     const char *d = strrchr(name, '.');
     if (!d) return DT_BIN;
     if (!strncasecmp(d, ".bas", 5)) return DT_BAS;
+    if (!strncasecmp(d, ".pas", 5)) return DT_PASCAL;
+    if (!strncasecmp(d, ".logo", 6)) return DT_LOGO;
+    if (!strncasecmp(d, ".lgo", 5)) return DT_LOGO;
+    if (!strncasecmp(d, ".s", 3)) return DT_ASM;
+    if (!strncasecmp(d, ".asm", 5)) return DT_ASM;
+    if (!strncasecmp(d, ".inc", 5)) return DT_ASM;
     if (!strncasecmp(d, ".sid", 5)) return DT_SID;
     if (!strncasecmp(d, ".mid", 5)) return DT_MID;
     if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
@@ -1124,6 +1158,7 @@ static int service_fio(void) {
     else if (cmd == FIO_CMD_FSEEK)   fio_fseek();
     else if (cmd == FIO_CMD_FTELL)   fio_ftell();
     else if (cmd == FIO_CMD_FSIZE)   fio_fsize();
+    else if (cmd == FIO_CMD_DEVSTATUS) fio_devstatus();
     else if (cmd == FIO_CMD_MIDPLAY) fio_midplay();
     else if (cmd == FIO_CMD_MIDSTOP) { audio_stop(); fio_ok(); }
     else if (cmd == FIO_CMD_SFLOAD)  fio_sfload();

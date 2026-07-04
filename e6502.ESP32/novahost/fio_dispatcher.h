@@ -140,6 +140,7 @@ private:
     static constexpr uint8_t CMD_FSTATUS  = 0x37;
     static constexpr uint8_t CMD_FDELETE  = 0x38;
     static constexpr uint8_t CMD_FRENAME  = 0x39;
+    static constexpr uint8_t CMD_DEVSTATUS = 0x3A;
 
     // Per-event state — only valid inside handle_event().
     uint8_t _bank[80];
@@ -227,6 +228,7 @@ private:
     void handle_rmdir();
     void handle_mount();
     void handle_unmount();
+    void handle_devstatus();
     void handle_pwd();
     void handle_clear_error();
     void handle_load_runtime();

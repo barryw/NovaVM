@@ -31,7 +31,7 @@ FIO_EMIT_ALL = 0
 .endif
 
 .if FIO_EMIT_ALL = 0
-.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_fopen) .OR .referenced(fio_fcreate) .OR .referenced(fio_fclose) .OR .referenced(fio_fread) .OR .referenced(fio_fwrite) .OR .referenced(fio_fseek) .OR .referenced(fio_ftell) .OR .referenced(fio_fsize) .OR .referenced(fio_fresize) .OR .referenced(fio_fflush) .OR .referenced(fio_fstatus) .OR .referenced(fio_fdelete_exact) .OR .referenced(fio_frename) .OR .referenced(fio_run)
+.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_devstatus) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_fopen) .OR .referenced(fio_fcreate) .OR .referenced(fio_fclose) .OR .referenced(fio_fread) .OR .referenced(fio_fwrite) .OR .referenced(fio_fseek) .OR .referenced(fio_ftell) .OR .referenced(fio_fsize) .OR .referenced(fio_fresize) .OR .referenced(fio_fflush) .OR .referenced(fio_fstatus) .OR .referenced(fio_fdelete_exact) .OR .referenced(fio_frename) .OR .referenced(fio_run)
       .refto fio_exec
 .endif
 .if .referenced(fio_exec)
@@ -94,6 +94,9 @@ FIO_EMIT_ALL = 0
 .endif
 .if FIO_EMIT_ALL .OR .referenced(fio_pwd)
       .export fio_pwd
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_devstatus)
+      .export fio_devstatus
 .endif
 .if FIO_EMIT_ALL .OR .referenced(fio_load_runtime)
       .export fio_load_runtime
@@ -358,6 +361,17 @@ fio_rmdir:
 .if FIO_EMIT_ALL .OR .referenced(fio_pwd)
 fio_pwd:
       LDA   #FIO_CMD_PWD
+      JMP   fio_exec
+.endif
+
+; @label FIO.DEVSTATUS
+; @kind routine
+; @symbol fio_devstatus
+; @summary Check whether the device named by FIO.NAME/FIO.NAMELEN is mounted.
+; @requires FIO_NAME FIO_NAMELEN
+.if FIO_EMIT_ALL .OR .referenced(fio_devstatus)
+fio_devstatus:
+      LDA   #FIO_CMD_DEVSTATUS
       JMP   fio_exec
 .endif
 

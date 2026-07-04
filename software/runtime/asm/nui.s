@@ -4,6 +4,17 @@
 .include "vtext.s"
 .include "vsprite.s"
 
+NUI_CH_TL = $C9
+NUI_CH_TR = $BB
+NUI_CH_BL = $C8
+NUI_CH_BR = $BC
+NUI_CH_H  = $CD
+NUI_CH_V  = $BA
+
+NUI_LIST_FOCUS_LIST   = $00
+NUI_LIST_FOCUS_OK     = $01
+NUI_LIST_FOCUS_CANCEL = $02
+
 .ifndef NUI_IMPLEMENTATION_INCLUDED
 NUI_IMPLEMENTATION_INCLUDED = 1
 
@@ -41,6 +52,7 @@ NUI_LIST_INDEX:     .res 1
 NUI_LIST_ROWL:      .res 1
 NUI_LIST_ROWH:      .res 1
 NUI_LIST_TMP:       .res 1
+NUI_LIST_FOCUS:     .res 1
 NUI_STYLE_SHADOW:   .res 1
 NUI_STYLE_BORDER:   .res 1
 NUI_STYLE_PANEL:    .res 1
@@ -89,10 +101,8 @@ nui_dialog_defaults:
       STA   NUI_DIALOG_WIDTH
       LDA   #NUI_DIALOG_DEFAULT_HEIGHT
       STA   NUI_DIALOG_HEIGHT
-      LDA   #<nui_footer_any_key
-      STA   NUI_FOOTERL
-      LDA   #>nui_footer_any_key
-      STA   NUI_FOOTERH
+      STZ   NUI_FOOTERL
+      STZ   NUI_FOOTERH
       JSR   nui_style_defaults
       JMP   nui_ok
 
@@ -316,10 +326,10 @@ nui_restore_under_full:
 
 nui_list_visible_rows:
       LDA   NUI_DIALOG_HEIGHT
-      CMP   #$07
+      CMP   #$08
       BCC   @error
       SEC
-      SBC   #$06
+      SBC   #$07
       STA   NUI_LIST_VISIBLE
       LDA   #NUI_OK
       RTS
@@ -422,7 +432,7 @@ nui_list_clear_area:
       STA   VTEXT_HEIGHT
       STZ   VTEXT_CURX
       STZ   VTEXT_CURY
-      LDA   NUI_STYLE_TEXT
+      LDA   #NUI_TEXT_FIELD
       STA   VTEXT_COLOR
       STZ   VTEXT_ATTR
       STZ   VTEXT_FLAGS
@@ -430,7 +440,7 @@ nui_list_clear_area:
 
 nui_list_print_row:
       JSR   nui_set_screen_text
-      LDA   NUI_STYLE_TEXT
+      LDA   #NUI_TEXT_FIELD
       STA   VTEXT_COLOR
       STZ   VTEXT_ATTR
       LDA   NUI_LIST_FIRST
@@ -462,6 +472,8 @@ nui_list_render:
       JSR   nui_list_clear_area
       BNE   @done
       JSR   nui_list_clear_spacer
+      BNE   @done
+      JSR   nui_list_render_buttons
       BNE   @done
       STZ   NUI_LIST_INDEX
 @loop:
@@ -505,6 +517,91 @@ nui_list_clear_spacer:
       LDA   #<nui_space_row
       LDY   #>nui_space_row
       JMP   vtext_put_run
+
+nui_list_render_buttons:
+      JSR   nui_set_screen_text
+      STZ   VTEXT_ATTR
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      CLC
+      ADC   NUI_LIST_VISIBLE
+      STA   VTEXT_CURY
+      INC   VTEXT_CURY
+      INC   VTEXT_CURY
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #$03
+      STA   VTEXT_CURX
+      LDA   #NUI_TEXT_SHADOW
+      STA   VTEXT_COLOR
+      LDA   #<nui_list_ok_shadow
+      LDY   #>nui_list_ok_shadow
+      LDX   #6
+      JSR   vtext_put_run
+      BNE   @done
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #10
+      STA   VTEXT_CURX
+      LDA   #<nui_list_cancel_shadow
+      LDY   #>nui_list_cancel_shadow
+      LDX   #8
+      JSR   vtext_put_run
+      BNE   @done
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      CLC
+      ADC   NUI_LIST_VISIBLE
+      STA   VTEXT_CURY
+      INC   VTEXT_CURY
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #$02
+      STA   VTEXT_CURX
+      LDA   #NUI_TEXT_BUTTON
+      STA   VTEXT_COLOR
+      LDA   NUI_LIST_FOCUS
+      CMP   #NUI_LIST_FOCUS_OK
+      BNE   :+
+      LDA   #VTEXT_ATTR_REVERSE
+      STA   VTEXT_ATTR
+:     LDA   #<nui_list_ok
+      LDY   #>nui_list_ok
+      LDX   #6
+      JSR   vtext_put_run
+      BNE   @done
+      STZ   VTEXT_ATTR
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #11
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #$03
+      CLC
+      ADC   NUI_LIST_VISIBLE
+      STA   VTEXT_CURY
+      INC   VTEXT_CURY
+      LDA   #NUI_TEXT_BUTTON
+      STA   VTEXT_COLOR
+      LDA   NUI_LIST_FOCUS
+      CMP   #NUI_LIST_FOCUS_CANCEL
+      BNE   :+
+      LDA   #VTEXT_ATTR_REVERSE
+      STA   VTEXT_ATTR
+:     LDA   #<nui_list_cancel
+      LDY   #>nui_list_cancel
+      LDX   #8
+      JSR   vtext_put_run
+      STZ   VTEXT_ATTR
+@done:
+      RTS
 
 nui_read_key_wait_byte:
       LDY   #$20
@@ -557,6 +654,10 @@ nui_read_key:
       BEQ   @ansi_left
       CMP   #'d'
       BEQ   @ansi_left
+      CMP   #'Z'
+      BEQ   @ansi_backtab
+      CMP   #'z'
+      BEQ   @ansi_backtab
       BRA   @plain_escape
 @ansi_up:
       LDA   #NUI_KEY_UP
@@ -570,6 +671,9 @@ nui_read_key:
 @ansi_left:
       LDA   #NUI_KEY_LEFT
       RTS
+@ansi_backtab:
+      LDA   #NUI_KEY_BACKTAB
+      RTS
 
 ; @label NUI.PICK_LIST
 ; @kind routine
@@ -578,8 +682,10 @@ nui_read_key:
 ; @requires NUI_DIALOG_* NUI_TITLEL/H NUI_FOOTERL/H NUI_LIST_ITEMSL/H NUI_LIST_ROW_WIDTH NUI_LIST_ROW_COUNT NUI_LIST_SELECTED
 ; @out A: 0 on success, 1 on error. NUI_RESULT = OK/CANCEL; NUI_LIST_SELECTED = selected row.
 nui_pick_list:
+      STZ   VGC_CURSEN
       JSR   nui_validate_list
       BNE   @error
+      STZ   NUI_LIST_FOCUS
       JSR   nui_show_dialog
       BNE   @error
       JSR   nui_list_ensure_visible
@@ -588,10 +694,20 @@ nui_pick_list:
       BNE   @error
 @key:
       JSR   nui_read_key
+      STA   NUI_LIST_TMP
       CMP   #NUI_KEY_ENTER
-      BEQ   @ok
+      BEQ   @enter
       CMP   #NUI_KEY_ESCAPE
       BEQ   @cancel
+      CMP   #NUI_KEY_TAB
+      BEQ   @focus_next
+      CMP   #NUI_KEY_RIGHT
+      BEQ   @focus_next
+      CMP   #NUI_KEY_LEFT
+      BEQ   @focus_prev
+      LDA   NUI_LIST_FOCUS
+      BNE   @key
+      LDA   NUI_LIST_TMP
       CMP   #NUI_KEY_UP
       BEQ   @up
       CMP   #NUI_KEY_DOWN
@@ -618,6 +734,28 @@ nui_pick_list:
       JSR   nui_list_render
       BNE   @error
       BRA   @key
+@focus_next:
+      INC   NUI_LIST_FOCUS
+      LDA   NUI_LIST_FOCUS
+      CMP   #$03
+      BCC   :+
+      STZ   NUI_LIST_FOCUS
+:     JSR   nui_list_render
+      BNE   @error
+      BRA   @key
+@focus_prev:
+      LDA   NUI_LIST_FOCUS
+      BNE   :+
+      LDA   #$03
+:     DEC   A
+      STA   NUI_LIST_FOCUS
+      JSR   nui_list_render
+      BNE   @error
+      BRA   @key
+@enter:
+      LDA   NUI_LIST_FOCUS
+      CMP   #NUI_LIST_FOCUS_CANCEL
+      BEQ   @cancel
 @ok:
       LDA   #NUI_RESULT_OK
       STA   NUI_RESULT
@@ -718,6 +856,10 @@ nui_draw_chrome:
       JSR   nui_set_dialog_rect_pixels
       JSR   nui_inc_x_pixel
       JSR   nui_inc_x_pixel
+      JSR   nui_inc_x_pixel
+      JSR   nui_inc_x_pixel
+      INC   VSPRITE_Y
+      INC   VSPRITE_Y
       INC   VSPRITE_Y
       INC   VSPRITE_Y
       JSR   vsprite_gfx_fill
@@ -828,8 +970,87 @@ nui_set_screen_text:
       STZ   VTEXT_FLAGS
       RTS
 
-nui_print_ptr:
+nui_frame_putc:
+      STA   VTEXT_CHAR
+      JMP   vtext_put_char
+
+nui_draw_text_frame:
       JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_TL
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+@top:
+      LDA   #NUI_CH_H
+      JSR   nui_frame_putc
+      DEC   NUI_TEXT_LEN
+      BNE   @top
+      LDA   #NUI_CH_TR
+      JSR   nui_frame_putc
+
+      LDA   NUI_DIALOG_HEIGHT
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #1
+      STA   VTEXT_CURY
+@sides:
+      LDA   NUI_TEXT_LEN
+      BEQ   @bottom
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_V
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #1
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_V
+      JSR   nui_frame_putc
+      INC   VTEXT_CURY
+      DEC   NUI_TEXT_LEN
+      BRA   @sides
+
+@bottom:
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   NUI_DIALOG_HEIGHT
+      SEC
+      SBC   #1
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_BL
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+@bottom_line:
+      LDA   #NUI_CH_H
+      JSR   nui_frame_putc
+      DEC   NUI_TEXT_LEN
+      BNE   @bottom_line
+      LDA   #NUI_CH_BR
+      JMP   nui_frame_putc
+
+nui_print_ptr:
       LDA   NUI_PRINT_X
       STA   VTEXT_CURX
       LDA   VTEXT_CURY
@@ -901,12 +1122,34 @@ nui_print_title:
       LDA   NUI_TITLEH
       STA   NUI_PRINTH
       JSR   nui_center_print_x
-      STA   VTEXT_CURX
+      LDA   NUI_PRINT_X
+      CMP   NUI_DIALOG_LEFT
+      BEQ   :+
+      DEC   NUI_PRINT_X
+:
       LDA   NUI_DIALOG_TOP
-      CLC
-      ADC   #1
       STA   VTEXT_CURY
-      JMP   nui_print_ptr
+      JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_PRINT_X
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #' '
+      JSR   nui_frame_putc
+      INC   NUI_PRINT_X
+      LDA   NUI_DIALOG_TOP
+      STA   VTEXT_CURY
+      JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_TITLEL
+      STA   NUI_PRINTL
+      LDA   NUI_TITLEH
+      STA   NUI_PRINTH
+      JSR   nui_print_ptr
+      LDA   #' '
+      JMP   nui_frame_putc
 @done:
       RTS
 
@@ -923,6 +1166,9 @@ nui_print_message:
       ADC   #2
       STA   NUI_PRINT_X
       STA   VTEXT_CURX
+      JSR   nui_set_screen_text
+      LDA   NUI_STYLE_TEXT
+      STA   VTEXT_COLOR
       LDA   NUI_DIALOG_TOP
       CLC
       ADC   #3
@@ -964,9 +1210,9 @@ nui_show_dialog:
       JSR   nui_ensure_style
       JSR   nui_draw_chrome
       JSR   nui_clear_text_region
+      JSR   nui_draw_text_frame
       JSR   nui_print_title
       JSR   nui_print_message
-      JSR   nui_print_footer
       JMP   nui_ok
 @done:
       RTS
@@ -1008,10 +1254,15 @@ nui_wait_key:
       PLA
       RTS
 
-nui_footer_any_key:
-      .byte "PRESS ANY KEY", 0
-
 nui_space_row:
       .byte "                                                                                "
+nui_list_ok:
+      .byte "  OK  "
+nui_list_cancel:
+      .byte " Cancel "
+nui_list_ok_shadow:
+      .byte $DC,$DC,$DC,$DC,$DC,$DC
+nui_list_cancel_shadow:
+      .byte $DC,$DC,$DC,$DC,$DC,$DC,$DC,$DC
 
 .endif

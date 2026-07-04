@@ -15,6 +15,7 @@ public sealed class AssemblySetup
     {
         Directory.CreateDirectory(StorageRoot);
         SeedForthLibraries();
+        SeedLogoHookAsset();
         Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", StorageRoot);
         Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", "1");
         Environment.SetEnvironmentVariable("NOAUTO", "1");
@@ -36,6 +37,17 @@ public sealed class AssemblySetup
         string source = FindRepoPath("software", "languages", "novaforth", "forth");
         string target = Path.Combine(StorageRoot, "hd0", "forth");
         CopyDirectory(source, target);
+    }
+
+    private static void SeedLogoHookAsset()
+    {
+        string source = Path.Combine(AppContext.BaseDirectory, "Resources", "LOGOHK.BIN");
+        if (!File.Exists(source))
+            source = Path.Combine(FindRepoPath("software", "languages", "novalogo"), "LOGOHK.BIN");
+
+        string targetDir = Path.Combine(StorageRoot, "hd0");
+        Directory.CreateDirectory(targetDir);
+        File.Copy(source, Path.Combine(targetDir, "LOGOHK.BIN"), overwrite: true);
     }
 
     private static string FindRepoPath(params string[] parts)

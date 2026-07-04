@@ -58,6 +58,10 @@ nui_read_key:
       BEQ   @ansi_left
       CMP   #'d'
       BEQ   @ansi_left
+      CMP   #'Z'
+      BEQ   @ansi_backtab
+      CMP   #'z'
+      BEQ   @ansi_backtab
       BRA   @plain_escape
 @ansi_up:
       LDA   #NUI_KEY_UP
@@ -70,4 +74,7 @@ nui_read_key:
       RTS
 @ansi_left:
       LDA   #NUI_KEY_LEFT
+      RTS
+@ansi_backtab:
+      LDA   #NUI_KEY_BACKTAB
       RTS

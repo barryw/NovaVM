@@ -82,8 +82,11 @@
 #define DT_BIN 2
 #define DT_MID 3
 #define DT_GFX 4
-#define DT_DIR 5
+#define NDI_DT_DIR 5
 #define DT_FORTH 6
+#define DT_LOGO 7
+#define DT_PASCAL 8
+#define DT_ASM 9
 
 /* XRAM shelf offsets (within the 1 MB g_xram window). Preserved from bare-metal
  * (SHELF_BASE/SHELF_SLOT used by the module loader; config page at +0x80000). */
@@ -408,7 +411,12 @@ static int ndi_create(ndi_t *m, const char *name, uint8_t type, uint16_t parent,
     int slot = ndi_dir_find_free_slot(m);
     if (slot < 0) { ndi_bam_free(m, start, sector_count); return -1; }
     ndi_dir_write_entry(m, slot, FL_ACTIVE, type, parent, (uint32_t)start, size, name, (uint32_t)sector_count);
-    if (ndi_flush_metadata(m) != 0) return -1;
+    if (ndi_flush_metadata(m) != 0) {
+        ndi_bam_free(m, start, sector_count);
+        ndi_dir_clear_slot(m, slot);
+        ndi_flush_metadata(m);
+        return -1;
+    }
     return slot;
 }
 static int ndi_write(ndi_t *m, int index, uint32_t file_offset, const void *buf, uint32_t len) {
@@ -519,9 +527,6 @@ static void drives_refresh(void) {
  *  for one op. SAVE/LOAD/DIR/DELETE/CD/PWD route through here when a disk is
  *  mounted (port of main.c boot_image()/img_find(), generalised to any slot).
  * =========================================================================== */
-#ifndef DT_LOGO
-#define DT_LOGO 7                    /* novalogo source (alongside DT_FORTH=6)   */
-#endif
 
 static ndi_t g_img;
 static int   g_img_slot = -1;        /* slot whose .ndi is open in g_img         */
@@ -618,11 +623,16 @@ static uint8_t fio_name_type(const char *name) {
     const char *d = strrchr(name, '.');
     if (!d) return DT_BIN;
     if (!strncasecmp(d, ".bas", 5)) return DT_BAS;
+    if (!strncasecmp(d, ".pas", 5)) return DT_PASCAL;
     if (!strncasecmp(d, ".sid", 5)) return DT_SID;
     if (!strncasecmp(d, ".mid", 5)) return DT_MID;
     if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
     if (!strncasecmp(d, ".4th", 5)) return DT_FORTH;
     if (!strncasecmp(d, ".logo", 6)) return DT_LOGO;
+    if (!strncasecmp(d, ".lgo", 5)) return DT_LOGO;
+    if (!strncasecmp(d, ".s", 3)) return DT_ASM;
+    if (!strncasecmp(d, ".asm", 5)) return DT_ASM;
+    if (!strncasecmp(d, ".inc", 5)) return DT_ASM;
     return DT_BIN;
 }
 
@@ -674,7 +684,7 @@ int nfio_image_load(const char *name) {
 static int ndi_mkdir(ndi_t *m, const char *name, uint16_t parent) {
     int slot = ndi_dir_find_free_slot(m);
     if (slot < 0) return -1;
-    ndi_dir_write_entry(m, slot, FL_ACTIVE | FL_DIRECTORY, DT_DIR, parent, 0, 0, name, 0);
+    ndi_dir_write_entry(m, slot, FL_ACTIVE | FL_DIRECTORY, NDI_DT_DIR, parent, 0, 0, name, 0);
     if (ndi_flush_metadata(m) != 0) return -1;
     return slot;
 }
@@ -803,7 +813,16 @@ void nfio_disk_save(void) {
     if (ndi_find(img, fname, parent) >= 0) ndi_delete(img, fname, parent);  /* overwrite */
     int idx = ndi_create(img, fname, type, parent, (uint32_t)(len + 2));
     if (idx < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
-    if (ndi_write(img, idx, 0, g_wbuf, (uint32_t)(len + 2)) != 0) { fio_fail(FIO_ERR_IO); return; }
+    if (ndi_write(img, idx, 0, g_wbuf, (uint32_t)(len + 2)) != 0) {
+        ndi_delete(img, fname, parent);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+    if (ndi_zero_tail(img, idx) != 0) {
+        ndi_delete(img, fname, parent);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
     ndi_flush(img);
     printf("[fio] SAVE(ndi) %s:%s type %d (%d bytes)\n", drive_slot_name(slot), path, type, len);
     fio_ok();
@@ -853,11 +872,18 @@ void nfio_disk_dirread(void) {
         if (!(e.flags & FL_ACTIVE)) continue;
         if (e.parent_index != g_ddir_parent) continue;
         int nl = 0; while (e.filename[nl] && nl < 63) nl++;
-        poke(FIO_DIRTYPE, (e.flags & FL_DIRECTORY) ? DT_DIR : e.file_type);
+        poke(FIO_DIRTYPE, (e.flags & FL_DIRECTORY) ? NDI_DT_DIR : e.file_type);
         poke(FIO_NAMELEN, nl);
         for (int k = 0; k < nl; k++) poke(FIO_NAME + k, e.filename[k]);
-        poke(FIO_SIZE_LO, e.size_bytes & 0xFF);
-        poke(FIO_SIZE_HI, (e.size_bytes >> 8) & 0xFF);
+        uint32_t display_size = e.size_bytes;
+        if (!(e.flags & FL_DIRECTORY) &&
+            (e.file_type == DT_BAS || e.file_type == DT_BIN) &&
+            display_size >= 2) {
+            display_size -= 2;
+        }
+        poke(FIO_SIZE_LO, display_size & 0xFF);
+        poke(FIO_SIZE_HI, (display_size >> 8) & 0xFF);
+        poke(FIO_SIZE2, (display_size >> 16) & 0xFF);
         fio_ok();
         return;
     }
@@ -899,7 +925,12 @@ void nfio_cd(void) {
         char *rest = buf; while (*rest == '/') rest++;
         snprintf(newdir, sizeof newdir, "%s", rest);          /* absolute on current drive */
     } else if (g_cwd_dir[0]) {
-        snprintf(newdir, sizeof newdir, "%s/%s", g_cwd_dir, buf);  /* relative */
+        size_t cwd_len = strlen(g_cwd_dir);
+        size_t buf_len = strlen(buf);
+        if (cwd_len + 1 + buf_len >= sizeof newdir) { fio_fail(FIO_ERR_IO); return; }
+        memcpy(newdir, g_cwd_dir, cwd_len);
+        newdir[cwd_len] = '/';
+        memcpy(newdir + cwd_len + 1, buf, buf_len + 1);       /* relative */
     } else {
         snprintf(newdir, sizeof newdir, "%s", buf);
     }
@@ -923,6 +954,21 @@ void nfio_pwd(void) {
     int n = (int)strlen(out); if (n > 63) n = 63;
     poke(FIO_NAMELEN, n);
     for (int i = 0; i < n; i++) poke(FIO_NAME + i, out[i]);
+    fio_ok();
+}
+
+void nfio_devstatus(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    char *colon = strchr(name, ':');
+    if (colon) *colon = 0;
+    int slot = drive_slot_index(name);
+    if (slot < 0) { fio_fail(FIO_ERR_IO); return; }
+    drives_refresh();
+    if (!drive_path(slot)[0] || !slot_image(slot)) {
+        fio_fail(FIO_ERR_NOTMOUNTED);
+        return;
+    }
     fio_ok();
 }
 

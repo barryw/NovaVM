@@ -356,6 +356,52 @@ VGC_SPR_PRI_BETWEEN = $01
 VGC_SPR_PRI_FRONT = $02
 .endif
 
+.ifndef VGC_MOUSE_XL
+VGC_MOUSE_XL      = $A0D0
+.endif
+.ifndef VGC_MOUSE_XH
+VGC_MOUSE_XH      = $A0D1
+.endif
+.ifndef VGC_MOUSE_Y
+VGC_MOUSE_Y       = $A0D2
+.endif
+.ifndef VGC_MOUSE_BUTTONS
+VGC_MOUSE_BUTTONS = $A0D3
+.endif
+.ifndef VGC_MOUSE_CTRL
+VGC_MOUSE_CTRL    = $A0D4
+.endif
+.ifndef VGC_MOUSE_COLOR
+VGC_MOUSE_COLOR   = $A0D5
+.endif
+.ifndef VGC_MOUSE_SHAPE
+VGC_MOUSE_SHAPE   = $A0D6
+.endif
+.ifndef VGC_MOUSE_HOTX
+VGC_MOUSE_HOTX    = $A0D7
+.endif
+.ifndef VGC_MOUSE_HOTY
+VGC_MOUSE_HOTY    = $A0D8
+.endif
+.ifndef VGC_MOUSE_CTRL_ENABLE
+VGC_MOUSE_CTRL_ENABLE = $01
+.endif
+.ifndef VGC_MOUSE_CTRL_AUTO
+VGC_MOUSE_CTRL_AUTO   = $02
+.endif
+.ifndef VGC_MOUSE_CTRL_COLOR
+VGC_MOUSE_CTRL_COLOR  = $04
+.endif
+.ifndef VGC_MOUSE_BTN_LEFT
+VGC_MOUSE_BTN_LEFT    = $01
+.endif
+.ifndef VGC_MOUSE_BTN_RIGHT
+VGC_MOUSE_BTN_RIGHT   = $02
+.endif
+.ifndef VGC_MOUSE_BTN_MIDDLE
+VGC_MOUSE_BTN_MIDDLE  = $04
+.endif
+
 .ifndef VGC_VRAM_PLANE
 VGC_VRAM_PLANE    = $A0E0
 .endif
@@ -1330,6 +1376,9 @@ FIO_CMD_FDELETE  = $38
 .ifndef FIO_CMD_FRENAME
 FIO_CMD_FRENAME  = $39
 .endif
+.ifndef FIO_CMD_DEVSTATUS
+FIO_CMD_DEVSTATUS = $3A
+.endif
 
 ; Host RNG result byte aliases. FIO.CMD_RNG returns little-endian bytes here.
 ; @label FIO.RNG0
@@ -1417,6 +1466,12 @@ FIO_TYPE_FORTH    = $06
 .endif
 .ifndef FIO_TYPE_LOGO
 FIO_TYPE_LOGO     = $07
+.endif
+.ifndef FIO_TYPE_PASCAL
+FIO_TYPE_PASCAL   = $08
+.endif
+.ifndef FIO_TYPE_ASM
+FIO_TYPE_ASM      = $09
 .endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.

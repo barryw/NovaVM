@@ -27,7 +27,7 @@
       lib_module_header MODULE_ID_TURTLE, LIB_ABI_VERSION, TUR_FN_COUNT
 
 ; ===========================================================================
-; NDOC documentation (extracted by tools/nmod_pack.py into turtle.nmod). The
+; NDOC documentation (extracted by nova module pack into turtle.nmod). The
 ; turtle is NOT a thin NDK wrapper (it owns the move-math + render), so no ;@ndk
 ; mappings — the drift guard (--ndk-dir) finds nothing to check, which is correct.
 ; ===========================================================================

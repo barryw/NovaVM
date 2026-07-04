@@ -1,7 +1,7 @@
 ; Shared Nova application UI helpers.
 ;
-; First-pass scope: modal/dialog chrome drawn with graphics-plane virtual
-; sprite fills, plus text rendered through vtext. Applications provide
+; First-pass scope: modal/dialog chrome drawn with graphics-plane fills, plus
+; text rendered through vtext. Applications provide
 ; zero-terminated title/message strings and can either use the default geometry
 ; or set NUI_DIALOG_* before drawing.
 ;
@@ -18,7 +18,6 @@
 NUI_INC_INCLUDED = 1
 
 .include "vtext.inc"
-.include "vsprite.inc"
 
 NUI_OK  = $00
 NUI_ERR = $01
@@ -26,6 +25,22 @@ NUI_ERR = $01
 NUI_RESULT_OK     = $00
 NUI_RESULT_CANCEL = $01
 
+NUI_FILE_MODE_OPEN = $00
+NUI_FILE_MODE_SAVE = $01
+
+NUI_FILE_TYPE_BAS    = $0001
+NUI_FILE_TYPE_SID    = $0002
+NUI_FILE_TYPE_BIN    = $0004
+NUI_FILE_TYPE_MID    = $0008
+NUI_FILE_TYPE_GFX    = $0010
+NUI_FILE_TYPE_DIR    = $0020
+NUI_FILE_TYPE_FORTH  = $0040
+NUI_FILE_TYPE_LOGO   = $0080
+NUI_FILE_TYPE_PASCAL = $0100
+NUI_FILE_TYPE_ASM    = $0200
+
+NUI_KEY_TAB = $09
+NUI_KEY_BACKTAB = $8F
 NUI_KEY_ENTER = $0D
 NUI_KEY_ESCAPE = $1B
 NUI_KEY_LEFT = $1C
@@ -33,15 +48,19 @@ NUI_KEY_RIGHT = $1D
 NUI_KEY_UP = $1E
 NUI_KEY_DOWN = $1F
 
-NUI_DIALOG_DEFAULT_LEFT   = 16
-NUI_DIALOG_DEFAULT_TOP    = 17
-NUI_DIALOG_DEFAULT_WIDTH  = 48
-NUI_DIALOG_DEFAULT_HEIGHT = 12
+NUI_DIALOG_DEFAULT_LEFT   = 20
+NUI_DIALOG_DEFAULT_TOP    = 6
+NUI_DIALOG_DEFAULT_WIDTH  = 40
+NUI_DIALOG_DEFAULT_HEIGHT = 14
 
 NUI_COLOR_SHADOW = $00
-NUI_COLOR_BORDER = $0F
-NUI_COLOR_PANEL  = $0B
-NUI_TEXT_NORMAL  = $01
+NUI_COLOR_BORDER = $01
+NUI_COLOR_PANEL  = $0F
+NUI_TEXT_NORMAL  = $F0
+NUI_TEXT_FRAME   = $F1
+NUI_TEXT_FIELD   = $30
+NUI_TEXT_BUTTON  = $50
+NUI_TEXT_SHADOW  = $00
 
 ; NUI_STYLE_* are palette-index settings consumed by shared modal controls.
 ; NUI_STYLE_BORDER is the one-pixel top/left highlight. NUI_STYLE_SHADOW is
@@ -72,6 +91,21 @@ NUI_TEXT_NORMAL  = $01
 .global NUI_LIST_ROW_WIDTH
 .global NUI_LIST_ROW_COUNT
 .global NUI_LIST_SELECTED
+.global NUI_FILE_OUTL
+.global NUI_FILE_OUTH
+.global NUI_FILE_OUT_MAX
+.global NUI_FILE_OUT_LEN
+.global NUI_FILE_MODE
+.global NUI_FILE_TYPE_MASK
+.global NUI_FILE_TYPE_MASKH
+.global NUI_FILE_ROWSL
+.global NUI_FILE_ROWSH
+.global NUI_INPUT_OUTL
+.global NUI_INPUT_OUTH
+.global NUI_INPUT_OUT_MAX
+.global NUI_INPUT_OUT_LEN
+.global NUI_INPUT_LABELL
+.global NUI_INPUT_LABELH
 .global NUI_STYLE_SHADOW
 .global NUI_STYLE_BORDER
 .global NUI_STYLE_PANEL
@@ -88,6 +122,8 @@ NUI_TEXT_NORMAL  = $01
 .global nui_save_under_full
 .global nui_restore_under_full
 .global nui_pick_list
+.global nui_file_picker
+.global nui_text_input
 
 ; Cross-object internal helpers (referenced between feature-group objects when
 ; nui is built as separate library objects).

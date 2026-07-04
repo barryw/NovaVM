@@ -9,7 +9,7 @@ steps:
   - name: build-and-test
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
-      - sh .woodpecker/install-linux-ci-deps.sh build
+      - dotnet run --project e6502.Nova -c Release -- ci install-linux-deps build
       - dotnet workload install wasm-tools
       # Generate+stage ROM/font resources via the repo's canonical entrypoint
       # before building, and serialize the project graph. Mirrors ci.yaml — the
@@ -40,7 +40,7 @@ steps:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - export GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
-      - sh .woodpecker/install-linux-ci-deps.sh release
+      - dotnet run --project e6502.Nova -c Release -- ci install-linux-deps release
       - |
         TAG="$$CI_COMMIT_TAG"
         if gh release view "$${TAG}" --repo "$$CI_REPO" >/dev/null 2>&1; then

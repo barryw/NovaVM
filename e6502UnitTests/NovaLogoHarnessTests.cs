@@ -475,9 +475,14 @@ public class NovaLogoHarnessTests
         Assert.IsTrue(start >= 0, $"Could not find {tableName} in {tablePath}.");
 
         int end = source.IndexOf(".word $0000", start, StringComparison.Ordinal);
+        if (end < 0)
+            end = source.IndexOf(".byte 0", start, StringComparison.Ordinal);
         Assert.IsTrue(end > start, $"Could not find {tableName} sentinel in {tablePath}.");
 
         string table = source[start..end];
+        foreach (Match match in Regex.Matches(table, @"EXT_ENTRY\s+[A-Za-z0-9_]+,\s*\d+,\s*""([^""]+)""", RegexOptions.CultureInvariant))
+            yield return match.Groups[1].Value;
+
         foreach (Match match in Regex.Matches(table, @"\.word\s+([A-Za-z0-9_]+)", RegexOptions.CultureInvariant))
         {
             string label = match.Groups[1].Value;
@@ -510,7 +515,7 @@ public class NovaLogoHarnessTests
 
     private static LogoInput Raw(string text) => new(text);
 
-    private static LogoInput SaveAndQuit() => Raw("\x0B" + "s" + "\x1B" + "x");
+    private static LogoInput SaveAndQuit() => Raw("\x13" + "\x1B" + "x");
 
     private static void QueueInput(ScreenEditor editor, LogoInput input)
     {

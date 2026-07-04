@@ -443,7 +443,7 @@ git commit -m "feat(page_dma): CPU MMIO trigger ($BA76) + CDC + rdy_out stall; e
 **Step 1: BRAM/timing diag on beast** ([[feedback_yosys_diag_for_bram_fit]],
 [[reference_beast_synth_wrapper]]):
 ```bash
-tools/beast-synth.sh diag xram-stream
+make -C e6502.FPGA/boards/ulx3s diag
 ```
 Expected: DP16KD count not materially worse than baseline (202/208-ish); no new timing
 blowup from the stream mux on `sdram_clk`.
@@ -451,7 +451,7 @@ blowup from the stream mux on `sdram_clk`.
 **Step 2: Full bitstream on beast only if diag is clean** ([[feedback_dont_ship_timing_failing_bitstream]],
 [[feedback_nextpnr_seed_sweep]] if timing misses by <1 MHz):
 ```bash
-tools/beast-synth.sh bitstream xram-stream
+make -C e6502.FPGA/boards/ulx3s bitstream
 ```
 Expected: timing met; back up the prior working `.bit` first
 ([[feedback_backup_bitstreams]]).

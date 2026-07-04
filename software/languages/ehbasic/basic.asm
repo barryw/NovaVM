@@ -706,7 +706,6 @@ TabLoop
       STA   g_step            ; save it
       LDX   #des_sk           ; descriptor stack start
       STX   next_s            ; set descriptor stack pointer
-      JSR   LAB_CRLF          ; print CR/LF
       LDY   #$00              ; clear Y for indirect indexed writes
       LDA   #<Ram_base        ; always start from configured RAM base
       STA   Itempl
@@ -1214,6 +1213,8 @@ LAB_1357
       LDA   #Ibuffe-Ibuffs    ; max line length ($7F)       -> ARG0 b2
       STA   LIB_ARG0+2
       STZ   LIB_ARG0+3        ; ARG0 b3 = 0
+      STZ   LIB_RESULT+0      ; discard stale line length before blocking for input
+      STZ   Ibuffs            ; stale immediate text must not execute if the call returns early
 
       LDA   #MODULE_ID_SYSTEM
       LDX   #SYS_SCREEN_READLINE
@@ -9069,7 +9070,6 @@ LAB_SPL_CUR
       RTS
 
 LAB_SPLASH
-      JSR   LAB_BOOT_SCREEN_CLEAR
       LDA   #$21              ; centered x for "NovaBASIC v1.0"
       LDY   #$01              ; leave breathing room on the first row
       JSR   LAB_SPL_CUR
@@ -9084,7 +9084,7 @@ LAB_SPLASH
       LDY   #>LAB_BNR2
       JSR   LAB_18C3
 
-      LDA   #$11              ; centered x for "xxxxx BASIC bytes free  xxxK expansion memory"
+      LDA   #$14              ; centered x for "xxxxx bytes free  xxxK expansion memory"
       LDY   #$05              ; one empty row between lines
       JMP   LAB_SPL_CUR       ; tail call: set cursor, return to splash caller
 

@@ -19,7 +19,7 @@
       lib_module_header MODULE_ID_SOUND, LIB_ABI_VERSION, SND_FN_COUNT
 
 ; ===========================================================================
-; NDOC documentation (extracted by tools/nmod_pack.py into sound.nmod).
+; NDOC documentation (extracted by nova module pack into sound.nmod).
 ;
 ; Each ;@ndk line maps the fn to the NDK routine it wraps; the human summary is
 ; single-sourced from that routine (feedback-ndk-source-of-truth). The build-time

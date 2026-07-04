@@ -1,6 +1,10 @@
 # Rust Browser Core Assets
 
-This directory is populated by `tools/build-browser-rust-core.sh`.
+This directory is populated by:
+
+```sh
+dotnet run --project e6502.Nova -c Release -- build browser-rust-core
+```
 
 Generated files are intentionally ignored:
 

@@ -563,4 +563,143 @@ public class ScreenTextEditorTests
         _ed.PasteClipboard();
         Assert.AreEqual("Hello Hello", _ed.GetLineText(0));
     }
+
+    [TestMethod]
+    public void SelectAll_CutSelection_RemovesWholeBuffer()
+    {
+        _ed.LoadLines(["program Demo;", "begin", "end."]);
+
+        _ed.SelectAll();
+        _ed.CutSelection();
+
+        Assert.AreEqual(1, _ed.LineCount, "Select-all cut is the developer escape hatch for clearing a file.");
+        Assert.AreEqual("", _ed.GetLineText(0));
+        Assert.IsTrue(_ed.Modified);
+    }
+
+    [TestMethod]
+    public void CtrlA_SelectsWholeBuffer()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var editor = new TestEditor(bus);
+        editor.LoadLines(["alpha", "beta"]);
+        editor.Activate();
+
+        editor.HandleKeyDown(Key.A, KeyModifiers.Control);
+
+        Assert.AreEqual("alpha\nbeta", editor.GetSelectedText(),
+            "Modern editor muscle memory: Ctrl-A must select the whole active buffer.");
+    }
+
+    [TestMethod]
+    public void ReplaceNext_ReplacesCaseInsensitiveMatchAndMarksDirty()
+    {
+        _ed.LoadLines(["alpha Beta", "beta gamma"]);
+        _ed.ClearModified();
+
+        Assert.IsTrue(_ed.ReplaceNext("beta", "delta"));
+
+        Assert.AreEqual("alpha delta", _ed.GetLineText(0));
+        Assert.AreEqual("beta gamma", _ed.GetLineText(1));
+        Assert.IsTrue(_ed.Modified);
+    }
+
+    [TestMethod]
+    public void ReplaceNext_NotFoundLeavesBufferClean()
+    {
+        _ed.LoadLines(["alpha", "beta"]);
+        _ed.ClearModified();
+
+        Assert.IsFalse(_ed.ReplaceNext("missing", "delta"));
+
+        Assert.AreEqual("alpha", _ed.GetLineText(0));
+        Assert.AreEqual("beta", _ed.GetLineText(1));
+        Assert.IsFalse(_ed.Modified, "A failed replace must not dirty a source file.");
+    }
+
+    [TestMethod]
+    public void CtrlR_PromptsForReplaceAndReplacement()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var editor = new TestEditor(bus);
+        editor.LoadLines(["alpha beta"]);
+        editor.Activate();
+
+        editor.HandleKeyDown(Key.R, KeyModifiers.Control);
+        TypePromptText(editor, "beta");
+        editor.HandleKeyDown(Key.Enter, KeyModifiers.None);
+        TypePromptText(editor, "delta");
+        editor.HandleKeyDown(Key.Enter, KeyModifiers.None);
+
+        Assert.AreEqual("alpha delta", editor.GetLineText(0));
+    }
+
+    [TestMethod]
+    public void F3RepeatsLastFind()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var editor = new TestEditor(bus);
+        editor.LoadLines(["one hit", "two hit"]);
+        editor.Activate();
+
+        editor.HandleKeyDown(Key.F, KeyModifiers.Control);
+        TypePromptText(editor, "hit");
+        editor.HandleKeyDown(Key.Enter, KeyModifiers.None);
+        Assert.AreEqual(0, editor.CursorLine);
+
+        editor.HandleKeyDown(Key.F3, KeyModifiers.None);
+
+        Assert.AreEqual(1, editor.CursorLine, "F3 should repeat the last search instead of reopening files.");
+        Assert.AreEqual("hit", editor.GetSelectedText());
+    }
+
+    [TestMethod]
+    public void BufferStateSwitch_RestoresPascalFileStateWithoutCopyingText()
+    {
+        var unit1 = new ScreenTextEditorBuffer("UNIT1.PAS", BuildPascalLines("Unit1", 60));
+        var unit2 = new ScreenTextEditorBuffer("UNIT2.PAS", BuildPascalLines("Unit2", 60));
+
+        _ed.RestoreBufferState(unit1);
+        _ed.SetCursor(45, 6);
+        _ed.EnsureVisible();
+        _ed.InsertChar('!');
+        unit1 = _ed.CaptureBufferState();
+        Assert.AreSame(_ed.Lines, unit1.Lines,
+            "Switching between Pascal files must retain the in-memory text block instead of copying the file.");
+
+        _ed.RestoreBufferState(unit2);
+        _ed.SetCursor(12, 4);
+        _ed.InsertChar('?');
+        unit2 = _ed.CaptureBufferState();
+
+        _ed.RestoreBufferState(unit1);
+
+        Assert.AreSame(unit1.Lines, _ed.Lines);
+        Assert.AreEqual("UNIT1.PAS", _ed.CaptureBufferState().Filename);
+        Assert.AreEqual(45, _ed.CursorLine);
+        Assert.AreEqual(7, _ed.CursorCol);
+        Assert.AreEqual(unit1.ScrollY, _ed.ScrollY);
+        Assert.IsTrue(_ed.Modified);
+        StringAssert.Contains(_ed.GetLineText(45), "line! 45");
+
+        _ed.RestoreBufferState(unit2);
+        Assert.AreEqual(12, _ed.CursorLine);
+        StringAssert.Contains(_ed.GetLineText(12), "li?ne 12");
+    }
+
+    private static void TypePromptText(TestEditor editor, string text)
+    {
+        foreach (char ch in text)
+            editor.HandleTextInput(ch.ToString());
+    }
+
+    private static string[] BuildPascalLines(string unitName, int count)
+    {
+        var lines = new string[count];
+        lines[0] = $"unit {unitName};";
+        for (int i = 1; i < count - 1; i++)
+            lines[i] = $"  line {i:D2} keeps a Pascal unit open in memory;";
+        lines[^1] = "end.";
+        return lines;
+    }
 }

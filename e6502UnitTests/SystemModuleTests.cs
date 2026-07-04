@@ -14,10 +14,10 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($19  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($1B  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
 ///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE +
-///                              NUI save-under/picker/full save-under/style)
+///                              NUI save-under/picker/full save-under/style/file picker/text input)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging SYSTEM.
 /// </summary>
@@ -35,7 +35,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x19, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style)
+        Assert.AreEqual(0x1B, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style + file picker + text input)
     }
 
     // =====================================================================
@@ -57,6 +57,7 @@ public class SystemModuleTests
     private const byte   SYS_NUI_PICK_LIST = 0x15;
     private const byte   SYS_NUI_SAVE_UNDER_FULL = 0x16, SYS_NUI_RESTORE_UNDER_FULL = 0x17;
     private const byte   SYS_NUI_SET_STYLE = 0x18;
+    private const byte   SYS_NUI_FILE_PICKER = 0x19, SYS_NUI_TEXT_INPUT = 0x1A;
     private const byte   LERR_OK = 0x00;
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
@@ -120,6 +121,14 @@ public class SystemModuleTests
         var sb = new System.Text.StringBuilder(count);
         for (int i = 0; i < count; i++)
             sb.Append((char)bus.Read((ushort)(baseAddr + i)));
+        return sb.ToString();
+    }
+
+    private static string ReadRamAscii(CompositeBusDevice bus, ushort address, int count)
+    {
+        var sb = new System.Text.StringBuilder(count);
+        for (int i = 0; i < count; i++)
+            sb.Append((char)bus.ReadRam((ushort)(address + i)));
         return sb.ToString();
     }
 
@@ -484,12 +493,722 @@ public class SystemModuleTests
 
         Assert.AreEqual(1, bus.ReadRam(RESULT), "picker must return the selected row");
         Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
-        Assert.AreEqual("SAVE 1", ReadScreenWindowRow(bus, top + 4, left + 2, 6),
+        Assert.AreEqual("SAVE 1", ReadScreenWindowRow(bus, top + 3, left + 2, 6),
             "the second row must be rendered after moving down once");
-        Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + 4, left + 2),
+        Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, top + 3, left + 2),
             "the active row must use reverse-video text attributes");
-        Assert.AreEqual("      ", ReadScreenWindowRow(bus, top + height - 3, left + 2, 6),
-            "picker must reserve a blank spacer row between list items and footer instructions");
+        StringAssert.Contains(ReadScreenWindowRow(bus, top + height - 3, left + 2, 18), "  OK  ",
+            "picker must render a Borland-style OK button below the list");
+        StringAssert.Contains(ReadScreenWindowRow(bus, top + height - 3, left + 2, 18), " Cancel ",
+            "picker must render a Borland-style Cancel button below the list");
+    }
+
+    [TestMethod]
+    public void NuiPickList_EscReportsCancel()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x0600;
+        const ushort title = 0x0640;
+        const ushort footer = 0x0660;
+        const ushort rows = 0x0700;
+
+        WriteRamString(bus, title, "SAVES");
+        WriteRamString(bus, footer, "ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, rows, System.Text.Encoding.ASCII.GetBytes(
+            "SAVE 0      " +
+            "SAVE 1      "));
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(rows & 0xFF), (byte)(rows >> 8),
+            12, 2, 1,
+            10, 8, 20, 8,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        QueueKeys(editor, 0x1B);
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_PICK_LIST);
+
+        Assert.AreEqual(1, bus.ReadRam(RESULT), "Esc must leave the caller's selected row intact.");
+        Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)), "Esc must report NUI_RESULT_CANCEL.");
+    }
+
+    [TestMethod]
+    public void NuiPickList_TabFocusesCancelButtonAndReturnsCancel()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x0600;
+        const ushort title = 0x0640;
+        const ushort footer = 0x0660;
+        const ushort rows = 0x0700;
+
+        WriteRamString(bus, title, "SAVES");
+        WriteRamString(bus, footer, "TAB NEXT  ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, rows, System.Text.Encoding.ASCII.GetBytes(
+            "SAVE 0      " +
+            "SAVE 1      "));
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(rows & 0xFF), (byte)(rows >> 8),
+            12, 2, 0,
+            10, 8, 20, 8,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        QueueKeys(editor, 0x09, 0x09, 0x0D);
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_PICK_LIST);
+
+        Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)),
+            "Tab to Cancel then Enter must report NUI_RESULT_CANCEL.");
+        Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 13, 19),
+            "focused Cancel button must use reverse-video text attributes.");
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_ShowsDrivesDirsAndReturnsFilteredFile()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        string hd0 = Path.Combine(root, "hd0");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(hd0, "SRC"));
+            File.WriteAllText(Path.Combine(hd0, "ROOT.4th"), ": ROOT ;");
+            File.WriteAllText(Path.Combine(hd0, "SKIP.bas"), "10 PRINT 1");
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+            const byte rowWidth = 36;
+            const byte selectedRootForth = 2; // .., SRC/, ROOT
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, selectedRootForth,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x0D);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(4, bus.ReadRam(RESULT), "picker must return selected filename length");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
+            Assert.AreEqual("ROOT", ReadRamAscii(bus, output, 4), "picker must copy the selected filename to caller RAM");
+            Assert.AreEqual((char)0xC9, ReadScreenWindowRow(bus, 10, 20, 1)[0],
+                "picker must draw a double-line CP437 dialog frame instead of a bare floating list");
+            Assert.AreEqual("Filename", ReadScreenWindowRow(bus, 13, 22, 8),
+                "picker must render a separate filename field label above the file list");
+            Assert.AreEqual(new string(' ', 36), ReadScreenWindowRow(bus, 14, 22, 36),
+                "picker must leave breathing room between the filename field and file list");
+            Assert.IsFalse(ReadScreenWindowRow(bus, 32, 20, 40).Contains("Help", StringComparison.Ordinal),
+                "file picker must not render a Help button");
+            Assert.IsFalse(ReadScreenWindowRow(bus, 15, 20, 40).Contains("Files", StringComparison.Ordinal),
+                "file picker must not label the obvious file list");
+            string bottomRow = ReadScreenWindowRow(bus, 35, 20, 40);
+            Assert.IsFalse(bottomRow.Contains("ENTER OPEN", StringComparison.Ordinal),
+                "picker must not print footer help text inside the dialog frame");
+            Assert.AreEqual("..", ReadRamAscii(bus, rows, 2),
+                "current directory view must start with parent navigation");
+            Assert.AreNotEqual("FD0:", ReadRamAscii(bus, rows, 4),
+                "drive rows must not clutter the current directory listing");
+            Assert.AreEqual("SRC/", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 4),
+                "directories must remain visible even when filtering files by type");
+            Assert.AreEqual("ROOT", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 4),
+                "matching files must be listed after parent/directory rows");
+            Assert.AreNotEqual("SKIP", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 4),
+                "non-matching file types must not consume picker rows");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_FiltersMultipleSourceTypesWithSixteenBitMask()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        string hd0 = Path.Combine(root, "hd0");
+        try
+        {
+            Directory.CreateDirectory(hd0);
+            File.WriteAllText(Path.Combine(hd0, "UNIT1.pas"), "program Unit1;\n");
+            File.WriteAllText(Path.Combine(hd0, "TURTLE.logo"), "TO SQUARE\nEND\n");
+            File.WriteAllText(Path.Combine(hd0, "WORDS.4th"), ": SQUARE DUP * ;\n");
+            File.WriteAllText(Path.Combine(hd0, "MAIN.asm"), ".byte $EA\n");
+            File.WriteAllText(Path.Combine(hd0, "SKIP.bas"), "10 PRINT 1\n");
+            File.WriteAllText(Path.Combine(hd0, "TUNE.sid"), "sid\n");
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+            const byte rowWidth = 36;
+            const byte selectedUnit = 3; // .., MAIN, TURTLE, UNIT1, WORDS
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0xC0, 0x03, selectedUnit,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x0D);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(5, bus.ReadRam(RESULT), "picker must return selected Pascal filename length.");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK.");
+            Assert.AreEqual("UNIT1", ReadRamAscii(bus, output, 5),
+                "a mask containing Pascal, Logo, Forth, and Assembly must allow selecting Pascal source.");
+            Assert.AreEqual("..", ReadRamAscii(bus, rows, 2),
+                "source-filtered file lists must keep parent navigation visible.");
+            Assert.AreEqual("MAIN", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 4),
+                "Assembly source must be visible with the source file mask.");
+            Assert.AreEqual("TURTLE", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 6),
+                "Logo source must be visible with the source file mask.");
+            Assert.AreEqual("UNIT1", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 5),
+                "Pascal source must be visible with the high mask byte.");
+            Assert.AreEqual("WORDS", ReadRamAscii(bus, (ushort)(rows + 4 * rowWidth), 5),
+                "Forth source must remain visible with the source file mask.");
+            Assert.AreNotEqual("SKIP", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 4),
+                "BASIC files must not consume source-filtered picker rows.");
+            Assert.AreNotEqual("TUNE", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 4),
+                "SID files must not consume source-filtered picker rows.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_ZeroTypeMaskShowsAnyFileType()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        string hd0 = Path.Combine(root, "hd0");
+        try
+        {
+            Directory.CreateDirectory(hd0);
+            File.WriteAllText(Path.Combine(hd0, "ALPHA.bas"), "10 PRINT 1\n");
+            File.WriteAllText(Path.Combine(hd0, "BETA.sid"), "sid\n");
+            File.WriteAllText(Path.Combine(hd0, "MAIN.asm"), ".byte $EA\n");
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+            const byte rowWidth = 36;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0, 0, 1,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x0D);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(5, bus.ReadRam(RESULT), "picker must return selected filename length.");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK.");
+            Assert.AreEqual("ALPHA", ReadRamAscii(bus, output, 5),
+                "a zero type mask must allow selecting any file type.");
+            Assert.AreEqual("ALPHA", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 5),
+                "BASIC files must be listed when the mask is zero.");
+            Assert.AreEqual("BETA", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 4),
+                "SID files must be listed when the mask is zero.");
+            Assert.AreEqual("MAIN", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 4),
+                "Assembly files must be listed when the mask is zero.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_KeepsParentVisibleWhenDirectoryListScrolls()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        string hd0 = Path.Combine(root, "hd0");
+        try
+        {
+            Directory.CreateDirectory(hd0);
+            for (int i = 0; i < 20; i++)
+                File.WriteAllText(Path.Combine(hd0, $"FILE{i:00}.4th"), ": X ;");
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, 18,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x1B);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)), "Esc must cancel the scrolled picker.");
+            Assert.AreEqual("..", ReadScreenWindowRow(bus, 16, 22, 2),
+                "directory file lists must keep parent navigation visible even when scrolled.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_EnteringDirectoryShowsThatDirectory()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        string hd0 = Path.Combine(root, "hd0");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(hd0, "SRC"));
+            File.WriteAllText(Path.Combine(hd0, "SRC", "NEST.4th"), ": NEST ;");
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, 1,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x0D, 0x1F, 0x0D);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(4, bus.ReadRam(RESULT), "picker must return nested filename length");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
+            Assert.AreEqual("NEST", ReadRamAscii(bus, output, 4),
+                "entering a directory must show and select files from that directory");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_SaveModePromptsForNewFilename()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "hd0"));
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+            WriteRamString(bus, title, "Save File As");
+            WriteRamString(bus, footer, "ENTER CHOOSE  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 1, 0x40, 0, 0,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueText(editor, "NEWUNIT");
+            QueueKeys(editor, 0x0D);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(7, bus.ReadRam(RESULT), "save-as prompt must return typed filename length");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
+            Assert.AreEqual("NEWUNIT", ReadRamAscii(bus, output, 7),
+                "save-as prompt must copy the typed filename to caller RAM");
+            Assert.AreEqual("..", ReadRamAscii(bus, rows, 2),
+                "save mode must keep parent navigation in the file list");
+            Assert.AreNotEqual("Save as.", ReadRamAscii(bus, (ushort)(rows + 36), 8),
+                "save mode must not fake a Save as... row inside the file list");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_ParentAtRootShowsVolumes()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "hd0"));
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+            const byte rowWidth = 36;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, 0,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x0D, 0x1B);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(0, bus.ReadRam(RESULT), "Esc after opening volume list must return no selected path bytes.");
+            Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)), "Esc must cancel from the volume list.");
+            Assert.AreEqual("FD0:", ReadRamAscii(bus, rows, 4),
+                "pressing .. at a device root must redraw the picker as a volume list");
+            Assert.AreEqual("HD1:", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 4),
+                "volume list must expose the hard disk slots as direct choices");
+            Assert.AreEqual(0x3C, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, 16, 22),
+                "detached FD0 must stay visible but render as a disabled volume choice.");
+            Assert.AreEqual(0x00, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 16, 22),
+                "detached FD0 must not receive the selectable reverse-video highlight.");
+            Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 18, 22),
+                "selection must skip detached floppy slots and land on the first mounted volume.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_EscReportsCancel()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "hd0"));
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, 0,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x1B);
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(0, bus.ReadRam(RESULT), "Esc cancel must return no selected path bytes.");
+            Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)), "Esc must report NUI_RESULT_CANCEL.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_OpenModeTabFocusesCancelButton()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "hd0"));
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+
+            WriteRamString(bus, title, "Open");
+            WriteRamString(bus, footer, "ENTER OPEN  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 0, 0x40, 0, 0,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueKeys(editor, 0x09, 0x09, 0x0D); // list -> OK -> Cancel, Enter
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(0, bus.ReadRam(RESULT), "Cancel must not return a selected filename.");
+            Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)),
+                "Tab to Cancel then Enter must report NUI_RESULT_CANCEL.");
+            Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 32, 43),
+                "focused Cancel button must use reverse-video text attributes.");
+            Assert.AreEqual(0x00, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 32, 31),
+                "OK button must not remain focused after tabbing to Cancel.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiFilePicker_SaveModeTabsFromFilenameToOk()
+    {
+        string? previousRoot = Environment.GetEnvironmentVariable("NOVA_STORAGE_ROOT");
+        string root = Path.Combine(Path.GetTempPath(), "e6502-filepicker-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "hd0"));
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", root);
+
+            using var bus = MakeSystemBus();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            const ushort config = 0x1000;
+            const ushort title = 0x1100;
+            const ushort footer = 0x1120;
+            const ushort output = 0x1140;
+            const ushort rows = 0x1200;
+
+            WriteRamString(bus, title, "Save File As");
+            WriteRamString(bus, footer, "ENTER CHOOSE  ESC CANCEL");
+            WriteRamBytes(bus, config, new byte[]
+            {
+                (byte)(title & 0xFF), (byte)(title >> 8),
+                (byte)(output & 0xFF), (byte)(output >> 8),
+                32, 1, 0x40, 0, 0,
+                0, 0, 0,
+                (byte)(footer & 0xFF), (byte)(footer >> 8),
+                (byte)(rows & 0xFF), (byte)(rows >> 8),
+            });
+
+            QueueText(editor, "UNIT1");
+            QueueKeys(editor, 0x09, 0x09, 0x0D); // filename -> list -> OK, Enter
+            SetArg(bus, ARG0, config);
+            RunFn(bus, SYS_NUI_FILE_PICKER);
+
+            Assert.AreEqual(5, bus.ReadRam(RESULT), "save-as must return the typed filename length.");
+            Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)),
+                "Tab to OK then Enter must report NUI_RESULT_OK.");
+            Assert.AreEqual("UNIT1", ReadRamAscii(bus, output, 5),
+                "save-as must keep the filename typed before tab traversal.");
+            Assert.AreEqual(0x02, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, 32, 31),
+                "focused OK button must use reverse-video text attributes.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", previousRoot);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void NuiTextInput_TabFocusesOkButtonAndReturnsTypedText()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x1000;
+        const ushort title = 0x1100;
+        const ushort label = 0x1120;
+        const ushort output = 0x1140;
+        const ushort footer = 0x1160;
+
+        WriteRamString(bus, title, "Find");
+        WriteRamString(bus, label, "Text:   ");
+        WriteRamString(bus, footer, "TAB NEXT  ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(label & 0xFF), (byte)(label >> 8),
+            (byte)(output & 0xFF), (byte)(output >> 8),
+            32, 14, 12, 52, 12,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        QueueText(editor, "HELLO");
+        QueueKeys(editor, 0x09, 0x0D);
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_TEXT_INPUT);
+
+        Assert.AreEqual(5, bus.ReadRam(RESULT), "text input must return typed text length");
+        Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "Enter on focused OK button must report NUI_RESULT_OK");
+        Assert.AreEqual("HELLO", ReadRamAscii(bus, output, 5),
+            "text input must copy typed bytes to caller RAM");
+        Assert.AreEqual((char)0xC9, ReadScreenWindowRow(bus, 12, 14, 1)[0],
+            "text input must use the shared CP437 dialog frame");
+        string bottomRow = ReadScreenWindowRow(bus, 23, 14, 52);
+        Assert.IsFalse(bottomRow.Contains("TAB NEXT", StringComparison.Ordinal),
+            "text input must not print footer help text inside the dialog frame");
+    }
+
+    [TestMethod]
+    public void NuiTextInput_EscReportsCancel()
+    {
+        using var bus = MakeSystemBus();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        const ushort config = 0x1000;
+        const ushort title = 0x1100;
+        const ushort label = 0x1120;
+        const ushort output = 0x1140;
+        const ushort footer = 0x1160;
+
+        WriteRamString(bus, title, "Find");
+        WriteRamString(bus, label, "Text:   ");
+        WriteRamString(bus, footer, "TAB NEXT  ENTER OK  ESC CANCEL");
+        WriteRamBytes(bus, config, new byte[]
+        {
+            (byte)(title & 0xFF), (byte)(title >> 8),
+            (byte)(label & 0xFF), (byte)(label >> 8),
+            (byte)(output & 0xFF), (byte)(output >> 8),
+            32, 14, 12, 52, 12,
+            (byte)(footer & 0xFF), (byte)(footer >> 8),
+        });
+
+        QueueText(editor, "HELLO");
+        QueueKeys(editor, 0x1B);
+        SetArg(bus, ARG0, config);
+        RunFn(bus, SYS_NUI_TEXT_INPUT);
+
+        Assert.AreEqual(0, bus.ReadRam(RESULT), "Esc cancel must return no committed text bytes.");
+        Assert.AreEqual(1, bus.ReadRam((ushort)(RESULT + 1)), "Esc must report NUI_RESULT_CANCEL.");
     }
 
     /// <summary>

@@ -66,7 +66,11 @@ if (effect == 1) { ok; return; }   // prepare: loaded, do not play
   `bus.ZSound.PackLoaded`. With boot preload, a sound game satisfies this right
   at the prompt — no fragile in-game walkthrough needed to prove *loading*.
 
-### 4. Collection builder (`examples/novaz/tools/build-infocom-collection.py`)
+### 4. Collection builder (retired)
+
+The old standalone NovaZ collection-builder script has been removed. Build
+individual NovaZ projects through their project Makefiles and the Nova CLI
+entry points.
 
 1. `make all` once (AUTOBOOT + runtime).
 2. Scan top-level archive folders. Per folder: pick the one supported story;

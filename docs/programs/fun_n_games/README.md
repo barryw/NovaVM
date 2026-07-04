@@ -13,7 +13,7 @@ type-in style disk inspired by *Commodore 64 Fun and Games*.
 Rebuild the disk image from the repository root with:
 
 ```sh
-bash docs/programs/fun_n_games/build.sh
+dotnet run --project e6502.Nova -c Release -- docs fun-n-games
 ```
 
 NovaBASIC accepts longer variable names, but only the first two characters are

@@ -76,6 +76,7 @@ void nfio_disk_dirread(void);   /* FIO_CMD_DIRREAD: name + FIO_DIRTYPE + FIO_SIZ
 void nfio_disk_delete(void);    /* FIO_CMD_DELETE  when a disk is mounted        */
 void nfio_cd(void);             /* FIO_CMD_CD: set the current drive/subdir      */
 void nfio_pwd(void);            /* FIO_CMD_PWD: "drive:dir" -> FIO_NAME/NAMELEN   */
+void nfio_devstatus(void);      /* FIO_CMD_DEVSTATUS: mounted slot probe         */
 
 /* ---- directory create/remove + VGC graphics-memory save/load --------------
  * Ports of the desktop FileIoController DoMkdir/DoRmdir/DoGSave/DoGLoad. Each

@@ -16,7 +16,7 @@ autoboot), audio via a prioritized kernel driver. See memory note
   **Must be a `reserved-memory` (no-map) node** so Linux never allocates it; `novavm` maps it
   coherently. (Bare-metal also did `Xil_DCacheFlushRange` on this — Linux mapping must be
   non-cached / explicitly synced.)
-- **PS config (Arty-specific, from build_uboot_oracle.sh — already proven on U-Boot):**
+- **PS config (Arty-specific, already proven on U-Boot):**
   console **UART0** (Arty USB-UART; Zybo is UART1), **DRAM 512 MB**, **ps-clk-frequency =
   50 MHz** (Arty crystal — NOT 33.33 MHz or every clock incl. UART baud is 1.5× off).
   Low-level bring-up done by `ps7_init` (XSA ps7_init.tcl) — SPL/low-level-init OFF in U-Boot.

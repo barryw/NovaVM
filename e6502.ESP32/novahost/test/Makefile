@@ -30,7 +30,6 @@ test: $(TARGETS)
 	./test_sid_vm
 	./test_boot_config_parser
 	./test_shelf_alloc
-	python3 test_wifi_contract.py
 
 clean:
 	rm -f $(TARGETS)

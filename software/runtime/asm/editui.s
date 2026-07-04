@@ -75,6 +75,9 @@ EDITUI_MENU_SAVE_X: .res 1
 EDITUI_MENU_SAVE_Y: .res 1
 EDITUI_MENU_SAVE_W: .res 1
 EDITUI_MENU_SAVE_H: .res 1
+EDITUI_MENU_CURSOR_X: .res 1
+EDITUI_MENU_CURSOR_Y: .res 1
+EDITUI_MENU_CURSOR_EN: .res 1
 EDITUI_SAVE_BOXX:   .res 1
 EDITUI_SAVE_BOXY:   .res 1
 EDITUI_SAVE_BOXW:   .res 1
@@ -100,12 +103,9 @@ EDITUI_MENU_ITEMH:  .res 1
       .export editui_init
       .export editui_full_region
       .export editui_clear_screen
-      .export editui_shutdown
       .export editui_draw_shell
       .export editui_draw_menu
       .export editui_draw_status
-      .export editui_draw_box
-      .export editui_select_box_body
       .export editui_print_ptr
       .export editui_print_marked
       .export editui_menu_open_hotkey
@@ -173,26 +173,6 @@ editui_clear_screen:
       LDA   #' '
       STA   VTEXT_CHAR
       JMP   vtext_clear_region
-
-editui_shutdown:
-      STZ   VTEXT_TOPROW
-      STZ   VGC_TEXT_TOPROW
-      STZ   VTEXT_SCROLL_TOP
-      STZ   VGC_TEXT_SCROLL_START
-      STZ   VTEXT_SCROLL_ROWS
-      LDA   #EDITUI_SCREEN_ROWS
-      STA   VGC_TEXT_SCROLL_ROWS
-      LDA   #$0C
-      STA   VGC_CHAROUT
-@wait:
-      LDA   VGC_CMD
-      AND   #$01
-      BNE   @wait
-      STZ   VGC_CURSX
-      STZ   VGC_CURSY
-      LDA   #$01
-      STA   VGC_CURSEN
-      RTS
 
 editui_fill_row:
       LDA   VTEXT_COLOR
@@ -289,11 +269,6 @@ editui_strlen:
 @done:
       LDA   EDITUI_LEN
       RTS
-
-editui_print_at_2:
-      LDA   #2
-      STA   EDITUI_PRINTX
-      JMP   editui_print_ptr
 
 editui_draw_shell:
       JSR   editui_clear_screen
@@ -451,207 +426,6 @@ editui_draw_status:
 @done:
       RTS
 
-editui_draw_box:
-      LDA   EDITUI_BOXW
-      CMP   #2
-      BCS   @width_ok
-      RTS
-@width_ok:
-      LDA   EDITUI_BOXH
-      CMP   #2
-      BCS   @height_ok
-      RTS
-@height_ok:
-      JSR   editui_load_box_chars
-      JSR   editui_full_region
-      LDA   #EDITUI_COLOR_FRAME
-      STA   VTEXT_COLOR
-      LDA   EDITUI_BOXX
-      STA   VTEXT_CURX
-      LDA   EDITUI_BOXY
-      STA   VTEXT_CURY
-      JSR   vtext_set_cursor
-      LDA   EDITUI_CH_TL
-      JSR   editui_putc
-      LDA   EDITUI_BOXW
-      SEC
-      SBC   #2
-      STA   EDITUI_COL
-@top:
-      LDA   EDITUI_CH_H
-      JSR   editui_putc
-      DEC   EDITUI_COL
-      BNE   @top
-      LDA   EDITUI_CH_TR
-      JSR   editui_putc
-
-      LDA   EDITUI_BOXH
-      SEC
-      SBC   #1
-      STA   EDITUI_TMP
-      LDA   #1
-      STA   EDITUI_ROW
-@sides:
-      LDA   EDITUI_ROW
-      CMP   EDITUI_TMP
-      BEQ   @bottom
-      LDA   EDITUI_BOXX
-      STA   VTEXT_CURX
-      LDA   EDITUI_BOXY
-      CLC
-      ADC   EDITUI_ROW
-      STA   VTEXT_CURY
-      JSR   vtext_set_cursor
-      LDA   EDITUI_CH_V
-      JSR   editui_putc
-      LDA   EDITUI_BOXX
-      CLC
-      ADC   EDITUI_BOXW
-      SEC
-      SBC   #1
-      STA   VTEXT_CURX
-      LDA   EDITUI_BOXY
-      CLC
-      ADC   EDITUI_ROW
-      STA   VTEXT_CURY
-      JSR   vtext_set_cursor
-      LDA   EDITUI_CH_V
-      JSR   editui_putc
-      INC   EDITUI_ROW
-      BRA   @sides
-
-@bottom:
-      LDA   EDITUI_BOXX
-      STA   VTEXT_CURX
-      LDA   EDITUI_BOXY
-      CLC
-      ADC   EDITUI_TMP
-      STA   VTEXT_CURY
-      JSR   vtext_set_cursor
-      LDA   EDITUI_CH_BL
-      JSR   editui_putc
-      LDA   EDITUI_BOXW
-      SEC
-      SBC   #2
-      STA   EDITUI_COL
-@bottom_line:
-      LDA   EDITUI_CH_H
-      JSR   editui_putc
-      DEC   EDITUI_COL
-      BNE   @bottom_line
-      LDA   EDITUI_CH_BR
-      JSR   editui_putc
-
-      LDA   EDITUI_BOX_TITLEL
-      ORA   EDITUI_BOX_TITLEH
-      BEQ   @done
-      LDA   EDITUI_BOX_TITLEL
-      STA   EDITUI_PRINTL
-      LDA   EDITUI_BOX_TITLEH
-      STA   EDITUI_PRINTH
-      LDA   EDITUI_BOXX
-      CLC
-      ADC   #2
-      STA   VTEXT_CURX
-      LDA   EDITUI_BOXY
-      STA   VTEXT_CURY
-      JSR   vtext_set_cursor
-      LDA   #EDITUI_COLOR_FRAME
-      STA   VTEXT_COLOR
-      LDA   EDITUI_CH_TITLE_L
-      JSR   editui_putc
-      LDA   #EDITUI_COLOR_TITLE
-      STA   VTEXT_COLOR
-      LDA   #' '
-      JSR   editui_putc
-      LDA   EDITUI_BOX_TITLEL
-      LDY   EDITUI_BOX_TITLEH
-      JSR   vtext_puts
-      LDA   #' '
-      JSR   editui_putc
-      LDA   #EDITUI_COLOR_FRAME
-      STA   VTEXT_COLOR
-      LDA   EDITUI_CH_TITLE_R
-      JSR   editui_putc
-@done:
-      RTS
-
-editui_load_box_chars:
-      LDA   EDITUI_BOX_STYLE
-      CMP   #EDITUI_BOX_DOUBLE
-      BEQ   @double
-      LDA   #EDITUI_CH_SINGLE_TL
-      STA   EDITUI_CH_TL
-      LDA   #EDITUI_CH_SINGLE_TR
-      STA   EDITUI_CH_TR
-      LDA   #EDITUI_CH_SINGLE_BL
-      STA   EDITUI_CH_BL
-      LDA   #EDITUI_CH_SINGLE_BR
-      STA   EDITUI_CH_BR
-      LDA   #EDITUI_CH_SINGLE_H
-      STA   EDITUI_CH_H
-      LDA   #EDITUI_CH_SINGLE_V
-      STA   EDITUI_CH_V
-      LDA   #EDITUI_CH_SINGLE_TITLE_L
-      STA   EDITUI_CH_TITLE_L
-      LDA   #EDITUI_CH_SINGLE_TITLE_R
-      STA   EDITUI_CH_TITLE_R
-      RTS
-@double:
-      LDA   #EDITUI_CH_DOUBLE_TL
-      STA   EDITUI_CH_TL
-      LDA   #EDITUI_CH_DOUBLE_TR
-      STA   EDITUI_CH_TR
-      LDA   #EDITUI_CH_DOUBLE_BL
-      STA   EDITUI_CH_BL
-      LDA   #EDITUI_CH_DOUBLE_BR
-      STA   EDITUI_CH_BR
-      LDA   #EDITUI_CH_DOUBLE_H
-      STA   EDITUI_CH_H
-      LDA   #EDITUI_CH_DOUBLE_V
-      STA   EDITUI_CH_V
-      LDA   #EDITUI_CH_DOUBLE_TITLE_L
-      STA   EDITUI_CH_TITLE_L
-      LDA   #EDITUI_CH_DOUBLE_TITLE_R
-      STA   EDITUI_CH_TITLE_R
-      RTS
-
-editui_select_box_body:
-      LDA   EDITUI_BOXW
-      CMP   #3
-      BCS   @width_ok
-      RTS
-@width_ok:
-      LDA   EDITUI_BOXH
-      CMP   #3
-      BCS   @height_ok
-      RTS
-@height_ok:
-      LDA   EDITUI_BOXX
-      CLC
-      ADC   #1
-      STA   VTEXT_LEFT
-      LDA   EDITUI_BOXY
-      CLC
-      ADC   #1
-      STA   VTEXT_TOP
-      LDA   EDITUI_BOXW
-      SEC
-      SBC   #2
-      STA   VTEXT_WIDTH
-      LDA   EDITUI_BOXH
-      SEC
-      SBC   #2
-      STA   VTEXT_HEIGHT
-      STZ   VTEXT_CURX
-      STZ   VTEXT_CURY
-      LDA   #EDITUI_COLOR_PANEL
-      STA   VTEXT_COLOR
-      STZ   VTEXT_ATTR
-      LDA   #VTEXT_FLAG_WRAP
-      STA   VTEXT_FLAGS
-      JMP   vtext_set_cursor
-
 editui_menu_open_hotkey:
       STA   EDITUI_MENU_KEY
       JSR   editui_menu_normalize_key
@@ -765,6 +539,7 @@ editui_menu_item_ptr:
       RTS
 
 editui_menu_open_current:
+      JSR   editui_menu_save_cursor
       LDA   EDITUI_MENU_ITEMS_L
       STA   EDITUI_MENU_ITEML
       LDA   EDITUI_MENU_ITEMS_H
@@ -774,6 +549,7 @@ editui_menu_open_current:
       STA   EDITUI_MENU_ITEM_COUNT
       STZ   EDITUI_MENU_SELECTED
       STZ   EDITUI_MENU_CMD
+      JSR   editui_menu_select_first_enabled
 @redraw:
       JSR   editui_menu_draw_dropdown
 @wait_key:
@@ -800,21 +576,12 @@ editui_menu_open_current:
 @down:
       LDA   EDITUI_MENU_SELECTED
       STA   EDITUI_TMP
-      INC   EDITUI_MENU_SELECTED
-      LDA   EDITUI_MENU_SELECTED
-      CMP   EDITUI_MENU_ITEM_COUNT
-      BCC   @redraw_selection
-      STZ   EDITUI_MENU_SELECTED
+      JSR   editui_menu_next_enabled
       BRA   @redraw_selection
 @up:
       LDA   EDITUI_MENU_SELECTED
       STA   EDITUI_TMP
-      LDA   EDITUI_MENU_SELECTED
-      BNE   @dec
-      LDA   EDITUI_MENU_ITEM_COUNT
-      STA   EDITUI_MENU_SELECTED
-@dec:
-      DEC   EDITUI_MENU_SELECTED
+      JSR   editui_menu_prev_enabled
 @redraw_selection:
       JSR   editui_menu_redraw_selection
       BRA   @wait_key
@@ -828,12 +595,14 @@ editui_menu_open_current:
       BRA   @wait_key
 @choose:
       JSR   editui_menu_select_current
+      LDA   EDITUI_MENU_CMD
+      BEQ   @wait_key
       BRA   @done
 @cancel:
       STZ   EDITUI_MENU_CMD
 @done:
       JSR   editui_menu_restore_under
-      RTS
+      JMP   editui_menu_restore_cursor
 
 editui_menu_redraw_selection:
       LDA   EDITUI_TMP
@@ -841,7 +610,8 @@ editui_menu_redraw_selection:
       JSR   editui_menu_draw_item
       LDA   EDITUI_MENU_SELECTED
       STA   EDITUI_MENU_INDEX
-      JMP   editui_menu_draw_item
+      JSR   editui_menu_draw_item
+      JMP   editui_menu_restore_cursor
 
 editui_menu_next_active:
       INC   EDITUI_MENU_ACTIVE
@@ -916,26 +686,67 @@ editui_menu_load_active:
       STA   EDITUI_MENU_ITEM_COUNT
       STZ   EDITUI_MENU_SELECTED
       STZ   EDITUI_MENU_CMD
+      JSR   editui_menu_select_first_enabled
+      RTS
+
+editui_menu_select_first_enabled:
+      STZ   EDITUI_MENU_SELECTED
+      STZ   EDITUI_TMP
+      JSR   editui_menu_current_enabled
+      BNE   @done
+      JSR   editui_menu_next_enabled
+@done:
+      RTS
+
+editui_menu_next_enabled:
+      LDA   EDITUI_MENU_ITEM_COUNT
+      BEQ   @done
+      STA   EDITUI_COL
+@loop:
+      INC   EDITUI_MENU_SELECTED
+      LDA   EDITUI_MENU_SELECTED
+      CMP   EDITUI_MENU_ITEM_COUNT
+      BCC   :+
+      STZ   EDITUI_MENU_SELECTED
+:     JSR   editui_menu_current_enabled
+      BNE   @done
+      DEC   EDITUI_COL
+      BNE   @loop
+      LDA   EDITUI_TMP
+      STA   EDITUI_MENU_SELECTED
+@done:
+      RTS
+
+editui_menu_prev_enabled:
+      LDA   EDITUI_MENU_ITEM_COUNT
+      BEQ   @done
+      STA   EDITUI_COL
+@loop:
+      LDA   EDITUI_MENU_SELECTED
+      BNE   :+
+      LDA   EDITUI_MENU_ITEM_COUNT
+      STA   EDITUI_MENU_SELECTED
+:     DEC   EDITUI_MENU_SELECTED
+      JSR   editui_menu_current_enabled
+      BNE   @done
+      DEC   EDITUI_COL
+      BNE   @loop
+      LDA   EDITUI_TMP
+      STA   EDITUI_MENU_SELECTED
+@done:
+      RTS
+
+editui_menu_current_enabled:
+      LDA   EDITUI_MENU_SELECTED
+      STA   EDITUI_MENU_INDEX
+      JSR   editui_menu_item_ptr
+      LDY   #0
+      LDA   (EDITUI_MENU_ITEML),Y
       RTS
 
 editui_menu_draw_dropdown:
-      JSR   editui_push_box_state
-      LDA   EDITUI_MENU_X
-      STA   EDITUI_BOXX
-      LDA   #1
-      STA   EDITUI_BOXY
-      LDA   EDITUI_MENU_WIDTH
-      STA   EDITUI_BOXW
-      LDA   EDITUI_MENU_ITEM_COUNT
-      CLC
-      ADC   #2
-      STA   EDITUI_BOXH
-      LDA   #EDITUI_BOX_SINGLE
-      STA   EDITUI_BOX_STYLE
-      STZ   EDITUI_BOX_TITLEL
-      STZ   EDITUI_BOX_TITLEH
       JSR   editui_menu_save_under
-      JSR   editui_draw_box
+      JSR   editui_menu_draw_frame
       STZ   EDITUI_MENU_INDEX
 @loop:
       LDA   EDITUI_MENU_INDEX
@@ -945,8 +756,109 @@ editui_menu_draw_dropdown:
       INC   EDITUI_MENU_INDEX
       BRA   @loop
 @done:
-      JSR   editui_pop_box_state
+      JMP   editui_menu_restore_cursor
+
+editui_menu_save_cursor:
+      LDA   VGC_CURSX
+      STA   EDITUI_MENU_CURSOR_X
+      LDA   VGC_CURSY
+      STA   EDITUI_MENU_CURSOR_Y
+      LDA   VGC_CURSEN
+      STA   EDITUI_MENU_CURSOR_EN
       RTS
+
+editui_menu_restore_cursor:
+      LDA   EDITUI_MENU_CURSOR_X
+      STA   VGC_CURSX
+      LDA   EDITUI_MENU_CURSOR_Y
+      STA   VGC_CURSY
+      LDA   EDITUI_MENU_CURSOR_EN
+      STA   VGC_CURSEN
+      RTS
+
+editui_menu_draw_frame:
+      JSR   editui_full_region
+      LDA   #EDITUI_COLOR_FRAME
+      STA   VTEXT_COLOR
+      LDA   EDITUI_MENU_X
+      STA   VTEXT_CURX
+      LDA   #1
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #EDITUI_CH_SINGLE_TL
+      JSR   editui_menu_putc
+      LDA   EDITUI_MENU_WIDTH
+      SEC
+      SBC   #2
+      STA   EDITUI_COL
+@top:
+      LDA   #EDITUI_CH_SINGLE_H
+      JSR   editui_menu_putc
+      DEC   EDITUI_COL
+      BNE   @top
+      LDA   #EDITUI_CH_SINGLE_TR
+      JSR   editui_menu_putc
+
+      LDA   EDITUI_MENU_ITEM_COUNT
+      CLC
+      ADC   #1
+      STA   EDITUI_TMP
+      LDA   #1
+      STA   EDITUI_ROW
+@sides:
+      LDA   EDITUI_ROW
+      CMP   EDITUI_TMP
+      BEQ   @bottom
+      LDA   EDITUI_MENU_X
+      STA   VTEXT_CURX
+      LDA   #1
+      CLC
+      ADC   EDITUI_ROW
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #EDITUI_CH_SINGLE_V
+      JSR   editui_menu_putc
+      LDA   EDITUI_MENU_X
+      CLC
+      ADC   EDITUI_MENU_WIDTH
+      SEC
+      SBC   #1
+      STA   VTEXT_CURX
+      LDA   #1
+      CLC
+      ADC   EDITUI_ROW
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #EDITUI_CH_SINGLE_V
+      JSR   editui_menu_putc
+      INC   EDITUI_ROW
+      BRA   @sides
+
+@bottom:
+      LDA   EDITUI_MENU_X
+      STA   VTEXT_CURX
+      LDA   #1
+      CLC
+      ADC   EDITUI_TMP
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #EDITUI_CH_SINGLE_BL
+      JSR   editui_menu_putc
+      LDA   EDITUI_MENU_WIDTH
+      SEC
+      SBC   #2
+      STA   EDITUI_COL
+@bottom_line:
+      LDA   #EDITUI_CH_SINGLE_H
+      JSR   editui_menu_putc
+      DEC   EDITUI_COL
+      BNE   @bottom_line
+      LDA   #EDITUI_CH_SINGLE_BR
+      JMP   editui_menu_putc
+
+editui_menu_putc:
+      STA   VTEXT_CHAR
+      JMP   vtext_put_char
 
 editui_menu_save_under:
       ; Derive the save rectangle from the active dropdown, then capture it
@@ -1179,7 +1091,12 @@ editui_menu_find_item_hotkey:
       LDY   #1
       LDA   (EDITUI_MENU_ITEML),Y
       CMP   EDITUI_MENU_KEY
-      BEQ   @found
+      BNE   @next
+      LDY   #0
+      LDA   (EDITUI_MENU_ITEML),Y
+      BEQ   @next
+      BRA   @found
+@next:
       INC   EDITUI_MENU_INDEX
       BRA   @loop
 @found:
@@ -1200,44 +1117,6 @@ editui_menu_normalize_key:
       STA   EDITUI_MENU_KEY
 @done:
       RTS
-
-editui_push_box_state:
-      LDA   EDITUI_BOXX
-      STA   EDITUI_SAVE_BOXX
-      LDA   EDITUI_BOXY
-      STA   EDITUI_SAVE_BOXY
-      LDA   EDITUI_BOXW
-      STA   EDITUI_SAVE_BOXW
-      LDA   EDITUI_BOXH
-      STA   EDITUI_SAVE_BOXH
-      LDA   EDITUI_BOX_TITLEL
-      STA   EDITUI_SAVE_TITL
-      LDA   EDITUI_BOX_TITLEH
-      STA   EDITUI_SAVE_TITH
-      LDA   EDITUI_BOX_STYLE
-      STA   EDITUI_SAVE_STYLE
-      RTS
-
-editui_pop_box_state:
-      LDA   EDITUI_SAVE_STYLE
-      STA   EDITUI_BOX_STYLE
-      LDA   EDITUI_SAVE_TITH
-      STA   EDITUI_BOX_TITLEH
-      LDA   EDITUI_SAVE_TITL
-      STA   EDITUI_BOX_TITLEL
-      LDA   EDITUI_SAVE_BOXH
-      STA   EDITUI_BOXH
-      LDA   EDITUI_SAVE_BOXW
-      STA   EDITUI_BOXW
-      LDA   EDITUI_SAVE_BOXY
-      STA   EDITUI_BOXY
-      LDA   EDITUI_SAVE_BOXX
-      STA   EDITUI_BOXX
-      RTS
-
-editui_putc:
-      STA   VTEXT_CHAR
-      JMP   vtext_put_char
 
       .segment "RODATA"
 
@@ -1260,19 +1139,25 @@ editui_default_menus:
       .byte 's', 18, <editui_menu_title_search, >editui_menu_title_search, <editui_menu_search_items, >editui_menu_search_items
 
 editui_menu_file_items:
-      .byte 2
+      .byte 3
       .byte EDITUI_CMD_SAVE, 's', <editui_item_save, >editui_item_save
+      .byte EDITUI_CMD_BUFFER_LIST, 'b', <editui_item_buffers, >editui_item_buffers
       .byte EDITUI_CMD_QUIT, 'x', <editui_item_quit, >editui_item_quit
 
 editui_menu_edit_items:
-      .byte 3
+      .byte 5
+      .byte EDITUI_CMD_UNDO,  'u', <editui_item_undo, >editui_item_undo
+      .byte EDITUI_CMD_REDO,  'r', <editui_item_redo, >editui_item_redo
       .byte EDITUI_CMD_CUT,   't', <editui_item_cut, >editui_item_cut
       .byte EDITUI_CMD_COPY,  'c', <editui_item_copy, >editui_item_copy
       .byte EDITUI_CMD_PASTE, 'p', <editui_item_paste, >editui_item_paste
 
 editui_menu_search_items:
-      .byte 2
+      .byte 5
       .byte EDITUI_CMD_FIND,      'f', <editui_item_find, >editui_item_find
+      .byte EDITUI_CMD_FIND_NEXT, 'n', <editui_item_find_next, >editui_item_find_next
+      .byte EDITUI_CMD_REPLACE,   'r', <editui_item_replace, >editui_item_replace
+      .byte EDITUI_CMD_REPLACE_ALL, 'a', <editui_item_replace_all, >editui_item_replace_all
       .byte EDITUI_CMD_GOTO_LINE, 'g', <editui_item_goto_line, >editui_item_goto_line
 
 editui_menu_title_file:
@@ -1283,9 +1168,15 @@ editui_menu_title_search:
       .byte "&Search",0
 
 editui_item_save:
-      .byte "&Save ^K S",0
+      .byte "&Save ^S",0
+editui_item_buffers:
+      .byte "&Buffers Alt-0",0
 editui_item_quit:
       .byte "E&xit Alt-X",0
+editui_item_undo:
+      .byte "&Undo ^Z",0
+editui_item_redo:
+      .byte "&Redo ^Y",0
 editui_item_cut:
       .byte "Cu&t ^X",0
 editui_item_copy:
@@ -1293,7 +1184,13 @@ editui_item_copy:
 editui_item_paste:
       .byte "&Paste ^V",0
 editui_item_find:
-      .byte "&Find ^Q F",0
+      .byte "&Find ^F",0
+editui_item_find_next:
+      .byte "Find &Next F3",0
+editui_item_replace:
+      .byte "&Replace",0
+editui_item_replace_all:
+      .byte "Replace &All",0
 editui_item_goto_line:
       .byte "&Goto ^G",0
 

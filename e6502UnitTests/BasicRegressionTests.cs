@@ -22,6 +22,45 @@ namespace e6502UnitTests;
 public class BasicRegressionTests
 {
     [TestMethod]
+    public void BasicLineReaderClearsStaleResultAndInputBeforeSystemCall()
+    {
+        string root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", ".."));
+        string src = File.ReadAllText(Path.Combine(root, "software", "languages", "ehbasic", "basic.asm"));
+
+        StringAssert.Contains(src,
+            "STZ   LIB_RESULT+0      ; discard stale line length before blocking for input\n" +
+            "      STZ   Ibuffs            ; stale immediate text must not execute if the call returns early\n" +
+            "\n" +
+            "      LDA   #MODULE_ID_SYSTEM",
+            "BASIC's line-reader wrapper must clear stale result/input before SYS_SCREEN_READLINE.");
+    }
+
+    [TestMethod]
+    public void BasicBannerMemoryLineIsCentered()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        int rowNumber = FindScreenRow(bus.Vgc, "bytes free");
+        Assert.IsTrue(rowNumber >= 0, "The BASIC cold-start banner must include the free-memory line.");
+        string row = ReadRow(bus.Vgc, rowNumber);
+        int first = row.AsSpan().IndexOfAnyExcept(' ');
+        int last = row.AsSpan().LastIndexOfAnyExcept(' ');
+
+        Assert.IsTrue(first >= 0 && last >= first,
+            $"The free-memory banner row should contain visible text.\n{SnapshotScreen(bus.Vgc)}");
+        int rightMargin = VgcConstants.ScreenCols - last - 1;
+
+        Assert.IsTrue(Math.Abs(first - rightMargin) <= 1,
+            $"The free-memory banner line must be centered. left={first}, right={rightMargin}, row='{row.TrimEnd()}'\n{SnapshotScreen(bus.Vgc)}");
+    }
+
+    [TestMethod]
     public void ScreenEditor_FreshLineExecutes()
     {
         // Proves the new SYS_SCREEN_READLINE path: type a fresh immediate-mode
@@ -1040,6 +1079,36 @@ public class BasicRegressionTests
             "LOCATE should position the cursor so the next PRINT lands at col 10, row 12.");
     }
 
+    [TestMethod]
+    public void ResetThenModeReturnsToInteractivePrompt()
+    {
+        // RESET is supposed to be a BASIC-level cold start. A following graphics
+        // lib_call must not leave the CPU wedged with the cursor disabled.
+        using var bus = new CompositeBusDevice(enableSound: false);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+
+        RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+        QueueLine(editor, "RESET");
+        RunUntilScreenContains(cpu, bus, "38655 bytes free", 80_000_000);
+        RunUntilScreenContains(cpu, bus, "Ready", 80_000_000);
+
+        QueueLine(editor, "MODE 2");
+        RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+        QueueLine(editor, "PRINT 123");
+        RunUntilEditorIdle(cpu, bus, editor, 80_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains(" 123", StringComparison.Ordinal),
+            $"BASIC should remain interactive after RESET followed by MODE 2.\n{screen}");
+        Assert.AreEqual(2, bus.Read((ushort)VgcConstants.RegMode),
+            "MODE 2 should still set the active VGC mode through lib_call(GRAPHICS).");
+    }
+
     // SOUND/VOLUME now route through lib_call(SOUND) (SND_SOUND/SND_SET_VOLUME)
     // instead of the audio.s driver compiled into the BASIC ROM. SOUND pokes the
     // SID voice-0 registers immediately; VOLUME writes the SID master volume reg.
@@ -1523,8 +1592,10 @@ public class BasicRegressionTests
     // the module via FIO_NAME (LAB_FIO_GETNAME -> inline fio_copy_name). Save a file,
     // confirm it exists, DELETE it, confirm it is gone — proving FILE_DELETE's
     // name marshalling reached the host through the module.
-    [TestMethod]
-    public void DeleteRemovesAFileThroughFilesModule()
+    [DataTestMethod]
+    [DataRow("DEL")]
+    [DataRow("DELETE")]
+    public void DeleteRemovesAFileThroughFilesModule(string command)
     {
         using var temp = new TempStorageRoot();
         using var bus = new CompositeBusDevice(enableSound: false);
@@ -1537,19 +1608,123 @@ public class BasicRegressionTests
 
         EnterProgramLines(cpu, bus, editor,
         [
-            "10 PRINT \"DELME\"",
-            "SAVE \"DELTEST\"",
+            $"10 PRINT \"{command}ME\"",
+            $"SAVE \"{command}TEST\"",
         ]);
-        string path = Path.Combine(temp.Hd0, "DELTEST.bas");
-        Assert.IsTrue(File.Exists(path), "SAVE \"DELTEST\" must create DELTEST.bas first.");
+        string path = Path.Combine(temp.Hd0, $"{command}TEST.bas");
+        Assert.IsTrue(File.Exists(path), $"SAVE \"{command}TEST\" must create {command}TEST.bas first.");
 
-        EnterProgramLines(cpu, bus, editor, ["DEL \"DELTEST\""]);
+        EnterProgramLines(cpu, bus, editor, [$"{command} \"{command}TEST\""]);
 
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsFalse(screen.Contains("Error", StringComparison.Ordinal),
-            $"DEL \"DELTEST\" must complete without an I/O error.\n{screen}");
+            $"{command} \"{command}TEST\" must complete without a BASIC error.\n{screen}");
         Assert.IsFalse(File.Exists(path),
-            "DEL \"DELTEST\" must remove DELTEST.bas via FILE_DELETE.");
+            $"{command} \"{command}TEST\" must remove {command}TEST.bas via FILE_DELETE.");
+    }
+
+    [TestMethod]
+    public void DeleteOnMountedNdiDoesNotReportDelayedFunctionCallError()
+    {
+        string? previousNoAutoMount = Environment.GetEnvironmentVariable("NOVA_NO_AUTOMOUNT");
+        using var temp = new TempStorageRoot();
+
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
+
+            string disks = Path.Combine(temp.Root, "disks");
+            Directory.CreateDirectory(disks);
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "BASIC", 800);
+            using (var image = NdiImage.Open(imagePath))
+                image.WriteFile("DRAW1.bas", NdiFileType.Bas, 0xFFFF, []);
+
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            cpu.Boot();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+            EnterProgramLines(cpu, bus, editor,
+            [
+                "DIR",
+                "DELETE \"DRAW1\"",
+                "",
+                "DIR",
+            ]);
+
+            string screen = SnapshotScreen(bus.Vgc);
+            Assert.IsFalse(screen.Contains("Function call Error", StringComparison.Ordinal),
+                $"DELETE on an auto-mounted fd0.ndi must not emit a delayed ?FC after the file is removed.\n{screen}");
+            int finalDir = screen.LastIndexOf("DIR", StringComparison.Ordinal);
+            Assert.IsTrue(finalDir >= 0, $"The final DIR command should be visible.\n{screen}");
+            string finalListing = screen[finalDir..];
+            Assert.IsFalse(finalListing.Contains("DRAW1", StringComparison.Ordinal),
+                $"The final DIR output after DELETE should not list DRAW1 from the mounted image.\n{screen}");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", previousNoAutoMount);
+        }
+    }
+
+    [TestMethod]
+    public void DirOnMountedNdiReportsSavedBasicPayloadSize()
+    {
+        string? previousNoAutoMount = Environment.GetEnvironmentVariable("NOVA_NO_AUTOMOUNT");
+        using var temp = new TempStorageRoot();
+
+        try
+        {
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
+
+            string disks = Path.Combine(temp.Root, "disks");
+            Directory.CreateDirectory(disks);
+            string imagePath = Path.Combine(disks, "fd0.ndi");
+            NdiImage.CreateFormatted(imagePath, "BASIC", 800);
+
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            cpu.Boot();
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+
+            RunUntilScreenContains(cpu, bus, "Ready", 50_000_000);
+
+            EnterProgramLines(cpu, bus, editor,
+            [
+                "CD \"FD0:\"",
+                "10 PRINT \"XDEL\"",
+                "SAVE \"XDEL\"",
+                "DIR",
+            ]);
+            RunUntil(cpu, bus, 50_000_000,
+                () => FindDirectoryRow(SnapshotScreen(bus.Vgc), "XDEL").Length > 0,
+                "DIR to list XDEL as a BASIC file");
+
+            string screen = SnapshotScreen(bus.Vgc);
+            string xdelRow = FindDirectoryRow(screen, "XDEL");
+            Assert.IsFalse(string.IsNullOrWhiteSpace(xdelRow),
+                $"DIR should list the BASIC program saved into the mounted fd0.ndi.\n{screen}");
+            Assert.IsFalse(xdelRow.TrimEnd().EndsWith(" 0", StringComparison.Ordinal),
+                $"DIR must not report a zero-byte saved BASIC file on a mounted NDI.\n{xdelRow}\n{screen}");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", previousNoAutoMount);
+        }
+    }
+
+    private static string FindDirectoryRow(string screen, string name)
+    {
+        foreach (string line in screen.Split('\n'))
+            if (line.Contains(name, StringComparison.Ordinal) &&
+                line.Contains("BAS", StringComparison.Ordinal))
+                return line;
+        return "";
     }
 
     // GSAVE / GLOAD round-trip through lib_call(FILES): FILE_GSAVE marshals the VGC

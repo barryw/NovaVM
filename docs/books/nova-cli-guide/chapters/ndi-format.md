@@ -122,12 +122,19 @@ Inactive entries have flags byte `0` and may be reused.
 | `GFX` | 4 | `.nvg` |
 | `DIR` | 5 | directories |
 | `FTH` | 6 | `.4th`, `.fth`, `.fs` |
+| `LOGO` | 7 | `.logo`, `.lgo` |
+| `PASCAL` | 8 | `.pas` |
+| `ASM` | 9 | `.s`, `.asm`, `.inc` |
 
 `GFX` is the internal NDI file type name for graphics. User-facing graphics
 assets should use `.nvg`.
 
 `FTH` is Forth source text. Nova's own Forth libraries use `.4th`; `.fth` and
 `.fs` are accepted for compatibility with common host-side Forth conventions.
+
+`ASM` is Nova assembly source text. `.s`, `.asm`, and `.inc` are treated as the
+same source file type so an assembly IDE can open all project source files with
+one type mask.
 
 ## Filenames
 

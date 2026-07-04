@@ -7,11 +7,17 @@ namespace e6502.Storage;
 public sealed class HostDirectoryDevice : IStorageDevice
 {
     private static readonly string[] SupportedExtensions =
-        [".bas", ".sid", ".bin", ".mid", ".nms", ".gfx", ".nvg", ".xram", ".4th", ".fth", ".fs", ".fr"];
+        [".bas", ".pas", ".logo", ".lgo", ".s", ".asm", ".inc", ".sid", ".bin", ".mid", ".nms", ".gfx", ".nvg", ".xram", ".4th", ".fth", ".fs", ".fr"];
 
     private static readonly Dictionary<string, NdiFileType> ExtToType = new(StringComparer.OrdinalIgnoreCase)
     {
         [".bas"] = NdiFileType.Bas,
+        [".pas"] = NdiFileType.Pascal,
+        [".logo"] = NdiFileType.Logo,
+        [".lgo"] = NdiFileType.Logo,
+        [".s"] = NdiFileType.Assembly,
+        [".asm"] = NdiFileType.Assembly,
+        [".inc"] = NdiFileType.Assembly,
         [".sid"] = NdiFileType.Sid,
         [".bin"] = NdiFileType.Bin,
         [".mid"] = NdiFileType.Mid,

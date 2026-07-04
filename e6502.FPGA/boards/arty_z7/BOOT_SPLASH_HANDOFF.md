@@ -36,7 +36,7 @@ Current local boot candidate:
 - Source is at marker `0xCAFE0013`. Normal splash behavior is restored: fade in, hold, fade out, restore text mode/full brightness/cursor, release the 6502.
 - `usb_init()` remains disabled because marker D got through the debug server and restarted before USB/audio/service-loop output.
 - JTAG visual diagnostic mode now only activates when `REBOOT_STATUS` has the debug-reset bit set. Normal POR/SD boot follows the SD mount/drive/audio/network path.
-- Vitis rebuilt marker 13 successfully and `make_boot_bin.sh` packaged it into `build/BOOT.bin` at 2026-06-24 02:37 UTC.
+- Vitis rebuilt marker 13 successfully and `nova arty make-boot-bin` packaged it into `build/BOOT.bin` at 2026-06-24 02:37 UTC.
 - `build/BOOT.bin` SHA-256: `7b214eceeab72242ce66ad42a3316b62a80e019ea7dc86245cee383aee0d4e46`.
 - Marker 13 has **not** been deployed to SD from this host. `lsblk` shows no removable/FAT Arty boot card mounted; the only new `sdp` device is a 10G ext4 virtual disk, so do not copy the image there.
 
@@ -55,7 +55,7 @@ Next action:
 - `boards/arty_z7/fio_bridge.sv` — PS↔FPGA AXI bridge. Added the VGC-memory **write** port (`dbg_vmem_we`/`dbg_vmem_wdata`) at AXI offset `0x2C` write: `{space[2:0]@25, addr[16:0]@8, data[7:0]}`. **(committed `4aef325`)**
 - `boards/arty_z7/arty_z7_full.sv` — wires `fb_vmem_we`/`fb_vmem_wdata` into `top.sv`'s `dbg_vmem_we`/`dbg_vmem_data`. **(committed `4aef325`)**
 - `rtl/vgc.sv` — `DISPLAY_DIM` applied at line ~3439 as `color × dim / 16` (smooth 16-level brightness on the final composited image). `dbg_vmem` write port (`dbg_vmem_gfx_we`, highest priority in the gfx port-A mux, ~line 3103).
-- `boards/arty_z7/make_boot_bin.sh` — packs FSBL + bitstream + `ps_fio.elf` → `build/BOOT.bin`. **(committed `3411097`)**
+- `nova arty make-boot-bin` — packs FSBL + bitstream + `ps_fio.elf` → `build/BOOT.bin`.
 - `test/test_vgc_dbg_gfx_write.sv` + `test/Makefile` — Verilator test proving the dbg_vmem gfx write. **(committed `4aef325`)**
 
 ## What was verified to actually WORK (over JTAG, where the elf definitely runs)
@@ -89,9 +89,9 @@ cd e6502.FPGA/boards/arty_z7
 # vivado -mode batch -source build_full.tcl                         # ~15 min
 # 1. Rebuild the PS app (regenerates platform incl FSBL):
 rm -rf /tmp/nova_fio_ws
-/tools/Xilinx/Vitis/2024.2/bin/vitis -s vitis/build_ps_fio.py     # ~3 min -> /tmp/nova_fio_ws/ps_fio/build/ps_fio.elf
+dotnet run --project ../../../e6502.Nova -c Release -- arty build-ps-fio --repo ../../..  # ~3 min -> /tmp/nova_fio_ws/ps_fio/build/ps_fio.elf
 # 2. Pack BOOT.bin (FSBL + build/ps_full/.../arty_z7_full.bit + ps_fio.elf):
-./make_boot_bin.sh                                                # -> build/BOOT.bin (~4.77 MB)
+dotnet run --project ../../../e6502.Nova -c Release -- arty make-boot-bin --repo ../../..  # -> build/BOOT.bin (~4.77 MB)
 # 3a. Push to the SD over the network (board running, on 192.168.1.213):
 cd /home/barry/NovaVM
 dotnet run --project e6502.Nova -c Release -- put e6502.FPGA/boards/arty_z7/build/BOOT.bin BOOT.bin --remote 192.168.1.213

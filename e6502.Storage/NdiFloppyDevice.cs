@@ -12,6 +12,12 @@ public sealed class NdiFloppyDevice : IStorageDevice
         new(StringComparer.OrdinalIgnoreCase)
         {
             [".bas"] = NdiFileType.Bas,
+            [".pas"] = NdiFileType.Pascal,
+            [".logo"] = NdiFileType.Logo,
+            [".lgo"] = NdiFileType.Logo,
+            [".s"] = NdiFileType.Assembly,
+            [".asm"] = NdiFileType.Assembly,
+            [".inc"] = NdiFileType.Assembly,
             [".sid"] = NdiFileType.Sid,
             [".bin"] = NdiFileType.Bin,
             [".mid"] = NdiFileType.Mid,

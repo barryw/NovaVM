@@ -4,9 +4,14 @@
 
 .include "editbuf.inc"
 .include "editui.inc"
+.include "nui.inc"
+.include "textsvc.inc"
 
 .ifndef EDITBUF_IMPLEMENTATION_INCLUDED
 EDITBUF_IMPLEMENTATION_INCLUDED = 1
+
+EDITBUF_STATUS_TICKS = 600
+EDITBUF_ALT_TIMEOUT_FRAMES = 15
 
 ; =====================================================================
 ; ZEROPAGE — editor working pointers
@@ -37,6 +42,10 @@ EDITBUF_BUFL:       .res 1
 EDITBUF_BUFH:       .res 1
 EDITBUF_CAPL:       .res 1
 EDITBUF_CAPH:       .res 1
+EDITBUF_UNDOBUFL:   .res 1
+EDITBUF_UNDOBUFH:   .res 1
+EDITBUF_REDOBUFL:   .res 1
+EDITBUF_REDOBUFH:   .res 1
 EDITBUF_LENL:       .res 1
 EDITBUF_LENH:       .res 1
 EDITBUF_TITLEL:     .res 1
@@ -53,6 +62,10 @@ EDITBUF_HILITE_VECL:.res 1
 EDITBUF_HILITE_VECH:.res 1
 EDITBUF_MENU_VECL:  .res 1
 EDITBUF_MENU_VECH:  .res 1
+EDITBUF_COMMAND_VECL:.res 1
+EDITBUF_COMMAND_VECH:.res 1
+EDITBUF_CHANGED_VECL:.res 1
+EDITBUF_CHANGED_VECH:.res 1
 
 ; --- state ---
 EDITBUF_RESULT:     .res 1
@@ -71,6 +84,17 @@ EB_CURCOL:          .res 1       ; computed cursor column
 EB_TOTAL_LINESL:    .res 1       ; cached total logical line count (16-bit)
 EB_TOTAL_LINESH:    .res 1
 EB_VSHIFT:          .res 1       ; 1=line inserted, $FF=line removed, 0=unknown
+EB_UNDOLENL:        .res 1
+EB_UNDOLENH:        .res 1
+EB_UNDOCURL:        .res 1
+EB_UNDOCURH:        .res 1
+EB_UNDOVALID:       .res 1
+EB_REDOLENL:        .res 1
+EB_REDOLENH:        .res 1
+EB_REDOCURL:        .res 1
+EB_REDOCURH:        .res 1
+EB_REDOVALID:       .res 1
+EB_REPLACE_CHANGED: .res 1
 
 ; --- render / nav scratch ---
 EB_ROW:             .res 1
@@ -105,21 +129,27 @@ EB_STATUS_NUML:     .res 1
 EB_STATUS_NUMH:     .res 1
 EB_BLT_HEIGHT:      .res 1
 EB_PROMPTLEN:       .res 1
+EB_FINDLEN:         .res 1
 EB_PROMPT_MSGL:     .res 1
 EB_PROMPT_MSGH:     .res 1
+EB_PROMPT_LABELL:   .res 1
+EB_PROMPT_LABELH:   .res 1
 
 EB_TITLEBUF:        .res 64
 EB_STATUSBUF:       .res 80
 EB_PROMPTBUF:       .res 32
+EB_FINDBUF:         .res 32
 
 ; --- HILITE hook scratch ---
 EDITBUF_HL_LEN:     .res 1
 EDITBUF_HL_COLORS:  .res 80
 
-; --- clipboard ---
-EDITBUF_CLIPLENL:   .res 1
-EDITBUF_CLIPLENH:   .res 1
-EDITBUF_CLIP:       .res EDITBUF_CLIP_CAP
+; --- transient status state (private; keep after exported hook ABI storage) ---
+EB_STATUS_TIMERL:   .res 1
+EB_STATUS_TIMERH:   .res 1
+EB_STATUS_LASTFRAME:.res 1
+EB_STATUS_ACTIVEL:  .res 1
+EB_STATUS_ACTIVEH:  .res 1
 
 ; =====================================================================
 ; CODE
@@ -129,6 +159,9 @@ EDITBUF_CLIP:       .res EDITBUF_CLIP_CAP
       .export editbuf_run
       .export editbuf_reset_state
       .export editbuf_dialog3
+      .exportzp EDITBUF_HL_PTR
+      .export EDITBUF_HL_LEN
+      .export EDITBUF_HL_COLORS
 
 ; ---------------------------------------------------------------------
 ; editbuf_reset_state — clear cursor/scroll/selection for a new session.
@@ -145,6 +178,14 @@ editbuf_reset_state:
       STZ   EDITBUF_SELACT
       STZ   EB_GOALCOL
       STZ   EB_VSHIFT
+      STZ   EB_UNDOVALID
+      STZ   EB_REDOVALID
+      STZ   EB_FINDLEN
+      STZ   EB_STATUS_TIMERL
+      STZ   EB_STATUS_TIMERH
+      STZ   EB_STATUS_ACTIVEL
+      STZ   EB_STATUS_ACTIVEH
+      JSR   textsvc_init
       JMP   editbuf_configure_scroll_window
 
 ; ---------------------------------------------------------------------
@@ -177,6 +218,7 @@ editbuf_run:
       JSR   editbuf_render
 
 @loop:
+      JSR   editbuf_status_tick
       LDA   VGC_CHARIN
       BEQ   @loop
       JSR   editbuf_dispatch_key
@@ -270,7 +312,22 @@ editbuf_dispatch_key:
       RTS
 
 editbuf_dispatch_command:
-      CMP   #EDITUI_CMD_SAVE
+      CMP   #EDITUI_CMD_NEW
+      BNE   :+
+      JSR   editbuf_do_host_command
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_OPEN
+      BNE   :+
+      JSR   editbuf_do_host_command
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_SAVE_AS
+      BNE   :+
+      JSR   editbuf_do_host_command
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_SAVE
       BNE   :+
       JSR   editbuf_do_save
       CLC
@@ -278,6 +335,16 @@ editbuf_dispatch_command:
 :     CMP   #EDITUI_CMD_QUIT
       BNE   :+
       JMP   editbuf_do_quit          ; propagates carry (set = exit)
+:     CMP   #EDITUI_CMD_UNDO
+      BNE   :+
+      JSR   editbuf_do_undo
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_REDO
+      BNE   :+
+      JSR   editbuf_do_redo
+      CLC
+      RTS
 :     CMP   #EDITUI_CMD_COPY
       BNE   :+
       JSR   editbuf_copy
@@ -303,9 +370,39 @@ editbuf_dispatch_command:
       JSR   editbuf_do_find
       CLC
       RTS
+:     CMP   #EDITUI_CMD_FIND_NEXT
+      BNE   :+
+      JSR   editbuf_do_find_next
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_REPLACE
+      BNE   :+
+      JSR   editbuf_do_replace
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_REPLACE_ALL
+      BNE   :+
+      JSR   editbuf_do_replace_all
+      CLC
+      RTS
 :     CMP   #EDITUI_CMD_GOTO_LINE
       BNE   :+
       JSR   editbuf_do_goto_line
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_BUFFER_NEXT
+      BNE   :+
+      JSR   editbuf_do_host_command
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_BUFFER_PREVIOUS
+      BNE   :+
+      JSR   editbuf_do_host_command
+      CLC
+      RTS
+:     CMP   #EDITUI_CMD_BUFFER_LIST
+      BNE   :+
+      JSR   editbuf_do_host_command
       CLC
       RTS
 :
@@ -313,7 +410,32 @@ editbuf_dispatch_command:
       RTS
 
 editbuf_key_to_command:
-      CMP   #EDITUI_KEY_CTRL_C
+      CMP   #EDITUI_KEY_CTRL_B
+      BNE   :+
+      LDA   #EDITUI_CMD_BUFFER_LIST
+      RTS
+:
+      CMP   #EDITUI_KEY_CTRL_N
+      BNE   :+
+      LDA   #EDITUI_CMD_NEW
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_O
+      BNE   :+
+      LDA   #EDITUI_CMD_OPEN
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_S
+      BNE   :+
+      LDA   #EDITUI_CMD_SAVE
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_Z
+      BNE   :+
+      LDA   #EDITUI_CMD_UNDO
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_Y
+      BNE   :+
+      LDA   #EDITUI_CMD_REDO
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_C
       BNE   :+
       LDA   #EDITUI_CMD_COPY
       RTS
@@ -329,25 +451,25 @@ editbuf_key_to_command:
       BNE   :+
       LDA   #EDITUI_CMD_SELECT_ALL
       RTS
+:     CMP   #EDITUI_KEY_CTRL_F
+      BNE   :+
+      LDA   #EDITUI_CMD_FIND
+      RTS
 :     CMP   #EDITUI_KEY_CTRL_G
       BNE   :+
       LDA   #EDITUI_CMD_GOTO_LINE
       RTS
-:     CMP   #EDITUI_KEY_CTRL_K
+:     CMP   #EDITUI_KEY_F3
       BNE   :+
-      JSR   editbuf_read_command_key
-      JSR   editbuf_normalize_command_key
-      CMP   #'s'
-      BNE   @none
-      LDA   #EDITUI_CMD_SAVE
+      LDA   #EDITUI_CMD_FIND_NEXT
       RTS
-:     CMP   #EDITUI_KEY_CTRL_Q
+:     CMP   #EDITUI_KEY_F6
       BNE   :+
-      JSR   editbuf_read_command_key
-      JSR   editbuf_normalize_command_key
-      CMP   #'f'
-      BNE   @none
-      LDA   #EDITUI_CMD_FIND
+      LDA   #EDITUI_CMD_BUFFER_NEXT
+      RTS
+:     CMP   #EDITUI_KEY_SHIFT_F6
+      BNE   :+
+      LDA   #EDITUI_CMD_BUFFER_PREVIOUS
       RTS
 :     CMP   #EDITUI_KEY_ALT_PREFIX
       BNE   @none
@@ -357,6 +479,10 @@ editbuf_key_to_command:
       BNE   :+
       LDA   #EDITUI_CMD_QUIT
       RTS
+:     CMP   #'0'
+      BNE   :+
+      LDA   #EDITUI_CMD_BUFFER_LIST
+      RTS
 :     JSR   editui_menu_open_hotkey
       RTS
 @none:
@@ -364,9 +490,18 @@ editbuf_key_to_command:
       RTS
 
 editbuf_read_command_key:
+      LDA   VGC_FRAME
+      CLC
+      ADC   #EDITBUF_ALT_TIMEOUT_FRAMES
+      STA   EB_T1
 @wait:
       LDA   VGC_CHARIN
-      BEQ   @wait
+      BNE   @got
+      LDA   VGC_FRAME
+      CMP   EB_T1
+      BNE   @wait
+      LDA   #0
+@got:
       RTS
 
 editbuf_normalize_command_key:
@@ -377,23 +512,87 @@ editbuf_normalize_command_key:
       ORA   #$20
 @done:
       RTS
-      CLC
-      RTS
 
 ; ---------------------------------------------------------------------
-; editbuf_apply_status — point EDITUI status at host string, or generate the
-; editor metadata bar.
+; editbuf_apply_status — show a transient message if EDITBUF_STATUS is set,
+; otherwise generate the editor metadata bar.
 ; ---------------------------------------------------------------------
 editbuf_apply_status:
       LDA   EDITBUF_STATUSL
       ORA   EDITBUF_STATUSH
-      BNE   @host
+      BNE   @request
+      LDA   EB_STATUS_TIMERL
+      ORA   EB_STATUS_TIMERH
+      BNE   @point
       JMP   editbuf_update_status
-@host:
+@request:
       LDA   EDITBUF_STATUSL
-      STA   EDITUI_STATUSL
+      STA   EB_STATUS_ACTIVEL
       LDA   EDITBUF_STATUSH
+      STA   EB_STATUS_ACTIVEH
+      STZ   EDITBUF_STATUSL
+      STZ   EDITBUF_STATUSH
+      LDA   #<EDITBUF_STATUS_TICKS
+      STA   EB_STATUS_TIMERL
+      LDA   #>EDITBUF_STATUS_TICKS
+      STA   EB_STATUS_TIMERH
+      LDA   VGC_FRAME
+      STA   EB_STATUS_LASTFRAME
+@point:
+      LDA   EB_STATUS_ACTIVEL
+      STA   EDITUI_STATUSL
+      LDA   EB_STATUS_ACTIVEH
       STA   EDITUI_STATUSH
+      RTS
+
+editbuf_status_tick:
+      LDA   EB_STATUS_TIMERL
+      ORA   EB_STATUS_TIMERH
+      BNE   :+
+      RTS
+:     LDA   VGC_FRAME
+      CMP   EB_STATUS_LASTFRAME
+      BNE   :+
+      RTS
+:     STA   EB_STATUS_LASTFRAME
+      LDA   EB_STATUS_TIMERL
+      BNE   @dec_lo
+      DEC   EB_STATUS_TIMERH
+@dec_lo:
+      DEC   EB_STATUS_TIMERL
+      LDA   EB_STATUS_TIMERL
+      ORA   EB_STATUS_TIMERH
+      BEQ   @expired
+      RTS
+@expired:
+      STZ   EDITBUF_STATUSL
+      STZ   EDITBUF_STATUSH
+      STZ   EB_STATUS_ACTIVEL
+      STZ   EB_STATUS_ACTIVEH
+      JSR   editbuf_update_status
+      JSR   editui_draw_status
+      JMP   editbuf_place_cursor
+
+editbuf_set_default_saved_status:
+      LDA   EDITBUF_STATUSL
+      ORA   EDITBUF_STATUSH
+      BNE   @done
+      LDA   #<editbuf_msg_saved
+      STA   EDITBUF_STATUSL
+      LDA   #>editbuf_msg_saved
+      STA   EDITBUF_STATUSH
+@done:
+      RTS
+
+editbuf_set_default_save_error_status:
+      LDA   EDITBUF_STATUSL
+      ORA   EDITBUF_STATUSH
+      BNE   @done
+      LDA   #<editbuf_msg_save_failed
+      STA   EDITBUF_STATUSL
+      LDA   #>editbuf_msg_save_failed
+      STA   EDITBUF_STATUSH
+@done:
       RTS
 
 editbuf_build_title:
@@ -771,6 +970,7 @@ editbuf_close_gap:
 ; editbuf_insert_char — insert A at cursor (if room). Marks dirty, re-renders.
 editbuf_insert_char:
       PHA
+      JSR   editbuf_capture_undo
       JSR   editbuf_clear_selection
       ; room? LEN < CAP
       JSR   editbuf_has_room
@@ -798,6 +998,7 @@ editbuf_insert_char:
 
 ; editbuf_newline — insert a \n at cursor, then auto-indent via hook.
 editbuf_newline:
+      JSR   editbuf_capture_undo
       JSR   editbuf_clear_selection
       JSR   editbuf_has_room
       BCC   @full
@@ -846,12 +1047,20 @@ editbuf_newline:
 editbuf_backspace:
       LDA   EDITBUF_SELACT
       BEQ   @nosel
+      JSR   editbuf_capture_undo
       JSR   editbuf_delete_selection
       JMP   editbuf_after_change
 @nosel:
       LDA   EDITBUF_CURL
       ORA   EDITBUF_CURH
+      BNE   @local
+      LDA   #EDITUI_CMD_WINDOW_PREVIOUS
+      JSR   editbuf_call_command
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
       BEQ   @done                 ; at start
+@local:
+      JSR   editbuf_capture_undo
       JSR   editbuf_cursor_dec
       ; peek the byte about to be removed (now at the cursor) to tell a line
       ; join (\n) from an in-line delete.
@@ -887,6 +1096,7 @@ editbuf_backspace:
 editbuf_delete:
       LDA   EDITBUF_SELACT
       BEQ   @nosel
+      JSR   editbuf_capture_undo
       JSR   editbuf_delete_selection
       JMP   editbuf_after_change
 @nosel:
@@ -896,6 +1106,7 @@ editbuf_delete:
       LDA   EDITBUF_CURH
       SBC   EDITBUF_LENH
       BCS   @done                 ; cursor >= len
+      JSR   editbuf_capture_undo
       ; peek the byte at the cursor to tell a line join (\n) from an in-line delete.
       LDX   EDITBUF_CURL
       LDA   EDITBUF_CURH
@@ -1036,67 +1247,43 @@ editbuf_select_all:
 ; editbuf_copy — copy selection (or nothing) into clipboard.
 editbuf_copy:
       LDA   EDITBUF_SELACT
-      BEQ   @done
+      BNE   :+
+      LDA   #1
+      RTS
+:
       JSR   editbuf_normalize_selection
-      ; count = end - start, clamp to clip cap
+      ; count = end - start
       SEC
       LDA   EB_SELENDL
       SBC   EB_SELSTARTL
-      STA   EDITBUF_CLIPLENL
+      STA   XMC_LENL
       LDA   EB_SELENDH
       SBC   EB_SELSTARTH
-      STA   EDITBUF_CLIPLENH
-      ; clamp cliplen to 255 (copy/paste iterate with an 8-bit index)
-      LDA   EDITBUF_CLIPLENH
-      BEQ   @copy
-      LDA   #255
-      STA   EDITBUF_CLIPLENL
-      STZ   EDITBUF_CLIPLENH
-@copy:
+      STA   XMC_LENH
+      LDA   XMC_LENL
+      ORA   XMC_LENH
+      BNE   :+
+      LDA   #1
+      RTS
+:
       ; src ptr = BUF + selstart
       LDA   EB_SELSTARTL
       STA   EB_SCRATCHL
       LDA   EB_SELSTARTH
       STA   EB_SCRATCHH
       JSR   editbuf_src_from_scratch
-      LDX   #0                    ; clip index (<=256)
-@cl:
-      CPX   EDITBUF_CLIPLENL
-      BNE   :+
-      LDA   EDITBUF_CLIPLENH
-      BEQ   @done
-:     LDY   #0
-      LDA   (EB_SRCL),Y
-      STA   EDITBUF_CLIP,X
-      INC   EB_SRCL
-      BNE   :+
-      INC   EB_SRCH
-:     INX
-      BNE   @cl
-@done:
-      RTS
+      LDA   EB_SRCL
+      STA   XMC_RAML
+      LDA   EB_SRCH
+      STA   XMC_RAMH
+      JMP   textsvc_clip_copy_from_ram
 
 editbuf_cut:
       LDA   EDITBUF_SELACT
       BEQ   @done
       JSR   editbuf_copy
-      ; Cut must remove exactly what reached the clipboard. editbuf_copy
-      ; normalized the selection (EB_SELSTART*) and clamped EDITBUF_CLIPLEN* to
-      ; the clipboard cap; re-anchor the selection to [start, start+cliplen) so a
-      ; selection larger than the cap is not deleted beyond what paste restores.
-      LDA   EB_SELSTARTL
-      STA   EB_SELL
-      LDA   EB_SELSTARTH
-      STA   EB_SELH
-      CLC
-      LDA   EB_SELSTARTL
-      ADC   EDITBUF_CLIPLENL
-      STA   EDITBUF_CURL
-      LDA   EB_SELSTARTH
-      ADC   EDITBUF_CLIPLENH
-      STA   EDITBUF_CURH
-      LDA   #1
-      STA   EDITBUF_SELACT
+      BNE   @done
+      JSR   editbuf_capture_undo
       JSR   editbuf_delete_selection
       JMP   editbuf_after_change
 @done:
@@ -1104,27 +1291,37 @@ editbuf_cut:
 
 ; editbuf_paste — insert clipboard bytes at cursor.
 editbuf_paste:
+      LDA   EDITBUF_SELACT
+      BNE   @snapshot
+      LDA   TEXTSVC_CLIPLENL
+      ORA   TEXTSVC_CLIPLENH
+      BNE   @snapshot
+      RTS
+@snapshot:
+      JSR   editbuf_capture_undo
       JSR   editbuf_clear_selection
-      LDA   EDITBUF_CLIPLENL
-      ORA   EDITBUF_CLIPLENH
-      BEQ   @done
+      LDA   TEXTSVC_CLIPLENL
+      ORA   TEXTSVC_CLIPLENH
+      BNE   :+
+      JMP   editbuf_after_change
+:
       ; room? LEN + cliplen <= CAP
       CLC
       LDA   EDITBUF_LENL
-      ADC   EDITBUF_CLIPLENL
+      ADC   TEXTSVC_CLIPLENL
       STA   EB_T0
       LDA   EDITBUF_LENH
-      ADC   EDITBUF_CLIPLENH
+      ADC   TEXTSVC_CLIPLENH
       STA   EB_T1
-      LDA   EB_T0
-      CMP   EDITBUF_CAPL
-      LDA   EB_T1
-      SBC   EDITBUF_CAPH
-      BCS   @done                 ; would overflow cap
+      LDA   EDITBUF_CAPL
+      CMP   EB_T0
+      LDA   EDITBUF_CAPH
+      SBC   EB_T1
+      BCC   @done                 ; would overflow cap
       ; make gap of cliplen at cursor
-      LDA   EDITBUF_CLIPLENL
+      LDA   TEXTSVC_CLIPLENL
       STA   EDITBUF_CNTL
-      LDA   EDITBUF_CLIPLENH
+      LDA   TEXTSVC_CLIPLENH
       STA   EDITBUF_CNTH
       JSR   editbuf_make_gap
       ; dst ptr = BUF + cursor
@@ -1139,28 +1336,30 @@ editbuf_paste:
       LDA   EDITBUF_BUFH
       ADC   EB_SCRATCHH
       STA   EB_DSTH
-      LDX   #0
-@pl:
-      CPX   EDITBUF_CLIPLENL
-      BNE   :+
-      LDA   EDITBUF_CLIPLENH
+      LDA   EB_DSTL
+      STA   XMC_RAML
+      LDA   EB_DSTH
+      STA   XMC_RAMH
+      JSR   textsvc_clip_fetch_to_ram
       BEQ   @adv
-:     LDA   EDITBUF_CLIP,X
-      LDY   #0
-      STA   (EB_DSTL),Y
-      INC   EB_DSTL
-      BNE   :+
-      INC   EB_DSTH
-:     INX
-      BNE   @pl
+      LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+      LDA   TEXTSVC_CLIPLENL
+      STA   EDITBUF_CNTL
+      LDA   TEXTSVC_CLIPLENH
+      STA   EDITBUF_CNTH
+      JSR   editbuf_close_gap
+      RTS
 @adv:
       ; cursor += cliplen
       CLC
       LDA   EDITBUF_CURL
-      ADC   EDITBUF_CLIPLENL
+      ADC   TEXTSVC_CLIPLENL
       STA   EDITBUF_CURL
       LDA   EDITBUF_CURH
-      ADC   EDITBUF_CLIPLENH
+      ADC   TEXTSVC_CLIPLENH
       STA   EDITBUF_CURH
       JSR   editbuf_mark_dirty
       JMP   editbuf_after_change
@@ -1175,7 +1374,15 @@ editbuf_move_left:
       JSR   editbuf_begin_move
       LDA   EDITBUF_CURL
       ORA   EDITBUF_CURH
+      BNE   @local
+      LDA   #EDITUI_CMD_WINDOW_PREVIOUS
+      JSR   editbuf_call_command
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
       BEQ   @done
+      JSR   editbuf_cursor_dec
+      JMP   editbuf_after_move
+@local:
       JSR   editbuf_cursor_dec
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
@@ -1188,12 +1395,13 @@ editbuf_move_right:
       CMP   EDITBUF_LENL
       LDA   EDITBUF_CURH
       SBC   EDITBUF_LENH
-      BCS   @done                 ; cursor >= len
+      BCC   @local
+      LDA   #EDITUI_CMD_WINDOW_NEXT
+      JMP   editbuf_do_host_command
+@local:
       JSR   editbuf_cursor_inc
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
-@done:
-      RTS
 
 editbuf_move_home:
       JSR   editbuf_begin_move
@@ -1253,7 +1461,10 @@ editbuf_move_up:
       JSR   editbuf_compute_linecol
       LDA   EB_CURLINEL
       ORA   EB_CURLINEH
-      BEQ   @done                 ; already on first line
+      BNE   @local
+      LDA   #EDITUI_CMD_WINDOW_PREVIOUS
+      JMP   editbuf_do_host_command
+@local:
       ; target line = curline - 1
       LDA   EB_CURLINEL
       STA   EB_SCRATCHL
@@ -1265,8 +1476,6 @@ editbuf_move_up:
 :     DEC   EB_SCRATCHL
       JSR   editbuf_goto_line_col
       JMP   editbuf_after_move
-@done:
-      RTS
 
 editbuf_move_down:
       JSR   editbuf_begin_move
@@ -1282,7 +1491,10 @@ editbuf_move_down:
       CMP   EDITBUF_LENL
       LDA   EB_SCRATCHH
       SBC   EDITBUF_LENH
-      BCS   @done                 ; no LF after cursor -> no line below
+      BCC   :+
+      LDA   #EDITUI_CMD_WINDOW_NEXT
+      JMP   editbuf_do_host_command
+:
       LDX   EB_SCRATCHL
       LDA   EB_SCRATCHH
       JSR   editbuf_ptr_from_off
@@ -1327,8 +1539,6 @@ editbuf_move_down:
       BNE   @adv
 @moved:
       JMP   editbuf_after_move_known
-@done:
-      RTS
 
 editbuf_page_up:
       JSR   editbuf_begin_move
@@ -1557,6 +1767,7 @@ editbuf_count_lines:
 ; After-change: recompute, adjust scroll, re-render, place cursor.
 ; =====================================================================
 editbuf_after_change:
+      JSR   editbuf_call_changed
       JSR   editbuf_recount_lines
       JSR   editbuf_compute_linecol
       JSR   editbuf_adjust_scroll
@@ -1654,6 +1865,7 @@ editbuf_after_move_known:
 ; the scroll didn't move, repaint ONLY the changed run [start..VIEW_COLS) of the
 ; cursor's row; otherwise a full repaint.
 editbuf_after_inline_edit:
+      JSR   editbuf_call_changed
       JSR   editbuf_compute_linecol
       LDA   EB_TOPLINEL
       STA   EB_PREVTOPL
@@ -1717,6 +1929,7 @@ editbuf_render_current_line:
 ; the view (a "local" repaint, not the whole screen), or full-repaint if the
 ; scroll moved.
 editbuf_after_change_down:
+      JSR   editbuf_call_changed
       JSR   editbuf_recount_lines
       JSR   editbuf_compute_linecol
       LDA   EB_TOPLINEL
@@ -2291,6 +2504,83 @@ editbuf_mark_dirty:
       RTS
 
 ; =====================================================================
+; Undo / redo snapshots
+; =====================================================================
+
+editbuf_capture_undo:
+      LDA   EDITBUF_BUFL
+      STA   XMC_RAML
+      LDA   EDITBUF_BUFH
+      STA   XMC_RAMH
+      LDA   EDITBUF_LENL
+      STA   XMC_LENL
+      LDA   EDITBUF_LENH
+      STA   XMC_LENH
+      LDA   EDITBUF_CURL
+      STA   TEXTSVC_CURL
+      LDA   EDITBUF_CURH
+      STA   TEXTSVC_CURH
+      JMP   textsvc_undo_capture
+
+editbuf_do_undo:
+      LDA   EDITBUF_BUFL
+      STA   XMC_RAML
+      LDA   EDITBUF_BUFH
+      STA   XMC_RAMH
+      LDA   EDITBUF_LENL
+      STA   XMC_LENL
+      LDA   EDITBUF_LENH
+      STA   XMC_LENH
+      LDA   EDITBUF_CURL
+      STA   TEXTSVC_CURL
+      LDA   EDITBUF_CURH
+      STA   TEXTSVC_CURH
+      JSR   textsvc_undo_apply
+      BNE   @done
+      LDA   TEXTSVC_REST_LENL
+      STA   EDITBUF_LENL
+      LDA   TEXTSVC_REST_LENH
+      STA   EDITBUF_LENH
+      LDA   TEXTSVC_REST_CURL
+      STA   EDITBUF_CURL
+      LDA   TEXTSVC_REST_CURH
+      STA   EDITBUF_CURH
+      STZ   EDITBUF_SELACT
+      JSR   editbuf_mark_dirty
+      JMP   editbuf_after_change
+@done:
+      RTS
+
+editbuf_do_redo:
+      LDA   EDITBUF_BUFL
+      STA   XMC_RAML
+      LDA   EDITBUF_BUFH
+      STA   XMC_RAMH
+      LDA   EDITBUF_LENL
+      STA   XMC_LENL
+      LDA   EDITBUF_LENH
+      STA   XMC_LENH
+      LDA   EDITBUF_CURL
+      STA   TEXTSVC_CURL
+      LDA   EDITBUF_CURH
+      STA   TEXTSVC_CURH
+      JSR   textsvc_redo_apply
+      BNE   @done
+      LDA   TEXTSVC_REST_LENL
+      STA   EDITBUF_LENL
+      LDA   TEXTSVC_REST_LENH
+      STA   EDITBUF_LENH
+      LDA   TEXTSVC_REST_CURL
+      STA   EDITBUF_CURL
+      LDA   TEXTSVC_REST_CURH
+      STA   EDITBUF_CURH
+      STZ   EDITBUF_SELACT
+      JSR   editbuf_mark_dirty
+      JMP   editbuf_after_change
+@done:
+      RTS
+
+; =====================================================================
 ; Find / goto-line requesters
 ; =====================================================================
 editbuf_do_find:
@@ -2298,13 +2588,122 @@ editbuf_do_find:
       STA   EB_PROMPT_MSGL
       LDA   #>editbuf_find_msg
       STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_find_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_find_label
+      STA   EB_PROMPT_LABELH
       JSR   editbuf_prompt_line
       BCC   @done
-      JSR   editbuf_find_text
+      JSR   editbuf_store_prompt_find
+      BCC   @done
+      JSR   editbuf_find_stored_wrapped_from_cursor
       BCC   @done
       JSR   editbuf_begin_move
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
+@done:
+      RTS
+
+editbuf_do_find_next:
+      LDA   EB_FINDLEN
+      BNE   :+
+      JMP   editbuf_do_find
+:     CLC
+      LDA   EDITBUF_CURL
+      ADC   #1
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      ADC   #0
+      STA   EB_SCRATCHH
+      JSR   editbuf_find_stored_from_scratch
+      BCS   @found
+      STZ   EB_SCRATCHL
+      STZ   EB_SCRATCHH
+      JSR   editbuf_find_stored_from_scratch
+      BCC   @done
+@found:
+      JSR   editbuf_begin_move
+      JSR   editbuf_update_goalcol
+      JMP   editbuf_after_move
+@done:
+      RTS
+
+editbuf_do_replace:
+      LDA   #<editbuf_replace_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_replace_msg
+      STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_find_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_find_label
+      STA   EB_PROMPT_LABELH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      JSR   editbuf_store_prompt_find
+      BCC   @done
+      LDA   #<editbuf_replace_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_replace_msg
+      STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_replace_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_replace_label
+      STA   EB_PROMPT_LABELH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      JSR   editbuf_find_stored_text
+      BCC   @done
+      JSR   editbuf_replace_match
+@done:
+      RTS
+
+editbuf_do_replace_all:
+      LDA   #<editbuf_replace_all_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_replace_all_msg
+      STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_find_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_find_label
+      STA   EB_PROMPT_LABELH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      JSR   editbuf_store_prompt_find
+      BCC   @done
+      LDA   #<editbuf_replace_all_msg
+      STA   EB_PROMPT_MSGL
+      LDA   #>editbuf_replace_all_msg
+      STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_replace_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_replace_label
+      STA   EB_PROMPT_LABELH
+      JSR   editbuf_prompt_line
+      BCC   @done
+      STZ   EB_REPLACE_CHANGED
+      STZ   EB_SCRATCHL
+      STZ   EB_SCRATCHH
+@loop:
+      JSR   editbuf_find_stored_from_scratch
+      BCC   @finish
+      LDA   EB_REPLACE_CHANGED
+      BNE   @replace
+      JSR   editbuf_capture_undo
+@replace:
+      JSR   editbuf_replace_match_raw
+      BCC   @finish
+      LDA   #1
+      STA   EB_REPLACE_CHANGED
+      LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+      BRA   @loop
+@finish:
+      LDA   EB_REPLACE_CHANGED
+      BEQ   @done
+      JSR   editbuf_mark_dirty
+      JMP   editbuf_after_change
 @done:
       RTS
 
@@ -2313,6 +2712,10 @@ editbuf_do_goto_line:
       STA   EB_PROMPT_MSGL
       LDA   #>editbuf_goto_msg
       STA   EB_PROMPT_MSGH
+      LDA   #<editbuf_goto_label
+      STA   EB_PROMPT_LABELL
+      LDA   #>editbuf_goto_label
+      STA   EB_PROMPT_LABELH
       JSR   editbuf_prompt_line
       BCC   @done
       JSR   editbuf_parse_goto_line
@@ -2327,107 +2730,101 @@ editbuf_do_goto_line:
 editbuf_prompt_line:
       STZ   EB_PROMPTLEN
       STZ   EB_PROMPTBUF
-      JSR   editbuf_prompt_begin
-@wait:
-      LDA   VGC_CHARIN
-      BEQ   @wait
-      CMP   #EDITUI_KEY_ESC
-      BEQ   @cancel
-      CMP   #EDITUI_KEY_ENTER
-      BEQ   @ok
-      CMP   #EDITUI_KEY_BACKSPACE
-      BEQ   @backspace
-      CMP   #$20
-      BCC   @wait
-      LDX   EB_PROMPTLEN
-      CPX   #31
-      BCS   @wait
-      STA   EB_PROMPTBUF,X
-      STA   VGC_CHAROUT
-      INX
-      STX   EB_PROMPTLEN
-      STZ   EB_PROMPTBUF,X
-      BRA   @wait
-@backspace:
-      LDX   EB_PROMPTLEN
-      BEQ   @wait
-      DEX
-      STX   EB_PROMPTLEN
-      STZ   EB_PROMPTBUF,X
-      TXA
-      CLC
-      ADC   #6
-      STA   VGC_CURSX
-      LDA   #' '
-      STA   VGC_CHAROUT
-      TXA
-      CLC
-      ADC   #6
-      STA   VGC_CURSX
-      BRA   @wait
+      JSR   nui_dialog_defaults
+      LDA   #14
+      STA   NUI_DIALOG_LEFT
+      LDA   #17
+      STA   NUI_DIALOG_TOP
+      LDA   #52
+      STA   NUI_DIALOG_WIDTH
+      LDA   #12
+      STA   NUI_DIALOG_HEIGHT
+      LDA   EB_PROMPT_MSGL
+      STA   NUI_TITLEL
+      LDA   EB_PROMPT_MSGH
+      STA   NUI_TITLEH
+      STZ   NUI_MSGL
+      STZ   NUI_MSGH
+      STZ   NUI_FOOTERL
+      STZ   NUI_FOOTERH
+      LDA   EB_PROMPT_LABELL
+      STA   NUI_INPUT_LABELL
+      LDA   EB_PROMPT_LABELH
+      STA   NUI_INPUT_LABELH
+      LDA   #<EB_PROMPTBUF
+      STA   NUI_INPUT_OUTL
+      LDA   #>EB_PROMPTBUF
+      STA   NUI_INPUT_OUTH
+      LDA   #32
+      STA   NUI_INPUT_OUT_MAX
+      JSR   nui_text_input
+      BNE   @cancel
+      LDA   NUI_RESULT
+      CMP   #NUI_RESULT_OK
+      BNE   @cancel
+      LDA   NUI_INPUT_OUT_LEN
+      STA   EB_PROMPTLEN
+      SEC
+      BRA   @restore
 @cancel:
       CLC
-      BRA   @restore
-@ok:
-      SEC
 @restore:
       PHP
+      JSR   editbuf_redraw_all
       JSR   editbuf_apply_status
       JSR   editui_draw_status
       JSR   editbuf_place_cursor
       PLP
       RTS
 
-editbuf_prompt_begin:
-      STZ   VTEXT_LEFT
-      LDA   #EDITUI_STATUS_ROW
-      STA   VTEXT_TOP
-      LDA   #EDITUI_SCREEN_COLS
-      STA   VTEXT_WIDTH
-      LDA   #1
-      STA   VTEXT_HEIGHT
-      STZ   VTEXT_CURX
-      STZ   VTEXT_CURY
-      LDA   #EDITUI_COLOR_STATUS
-      STA   VTEXT_COLOR
-      STZ   VTEXT_ATTR
-      STZ   VTEXT_FLAGS
-      LDA   #' '
-      STA   VTEXT_CHAR
-      JSR   vtext_clear_region
-
-      LDA   EB_PROMPT_MSGL
-      STA   EDITUI_PRINTL
-      LDA   EB_PROMPT_MSGH
-      STA   EDITUI_PRINTH
-      STZ   EDITUI_PRINTX
-      LDA   #EDITUI_STATUS_ROW
-      STA   EDITUI_PRINTY
-      LDA   #EDITUI_COLOR_STATUS
-      STA   VTEXT_COLOR
-      JSR   editui_print_ptr
-      LDA   #6
-      STA   VGC_CURSX
-      LDA   #EDITUI_STATUS_ROW
-      STA   VGC_CURSY
-      LDA   #1
-      STA   VGC_CURSEN
-      RTS
-
-; Search forward from the current cursor. Carry set on match, with cursor moved.
-editbuf_find_text:
+editbuf_store_prompt_find:
       LDA   EB_PROMPTLEN
       BNE   :+
       CLC
       RTS
-:     LDA   EDITBUF_CURL
+:     STA   EB_FINDLEN
+      LDX   #0
+@copy:
+      CPX   EB_FINDLEN
+      BEQ   @done
+      LDA   EB_PROMPTBUF,X
+      STA   EB_FINDBUF,X
+      INX
+      BRA   @copy
+@done:
+      SEC
+      RTS
+
+editbuf_find_stored_wrapped_from_cursor:
+      LDA   EDITBUF_CURL
       STA   EB_SCRATCHL
       LDA   EDITBUF_CURH
       STA   EB_SCRATCHH
+      JSR   editbuf_find_stored_from_scratch
+      BCS   @done
+      STZ   EB_SCRATCHL
+      STZ   EB_SCRATCHH
+      JSR   editbuf_find_stored_from_scratch
+@done:
+      RTS
+
+editbuf_find_stored_text:
+      LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+      JMP   editbuf_find_stored_from_scratch
+
+editbuf_find_stored_from_scratch:
+      LDA   EB_FINDLEN
+      BNE   :+
+      CLC
+      RTS
+:
 @outer:
       CLC
       LDA   EB_SCRATCHL
-      ADC   EB_PROMPTLEN
+      ADC   EB_FINDLEN
       STA   EB_T0
       LDA   EB_SCRATCHH
       ADC   #0
@@ -2440,10 +2837,10 @@ editbuf_find_text:
       JSR   editbuf_src_from_scratch
       LDY   #0
 @compare:
-      CPY   EB_PROMPTLEN
+      CPY   EB_FINDLEN
       BEQ   @found
       LDA   (EB_SRCL),Y
-      CMP   EB_PROMPTBUF,Y
+      CMP   EB_FINDBUF,Y
       BNE   @next
       INY
       BRA   @compare
@@ -2460,6 +2857,79 @@ editbuf_find_text:
       SEC
       RTS
 @not_found:
+      CLC
+      RTS
+
+editbuf_replace_match:
+      JSR   editbuf_capture_undo
+      JSR   editbuf_replace_match_raw
+      BCC   @done
+      JSR   editbuf_mark_dirty
+      JMP   editbuf_after_change
+@done:
+      RTS
+
+editbuf_replace_match_raw:
+      LDA   EB_FINDLEN
+      BNE   :+
+      CLC
+      RTS
+:     STZ   EDITBUF_SELACT
+      LDA   EB_PROMPTLEN
+      CMP   EB_FINDLEN
+      BCC   @size_ok
+      BEQ   @size_ok
+      SEC
+      SBC   EB_FINDLEN
+      STA   EB_T0                 ; growth = replacement - find
+      SEC
+      LDA   EDITBUF_CAPL
+      SBC   EDITBUF_LENL
+      STA   EB_T1                 ; available low (test buffers < 64 KB)
+      LDA   EDITBUF_CAPH
+      SBC   EDITBUF_LENH
+      BCC   @done
+      BNE   @size_ok
+      LDA   EB_T1
+      CMP   EB_T0
+      BCC   @done
+@size_ok:
+      LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+      LDA   EB_FINDLEN
+      STA   EDITBUF_CNTL
+      STZ   EDITBUF_CNTH
+      JSR   editbuf_close_gap
+      LDA   EB_PROMPTLEN
+      BEQ   @mark
+      STA   EDITBUF_CNTL
+      STZ   EDITBUF_CNTH
+      JSR   editbuf_make_gap
+      LDX   EDITBUF_CURL
+      LDA   EDITBUF_CURH
+      JSR   editbuf_ptr_from_off
+      LDY   #0
+@copy:
+      CPY   EB_PROMPTLEN
+      BEQ   @advance
+      LDA   EB_PROMPTBUF,Y
+      STA   (EB_PL),Y
+      INY
+      BRA   @copy
+@advance:
+      CLC
+      LDA   EDITBUF_CURL
+      ADC   EB_PROMPTLEN
+      STA   EDITBUF_CURL
+      LDA   EDITBUF_CURH
+      ADC   #0
+      STA   EDITBUF_CURH
+@mark:
+      SEC
+      RTS
+@done:
       CLC
       RTS
 
@@ -2546,11 +3016,45 @@ editbuf_parse_goto_line:
 ; =====================================================================
 ; Save / quit
 ; =====================================================================
+editbuf_do_host_command:
+      JSR   editbuf_call_command
+      JSR   editbuf_clamp_cursor_len
+      JSR   editbuf_build_title
+      JSR   editbuf_compute_linecol
+      JSR   editbuf_adjust_scroll
+      JSR   editbuf_recount_lines
+      JSR   editbuf_redraw_all
+      JSR   editbuf_apply_status
+      JSR   editui_draw_status
+      JMP   editbuf_place_cursor
+
+editbuf_clamp_cursor_len:
+      LDA   EDITBUF_LENL
+      CMP   EDITBUF_CURL
+      LDA   EDITBUF_LENH
+      SBC   EDITBUF_CURH
+      BCS   @done
+      LDA   EDITBUF_LENL
+      STA   EDITBUF_CURL
+      LDA   EDITBUF_LENH
+      STA   EDITBUF_CURH
+@done:
+      RTS
+
 editbuf_do_save:
       JSR   editbuf_call_save        ; A = status
+      STA   EB_T0
+      CMP   #EDITBUF_SAVE_OK
+      BNE   :+
+      JSR   editbuf_set_default_saved_status
+      STZ   EDITUI_DIRTY
+      JSR   editbuf_call_changed
+      BRA   @after_status
+:     JSR   editbuf_set_default_save_error_status
+@after_status:
+      LDA   EB_T0
       CMP   #EDITBUF_SAVE_OK
       BNE   @notok
-      STZ   EDITUI_DIRTY
       JSR   editui_refresh_dirty
 @notok:
       JSR   editbuf_apply_status
@@ -2581,12 +3085,14 @@ editbuf_do_quit:
       CMP   #EDITBUF_SAVE_OK
       BNE   @save_failed
       STZ   EDITUI_DIRTY
+      JSR   editbuf_call_changed
       LDA   #EDITBUF_EXIT_SAVED
       STA   EDITBUF_RESULT
       SEC
       RTS
 @save_failed:
       ; stay in editor showing the host's status message
+      JSR   editbuf_set_default_save_error_status
       JSR   editbuf_redraw_all
       JSR   editbuf_apply_status
       JSR   editui_draw_status
@@ -2604,33 +3110,177 @@ editbuf_redraw_all:
       JMP   editbuf_render
 
 editbuf_dialog3:
+      JSR   nui_dialog_defaults
+      LDA   #14
+      STA   NUI_DIALOG_LEFT
+      LDA   #17
+      STA   NUI_DIALOG_TOP
+      LDA   #52
+      STA   NUI_DIALOG_WIDTH
+      LDA   #12
+      STA   NUI_DIALOG_HEIGHT
+      LDA   #<editbuf_dlg_title
+      STA   NUI_TITLEL
+      LDA   #>editbuf_dlg_title
+      STA   NUI_TITLEH
       LDA   #<editbuf_dlg_msg
-      STA   EB_PROMPT_MSGL
+      STA   NUI_MSGL
       LDA   #>editbuf_dlg_msg
-      STA   EB_PROMPT_MSGH
-      JSR   editbuf_prompt_begin
+      STA   NUI_MSGH
+      STZ   NUI_FOOTERL
+      STZ   NUI_FOOTERH
+      JSR   nui_show_dialog
+      BNE   @cancel
+      STZ   EB_PROMPTLEN
+      JSR   editbuf_dialog3_render
 @wait:
-      LDA   VGC_CHARIN
-      BEQ   @wait
+      JSR   nui_read_key
       CMP   #EDITUI_KEY_ENTER
-      BEQ   @exit
+      BEQ   @select
       CMP   #EDITUI_KEY_ESC
       BEQ   @cancel
+      CMP   #NUI_KEY_TAB
+      BEQ   @next
+      CMP   #NUI_KEY_RIGHT
+      BEQ   @next
+      CMP   #NUI_KEY_LEFT
+      BEQ   @prev
       ORA   #$20
+      CMP   #'s'
+      BEQ   @save
       CMP   #'e'
       BEQ   @exit
-      CMP   #'s'
-      BNE   :+
-      LDA   #1
-      BRA   @done
-:     CMP   #'c'
+      CMP   #'d'
+      BEQ   @exit
+      CMP   #'c'
       BNE   @wait
 @cancel:
       LDA   #2
-      BRA   @done
+      RTS
+@next:
+      INC   EB_PROMPTLEN
+      LDA   EB_PROMPTLEN
+      CMP   #3
+      BCC   :+
+      STZ   EB_PROMPTLEN
+:     JSR   editbuf_dialog3_render
+      BRA   @wait
+@prev:
+      LDA   EB_PROMPTLEN
+      BNE   :+
+      LDA   #3
+:     DEC   A
+      STA   EB_PROMPTLEN
+      JSR   editbuf_dialog3_render
+      BRA   @wait
+@select:
+      LDA   EB_PROMPTLEN
+      BEQ   @save
+      CMP   #1
+      BEQ   @exit
+      BRA   @cancel
+@save:
+      LDA   #1
+      RTS
 @exit:
       LDA   #0
+      RTS
+
+editbuf_dialog3_render:
+      JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_SHADOW
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #8
+      STA   VTEXT_CURY
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #7
+      STA   VTEXT_CURX
+      LDA   #<editbuf_dlg_save_shadow
+      LDY   #>editbuf_dlg_save_shadow
+      LDX   #6
+      JSR   vtext_put_run
+      BEQ   :+
+      JMP   @done
+:     LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #21
+      STA   VTEXT_CURX
+      LDA   #<editbuf_dlg_discard_shadow
+      LDY   #>editbuf_dlg_discard_shadow
+      LDX   #9
+      JSR   vtext_put_run
+      BEQ   :+
+      JMP   @done
+:     LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #38
+      STA   VTEXT_CURX
+      LDA   #<editbuf_dlg_cancel_shadow
+      LDY   #>editbuf_dlg_cancel_shadow
+      LDX   #8
+      JSR   vtext_put_run
+      BEQ   :+
+      JMP   @done
+:     LDA   #NUI_TEXT_BUTTON
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #7
+      STA   VTEXT_CURY
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #6
+      STA   VTEXT_CURX
+      LDA   #0
+      JSR   editbuf_dialog3_attr
+      LDA   #<editbuf_dlg_save
+      LDY   #>editbuf_dlg_save
+      LDX   #6
+      JSR   vtext_put_run
+      BEQ   :+
+      JMP   @done
+:     STZ   VTEXT_ATTR
+      LDA   #NUI_TEXT_BUTTON
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #20
+      STA   VTEXT_CURX
+      LDA   #1
+      JSR   editbuf_dialog3_attr
+      LDA   #<editbuf_dlg_discard
+      LDY   #>editbuf_dlg_discard
+      LDX   #9
+      JSR   vtext_put_run
+      BEQ   :+
+      JMP   @done
+:     STZ   VTEXT_ATTR
+      LDA   #NUI_TEXT_BUTTON
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   #37
+      STA   VTEXT_CURX
+      LDA   #2
+      JSR   editbuf_dialog3_attr
+      LDA   #<editbuf_dlg_cancel
+      LDY   #>editbuf_dlg_cancel
+      LDX   #8
+      JSR   vtext_put_run
 @done:
+      STZ   VTEXT_ATTR
+      RTS
+
+editbuf_dialog3_attr:
+      CMP   EB_PROMPTLEN
+      BNE   :+
+      LDA   #VTEXT_ATTR_REVERSE
+      STA   VTEXT_ATTR
+      RTS
+:     STZ   VTEXT_ATTR
       RTS
 
 ; =====================================================================
@@ -2666,10 +3316,27 @@ editbuf_init_vectors:
       STA   EDITBUF_MENU_VECL
       LDA   #>editbuf_default_menu
       STA   EDITBUF_MENU_VECH
+:     LDA   EDITBUF_COMMAND_VECL
+      ORA   EDITBUF_COMMAND_VECH
+      BNE   :+
+      LDA   #<editbuf_default_command
+      STA   EDITBUF_COMMAND_VECL
+      LDA   #>editbuf_default_command
+      STA   EDITBUF_COMMAND_VECH
+:     LDA   EDITBUF_CHANGED_VECL
+      ORA   EDITBUF_CHANGED_VECH
+      BNE   :+
+      LDA   #<editbuf_default_changed
+      STA   EDITBUF_CHANGED_VECL
+      LDA   #>editbuf_default_changed
+      STA   EDITBUF_CHANGED_VECH
 :     RTS
 
 editbuf_call_menu:
       JMP   (EDITBUF_MENU_VECL)
+
+editbuf_call_command:
+      JMP   (EDITBUF_COMMAND_VECL)
 
 editbuf_call_save:
       JMP   (EDITBUF_SAVE_VECL)
@@ -2680,11 +3347,16 @@ editbuf_call_indent:
 editbuf_call_hilite:
       JMP   (EDITBUF_HILITE_VECL)
 
+editbuf_call_changed:
+      JMP   (EDITBUF_CHANGED_VECL)
+
 ; default hook bodies (host may point vectors here)
       .export editbuf_default_save
       .export editbuf_default_indent
       .export editbuf_default_hilite
       .export editbuf_default_menu
+      .export editbuf_default_command
+      .export editbuf_default_changed
 editbuf_default_save:
       LDA   #EDITBUF_SAVE_OK
       RTS
@@ -2697,6 +3369,10 @@ editbuf_default_hilite:
 ; EDITBUF_MENU_VECL/H at its own routine which calls editui_set_menus (and,
 ; later, the per-item enable/disable API) to tailor the menu for its tools.
 editbuf_default_menu:
+      RTS
+editbuf_default_command:
+      RTS
+editbuf_default_changed:
       RTS
 
 ; =====================================================================
@@ -2714,15 +3390,43 @@ editbuf_status_lines:
       .byte " L:", 0
 editbuf_status_type:
       .byte " T:", 0
+editbuf_msg_saved:
+      .byte "Saved", 0
+editbuf_msg_save_failed:
+      .byte "Save failed", 0
 editbuf_pow10_lo:
       .byte <10000, <1000, <100, <10, <1
 editbuf_pow10_hi:
       .byte >10000, >1000, >100, >10, >1
 editbuf_find_msg:
       .byte "Find", 0
+editbuf_find_label:
+      .byte "Text:   "
+editbuf_replace_msg:
+      .byte "Replace", 0
+editbuf_replace_all_msg:
+      .byte "Replace All", 0
+editbuf_replace_label:
+      .byte "With:   "
 editbuf_goto_msg:
       .byte "Ln", 0
+editbuf_goto_label:
+      .byte "Line:   "
+editbuf_dlg_title:
+      .byte "Modified", 0
 editbuf_dlg_msg:
-      .byte "Mod: E exit S save C cancel", 0
+      .byte "Save changes before closing?", 0
+editbuf_dlg_save:
+      .byte " Save "
+editbuf_dlg_discard:
+      .byte " Discard "
+editbuf_dlg_cancel:
+      .byte " Cancel "
+editbuf_dlg_save_shadow:
+      .byte "      "
+editbuf_dlg_discard_shadow:
+      .byte "         "
+editbuf_dlg_cancel_shadow:
+      .byte "        "
 
 .endif

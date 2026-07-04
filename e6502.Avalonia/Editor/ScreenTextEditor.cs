@@ -5,6 +5,38 @@ using KDS.e6502;
 
 namespace e6502.Avalonia.Editor;
 
+public enum EditorMode { Edit, FileBrowser, Running, Debug }
+
+internal sealed class ScreenTextEditorBuffer
+{
+    public ScreenTextEditorBuffer(string filename, IEnumerable<string> lines)
+        : this(filename, lines.ToList(), 0, 0, 0, 0, false, true)
+    {
+    }
+
+    public ScreenTextEditorBuffer(string filename, List<string> lines, int cursorLine, int cursorCol,
+                                  int scrollY, int scrollX, bool modified, bool insertMode)
+    {
+        Filename = filename;
+        Lines = lines.Count == 0 ? [""] : lines;
+        CursorLine = cursorLine;
+        CursorCol = cursorCol;
+        ScrollY = scrollY;
+        ScrollX = scrollX;
+        Modified = modified;
+        InsertMode = insertMode;
+    }
+
+    public string Filename { get; }
+    public List<string> Lines { get; }
+    public int CursorLine { get; }
+    public int CursorCol { get; }
+    public int ScrollY { get; }
+    public int ScrollX { get; }
+    public bool Modified { get; }
+    public bool InsertMode { get; }
+}
+
 /// <summary>
 /// Abstract base class for full-screen text editors rendered to VGC character/color RAM.
 /// Owns the text buffer, cursor state, movement, rendering, screen save/restore,
@@ -48,7 +80,7 @@ public abstract class ScreenTextEditor
     protected const byte BoxMR = 0xB9;
 
     // ── State ────────────────────────────────────────────────────────────────
-    private readonly List<string> _lines = new() { "" };
+    private List<string> _lines = new() { "" };
     private int _cursorLine;
     private int _cursorCol;
     private int _scrollY;
@@ -159,6 +191,16 @@ public abstract class ScreenTextEditor
 
     internal void ClearSelection() => _selActive = false;
 
+    internal void SelectAll()
+    {
+        _selAnchorLine = 0;
+        _selAnchorCol = 0;
+        _cursorLine = _lines.Count - 1;
+        _cursorCol = _lines[^1].Length;
+        _selActive = _lines.Count > 1 || _cursorCol > 0;
+        EnsureVisible();
+    }
+
     internal void SetCursor(int line, int col)
     {
         _cursorLine = Math.Clamp(line, 0, _lines.Count - 1);
@@ -185,6 +227,25 @@ public abstract class ScreenTextEditor
         _scrollX = 0;
         SetModified(false);
         OnLinesReset();
+    }
+
+    internal ScreenTextEditorBuffer CaptureBufferState() =>
+        new(_currentFilename, _lines, _cursorLine, _cursorCol, _scrollY, _scrollX, _modified, _insertMode);
+
+    internal void RestoreBufferState(ScreenTextEditorBuffer buffer)
+    {
+        _lines = buffer.Lines.Count == 0 ? [""] : buffer.Lines;
+        _currentFilename = buffer.Filename;
+        _cursorLine = Math.Clamp(buffer.CursorLine, 0, _lines.Count - 1);
+        _cursorCol = Math.Clamp(buffer.CursorCol, 0, _lines[_cursorLine].Length);
+        _scrollY = Math.Clamp(buffer.ScrollY, 0, Math.Max(0, _lines.Count - 1));
+        _scrollX = Math.Max(0, buffer.ScrollX);
+        _insertMode = buffer.InsertMode;
+        _selActive = false;
+        _modified = buffer.Modified;
+        EnsureVisible();
+        OnLinesReset();
+        if (IsActive) Redraw();
     }
 
     // ── Activation ───────────────────────────────────────────────────────────
@@ -518,10 +579,13 @@ public abstract class ScreenTextEditor
         });
     }
 
-    internal void FindNext(string term)
+    internal bool FindNext(string term)
     {
+        if (string.IsNullOrEmpty(term))
+            return false;
+
         int startLine = _cursorLine;
-        int startCol = _cursorCol + 1;
+        int startCol = _cursorCol;
 
         for (int i = 0; i < _lines.Count; i++)
         {
@@ -539,10 +603,50 @@ public abstract class ScreenTextEditor
                 EnsureVisible();
                 RedrawCode();
                 RedrawStatusBar();
-                return;
+                return true;
             }
         }
         ShowMessage("Not found: " + term, true);
+        return false;
+    }
+
+    internal void StartReplace()
+    {
+        StartPrompt("Replace: ", term =>
+        {
+            if (string.IsNullOrEmpty(term))
+                return;
+
+            StartPrompt("With: ", replacement => ReplaceNext(term, replacement));
+        });
+    }
+
+    internal bool ReplaceNext(string term, string replacement)
+    {
+        if (string.IsNullOrEmpty(term) || !FindNext(term))
+            return false;
+
+        DeleteSelection();
+        bool inserted = false;
+        foreach (char ch in replacement)
+        {
+            if (ch == '\n')
+            {
+                InsertNewline();
+                inserted = true;
+            }
+            else if (!char.IsControl(ch))
+            {
+                InsertChar(ch);
+                inserted = true;
+            }
+        }
+        if (!inserted)
+        {
+            RedrawCode();
+            RedrawStatusBar();
+        }
+        return true;
     }
 
     internal void StartGoToLine()
@@ -1087,6 +1191,8 @@ public abstract class ScreenTextEditor
         NdiFileType.Gfx => ".gfx",
         NdiFileType.Forth => ".4th",
         NdiFileType.Logo => ".logo",
+        NdiFileType.Pascal => ".pas",
+        NdiFileType.Assembly => ".s",
         _ => ""
     };
 
@@ -1403,11 +1509,19 @@ public abstract class ScreenTextEditor
         {
             switch (key)
             {
+                case Key.A:
+                    SelectAll();
+                    RedrawCode();
+                    RedrawStatusBar();
+                    return true;
                 case Key.Q:
                     RequestExit();
                     return true;
                 case Key.F:
                     StartFind();
+                    return true;
+                case Key.R:
+                    StartReplace();
                     return true;
                 case Key.G:
                     StartGoToLine();
@@ -1562,8 +1676,13 @@ public abstract class ScreenTextEditor
                 RedrawStatusBar();
                 return true;
 
-            // 9. F3 — file browser
+            // 9. F3 — find next if a search is active, otherwise file browser
             case Key.F3:
+                if (!string.IsNullOrEmpty(_lastSearchTerm))
+                {
+                    FindNext(_lastSearchTerm);
+                    return true;
+                }
                 OpenFileBrowser();
                 return true;
         }

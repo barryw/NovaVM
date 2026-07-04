@@ -288,6 +288,7 @@ __pycache__/
 # Local agent/editor state
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+.tmp-home/
 
 # macOS/Swift local build artifacts
 .DS_Store
@@ -303,6 +304,10 @@ examples/novaz/dist/
 runtime/asm/build/
 examples/novaz/projects/*/STORY.BIN
 examples/novaz/projects/*/PICS.BLB
+software/examples/novaz/build/
+software/examples/novaz/dist/
+software/examples/novaz/projects/*/STORY.BIN
+software/examples/novaz/projects/*/PICS.BLB
 
 # Copyrighted Infocom material must never be committed. The NovaZ collection
 # images live under examples/novaz/dist/ (ignored above); these rules block the
@@ -356,8 +361,18 @@ modules/**/*.nmod
 assembly/apps/**/*.bin
 runtime/asm/*.bin
 runtime/asm/build/
+software/languages/*/*.bin
+software/languages/*/*.BIN
+software/modules/**/*.bin
+software/modules/**/*.nmod
+software/assembly/apps/**/*.bin
+software/runtime/asm/*.bin
+software/runtime/asm/build/
 e6502.Avalonia/Resources/*.bin
+e6502.Avalonia/Resources/*.BIN
 !e6502.Avalonia/Resources/cp437.bin
+!e6502.Avalonia/Resources/petscii_upper.bin
+!e6502.Avalonia/Resources/petscii_lower.bin
 e6502.CLI/Resources/*.bin
 e6502.FPGA/rom/ehbasic.bin
 e6502.FPGA/rom/extension.bin

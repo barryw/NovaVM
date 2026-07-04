@@ -58,12 +58,14 @@ during the copy → atomic. `ext_rom` = bank-1 dual-clock `dpram_dc`, mapped at 
 
 - **Verilator gate (fast):** `cd e6502.FPGA && make -C test test_sdram_stream` (+ `test_page_dma`,
   `test_page_in_top`, `test_xram_sdram`, `test_sdram_loopback`). All green at `b339d49`.
-- **Synth (17 min, beast):** `tools/beast-synth.sh bitstream <label>` — **set `NEXTPNR_SEED=3`**
-  for the current sdram.v. Timing gate is on; never ship a failing one.
+- **Synth (17 min):** `make -C e6502.FPGA/boards/ulx3s bitstream` — set
+  `NEXTPNR_SEED=3` for the current sdram.v when reproducing this handoff.
+  Timing gate is on; never ship a failing one.
 - **Flash:** `openFPGALoader --board ulx3s -f --verify <bit>`. If FTDI is busy (`-6`), physically
   replug USB and retry.
-- **HW page-in regression test:** `python3 tools/run-page-in-hardware-smoke.py --host 192.168.1.65`
-  → expects PASS / checksum 57344. **Use this to verify any future stream/page_dma change on HW.**
+- **HW page-in regression:** the old Python smoke wrapper has been retired.
+  Use the Nova CLI VM/debug commands and the FPGA test targets above when
+  verifying future stream/page_dma changes on hardware.
 
 ---
 

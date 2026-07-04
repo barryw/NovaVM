@@ -7,8 +7,8 @@ NDI is the disk image format. Nova is the CLI.
 
 This guide is written for someone trying to get useful work done without
 reverse-engineering the code. It covers the implemented commands, their
-parameters, the paths they touch, and examples that are exercised by
-`tools/test-nova-cli-doc-examples.py`.
+parameters, the paths they touch, and runnable examples for the supported CLI
+surface.
 
 ## Quick Start
 
@@ -113,16 +113,16 @@ defaults to NativeAOT and produces the binary users should run.
 Publish a single NativeAOT binary for the current machine:
 
 ```bash
-tools/publish-nova-cli.sh
+nova publish
 ```
 
 Publish for a specific runtime:
 
 ```bash
-tools/publish-nova-cli.sh osx-arm64
-tools/publish-nova-cli.sh linux-x64
-tools/publish-nova-cli.sh linux-arm64
-tools/publish-nova-cli.sh win-x64
+nova publish osx-arm64
+nova publish linux-x64
+nova publish linux-arm64
+nova publish win-x64
 ```
 
 NativeAOT output paths:
@@ -172,6 +172,9 @@ The CLI infers local NDI file type from extension:
 | Extension | NDI Type | Notes |
 | --- | --- | --- |
 | `.bas` | `BAS` | Tokenized when imported with `--tokenize` |
+| `.pas` | `PASCAL` | NovaPascal source text |
+| `.logo`, `.lgo` | `LOGO` | NovaLogo source text |
+| `.s`, `.asm`, `.inc` | `ASM` | Nova assembly source text |
 | `.sid` | `SID` | SID music file |
 | `.bin` | `BIN` | Binary program/data |
 | `.mid`, `.midi` | `MID` | Compiled to `.nms` first |
@@ -183,21 +186,71 @@ The CLI infers local NDI file type from extension:
 `GFX` is the internal NDI file type name for graphics. User-facing graphics
 assets should use `.nvg`.
 
-## Tested Examples
+## Local Conversion Commands
 
-The examples in this guide are intended to be executable. Run the local image
-and remote-command documentation smoke test with:
+Build helpers that used to live as standalone scripts are exposed through
+`nova convert`.
+
+Convert one 16-bit hex value per line into a little-endian binary file:
 
 ```bash
-tools/test-nova-cli-doc-examples.py
+nova convert hex16-to-bin e6502.FPGA/rom/f6581_curve.hex build/f6581_curve.bin
 ```
 
-The test creates temporary NDI images, imports BASIC, binary, MIDI, and NVG
-files, validates image state, and runs remote commands against a local
-NovaHost-compatible mock server.
+Embed a binary file as a C header:
 
-Remote examples using `192.168.1.65` are the same command shapes. Replace that
-host with your board's IP address.
+```bash
+nova convert bin-header software/languages/ehbasic/basic.bin build/basic_rom.h BASIC_ROM
+```
+
+## Code Generation Commands
+
+Generated build artifacts are produced through `nova codegen`.
+
+```bash
+nova codegen tokens software/languages/ehbasic/basic.asm -o software/languages/ehbasic/tokens.json
+nova codegen novavm-inc e6502.Avalonia/Hardware/VgcConstants.cs software/languages/ehbasic/basic.sym -o software/runtime/asm/novavm.inc
+nova codegen runtime-abi <sources...> --sym software/languages/ehbasic/basic.sym --json software/languages/ehbasic/runtime_labels.json --md docs/assembly/runtime-labels.md --asm software/runtime/asm/runtime_labels.inc
+nova codegen ndk-reference --runtime-dir software/runtime/asm --tex docs/books/ndk-reference/generated/library-reference.tex --json docs/books/ndk-reference/generated/ndk-api.json
+```
+
+Local browser/demo assets are also built through `nova`, not standalone helper
+scripts:
+
+```sh
+nova build browser-rust-core
+nova docs showcase-demo
+nova docs fun-n-games
+```
+
+`nova build browser-rust-core` builds the browser WASM core and copies the ROM,
+font, and module assets into `e6502.Browser/wwwroot/rust`. `nova docs
+showcase-demo` rebuilds `docs/programs/demo.ndi`.
+
+## CI Maintenance Commands
+
+CI bootstrap behavior is also owned by the Nova CLI:
+
+```sh
+nova ci install-linux-deps build
+nova ci install-linux-deps release
+nova ci install-macos-cc65
+nova ci mint-github-token
+```
+
+`nova ci install-linux-deps` installs the pinned Linux build or release package
+set used by Woodpecker, including a w65c02-capable cc65 when the system `ca65`
+is too old. `nova ci install-macos-cc65` self-provisions the same pinned cc65
+on the macOS local runner. `nova ci mint-github-token` mints the short-lived
+GitHub App installation token used by CI upload and private dependency fetch
+steps.
+
+The Makefiles call these commands directly and list the `nova` CLI sources as
+prerequisites, so generator changes force regenerated outputs.
+
+The script inventory is intentionally tiny and documented in
+`docs/script-inventory.md`; repo operations should be `nova` commands, not
+new shell or Python files.
 
 ## Local Image Commands
 
@@ -718,8 +771,31 @@ nova vm key <key>
   return).
 - `enter` types the text and appends a carriage return.
 - `key` sends one named key (`ENTER`, `BACKSPACE`, `TAB`, `ESC`, `SPACE`,
-  arrows `LEFT`/`RIGHT`/`UP`/`DOWN`, `HOME`, `END`, `DELETE`, `CTRL-C`, or a
-  single character).
+  arrows `LEFT`/`RIGHT`/`UP`/`DOWN`, `HOME`, `END`, `DELETE`,
+  `CTRL-A` through `CTRL-Z`, `ALT-A` through `ALT-Z`, or a single character).
+
+### Editor demo smoke test
+
+The live editor smoke test uses the same debug protocol as `nova vm`, so it can
+target the Avalonia emulator or the Arty hardware. Start the standalone editor
+demo first, then run:
+
+```bash
+NOVA_EDITOR_SMOKE_HOST=127.0.0.1 \
+  dotnet test e6502UnitTests/e6502UnitTests.csproj -c Release --no-build \
+  --filter EditorRemoteSmokeTests
+```
+
+For Arty, point the test at the board:
+
+```bash
+NOVA_EDITOR_SMOKE_HOST=192.168.1.188 \
+  dotnet test e6502UnitTests/e6502UnitTests.csproj -c Release --no-build \
+  --filter EditorRemoteSmokeTests
+```
+
+`NOVA_EDITOR_SMOKE_PORT` overrides the debug port. Without it, loopback targets
+use `6502` and remote targets use `6503`.
 
 ### Memory & video RAM
 
@@ -1006,6 +1082,7 @@ nova module ls --remote <host>
 nova module put <file> [name] --remote <host>
 nova module get <name> [local] --remote <host>
 nova module rm <name> --remote <host>
+nova module pack --src <module.s> --bin <module.bin> --out <module.nmod> [--syms <file>] [--ndk-dir <dir>]
 ```
 
 - `info` shows a module's metadata, either from a local file or by reading it
@@ -1015,6 +1092,8 @@ nova module rm <name> --remote <host>
 - `put` uploads a module (the on-board name defaults from the file name).
 - `get` downloads a module to a local file.
 - `rm` deletes a module from the board.
+- `pack` writes a self-documenting `.nmod` from a 16 KB module image and `;@`
+  annotations in the module source.
 
 ## Standard SD Layout
 
@@ -1049,11 +1128,37 @@ nova audio status --remote 192.168.1.65
 nova audio stop --remote 192.168.1.65
 nova keyboard --remote 192.168.1.65
 nova device reboot --remote 192.168.1.65
+nova capture hdmi screenshots/hardware/current.png
+nova check spi-bridge --remote 192.168.1.65
+nova check vgc-reset-stale --remote 192.168.1.65
+nova fpga check-timing e6502.FPGA/boards/ulx3s/build/nextpnr-report.json
 ```
 
 The raw NovaHost SD commands are intentionally not the primary user-facing
 workflow. The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
 `nova get`, and `nova rm` for compatibility and diagnostics.
+
+Arty Z7 board workflows also live under `nova arty`:
+
+```bash
+nova arty sync-payloads
+nova arty build-linux-host
+nova arty build-ps-fio
+nova arty deploy-editor-demo --remote 192.168.1.188
+nova arty make-boot-bin
+```
+
+`nova arty make-boot-bin` packages the FSBL, bitstream, and PS FIO ELF into
+`e6502.FPGA/boards/arty_z7/build/BOOT.bin` after refreshing embedded 6502
+payloads.
+
+`nova arty deploy-editor-demo` uploads the editor demo as
+`/data/nova/programs/AUTOBOOT.BIN` and clears mounted drive slots before
+restarting NovaVM, so a previously mounted floppy or hard-drive image cannot
+steal the boot path. The deploy path also passes the current `nova` binary into
+nested Makefiles as `NOVA_CLI`, avoiding stale or environment-specific
+`dotnet run` calls while refreshing payloads. After installing the Linux host,
+the command restarts NovaVM and waits for the management port before returning.
 
 ## Runtime Configuration Commands
 

@@ -33,5 +33,5 @@ steps:
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
       - export GITHUB_TOKEN=$(cat "$CI_WORKSPACE/.ci-token")
-      - sh .woodpecker/install-linux-ci-deps.sh release
+      - dotnet run --project e6502.Nova -c Release -- ci install-linux-deps release
       - gh release edit "$$CI_COMMIT_TAG" --draft=false --repo "$$CI_REPO"

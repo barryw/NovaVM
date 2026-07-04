@@ -146,7 +146,6 @@ Current evidence:
 - Verilator turn/forward interaction passes: `x=174 y=45 heading=45`,
   `diagonal=7`, `old_center=0`.
 - Emulator LOGO/RomSwap subset passes: 81 passed, 0 failed, 0 skipped.
-- `python3 -m py_compile tools/run-novalogo-hardware-smoke.py tools/novahost_client.py` passes.
 - `dotnet build e6502.Nova/e6502.Nova.csproj -c Release` passes.
 - `dotnet build e6502.Avalonia/e6502.Avalonia.csproj -c Release` passes.
 - Live Avalonia smoke passes against a fresh port-6504 instance with current
@@ -154,15 +153,13 @@ Current evidence:
   `PASS NovaLogo DRAW: center_pixels=39 total_pixels=39; turn_fd=x174,y45,h45,diag7,old0`.
 - The default Avalonia debug target on port 6502 has also been relaunched with
   current ROM resources and passes the same smoke command:
-  `tools/run-novalogo-hardware-smoke.py --target avalonia --timeout 30`.
+  use `nova vm screen`, `nova vm line`, and focused NovaLogo unit tests for the
+  current supported check path.
 - `make -C e6502.ESP32/novahost/test test` passes. The NDI host test now
   matches the checked-in `SHOWCASE` fixture and verifies case-insensitive
   lookup against a real `AUTOBOOT.bin` entry.
-- `python3 e6502.ESP32/novahost/test/test_wifi_contract.py` passes. Bulk HTTP
-  file responses use the non-probe bounded write path, the active-high LED
-  contract matches the current user/music/operator LED mux, the staged SD
-  runtime config/ROM asset contract covers NovaLogo, and the stack deploy path
-  exposes the optional NovaLogo post-deploy smoke gate.
+- The retired Python WiFi contract test has been replaced by the active
+  NovaHost test harness and Nova CLI device/runtime checks.
 - CPU/core regression sweep passes without synthesis:
   - `make -C e6502.FPGA/test test_cpu_dormann_6502 test_cpu_dormann_65c02 test_cpu_stz test_cpu_memory_write_opcodes`
   - 6502 functional pass loop reached after 92,606,025 cycles.

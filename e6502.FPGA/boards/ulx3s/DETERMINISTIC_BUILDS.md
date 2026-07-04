@@ -6,9 +6,9 @@ bitstream on this design.
 
 ## Default Timing Gate
 
-`tools/beast-synth.sh bitstream <label>` runs the full route and checks
-`build/nextpnr-report.json`. That routed report is the production timing
-authority.
+`make -C e6502.FPGA/boards/ulx3s bitstream` runs the full route and writes
+`build/nextpnr-report.json`. Check that routed report with
+`nova fpga check-timing`; it is the production timing authority.
 
 `make placecheck` remains available as an early diagnostic. It uses nextpnr
 `--no-route`, parses the placement Fmax lines from `build/nextpnr-place.log`,
@@ -19,8 +19,8 @@ proof that a routed bitstream cannot pass.
 Useful overrides:
 
 ```sh
-PLACE_TIMING_GATE=1 tools/beast-synth.sh bitstream strict-placegate
-PLACE_TIMING_MARGIN_MHZ=0.0 tools/beast-synth.sh placecheck no-margin
+make -C e6502.FPGA/boards/ulx3s bitstream
+PLACE_TIMING_MARGIN_MHZ=0.0 make -C e6502.FPGA/boards/ulx3s placecheck
 ```
 
 ## Floorplan Modes
@@ -37,7 +37,7 @@ PLACE_TIMING_MARGIN_MHZ=0.0 tools/beast-synth.sh placecheck no-margin
 Extra one-off regions can be enforced with:
 
 ```sh
-NOVA_FLOORPLAN_ENFORCE=host_io,sdram_edge tools/beast-synth.sh placecheck edge-test
+NOVA_FLOORPLAN_ENFORCE=host_io,sdram_edge make -C e6502.FPGA/boards/ulx3s placecheck
 ```
 
 ## Seed Sweeps
@@ -46,7 +46,7 @@ Use seed sweeps to measure robustness after the placement gate passes, not to
 hunt for a lucky bitstream:
 
 ```sh
-BEAST_CLEAN=0 NEXTPNR_SEEDS="1 2 3 4 5" tools/beast-synth.sh seed-sweep timing-sweep
+NEXTPNR_SEEDS="1 2 3 4 5" make -C e6502.FPGA/boards/ulx3s seed-sweep
 ```
 
 If one seed passes and others fail, the design is still not deterministic.

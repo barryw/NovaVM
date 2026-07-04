@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using e6502.GameServer.Protocol;
 using e6502.GameServer.Server;
@@ -233,6 +234,27 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void EditUiMenuHotkeysMatchVisibleAmpersandMarkers()
+    {
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.s"));
+
+        var labels = Regex.Matches(impl, @"(?m)^(editui_(?:menu_title|item)_[A-Za-z0-9_]+):\s*\n\s*\.byte\s+""([^""]+)"",0")
+            .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
+        var hotkeys = Regex.Matches(impl, @"\.byte\s+(?:EDITUI_CMD_[A-Z_]+|'.'),\s*'([^']+)',\s*<([^,]+),\s*>[^\r\n]+")
+            .Cast<Match>()
+            .Concat(Regex.Matches(impl, @"\.byte\s+'([^']+)',\s*\d+,\s*<([^,]+),\s*>[^\r\n]+").Cast<Match>());
+
+        foreach (Match match in hotkeys)
+        {
+            string labelName = match.Groups[2].Value.Trim();
+            Assert.IsTrue(labels.ContainsKey(labelName), $"Missing menu label {labelName}.");
+            string label = labels[labelName];
+            Assert.AreEqual(char.ToLowerInvariant(match.Groups[1].Value[0]), MarkedHotkey(label),
+                $"{labelName} hotkey byte must match the visible '&' marker in \"{label}\".");
+        }
+    }
+
+    [TestMethod]
     public void EditBufExposesSharedEditingEngine()
     {
         string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "editbuf.inc"));
@@ -260,6 +282,89 @@ public class RuntimeLibraryAbiTests
         // Caller-owned buffer + dirty state are shared, not Logo-specific.
         StringAssert.Contains(inc, ".global EDITBUF_BUFL");
         StringAssert.Contains(inc, ".global EDITBUF_LENL");
+    }
+
+    [TestMethod]
+    public void EditorModuleEditContractUsesSingleHookTableAbi()
+    {
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "libeditor.inc"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+        string editEx = "EDITOR_FN_EDIT" + "_EX";
+        string profilePrefix = "EDITOR_EDIT" + "_PROFILE";
+
+        AssertConstant("EDITOR_FN_EDIT", 0x00);
+        AssertConstant("EDITOR_FN_COUNT", 0x01);
+        Assert.IsFalse(constants.ContainsKey(editEx), "The editor ABI must not keep a legacy extended edit function.");
+        Assert.IsFalse(constants.Keys.Any(name => name.StartsWith(profilePrefix, StringComparison.Ordinal)), "Editor profiles must be removed; callers pass hook tables.");
+
+        AssertConstant("EDITOR_HOOKS_TYPEL", 0);
+        AssertConstant("EDITOR_HOOKS_TYPEH", 1);
+        AssertConstant("EDITOR_HOOKS_STATUSL", 2);
+        AssertConstant("EDITOR_HOOKS_STATUSH", 3);
+        AssertConstant("EDITOR_HOOKS_SAVE_VECL", 4);
+        AssertConstant("EDITOR_HOOKS_SAVE_VECH", 5);
+        AssertConstant("EDITOR_HOOKS_INDENT_VECL", 6);
+        AssertConstant("EDITOR_HOOKS_INDENT_VECH", 7);
+        AssertConstant("EDITOR_HOOKS_HILITE_VECL", 8);
+        AssertConstant("EDITOR_HOOKS_HILITE_VECH", 9);
+        AssertConstant("EDITOR_HOOKS_MENU_VECL", 10);
+        AssertConstant("EDITOR_HOOKS_MENU_VECH", 11);
+        AssertConstant("EDITOR_HOOKS_COMMAND_VECL", 12);
+        AssertConstant("EDITOR_HOOKS_COMMAND_VECH", 13);
+        AssertConstant("EDITOR_HOOKS_CHANGED_VECL", 14);
+        AssertConstant("EDITOR_HOOKS_CHANGED_VECH", 15);
+        AssertConstant("EDITOR_HOOKS_SIZE", 16);
+        AssertConstant("EDITOR_HOOK_ABI_HL_PTRL", 0x00AB);
+        AssertConstant("EDITOR_HOOK_ABI_HL_PTRH", 0x00AC);
+        AssertConstant("EDITOR_HOOK_ABI_HL_LEN", 0x055C);
+        AssertConstant("EDITOR_HOOK_ABI_HL_COLORS", 0x055D);
+        AssertConstant("EDITOR_HOOK_ABI_BUFL", 0x0430);
+        AssertConstant("EDITOR_HOOK_ABI_LENL", 0x0438);
+        AssertConstant("EDITOR_HOOK_ABI_TYPEL", 0x043C);
+        AssertConstant("EDITOR_HOOK_ABI_STATUSL", 0x043E);
+        AssertConstant("EDITOR_HOOK_ABI_SAVE_VECL", 0x0440);
+        AssertConstant("EDITOR_HOOK_ABI_INDENT_VECL", 0x0442);
+        AssertConstant("EDITOR_HOOK_ABI_HILITE_VECL", 0x0444);
+        AssertConstant("EDITOR_HOOK_ABI_MENU_VECL", 0x0446);
+        AssertConstant("EDITOR_HOOK_ABI_COMMAND_VECL", 0x0448);
+        AssertConstant("EDITOR_HOOK_ABI_CHANGED_VECL", 0x044A);
+        AssertConstant("EDITOR_HOOK_ABI_CURL", 0x044D);
+        Assert.IsFalse(inc.Contains(editEx, StringComparison.Ordinal), "libeditor.inc must document only the single hook-table EDIT function.");
+        Assert.IsFalse(inc.Contains(profilePrefix, StringComparison.Ordinal), "libeditor.inc must not expose profile-byte compatibility constants.");
+
+        void AssertConstant(string name, int expected)
+        {
+            Assert.IsTrue(constants.TryGetValue(name, out int actual), $"{name} must be defined in libeditor.inc.");
+            Assert.AreEqual(expected, actual, name);
+        }
+    }
+
+    [TestMethod]
+    public void EditorHookAbiConstantsMatchEditorMap()
+    {
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "libeditor.inc"));
+        string map = File.ReadAllText(RepoPath("software", "modules", "editor", "editor.map"));
+        IReadOnlyDictionary<string, int> constants = ParseCa65NumericConstants(inc);
+
+        AssertMapSymbol("EDITOR_HOOK_ABI_BUFL", "EDITBUF_BUFL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_LENL", "EDITBUF_LENL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_TYPEL", "EDITBUF_TYPEL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_STATUSL", "EDITBUF_STATUSL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_SAVE_VECL", "EDITBUF_SAVE_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_INDENT_VECL", "EDITBUF_INDENT_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_HILITE_VECL", "EDITBUF_HILITE_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_MENU_VECL", "EDITBUF_MENU_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_COMMAND_VECL", "EDITBUF_COMMAND_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_CHANGED_VECL", "EDITBUF_CHANGED_VECL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_CURL", "EDITBUF_CURL");
+        AssertMapSymbol("EDITOR_HOOK_ABI_HL_LEN", "EDITBUF_HL_LEN");
+        AssertMapSymbol("EDITOR_HOOK_ABI_HL_COLORS", "EDITBUF_HL_COLORS");
+
+        void AssertMapSymbol(string constantName, string symbolName)
+        {
+            Assert.IsTrue(constants.TryGetValue(constantName, out int expected), $"{constantName} must be defined.");
+            Assert.AreEqual(expected, ParseMapSymbol(map, symbolName), symbolName);
+        }
     }
 
     [TestMethod]
@@ -916,6 +1021,13 @@ public class RuntimeLibraryAbiTests
             $"{symbol} must not alias an NVR pseudo-register.");
     }
 
+    private static char MarkedHotkey(string label)
+    {
+        int marker = label.IndexOf('&');
+        Assert.IsTrue(marker >= 0 && marker + 1 < label.Length, $"Menu label must mark a hotkey: {label}");
+        return char.ToLowerInvariant(label[marker + 1]);
+    }
+
     private static IReadOnlyDictionary<string, int> ParseCa65NumericConstants(string source)
     {
         var constants = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -928,6 +1040,13 @@ public class RuntimeLibraryAbiTests
         }
 
         return constants;
+    }
+
+    private static int ParseMapSymbol(string map, string symbol)
+    {
+        var match = Regex.Match(map, $@"\b{Regex.Escape(symbol)}\s+([0-9A-Fa-f]{{6}})\s+R");
+        Assert.IsTrue(match.Success, $"Could not find {symbol} in linker map.");
+        return Convert.ToInt32(match.Groups[1].Value, 16);
     }
 
     private static string RepoPath(params string[] parts)

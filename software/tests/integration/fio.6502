@@ -1,5 +1,5 @@
 ; FIO control integration tests.
-; Run: tools/run-basic-integration.sh fio
+; Run live hardware checks through the Nova CLI debug bridge.
 
 suites {
   suite("FIO Control") {

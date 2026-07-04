@@ -9,6 +9,7 @@ ROTATE_DIR   := apps/vsprite_rotate
 TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
 EDITBUF_TEST_DIR := apps/editbuf_test
+EDITBUF_DEMO_DIR := apps/editbuf_demo
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 VGC_VSYNC_OBJ := $(KEYBOARD_DIR)/vgc_vsync.o
 VGC_KEYBOARD_OBJS := $(VGC_WAIT_OBJ) $(VGC_VSYNC_OBJ)
@@ -19,7 +20,7 @@ NOVA_LIB := $(NOVA_ASM)/build/nova.lib
 $(NOVA_LIB):
 	$(MAKE) -C $(NOVA_ASM)
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -116,7 +117,7 @@ editbuf-test: $(EDITBUF_TEST_DIR)/editbuf_test.bin
 $(EDITBUF_TEST_DIR)/editbuf_test.bin: $(EDITBUF_TEST_DIR)/editbuf_test.o $(NOVA_LIB) $(EDITBUF_TEST_DIR)/editbuf_test.cfg
 	ld65 -C $(EDITBUF_TEST_DIR)/editbuf_test.cfg -o $@ $(EDITBUF_TEST_DIR)/editbuf_test.o $(NOVA_LIB)
 
-$(EDITBUF_TEST_DIR)/editbuf_test.o: $(EDITBUF_TEST_DIR)/editbuf_test.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editbuf.inc
+$(EDITBUF_TEST_DIR)/editbuf_test.o: $(EDITBUF_TEST_DIR)/editbuf_test.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/docbuf.inc $(NOVA_ASM)/nui.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 $(EDITBUF_TEST_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA_ASM)/vtext.s $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/blitter.s $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/nova.inc
@@ -124,6 +125,14 @@ $(EDITBUF_TEST_DIR)/editui.o: $(NOVA_ASM)/editui.s $(NOVA_ASM)/editui.inc $(NOVA
 
 $(EDITBUF_TEST_DIR)/editbuf.o: $(NOVA_ASM)/editbuf.s $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/nova.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $(NOVA_ASM)/editbuf.s -o $@
+
+editbuf-demo: $(EDITBUF_DEMO_DIR)/editbuf_demo.bin
+
+$(EDITBUF_DEMO_DIR)/editbuf_demo.bin: $(EDITBUF_DEMO_DIR)/editbuf_demo.o $(NOVA_LIB) $(EDITBUF_DEMO_DIR)/editbuf_demo.cfg
+	ld65 -C $(EDITBUF_DEMO_DIR)/editbuf_demo.cfg -o $@ $(EDITBUF_DEMO_DIR)/editbuf_demo.o $(NOVA_LIB)
+
+$(EDITBUF_DEMO_DIR)/editbuf_demo.o: $(EDITBUF_DEMO_DIR)/editbuf_demo.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/nui.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 clean:
 	$(RM) $(KEYBOARD_DIR)/keyboard.o $(KEYBOARD_DIR)/keyboard.bin
@@ -139,5 +148,7 @@ clean:
 	$(RM) $(TURTLE_DIR)/vsprite.o
 	$(RM) $(EDITUI_SHELL_DIR)/editui_shell.o $(EDITUI_SHELL_DIR)/editui_shell.bin
 	$(RM) $(EDITUI_SHELL_DIR)/editui.o
+	$(RM) $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editbuf_test.bin
+	$(RM) $(EDITBUF_DEMO_DIR)/editbuf_demo.o $(EDITBUF_DEMO_DIR)/editbuf_demo.bin
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test clean
+.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo clean

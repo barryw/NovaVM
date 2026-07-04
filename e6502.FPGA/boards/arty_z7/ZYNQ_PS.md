@@ -70,10 +70,9 @@ UART0 -> /dev/ttyUSB1 (verifiable on the build host).
 - Vivado/Vitis 2024.2. Arty Z7-20 board files installed (`digilentinc.com:
   arty-z7-20:part0:1.1`).
 - **Vitis classic xsct platform/app flow is NOT available** ("--classic only
-  with full Vitis install"). Use the **new `vitis -s <script.py>` Python CLI**
-  (`vitis/build_ps_hello.py` — confirmed working: builds platform + FSBL BSP +
-  hello.elf). Use a FRESH workspace dir; the CLI rejects a workspace touched by
-  classic xsct.
+  with full Vitis install"). Use `nova arty build-ps-fio`, which invokes the
+  Vitis Python CLI hook with a fresh workspace. The CLI rejects a workspace
+  touched by classic xsct.
 - JTAG boot of the PS app is still pending: `xsct connect; targets` returned an
   EMPTY list even though Vivado's hw_manager sees `arm_dap_0` + `xc7z020`. So
   the cable/DAP are fine — it's an xsct/hw_server contention or boot-mode issue.
@@ -105,7 +104,7 @@ The Zynq PS is now the NovaVM host (replacing manual xsct staging + the FIO NAK)
 - BD: M_AXI_GP0 -> axi_protocol_converter (AXI3->AXI4-Lite) -> external M_AXI_FIO,
   all on hp_aclk (=clk_pixel, no CDC); fio_aresetn exposed.
 - arty_z7_full drives top's dbg surface from fio_bridge (staging FSM + NAK gone).
-- PS app (ps_fio/src/main.c + vitis/build_ps_fio.py): standalone + xilffs FatFs;
+- PS app (`ps_fio/src/main.c`, built through `nova arty build-ps-fio`): standalone + xilffs FatFs;
   holds CPU reset, stages libcall.bin to $0320, mounts microSD, releases CPU,
   services FIO_CMD_LOAD_MODULE ($2C: id in FIO_SRC_LO, slot in FIO_END_LO) by
   reading /lib/<name>.nmod into the XRAM shelf slot (DDR 0x10000000+0x060000+
@@ -159,7 +158,7 @@ ILA (d_pc/d_addr) + the NovaHost boot spec settled the READY blocker:
 - THEREFORE minimum READY = loader@$0320 (done) + FILES module (.nmod) staged in
   XRAM at its shelf slot ($06xxxx) + shelf dir @ $0418, then release CPU. The
   module page-in exercises the axi_xram STREAM path (untested) — next to verify.
-  Build FILES.nmod with cc65 (installed) + tools/nmod_pack.py; stage to DDR
+  Build FILES.nmod with cc65 (installed) + `nova module pack`; stage to DDR
   (PS/xsct write XRAM=DDR directly) BEFORE releasing the CPU.
 
 ## READY blocker = lib_call dispatch, NOT the Zynq/XRAM work (2026-06-19, latest)

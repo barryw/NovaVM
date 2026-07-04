@@ -823,7 +823,7 @@ bool streamSdramAsset(uint32_t base_addr, const char* label,
 
     size_t actual = f.size();
     // A LARGER file is fine: a paged-library .nmod carries a documentation
-    // trailer after its `expected_len`-byte image (see tools/nmod_pack.py). We
+    // trailer after its `expected_len`-byte image (see `nova module pack`). We
     // stream only the first expected_len bytes; the trailer stays on the SD card
     // for the nova CLI / web UI. Only a SHORT file is an error.
     if (actual < expected_len) {

@@ -24,7 +24,7 @@ sys_ptr2H:         .res 1
       lib_module_header MODULE_ID_SYSTEM, LIB_ABI_VERSION, SYS_FN_COUNT
 
 ; ===========================================================================
-; NDOC documentation (extracted by tools/nmod_pack.py into system.nmod).
+; NDOC documentation (extracted by nova module pack into system.nmod).
 ; Function ids resolve symbolically from runtime/asm/libsystem.inc.
 ; ===========================================================================
 ;@module SYSTEM
@@ -149,6 +149,22 @@ sys_ptr2H:         .res 1
 ;@ret u8 command: 0 OK, 1 Cancel (RESULT byte1)
 ;@status LERR_OK, LERR_SYS_FAIL
 ;
+;@fn SYS_NUI_FILE_PICKER
+;@ndk nui_file_picker
+;@brief Draw an interactive drive/directory/file picker.
+;@arg config u16 caller-owned config struct pointer (ARG0 byte0,1)
+;@ret u8 selected filename length (RESULT byte0)
+;@ret u8 command: 0 OK, 1 Cancel (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_NUI_TEXT_INPUT
+;@ndk nui_text_input
+;@brief Draw an interactive text field with OK/Cancel buttons.
+;@arg config u16 caller-owned config struct pointer (ARG0 byte0,1)
+;@ret u8 typed text length (RESULT byte0)
+;@ret u8 command: 0 OK, 1 Cancel (RESULT byte1)
+;@status LERR_OK, LERR_SYS_FAIL
+;
 ;@fn SYS_NUI_SET_STYLE
 ;@brief Set modal NUI chrome/text colors from caller-provided palette indexes.
 ;@arg style u32 b0 shadow color index, b1 border color index, b2 panel color index, b3 packed text color bg/fg
@@ -254,6 +270,8 @@ sys_jtable:
       .word   sys_nui_save_under_full-1 ; $16 SYS_NUI_SAVE_UNDER_FULL
       .word   sys_nui_restore_under_full-1 ; $17 SYS_NUI_RESTORE_UNDER_FULL
       .word   sys_nui_set_style-1      ; $18 SYS_NUI_SET_STYLE
+      .word   sys_nui_file_picker-1    ; $19 SYS_NUI_FILE_PICKER
+      .word   sys_nui_text_input-1     ; $1A SYS_NUI_TEXT_INPUT
 
 sys_no_fn:
       lda     #LERR_NO_FN
@@ -642,6 +660,158 @@ sys_nui_pick_list:
       CMP   #$00
       BNE   @fail
       LDA   NUI_LIST_SELECTED
+      STA   LIB_RESULT+0
+      LDA   NUI_RESULT
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      STZ   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; Config layout consumed by SYS_NUI_FILE_PICKER:
+; +0 title ptr, +2 output buffer ptr, +4 output max, +5 mode,
+;    mode 0=open/select, mode 1=save-as prompt.
+; +6 low file type mask, +7 high file type mask, +8 selected, +9..+11 ignored legacy geometry,
+; +12 footer ptr, +14 row buffer ptr (24*36 bytes).
+sys_marshal_nui_file_picker:
+      LDA   LIB_ARG0+0
+      STA   sys_ptr0L
+      LDA   LIB_ARG0+1
+      STA   sys_ptr0H
+      LDY   #$00
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_OUTL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_OUTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_OUT_MAX
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_MODE
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_TYPE_MASK
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_TYPE_MASKH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_LIST_SELECTED
+      LDY   #$0C
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_ROWSL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FILE_ROWSH
+      STZ   NUI_MSGL
+      STZ   NUI_MSGH
+      RTS
+
+; --- $19 SYS_NUI_FILE_PICKER: drive/directory/file picker from caller config ---
+sys_nui_file_picker:
+      JSR   sys_marshal_nui_file_picker
+      JSR   nui_file_picker
+      CMP   #$00
+      BNE   @fail
+      LDA   NUI_FILE_OUT_LEN
+      STA   LIB_RESULT+0
+      LDA   NUI_RESULT
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+@fail:
+      STZ   LIB_RESULT+0
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_SYS_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; Config layout consumed by SYS_NUI_TEXT_INPUT:
+; +0 title ptr, +2 label ptr (8 bytes, space-padded), +4 output buffer ptr,
+; +6 output max, +7 left, +8 top, +9 width, +10 height, +11 footer ptr.
+sys_marshal_nui_text_input:
+      LDA   LIB_ARG0+0
+      STA   sys_ptr0L
+      LDA   LIB_ARG0+1
+      STA   sys_ptr0H
+      LDY   #$00
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_TITLEH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_INPUT_LABELL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_INPUT_LABELH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_INPUT_OUTL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_INPUT_OUTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_INPUT_OUT_MAX
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_LEFT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_TOP
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_WIDTH
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_DIALOG_HEIGHT
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERL
+      INY
+      LDA   (sys_ptr0L),Y
+      STA   NUI_FOOTERH
+      STZ   NUI_MSGL
+      STZ   NUI_MSGH
+      RTS
+
+; --- $1A SYS_NUI_TEXT_INPUT: Borland-style text field from caller config ---
+sys_nui_text_input:
+      JSR   sys_marshal_nui_text_input
+      JSR   nui_text_input
+      CMP   #$00
+      BNE   @fail
+      LDA   NUI_INPUT_OUT_LEN
       STA   LIB_RESULT+0
       LDA   NUI_RESULT
       STA   LIB_RESULT+1

@@ -1,5 +1,9 @@
 using System.Net.Sockets;
 using System.IO.Compression;
+using System.Diagnostics;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -48,6 +52,8 @@ return verb switch
     "audio"      => DoAudio(args[1..], remoteHost),
     "keyboard"   => DoKeyboard(args[1..], remoteHost),
     "vm" or "emulator" => DoVm(args[1..], remoteHost),
+    "capture"    => DoCapture(args[1..], remoteHost),
+    "check"      => DoCheck(args[1..], remoteHost),
     "disk"       => DoDisk(args[1..], remoteHost),
     "rom"        => DoRom(args[1..], remoteHost),
     "soundfont"  => DoSoundfont(args[1..], remoteHost),
@@ -56,12 +62,2017 @@ return verb switch
     "runtime"    => DoRuntime(args[1..], remoteHost),
     "webserver" or "web" => DoWebServer(args[1..], remoteHost),
     "module"     => DoModule(args[1..], remoteHost),
+    "arty"       => DoArty(args[1..], remoteHost),
+    "publish"    => DoPublish(args[1..]),
+    "convert"    => DoConvert(args[1..]),
+    "codegen"    => DoCodegen(args[1..]),
+    "build"      => DoBuild(args[1..]),
+    "docs"       => DoDocs(args[1..]),
+    "fpga"       => DoFpga(args[1..]),
+    "ci"         => DoCi(args[1..]),
     _            => UnknownVerb(verb),
 };
 
 // ===========================================================================
 // Remote SD operations — talks to NovaHost's TCP management service.
 // ===========================================================================
+
+static int DoArty(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintArtyUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    string repo = ResolveRepoRoot(rest);
+
+    try
+    {
+        return command switch
+        {
+            "sync-payloads" => DoArtySyncPayloads(repo, rest),
+            "build-linux-host" => DoArtyBuildLinuxHost(repo, rest),
+            "build-ps-fio" => DoArtyBuildPsFio(repo, rest),
+            "deploy-linux-host" => DoArtyDeployLinuxHost(repo, rest, host, editorDemo: TakeFlag(rest, "--editor-demo")),
+            "deploy-editor-demo" => DoArtyDeployLinuxHost(repo, rest, host, editorDemo: true),
+            "make-boot-bin" => DoArtyMakeBootBin(repo, rest),
+            _ => UnknownArtyCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"arty {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static void PrintArtyUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova arty sync-payloads [--repo <repo>] [--check]");
+    Console.Error.WriteLine("  nova arty build-linux-host [--repo <repo>]");
+    Console.Error.WriteLine("  nova arty build-ps-fio [--repo <repo>] [--vitis <path>]");
+    Console.Error.WriteLine("  nova arty deploy-linux-host [--repo <repo>] [--remote <ip>] [--editor-demo]");
+    Console.Error.WriteLine("  nova arty deploy-editor-demo [--repo <repo>] [--remote <ip>]");
+    Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>]");
+}
+
+static int UnknownArtyCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown arty command: {command}");
+    PrintArtyUsage();
+    return 1;
+}
+
+static string ResolveRepoRoot(List<string> args)
+{
+    string? repo = TakeOptionValue(args, "--repo");
+    if (!string.IsNullOrWhiteSpace(repo))
+        return Path.GetFullPath(repo);
+
+    string dir = Directory.GetCurrentDirectory();
+    while (!string.IsNullOrEmpty(dir))
+    {
+        if (File.Exists(Path.Combine(dir, "e6502.sln")))
+            return dir;
+
+        string? parent = Directory.GetParent(dir)?.FullName;
+        if (parent == dir)
+            break;
+        dir = parent ?? "";
+    }
+
+    return Directory.GetCurrentDirectory();
+}
+
+static int DoArtySyncPayloads(string repo, List<string> args)
+{
+    bool check = TakeFlag(args, "--check");
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty sync-payloads argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    if (!check)
+    {
+        int rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "e6502.FPGA"), "hex"));
+        if (rc != 0) return rc;
+
+        rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "runtime", "asm")]);
+        if (rc != 0) return rc;
+
+        foreach (string module in ArtyModuleNames())
+        {
+            rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "modules", module)));
+            if (rc != 0) return rc;
+        }
+
+        rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "languages", "novalogo"), "ndi"));
+        if (rc != 0) return rc;
+
+        rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "languages", "novaforth"), "ndi"));
+        if (rc != 0) return rc;
+
+        rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "assembly"), "editbuf-demo"]);
+        if (rc != 0) return rc;
+    }
+
+    bool dirty = false;
+    dirty |= WriteBinHeader(
+        Path.Combine(repo, "software", "runtime", "asm", "libcall.bin"),
+        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "linux", "novavm", "loader_bin.h"),
+        "LOADER_BIN",
+        check);
+    dirty |= WriteBinHeader(
+        Path.Combine(repo, "software", "runtime", "asm", "libcall.bin"),
+        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "ps_fio", "src", "loader_bin.h"),
+        "LOADER_BIN",
+        check);
+    dirty |= WriteBinHeader(
+        Path.Combine(repo, "software", "languages", "ehbasic", "basic.bin"),
+        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "ps_fio", "src", "ehbasic_rom.h"),
+        "EHBASIC_ROM",
+        check);
+
+    string modules = RenderArtyModules(repo);
+    dirty |= WriteTextIfNeeded(
+        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "linux", "novavm", "modules_embedded.h"),
+        modules,
+        check);
+    dirty |= WriteTextIfNeeded(
+        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "ps_fio", "src", "modules_embedded.h"),
+        modules,
+        check);
+
+    return check && dirty ? 1 : 0;
+}
+
+static string[] MakeArgsWithCurrentNova(string repo, params string[] args) =>
+    [.. args, "NOVA_CLI=" + CurrentNovaExecutable(repo)];
+
+static string CurrentNovaExecutable(string repo)
+{
+    string? processPath = Environment.ProcessPath;
+    if (IsNovaExecutable(processPath))
+        return processPath!;
+
+    string outputRoot = Path.Combine(repo, "e6502.Nova", "bin", "Release", "net10.0");
+    string executableName = OperatingSystem.IsWindows() ? "nova.exe" : "nova";
+    if (Directory.Exists(outputRoot))
+    {
+        string? executable = Directory.GetFiles(outputRoot, executableName, SearchOption.AllDirectories)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+        if (executable is not null)
+            return executable;
+    }
+
+    throw new FileNotFoundException("Build the Nova CLI before running Arty payload builds.", Path.Combine(outputRoot, executableName));
+}
+
+static bool IsNovaExecutable(string? path)
+{
+    if (string.IsNullOrWhiteSpace(path))
+        return false;
+    string name = Path.GetFileName(path);
+    return name.Equals("nova", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("nova.exe", StringComparison.OrdinalIgnoreCase);
+}
+
+static int DoArtyBuildLinuxHost(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty build-linux-host argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    int rc = DoArtySyncPayloads(repo, []);
+    if (rc != 0) return rc;
+
+    string hostDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "linux", "novavm");
+    string cc = Environment.GetEnvironmentVariable("CC") ?? "arm-linux-gnueabihf-gcc";
+    string[] sources =
+    [
+        "novavm.c", "naudio.c", "nservers.c", "nkbd.c", "nmouse.c", "nfio.c",
+        "nsplash.c", "nbootcfg.c", "nosd.c", "cJSON.c"
+    ];
+
+    rc = RunCommand(cc, ["-O2", "-static", "-pthread", "-I.", "-o", "novavm", .. sources, "-lm"], hostDir);
+    if (rc != 0) return rc;
+
+    _ = RunCommand(cc, ["--version"], hostDir);
+    _ = RunCommand("arm-linux-gnueabihf-size", ["novavm"], hostDir);
+    Console.WriteLine($"built: {Path.Combine(hostDir, "novavm")}");
+    return 0;
+}
+
+static int DoArtyBuildPsFio(string repo, List<string> args)
+{
+    string vitis = TakeOptionValue(args, "--vitis") ?? Environment.GetEnvironmentVariable("VITIS") ?? "/tools/Xilinx/Vitis/2024.2/bin/vitis";
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty build-ps-fio argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    int rc = DoArtySyncPayloads(repo, []);
+    if (rc != 0) return rc;
+
+    string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
+    return RunCommand(vitis, ["-s", Path.Combine(boardDir, "vitis", "build_ps_fio.py")], boardDir,
+        new Dictionary<string, string?>
+        {
+            ["NOVA_ARTY_SYNC_PAYLOADS_DONE"] = "1",
+        });
+}
+
+static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, bool editorDemo)
+{
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty deploy argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    host ??= "192.168.1.188";
+    string remote = "root@" + host;
+    string hostDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "linux", "novavm");
+
+    int rc = RunSsh(host, "true");
+    if (rc != 0)
+    {
+        Console.Error.WriteLine($"cannot reach {remote} over SSH");
+        Console.Error.WriteLine($"If SSH says the host key changed, run: ssh-keygen -R {host}");
+        return rc;
+    }
+
+    rc = DoArtyBuildLinuxHost(repo, []);
+    if (rc != 0) return rc;
+
+    string programs = editorDemo ? " /data/nova/programs" : "";
+    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy" + programs);
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(hostDir, "novavm"), "/run/novavm.new");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "ehbasic", "basic.bin"), "/data/nova/roms/ehbasic.bin");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novalogo", "novalogo.ndi"), "/data/nova/disks/floppy/novalogo.ndi");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/floppy/novaforth.ndi");
+    if (rc != 0) return rc;
+
+    if (editorDemo)
+    {
+        rc = RunScp(host, Path.Combine(repo, "software", "assembly", "apps", "editbuf_demo", "editbuf_demo.bin"), "/data/nova/programs/AUTOBOOT.BIN");
+        if (rc != 0) return rc;
+
+        rc = UnmountAllBootDrives(host);
+        if (rc != 0) return rc;
+    }
+
+    string installAndStop = "mount -o remount,rw / || exit 1; " +
+                            "cp /run/novavm.new /usr/bin/novavm && chmod 0755 /usr/bin/novavm && sync; " +
+                            "rc=$?; mount -o remount,ro / 2>/dev/null || true; rm -f /run/novavm.new; " +
+                            "[ \"$rc\" -eq 0 ] || exit \"$rc\"; " +
+                            "for p in $(pidof novavm 2>/dev/null); do kill \"$p\" 2>/dev/null || true; done; sleep 1";
+    rc = RunSsh(host, installAndStop);
+    if (rc != 0) return rc;
+
+    rc = VerifyRemoteFileSha256(host, Path.Combine(hostDir, "novavm"), "/usr/bin/novavm");
+    if (rc != 0) return rc;
+
+    rc = RunSsh(host, "/etc/init.d/novavm start");
+    if (rc != 0) return rc;
+
+    rc = WaitForRemotePort(host, 6504, TimeSpan.FromSeconds(10));
+    if (rc != 0)
+    {
+        _ = RunSsh(host, "tail -80 /run/novavm.log");
+        return rc;
+    }
+
+    if (editorDemo)
+    {
+        Thread.Sleep(TimeSpan.FromSeconds(2));
+        return RunSsh(host, "tail -80 /run/novavm.log");
+    }
+
+    return 0;
+}
+
+static int WaitForRemotePort(string host, int port, TimeSpan timeout)
+{
+    DateTime deadline = DateTime.UtcNow + timeout;
+    Exception? lastError = null;
+    while (DateTime.UtcNow < deadline)
+    {
+        try
+        {
+            using var client = new TcpClient();
+            Task connect = client.ConnectAsync(host, port);
+            if (connect.Wait(TimeSpan.FromMilliseconds(500)) && client.Connected)
+                return 0;
+        }
+        catch (Exception ex)
+        {
+            lastError = ex;
+        }
+
+        Thread.Sleep(250);
+    }
+
+    Console.Error.WriteLine(lastError is null
+        ? $"timed out waiting for {host}:{port}"
+        : $"timed out waiting for {host}:{port}: {lastError.Message}");
+    return 1;
+}
+
+static int UnmountAllBootDrives(string host)
+{
+    foreach (string slot in new[] { "fd0", "fd1", "fd2", "fd3", "hd0", "hd1" })
+    {
+        int rc = DoDriveUnmount([slot], host);
+        if (rc != 0) return rc;
+    }
+
+    return 0;
+}
+
+static int DoArtyMakeBootBin(string repo, List<string> args)
+{
+    string workspace = TakeOptionValue(args, "--workspace") ?? Environment.GetEnvironmentVariable("NOVA_FIO_WS") ?? "/tmp/nova_fio_ws";
+    string bootgen = TakeOptionValue(args, "--bootgen") ?? Environment.GetEnvironmentVariable("BOOTGEN") ?? "/tools/Xilinx/Vitis/2024.2/bin/bootgen";
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty make-boot-bin argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    int rc = DoArtySyncPayloads(repo, []);
+    if (rc != 0) return rc;
+
+    string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
+    string fsbl = Path.Combine(workspace, "nova_fio_plat", "export", "nova_fio_plat", "sw", "boot", "fsbl.elf");
+    string bit = Path.Combine(boardDir, "build", "ps_full", "ps_full.runs", "impl_1", "arty_z7_full.bit");
+    string app = Path.Combine(workspace, "ps_fio", "build", "ps_fio.elf");
+    foreach (string file in new[] { fsbl, bit, app })
+    {
+        if (!File.Exists(file))
+        {
+            Console.Error.WriteLine($"ERROR: missing {file}");
+            return 1;
+        }
+    }
+
+    DateTime appTime = File.GetLastWriteTimeUtc(app);
+    string psSrc = Path.Combine(boardDir, "ps_fio", "src");
+    string? newer = Directory.GetFiles(psSrc, "*", SearchOption.AllDirectories)
+                             .FirstOrDefault(path => File.GetLastWriteTimeUtc(path) > appTime);
+    if (newer is not null)
+    {
+        Console.Error.WriteLine($"ERROR: {app} is stale; rebuild the PS app with Vitis before packaging BOOT.bin");
+        Console.Error.WriteLine($"newer source: {newer}");
+        return 1;
+    }
+
+    string buildDir = Path.Combine(boardDir, "build");
+    Directory.CreateDirectory(buildDir);
+    string bif = Path.Combine(buildDir, "boot.bif");
+    File.WriteAllText(bif,
+        "the_ROM_image:\n" +
+        "{\n" +
+        $"\t[bootloader]{fsbl}\n" +
+        $"\t{bit}\n" +
+        $"\t{app}\n" +
+        "}\n");
+
+    string output = Path.Combine(buildDir, "BOOT.bin");
+    rc = RunCommand(bootgen, ["-arch", "zynq", "-image", bif, "-w", "on", "-o", output]);
+    if (rc != 0) return rc;
+    Console.WriteLine($"BOOT.bin -> {output}");
+    Console.WriteLine(new FileInfo(output).FullName);
+    return 0;
+}
+
+static string[] ArtyModuleNames() =>
+[
+    "graphics", "system", "editor", "sound", "files", "memory", "net", "turtle"
+];
+
+static (string Symbol, string Name)[] ArtyEmbeddedModules() =>
+[
+    ("MOD_GRAPHICS", "graphics"),
+    ("MOD_SOUND", "sound"),
+    ("MOD_SYSTEM", "system"),
+    ("MOD_FILES", "files"),
+    ("MOD_MEMORY", "memory"),
+    ("MOD_NET", "net"),
+    ("MOD_TURTLE", "turtle"),
+    ("MOD_EDITOR", "editor"),
+];
+
+static bool WriteBinHeader(string input, string output, string symbol, bool check, string generator = "nova arty sync-payloads")
+{
+    byte[] data = File.ReadAllBytes(input);
+    var lines = new List<string>
+    {
+        $"// Auto-generated from {Path.GetFileName(input)} by {generator} - do not edit.",
+        $"// Size: {data.Length} bytes",
+        "#pragma once",
+        "",
+        "#include <stdint.h>",
+        "#include <stddef.h>",
+        "",
+        $"static const size_t {symbol}_LEN = {data.Length};",
+        $"static const uint8_t {symbol}[{data.Length}] = {{",
+    };
+
+    for (int offset = 0; offset < data.Length; offset += 16)
+    {
+        string bytes = string.Join(", ", data.Skip(offset).Take(16).Select(b => $"0x{b:X2}"));
+        lines.Add($"    {bytes},");
+    }
+
+    lines.Add("};");
+    lines.Add("");
+    return WriteTextIfNeeded(output, string.Join("\n", lines), check);
+}
+
+static string RenderArtyModules(string repo)
+{
+    var sb = new StringBuilder();
+    sb.Append("// Auto-generated: embedded 16KB module images from modules/<name>/<name>.bin\n");
+    sb.Append("#ifndef MODULES_EMBEDDED_H\n#define MODULES_EMBEDDED_H\n");
+
+    foreach ((string symbol, string name) in ArtyEmbeddedModules())
+    {
+        string path = Path.Combine(repo, "software", "modules", name, name + ".bin");
+        byte[] data = File.ReadAllBytes(path);
+        if (data.Length != 16384)
+            throw new InvalidOperationException($"{path}: expected 16384 bytes, got {data.Length}");
+
+        sb.Append($"static const unsigned char {symbol}[16384] = {{\n");
+        for (int offset = 0; offset < data.Length; offset += 24)
+        {
+            sb.Append(' ');
+            sb.Append(string.Join(",", data.Skip(offset).Take(24)));
+            sb.Append(",\n");
+        }
+        sb.Append("};\n");
+    }
+
+    sb.Append("static const unsigned char *const EMBEDDED_MOD[9] = {0, MOD_GRAPHICS, MOD_SOUND, MOD_SYSTEM, MOD_FILES, MOD_MEMORY, MOD_NET, MOD_TURTLE, MOD_EDITOR};\n");
+    sb.Append("#endif\n");
+    return sb.ToString();
+}
+
+static bool WriteTextIfNeeded(string output, string text, bool check)
+{
+    if (File.Exists(output) && File.ReadAllText(output) == text)
+        return false;
+
+    if (check)
+    {
+        Console.Error.WriteLine($"stale: {output}");
+        return true;
+    }
+
+    Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+    File.WriteAllText(output, text);
+    Console.WriteLine($"updated: {output}");
+    return true;
+}
+
+static int RunSsh(string host, string remoteCommand) =>
+    RunCommand("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", "root@" + host, remoteCommand]);
+
+static int RunScp(string host, string localPath, string remotePath) =>
+    RunCommand("scp", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", localPath, "root@" + host + ":" + remotePath]);
+
+static int VerifyRemoteFileSha256(string host, string localPath, string remotePath)
+{
+    string localSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(localPath))).ToLowerInvariant();
+    int rc = RunSshCapture(host, "sha256sum " + remotePath, out string stdout);
+    if (rc != 0) return rc;
+
+    string[] parts = stdout.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length == 0)
+    {
+        Console.Error.WriteLine($"could not read remote sha256 for {remotePath}");
+        return 1;
+    }
+
+    string remoteSha = parts[0].ToLowerInvariant();
+    if (!string.Equals(localSha, remoteSha, StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"ERROR: stale deployed artifact: {remotePath}");
+        Console.Error.WriteLine($"local  {localSha}  {localPath}");
+        Console.Error.WriteLine($"remote {remoteSha}  {remotePath}");
+        return 1;
+    }
+
+    Console.WriteLine($"verified: {remotePath} sha256 {localSha}");
+    return 0;
+}
+
+static int RunSshCapture(string host, string remoteCommand, out string stdout) =>
+    RunCommandCapture("ssh", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", "root@" + host, remoteCommand], out stdout);
+
+static int RunCommandCapture(string fileName, IEnumerable<string> args, out string stdout)
+{
+    var psi = new ProcessStartInfo(fileName)
+    {
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        WorkingDirectory = Directory.GetCurrentDirectory(),
+    };
+    foreach (string arg in args)
+        psi.ArgumentList.Add(arg);
+
+    using Process process = Process.Start(psi)
+        ?? throw new InvalidOperationException($"could not start {fileName}");
+    stdout = process.StandardOutput.ReadToEnd();
+    string stderr = process.StandardError.ReadToEnd();
+    process.WaitForExit();
+    if (!string.IsNullOrEmpty(stderr))
+        Console.Error.Write(stderr);
+    return process.ExitCode;
+}
+
+static int RunCommand(
+    string fileName,
+    IEnumerable<string> args,
+    string? workingDirectory = null,
+    IReadOnlyDictionary<string, string?>? environment = null)
+{
+    var psi = new ProcessStartInfo(fileName)
+    {
+        UseShellExecute = false,
+        WorkingDirectory = workingDirectory ?? Directory.GetCurrentDirectory(),
+    };
+    foreach (string arg in args)
+        psi.ArgumentList.Add(arg);
+    if (environment is not null)
+    {
+        foreach ((string key, string? value) in environment)
+        {
+            if (value is null)
+                psi.Environment.Remove(key);
+            else
+                psi.Environment[key] = value;
+        }
+    }
+
+    using Process process = Process.Start(psi)
+        ?? throw new InvalidOperationException($"could not start {fileName}");
+    process.WaitForExit();
+    return process.ExitCode;
+}
+
+static int DoCi(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintCiUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    try
+    {
+        return command switch
+        {
+            "install-linux-deps" => DoCiInstallLinuxDeps(rest),
+            "install-macos-cc65" => DoCiInstallMacosCc65(rest),
+            "mint-github-token" => DoCiMintGithubToken(rest),
+            _ => UnknownCiCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"ci {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoCiInstallLinuxDeps(List<string> args)
+{
+    string mode = "build";
+    if (args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
+    {
+        mode = args[0].ToLowerInvariant();
+        args.RemoveAt(0);
+    }
+    if (args.Count > 0 || mode is not ("build" or "release"))
+    {
+        PrintCiUsage();
+        return 1;
+    }
+
+    int rc = RunCommand("apt-get", ["update", "-qq"]);
+    if (rc != 0) return rc;
+
+    string[] packages = mode == "build"
+        ? [
+            "ca-certificates", "clang", "curl", "fonts-lmodern", "git", "gzip",
+            "latexmk", "lmodern", "make", "pandoc", "python3-yaml", "tar",
+            "texlive-fonts-recommended", "texlive-latex-extra",
+            "texlive-latex-recommended", "zlib1g-dev"
+        ]
+        : ["ca-certificates", "curl", "git", "gzip", "tar"];
+
+    rc = RunCommand("apt-get", ["install", "-y", "-qq", "--no-install-recommends", .. packages]);
+    if (rc != 0) return rc;
+
+    if (mode == "build" && !Ca65SupportsW65c02())
+    {
+        rc = BuildPinnedCc65("/usr/local", "clang");
+        if (rc != 0) return rc;
+    }
+
+    if (!CommandExists("cog"))
+    {
+        rc = InstallTarballMember(
+            "https://github.com/cocogitto/cocogitto/releases/download/6.5.0/cocogitto-6.5.0-x86_64-unknown-linux-musl.tar.gz",
+            "/usr/local/bin",
+            "x86_64-unknown-linux-musl/cog",
+            stripComponents: 1);
+        if (rc != 0) return rc;
+    }
+
+    if (mode == "release" && !CommandExists("gh"))
+    {
+        rc = InstallTarballMember(
+            "https://github.com/cli/cli/releases/download/v2.74.0/gh_2.74.0_linux_amd64.tar.gz",
+            "/usr/local/bin",
+            "gh_2.74.0_linux_amd64/bin/gh",
+            stripComponents: 2);
+        if (rc != 0) return rc;
+    }
+
+    _ = RunCommand("apt-get", ["clean"]);
+    CleanDirectoryContents("/var/lib/apt/lists");
+    return 0;
+}
+
+static int DoCiInstallMacosCc65(List<string> args)
+{
+    string cc65Ref = TakeOptionValue(args, "--cc65-ref") ?? DefaultCc65Ref();
+    string? prefix = TakeOptionValue(args, "--prefix") ?? Environment.GetEnvironmentVariable("CC65_PREFIX");
+    if (args.Count > 0)
+    {
+        PrintCiUsage();
+        return 1;
+    }
+
+    prefix ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local");
+    string bin = Path.Combine(prefix, "bin");
+    string path = Environment.GetEnvironmentVariable("PATH") ?? "";
+    Environment.SetEnvironmentVariable("PATH", bin + Path.PathSeparator + path);
+
+    if (Ca65SupportsW65c02())
+    {
+        Console.WriteLine("cc65 already provides a w65c02-capable ca65; skipping build.");
+        return RunCommand("ca65", ["--cpu", "w65c02", "--version"]);
+    }
+
+    Console.WriteLine($"Building pinned cc65 ({cc65Ref}) from source into {prefix} ...");
+    int rc = BuildPinnedCc65(prefix, cc: null, cc65Ref);
+    if (rc != 0) return rc;
+    rc = RunCommand("ca65", ["--cpu", "w65c02", "--version"]);
+    if (rc == 0)
+        Console.WriteLine($"cc65 installed to {bin}");
+    return rc;
+}
+
+static int DoCiMintGithubToken(List<string> args)
+{
+    string api = TakeOptionValue(args, "--api") ?? Environment.GetEnvironmentVariable("GITHUB_API_URL") ?? "https://api.github.com";
+    string? reposText = TakeOptionValue(args, "--repos") ?? Environment.GetEnvironmentVariable("MINT_REPOS");
+    string permsText = TakeOptionValue(args, "--permissions", "--perms") ?? Environment.GetEnvironmentVariable("MINT_PERMS") ?? "contents=write,metadata=read";
+    if (args.Count > 0)
+    {
+        PrintCiUsage();
+        return 1;
+    }
+
+    string appId = RequiredEnvironment("GH_APP_ID");
+    string installationId = RequiredEnvironment("GH_APP_INSTALLATION_ID");
+    string privateKey = RequiredEnvironment("GH_APP_PRIVATE_KEY");
+    reposText ??= CurrentCiRepoName();
+
+    string jwt = CreateGithubAppJwt(appId, privateKey);
+    JsonObject body = CreateGithubInstallationTokenBody(reposText, permsText);
+
+    using var request = new HttpRequestMessage(HttpMethod.Post, api.TrimEnd('/') + $"/app/installations/{installationId}/access_tokens");
+    request.Headers.TryAddWithoutValidation("Authorization", "Bearer " + jwt);
+    request.Headers.TryAddWithoutValidation("Accept", "application/vnd.github+json");
+    request.Headers.TryAddWithoutValidation("X-GitHub-Api-Version", "2022-11-28");
+    request.Headers.TryAddWithoutValidation("User-Agent", "nova-cli");
+    request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+
+    using var http = new HttpClient();
+    using HttpResponseMessage response = http.Send(request);
+    string text = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+    if (!response.IsSuccessStatusCode)
+    {
+        Console.Error.WriteLine($"token request failed: {(int)response.StatusCode} {response.ReasonPhrase}");
+        Console.Error.WriteLine(text);
+        return 1;
+    }
+
+    string? token = JsonNode.Parse(text)?["token"]?.GetValue<string>();
+    if (string.IsNullOrEmpty(token))
+    {
+        Console.Error.WriteLine("token response did not contain a token");
+        Console.Error.WriteLine(text);
+        return 1;
+    }
+
+    Console.WriteLine(token);
+    return 0;
+}
+
+static int UnknownCiCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown ci command: {command}");
+    PrintCiUsage();
+    return 1;
+}
+
+static void PrintCiUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova ci install-linux-deps [build|release]");
+    Console.Error.WriteLine("  nova ci install-macos-cc65 [--prefix <dir>] [--cc65-ref <git-ref>]");
+    Console.Error.WriteLine("  nova ci mint-github-token [--repos <repo,...>] [--permissions <key=level,...>] [--api <url>]");
+}
+
+static string DefaultCc65Ref() => "cc3c40c54e51b2d9a22b63c85c418a2b11763377";
+
+static bool Ca65SupportsW65c02() => CommandSucceeds("ca65", ["--cpu", "w65c02", "--version"]);
+
+static bool CommandSucceeds(string fileName, IEnumerable<string> args)
+{
+    try
+    {
+        return RunCommand(fileName, args) == 0;
+    }
+    catch
+    {
+        return false;
+    }
+}
+
+static int BuildPinnedCc65(string prefix, string? cc, string? cc65Ref = null)
+{
+    cc65Ref ??= DefaultCc65Ref();
+    using TempDir temp = TempDir.Create("cc65-");
+    string source = Path.Combine(temp.Path, "cc65");
+    int rc = RunCommand("git", ["clone", "--filter=blob:none", "-q", "https://github.com/cc65/cc65.git", source]);
+    if (rc != 0) return rc;
+    rc = RunCommand("git", ["-C", source, "checkout", "-q", cc65Ref]);
+    if (rc != 0) return rc;
+
+    var makeArgs = new List<string> { "-C", source, "-j" + Math.Max(1, Environment.ProcessorCount).ToString(CultureInfo.InvariantCulture) };
+    if (!string.IsNullOrEmpty(cc))
+        makeArgs.Add("CC=" + cc);
+    rc = RunCommand("make", makeArgs);
+    if (rc != 0) return rc;
+
+    return RunCommand("make", ["-C", source, "install", "PREFIX=" + prefix]);
+}
+
+static int InstallTarballMember(string url, string destination, string member, int stripComponents)
+{
+    using TempDir temp = TempDir.Create("nova-ci-tar-");
+    string archive = Path.Combine(temp.Path, "package.tar.gz");
+    int rc = RunCommand("curl", ["-fsSL", "-o", archive, url]);
+    if (rc != 0) return rc;
+
+    Directory.CreateDirectory(destination);
+    return RunCommand("tar", ["-xzf", archive, "--strip-components=" + stripComponents.ToString(CultureInfo.InvariantCulture), "-C", destination, member]);
+}
+
+static void CleanDirectoryContents(string directory)
+{
+    if (!Directory.Exists(directory))
+        return;
+
+    foreach (string file in Directory.GetFiles(directory))
+        File.Delete(file);
+    foreach (string child in Directory.GetDirectories(directory))
+        Directory.Delete(child, recursive: true);
+}
+
+static string RequiredEnvironment(string name)
+{
+    string? value = Environment.GetEnvironmentVariable(name);
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"{name} is not set");
+    return value;
+}
+
+static string CurrentCiRepoName()
+{
+    string ciRepo = RequiredEnvironment("CI_REPO");
+    string[] parts = ciRepo.Split('/', StringSplitOptions.RemoveEmptyEntries);
+    return parts.Length == 0 ? ciRepo : parts[^1];
+}
+
+static string CreateGithubAppJwt(string appId, string privateKey)
+{
+    string pem = privateKey.Contains('\n')
+        ? privateKey
+        : privateKey.Replace("\\n", "\n", StringComparison.Ordinal);
+
+    using RSA rsa = RSA.Create();
+    rsa.ImportFromPem(pem);
+
+    long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+    string header = """{"alg":"RS256","typ":"JWT"}""";
+    string payload = $"{{\"iat\":{now - 60},\"exp\":{now + 540},\"iss\":\"{appId}\"}}";
+    string unsigned = Base64Url(Encoding.UTF8.GetBytes(header)) + "." + Base64Url(Encoding.UTF8.GetBytes(payload));
+    byte[] signature = rsa.SignData(Encoding.UTF8.GetBytes(unsigned), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+    return unsigned + "." + Base64Url(signature);
+}
+
+static string Base64Url(byte[] bytes) =>
+    Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+static JsonObject CreateGithubInstallationTokenBody(string reposText, string permissionsText)
+{
+    var repositories = new JsonArray();
+    foreach (string repo in reposText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        repositories.Add(repo);
+
+    var permissions = new JsonObject();
+    foreach (string item in permissionsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        int equals = item.IndexOf('=', StringComparison.Ordinal);
+        if (equals <= 0 || equals == item.Length - 1)
+            throw new InvalidOperationException($"bad permission '{item}' (want key=level)");
+        permissions[item[..equals]] = item[(equals + 1)..];
+    }
+
+    return new JsonObject
+    {
+        ["repositories"] = repositories,
+        ["permissions"] = permissions,
+    };
+}
+
+static int DoPublish(string[] args)
+{
+    var rest = args.ToList();
+    bool help = rest.Count > 0 && rest[0].Equals("help", StringComparison.OrdinalIgnoreCase);
+    help |= TakeFlag(rest, "--help", "-h");
+    string repo = ResolveRepoRoot(rest);
+    string? rid = TakeOptionValue(rest, "--rid", "--runtime");
+
+    if (help)
+    {
+        PrintPublishUsage();
+        return 0;
+    }
+
+    if (rid is null && rest.Count > 0 && !rest[0].StartsWith("-", StringComparison.Ordinal))
+    {
+        rid = rest[0];
+        rest.RemoveAt(0);
+    }
+
+    if (rest.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected publish argument: {rest[0]}");
+        PrintPublishUsage();
+        return 1;
+    }
+
+    rid ??= DetectRuntimeIdentifier();
+    if (rid is null)
+    {
+        Console.Error.WriteLine("Could not detect a runtime identifier. Pass one, e.g. linux-x64, linux-arm64, osx-arm64, win-x64.");
+        return 1;
+    }
+
+    string output = Path.Combine(repo, "artifacts", "nova-cli", rid);
+    string csproj = Path.Combine(repo, "e6502.Nova", "e6502.Nova.csproj");
+    int rc = RunCommand("dotnet",
+    [
+        "publish", csproj,
+        "-c", "Release",
+        "-r", rid,
+        "--self-contained", "true",
+        "-p:PublishAot=true",
+        "--tl:off",
+        "-o", output
+    ]);
+    if (rc != 0)
+        return rc;
+
+    string exe = Path.Combine(output, rid.StartsWith("win-", StringComparison.OrdinalIgnoreCase) ? "nova.exe" : "nova");
+    if (!File.Exists(exe))
+    {
+        Console.Error.WriteLine($"NativeAOT publish completed without producing {exe}");
+        return 1;
+    }
+
+    Console.WriteLine($"Published Nova CLI: {exe}");
+    return 0;
+}
+
+static string? DetectRuntimeIdentifier()
+{
+    string os = OperatingSystem.IsWindows() ? "win"
+              : OperatingSystem.IsMacOS() ? "osx"
+              : OperatingSystem.IsLinux() ? "linux"
+              : "";
+    string arch = RuntimeInformation.OSArchitecture switch
+    {
+        Architecture.X64 => "x64",
+        Architecture.Arm64 => "arm64",
+        _ => "",
+    };
+    return os.Length > 0 && arch.Length > 0 ? $"{os}-{arch}" : null;
+}
+
+static void PrintPublishUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova publish [rid] [--repo <repo>]");
+    Console.Error.WriteLine("  nova publish --rid <rid> [--repo <repo>]");
+    Console.Error.WriteLine("Examples:");
+    Console.Error.WriteLine("  nova publish");
+    Console.Error.WriteLine("  nova publish linux-x64");
+    Console.Error.WriteLine("  nova publish linux-arm64");
+    Console.Error.WriteLine("  nova publish osx-arm64");
+    Console.Error.WriteLine("  nova publish win-x64");
+}
+
+static int DoConvert(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintConvertUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    try
+    {
+        return args[0].ToLowerInvariant() switch
+        {
+            "hex16-to-bin" or "hex16" => DoConvertHex16ToBin(args[1..]),
+            "bin-header" or "bin2header" => DoConvertBinHeader(args[1..]),
+            _ => UnknownConvertCommand(args[0]),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"convert {args[0]}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoConvertHex16ToBin(string[] args)
+{
+    if (args.Length != 2)
+    {
+        PrintConvertUsage();
+        return 1;
+    }
+
+    string input = args[0];
+    string output = args[1];
+    var bytes = new List<byte>();
+
+    int lineNo = 0;
+    foreach (string raw in File.ReadLines(input))
+    {
+        lineNo++;
+        string token = raw.Trim();
+        if (token.Length == 0 || token.StartsWith("//", StringComparison.Ordinal))
+            continue;
+
+        string hex = token.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? token[2..] : token;
+        if (!ushort.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ushort value))
+        {
+            Console.Error.WriteLine($"{input}:{lineNo}: not a 16-bit hex value: {token}");
+            return 1;
+        }
+
+        bytes.Add((byte)(value & 0xFF));
+        bytes.Add((byte)(value >> 8));
+    }
+
+    EnsureParentDirectory(output);
+    File.WriteAllBytes(output, bytes.ToArray());
+    Console.WriteLine($"{input} -> {output} ({bytes.Count} bytes)");
+    return 0;
+}
+
+static int DoConvertBinHeader(string[] args)
+{
+    if (args.Length != 3)
+    {
+        PrintConvertUsage();
+        return 1;
+    }
+
+    WriteBinHeader(args[0], args[1], args[2], check: false, generator: "nova convert bin-header");
+    return 0;
+}
+
+static int UnknownConvertCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown convert command: {command}");
+    PrintConvertUsage();
+    return 1;
+}
+
+static void PrintConvertUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova convert hex16-to-bin <input.hex> <output.bin>");
+    Console.Error.WriteLine("  nova convert bin-header <input.bin> <output.h> <symbol>");
+}
+
+static int DoCodegen(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintCodegenUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    try
+    {
+        return command switch
+        {
+            "tokens" => DoCodegenTokens(rest),
+            "novavm-inc" => DoCodegenNovaVmInc(rest),
+            "runtime-abi" => DoCodegenRuntimeAbi(rest),
+            "ndk-reference" => DoCodegenNdkReference(rest),
+            _ => UnknownCodegenCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"codegen {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoCodegenTokens(List<string> args)
+{
+    string output = TakeOptionValue(args, "-o", "--output") ?? "tokens.json";
+    if (args.Count != 1)
+    {
+        PrintCodegenUsage();
+        return 1;
+    }
+
+    NovaBuildTools.GenerateTokens(args[0], output);
+    return 0;
+}
+
+static int DoCodegenNovaVmInc(List<string> args)
+{
+    string output = TakeOptionValue(args, "-o", "--output") ?? "novavm.inc";
+    if (args.Count is < 1 or > 2)
+    {
+        PrintCodegenUsage();
+        return 1;
+    }
+
+    string? symPath = args.Count == 2 ? args[1] : null;
+    NovaBuildTools.GenerateNovaVmInc(args[0], symPath, output);
+    return 0;
+}
+
+static int DoCodegenRuntimeAbi(List<string> args)
+{
+    string? sym = TakeOptionValue(args, "--sym");
+    string? json = TakeOptionValue(args, "--json");
+    string? md = TakeOptionValue(args, "--md");
+    string? asm = TakeOptionValue(args, "--asm");
+    if (args.Count < 1 || json is null || md is null)
+    {
+        PrintCodegenUsage();
+        return 1;
+    }
+
+    NovaBuildTools.GenerateRuntimeAbiDocs(args, sym, json, md, asm);
+    return 0;
+}
+
+static int DoCodegenNdkReference(List<string> args)
+{
+    string? runtimeDir = TakeOptionValue(args, "--runtime-dir");
+    string? tex = TakeOptionValue(args, "--tex");
+    string? json = TakeOptionValue(args, "--json");
+    if (runtimeDir is null || tex is null || json is null || args.Count > 0)
+    {
+        PrintCodegenUsage();
+        return 1;
+    }
+
+    NovaBuildTools.GenerateNdkReference(runtimeDir, tex, json);
+    return 0;
+}
+
+static int UnknownCodegenCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown codegen command: {command}");
+    PrintCodegenUsage();
+    return 1;
+}
+
+static void PrintCodegenUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova codegen tokens <basic.asm> [-o tokens.json]");
+    Console.Error.WriteLine("  nova codegen novavm-inc <VgcConstants.cs> [basic.sym] [-o novavm.inc]");
+    Console.Error.WriteLine("  nova codegen runtime-abi <sources...> --sym <basic.sym> --json <out.json> --md <out.md> [--asm <out.inc>]");
+    Console.Error.WriteLine("  nova codegen ndk-reference --runtime-dir <runtime/asm> --tex <out.tex> --json <out.json>");
+}
+
+static int DoDocs(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintDocsUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    string repo = ResolveRepoRoot(rest);
+    try
+    {
+        return command switch
+        {
+            "basic-user-guide" => DoDocsBasicUserGuide(repo, rest),
+            "nova-cli-guide" => DoDocsNovaCliGuide(repo, rest),
+            "fun-n-games" => DoDocsFunNGames(repo, rest),
+            "showcase-demo" => DoDocsShowcaseDemo(repo, rest),
+            _ => UnknownDocsCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"docs {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoDocsBasicUserGuide(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        PrintDocsUsage();
+        return 1;
+    }
+
+    if (!CommandExists("pandoc") || !CommandExists("latexmk"))
+    {
+        Console.WriteLine("docs basic-user-guide: pandoc/latexmk not found -- skipping PDF user guide.");
+        return 0;
+    }
+
+    string bookDir = Path.Combine(repo, "docs", "books", "basic-user-guide");
+    string assembled = Path.Combine(bookDir, "assembled.md");
+    NovaBuildTools.AssembleHelpBook(
+        Path.Combine(bookDir, "book.yaml"),
+        Path.Combine(repo, "docs", "help"),
+        assembled);
+
+    var pandocArgs = new List<string>
+    {
+        assembled,
+        "--lua-filter=" + Path.Combine(bookDir, "nova-filter.lua"),
+        "--pdf-engine=latexmk",
+        "--pdf-engine-opt=-pdf",
+        "-V", "geometry:margin=1in",
+        "-V", "fontsize=11pt",
+        "-o", Path.Combine(bookDir, "novabasic_user_guide.pdf"),
+    };
+    string template = Path.Combine(bookDir, "latex-template.tex");
+    if (File.Exists(template))
+        pandocArgs.Add("--template=" + template);
+    string header = Path.Combine(bookDir, "latex-header.tex");
+    if (File.Exists(header))
+    {
+        pandocArgs.Add("-H");
+        pandocArgs.Add(header);
+    }
+
+    try
+    {
+        int rc = RunCommand("pandoc", pandocArgs);
+        if (rc == 0)
+            Console.WriteLine($"PDF generated: {Path.Combine(bookDir, "novabasic_user_guide.pdf")}");
+        return rc;
+    }
+    finally
+    {
+        if (File.Exists(assembled))
+            File.Delete(assembled);
+    }
+}
+
+static int DoDocsNovaCliGuide(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        PrintDocsUsage();
+        return 1;
+    }
+    foreach (string tool in new[] { "pandoc", "latexmk" })
+    {
+        if (!CommandExists(tool))
+        {
+            Console.Error.WriteLine($"ERROR: {tool} is required but not installed.");
+            return 1;
+        }
+    }
+
+    string bookDir = Path.Combine(repo, "docs", "books", "nova-cli-guide");
+    int rc = RunCommand("pandoc",
+    [
+        Path.Combine(bookDir, "metadata.yaml"),
+        Path.Combine(bookDir, "chapters", "nova-cli.md"),
+        Path.Combine(bookDir, "chapters", "ndi-format.md"),
+        "--from=gfm+smart",
+        "--pdf-engine=latexmk",
+        "--pdf-engine-opt=-pdf",
+        "--toc",
+        "--number-sections",
+        "-V", "documentclass=book",
+        "-V", "classoption=oneside",
+        "-V", "geometry:margin=0.85in",
+        "-V", "fontsize=10pt",
+        "-H", Path.Combine(bookDir, "latex-header.tex"),
+        "-o", Path.Combine(bookDir, "nova-cli-guide.pdf"),
+    ]);
+    if (rc == 0)
+        Console.WriteLine($"PDF generated: {Path.Combine(bookDir, "nova-cli-guide.pdf")}");
+    return rc;
+}
+
+static int DoDocsFunNGames(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        PrintDocsUsage();
+        return 1;
+    }
+
+    string sourceDir = Path.Combine(repo, "docs", "programs", "fun_n_games");
+    string buildDir = Path.Combine(Path.GetTempPath(), "fun_n_games_build_" + Environment.ProcessId);
+    string image = Path.Combine(repo, "docs", "programs", "fun_n_games.ndi");
+    Directory.CreateDirectory(buildDir);
+
+    try
+    {
+        string common = File.ReadAllText(Path.Combine(sourceDir, "common.bas"));
+        foreach (string stub in Directory.GetFiles(Path.Combine(sourceDir, "stubs"), "*.bas").Order(StringComparer.Ordinal))
+        {
+            string text = File.ReadAllText(stub).TrimEnd() + "\n\n" + common;
+            File.WriteAllText(Path.Combine(buildDir, Path.GetFileName(stub)), text);
+        }
+
+        int rc = DoCreate([image, "--size", "800", "--label", "FUNNGAMES"]);
+        if (rc != 0) return rc;
+        foreach (string source in Directory.GetFiles(buildDir, "*.bas").Order(StringComparer.Ordinal))
+        {
+            rc = DoImport([image, source, "/", "--tokenize"]);
+            if (rc != 0) return rc;
+        }
+        return DoValidate([image]);
+    }
+    finally
+    {
+        if (Directory.Exists(buildDir))
+            Directory.Delete(buildDir, recursive: true);
+    }
+}
+
+static int DoDocsShowcaseDemo(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        PrintDocsUsage();
+        return 1;
+    }
+
+    string image = Path.Combine(repo, "docs", "programs", "demo.ndi");
+    string sourceDir = Path.Combine(repo, "docs", "programs");
+    using TempDir temp = TempDir.Create("nova-showcase-");
+
+    int rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "assembly"), "keyboard", "demo"]);
+    if (rc != 0) return rc;
+
+    rc = DoCreate([image, "--size", "4096", "--label", "SHOWCASE"]);
+    if (rc != 0) return rc;
+
+    foreach (string dir in new[] { "featured", "2sid", "sid", "wts", "arcade" })
+    {
+        rc = DoMkdir([image, "/" + dir]);
+        if (rc != 0) return rc;
+    }
+
+    string autoboot = Path.Combine(temp.Path, "AUTOBOOT.bin");
+    string keyboard = Path.Combine(temp.Path, "KEYBOARD.bin");
+    File.Copy(Path.Combine(repo, "software", "assembly", "apps", "demo", "demo.bin"), autoboot, overwrite: true);
+    File.Copy(Path.Combine(repo, "software", "assembly", "apps", "keyboard", "keyboard.bin"), keyboard, overwrite: true);
+    rc = DoImport([image, autoboot, "/"]);
+    if (rc != 0) return rc;
+    rc = DoImport([image, keyboard, "/"]);
+    if (rc != 0) return rc;
+
+    foreach ((string Source, string Dest, string Dir) entry in ShowcaseSidFiles())
+    {
+        string staged = Path.Combine(temp.Path, entry.Dest);
+        File.Copy(Path.Combine(sourceDir, "sid", entry.Source), staged, overwrite: true);
+        rc = DoImport([image, staged, entry.Dir]);
+        if (rc != 0) return rc;
+    }
+
+    foreach ((string Name, string Dir) entry in ShowcaseMidiFiles())
+    {
+        rc = DoImport([image, Path.Combine(sourceDir, "midi", entry.Name), entry.Dir, "--raw-midi"]);
+        if (rc != 0) return rc;
+    }
+
+    rc = DoValidate([image]);
+    if (rc != 0) return rc;
+    rc = DoDir([image]);
+    if (rc != 0) return rc;
+    return DoDir([image, "/featured"]);
+}
+
+static (string Source, string Dest, string Dir)[] ShowcaseSidFiles() =>
+[
+    ("Love_Fileosophy_2SID.sid", "Love_Fileosophy_2SID.sid", "/featured"),
+    ("Fratres_2SID.sid", "Fratres_2SID.sid", "/featured"),
+    ("commando.sid", "commando.sid", "/featured"),
+    ("monty-on-the-run.sid", "monty-on-the-run.sid", "/featured"),
+    ("tubular_bells_ii_shake_airwolf_style.sid", "tubular-airwolf.sid", "/featured"),
+
+    ("Love_Fileosophy_2SID.sid", "Love_Fileosophy_2SID.sid", "/2sid"),
+    ("Fratres_2SID.sid", "Fratres_2SID.sid", "/2sid"),
+    ("Popel_Premiere_2SID.sid", "Popel_Premiere_2SID.sid", "/2sid"),
+
+    ("commando.sid", "commando.sid", "/sid"),
+    ("monty-on-the-run.sid", "monty-on-the-run.sid", "/sid"),
+    ("parallax.sid", "parallax.sid", "/sid"),
+    ("wizball.sid", "wizball.sid", "/sid"),
+    ("crazy-comets.sid", "crazy-comets.sid", "/sid"),
+    ("delta.sid", "delta.sid", "/sid"),
+    ("cybernoid.sid", "cybernoid.sid", "/sid"),
+    ("sanxion.sid", "sanxion.sid", "/sid"),
+    ("lightforce.sid", "lightforce.sid", "/sid"),
+    ("master-of-magic.sid", "master-of-magic.sid", "/sid"),
+];
+
+static (string Name, string Dir)[] ShowcaseMidiFiles() =>
+[
+    ("sousa-stars-stripes.mid", "/featured"),
+    ("bach-toccata-dm.mid", "/featured"),
+    ("joplin-entertainer.mid", "/featured"),
+    ("miami-vice.mid", "/featured"),
+    ("tetris-theme.mid", "/featured"),
+    ("castlevania-bloody-tears.mid", "/featured"),
+    ("star-wars.mid", "/featured"),
+
+    ("sousa-stars-stripes.mid", "/wts"),
+    ("bach-toccata-dm.mid", "/wts"),
+    ("joplin-entertainer.mid", "/wts"),
+    ("debussy-clair-de-lune.mid", "/wts"),
+    ("miami-vice.mid", "/wts"),
+    ("tetris-theme.mid", "/wts"),
+    ("castlevania-bloody-tears.mid", "/wts"),
+    ("star-wars.mid", "/wts"),
+    ("grieg-mountain-king.mid", "/wts"),
+    ("pink-panther.mid", "/wts"),
+
+    ("sonic-green-hill.mid", "/arcade"),
+    ("super-mario-bros.mid", "/arcade"),
+    ("zelda-overworld.mid", "/arcade"),
+    ("megaman2-wily.mid", "/arcade"),
+    ("street-fighter-2.mid", "/arcade"),
+    ("contra-theme.mid", "/arcade"),
+    ("mission-impossible.mid", "/arcade"),
+    ("x-files.mid", "/arcade"),
+    ("ghostbusters.mid", "/arcade"),
+    ("hawaii-five-o.mid", "/arcade"),
+];
+
+static int DoBuild(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintBuildUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    string repo = ResolveRepoRoot(rest);
+    try
+    {
+        return command switch
+        {
+            "browser-rust-core" => DoBuildBrowserRustCore(repo, rest),
+            _ => UnknownBuildCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"build {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoBuildBrowserRustCore(string repo, List<string> args)
+{
+    if (args.Count > 0)
+    {
+        PrintBuildUsage();
+        return 1;
+    }
+
+    string outDir = Path.Combine(repo, "e6502.Browser", "wwwroot", "rust");
+    int rc = RunCommand("rustup",
+    [
+        "run", "stable", "cargo", "build",
+        "--manifest-path", Path.Combine(repo, "e6502.Browser.RustCore", "Cargo.toml"),
+        "--target", "wasm32-unknown-unknown",
+        "--release"
+    ]);
+    if (rc != 0) return rc;
+
+    Directory.CreateDirectory(outDir);
+    File.Copy(
+        Path.Combine(repo, "e6502.Browser.RustCore", "target", "wasm32-unknown-unknown", "release", "nova_browser_core.wasm"),
+        Path.Combine(outDir, "nova_browser_core.wasm"),
+        overwrite: true);
+
+    foreach (string resource in BrowserRustResourceFiles())
+    {
+        File.Copy(
+            Path.Combine(repo, "e6502.Avalonia", "Resources", resource),
+            Path.Combine(outDir, resource),
+            overwrite: true);
+    }
+
+    string forthDisk = Path.Combine(repo, "e6502.Browser", "wwwroot", "forth.ndi");
+    using TempFile tempForth = TempFile.Create(".ndi");
+    rc = DoCreate([tempForth.Path, "--size", "800", "--label", "FORTH"]);
+    if (rc != 0) return rc;
+
+    string forthRoot = Path.Combine(repo, "software", "languages", "novaforth");
+    foreach (string dir in Directory.GetDirectories(Path.Combine(forthRoot, "forth"), "*", SearchOption.AllDirectories)
+                                    .Order(StringComparer.Ordinal))
+    {
+        string rel = Path.GetRelativePath(forthRoot, dir).Replace(Path.DirectorySeparatorChar, '/');
+        rc = DoMkdir([tempForth.Path, "/" + rel]);
+        if (rc != 0) return rc;
+    }
+
+    foreach (string file in Directory.GetFiles(Path.Combine(forthRoot, "forth"), "*", SearchOption.AllDirectories)
+                                     .Where(IsForthSourcePath)
+                                     .Order(StringComparer.Ordinal))
+    {
+        string rel = Path.GetRelativePath(forthRoot, file).Replace(Path.DirectorySeparatorChar, '/');
+        string destDir = "/" + Path.GetDirectoryName(rel)!.Replace(Path.DirectorySeparatorChar, '/');
+        rc = DoImport([tempForth.Path, file, destDir]);
+        if (rc != 0) return rc;
+    }
+
+    rc = DoValidate([tempForth.Path]);
+    if (rc != 0) return rc;
+    File.Copy(tempForth.Path, forthDisk, overwrite: true);
+    Console.WriteLine($"Rust browser core assets written to {outDir}");
+    return 0;
+}
+
+static string[] BrowserRustResourceFiles() =>
+[
+    "ehbasic.bin", "novalogo.bin", "novaforth.bin", "extension.bin", "cp437.bin",
+    "libcall.bin", "graphics.bin", "system.bin", "sound.bin", "editor.bin",
+    "files.bin", "memory.bin", "net.bin", "turtle.bin",
+];
+
+static bool IsForthSourcePath(string path)
+{
+    string ext = Path.GetExtension(path).ToLowerInvariant();
+    return ext is ".4th" or ".fth" or ".fr" or ".fs";
+}
+
+static int UnknownBuildCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown build command: {command}");
+    PrintBuildUsage();
+    return 1;
+}
+
+static void PrintBuildUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova build browser-rust-core [--repo <repo>]");
+}
+
+static int DoCapture(string[] args, string? host)
+{
+    _ = host;
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintCaptureUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    try
+    {
+        return command switch
+        {
+            "hdmi" => DoCaptureHdmi(rest),
+            _ => UnknownCaptureCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"capture {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoCaptureHdmi(List<string> args)
+{
+    bool list = TakeFlag(args, "--list");
+    string device = TakeOptionValue(args, "--device") ?? Environment.GetEnvironmentVariable("HDMI_DEVICE") ?? "0:none";
+    string size = TakeOptionValue(args, "--size") ?? Environment.GetEnvironmentVariable("HDMI_SIZE") ?? "720x480";
+    string framerate = TakeOptionValue(args, "--framerate") ?? Environment.GetEnvironmentVariable("HDMI_FRAMERATE") ?? "30";
+
+    if (list)
+        return RunCommand("ffmpeg", ["-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""]);
+
+    string output = args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal)
+        ? args[0]
+        : Path.Combine("screenshots", "hardware", "novavm-hdmi-" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".png");
+    if (args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
+        args.RemoveAt(0);
+    if (args.Count > 0)
+    {
+        PrintCaptureUsage();
+        return 1;
+    }
+
+    EnsureParentDirectory(output);
+    int rc = RunCommand("ffmpeg",
+    [
+        "-hide_banner",
+        "-loglevel", "warning",
+        "-y",
+        "-f", "avfoundation",
+        "-pixel_format", "uyvy422",
+        "-framerate", framerate,
+        "-video_size", size,
+        "-i", device,
+        "-frames:v", "1",
+        "-update", "1",
+        output
+    ]);
+    if (rc == 0)
+        Console.WriteLine(output);
+    return rc;
+}
+
+static int UnknownCaptureCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown capture command: {command}");
+    PrintCaptureUsage();
+    return 1;
+}
+
+static void PrintCaptureUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova capture hdmi [out.png] [--device <avfoundation-device>] [--size 720x480] [--framerate 30]");
+    Console.Error.WriteLine("  nova capture hdmi --list");
+}
+
+static int DoCheck(string[] args, string? host)
+{
+    host = ExtractRemoteHost(ref args, host);
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintCheckUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    try
+    {
+        return command switch
+        {
+            "vgc-reset-stale" => DoCheckVgcResetStale(rest, host),
+            "spi-bridge" => DoCheckSpiBridge(rest, host),
+            _ => UnknownCheckCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"check {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoCheckVgcResetStale(List<string> args, string? host)
+{
+    string? portOpt = TakeOptionValue(args, "--port", "--debug-port");
+    string? settleOpt = TakeOptionValue(args, "--settle");
+    if (args.Count > 0)
+    {
+        PrintCheckUsage();
+        return 1;
+    }
+
+    host ??= Environment.GetEnvironmentVariable("NOVAHOST") ?? "192.168.1.65";
+    int port = 6503;
+    if (portOpt is not null && (!int.TryParse(portOpt, out port) || port is < 1 or > 65535))
+    {
+        Console.Error.WriteLine($"Invalid debug TCP port: {portOpt}");
+        return 1;
+    }
+    double settleSeconds = 0.5;
+    if (settleOpt is not null && !double.TryParse(settleOpt, NumberStyles.Float, CultureInfo.InvariantCulture, out settleSeconds))
+    {
+        Console.Error.WriteLine($"Invalid settle seconds: {settleOpt}");
+        return 1;
+    }
+
+    JsonNode status = SendVmRequest(host, port, new JsonObject { ["command"] = "boot_status" });
+    if (status["fpgaBridgeAvailable"]?.GetValue<bool>() == false)
+    {
+        Console.Error.WriteLine($"FPGA bridge unavailable: {status.ToJsonString()}");
+        return 1;
+    }
+
+    _ = SendVmRequest(host, port, new JsonObject { ["command"] = "dbg_pause" });
+    Console.WriteLine("Dirtying VGC memory planes...");
+    foreach (VgcResetPlane plane in VgcResetPlanes())
+    {
+        _ = SendVmRequest(host, port, new JsonObject
+        {
+            ["command"] = "fill_vram",
+            ["space"] = plane.Space,
+            ["address"] = 0,
+            ["value"] = plane.DirtyValue,
+            ["length"] = plane.Length,
+        });
+        Console.WriteLine($"  dirtied {plane.Name}");
+    }
+
+    Console.WriteLine("Resetting VM...");
+    using (var management = new NovaHostManagementClient(host))
+        _ = management.VmResetAsync(CancellationToken.None).GetAwaiter().GetResult();
+    Thread.Sleep(TimeSpan.FromSeconds(settleSeconds));
+
+    Console.WriteLine("Scanning for stale data...");
+    bool failed = false;
+    foreach (VgcResetPlane plane in VgcResetPlanes())
+    {
+        (int failures, string? first) = ScanVgcResetPlane(host, port, plane);
+        if (failures > 0)
+        {
+            failed = true;
+            Console.WriteLine($"FAIL {plane.Name}: {failures} stale bytes; first {first}");
+        }
+        else
+        {
+            string expectation = plane.ExpectZero ? "zeroed" : "dirty sentinel removed";
+            Console.WriteLine($"PASS {plane.Name}: {expectation}");
+        }
+    }
+
+    return failed ? 1 : 0;
+}
+
+static VgcResetPlane[] VgcResetPlanes() =>
+[
+    new("text chars", 1, 4000, 0x01, false),
+    new("text colors", 2, 4000, 0x06, false),
+    new("text attrs", 7, 4000, 0x80, true),
+    new("graphics bitmap", 3, 64000, 0x0D, true),
+    new("sprite shapes", 4, 2048, 0xA5, true),
+];
+
+static (int Failures, string? First) ScanVgcResetPlane(string host, int port, VgcResetPlane plane)
+{
+    const int Block = 256;
+    int failures = 0;
+    string? first = null;
+    for (int offset = 0; offset < plane.Length; offset += Block)
+    {
+        int length = Math.Min(Block, plane.Length - offset);
+        int[] data = ReadVramValues(host, port, plane.Space, offset, length);
+        for (int i = 0; i < data.Length; i++)
+        {
+            bool bad = plane.ExpectZero ? data[i] != 0 : data[i] == plane.DirtyValue;
+            if (!bad)
+                continue;
+            failures++;
+            first ??= $"offset {offset + i}: got {data[i]}, expected {(plane.ExpectZero ? "0" : "not " + plane.DirtyValue.ToString(CultureInfo.InvariantCulture))}";
+        }
+    }
+    return (failures, first);
+}
+
+static int[] ReadVramValues(string host, int port, int space, int address, int length)
+{
+    JsonNode response = SendVmRequest(host, port, new JsonObject
+    {
+        ["command"] = "read_vram",
+        ["space"] = space,
+        ["address"] = address,
+        ["length"] = length,
+    });
+    if (length == 1 && response["value"] is JsonNode value)
+        return [value.GetValue<int>() & 0xFF];
+    JsonArray? data = response["data"] as JsonArray ?? response["values"] as JsonArray;
+    if (data is null)
+        throw new IOException($"read_vram returned no data at space={space} address={address}: {response.ToJsonString()}");
+    return data.Select(v => v?.GetValue<int>() & 0xFF ?? 0).ToArray();
+}
+
+static int DoCheckSpiBridge(List<string> args, string? host)
+{
+    string? portOpt = TakeOptionValue(args, "--port", "--debug-port");
+    string baseText = TakeOptionValue(args, "--base") ?? "0x7F0000";
+    string blocksText = TakeOptionValue(args, "--blocks") ?? "64";
+    string iterationsText = TakeOptionValue(args, "--iterations") ?? "2";
+    bool noRestore = TakeFlag(args, "--no-restore");
+    if (args.Count > 0)
+    {
+        PrintCheckUsage();
+        return 1;
+    }
+
+    host ??= Environment.GetEnvironmentVariable("NOVAHOST") ?? "192.168.1.65";
+    int port = 6503;
+    if (portOpt is not null && (!int.TryParse(portOpt, out port) || port is < 1 or > 65535))
+    {
+        Console.Error.WriteLine($"Invalid debug TCP port: {portOpt}");
+        return 1;
+    }
+
+    int baseAddress = ParseVmNumber(baseText);
+    if (!int.TryParse(blocksText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int blocks) || blocks < 1)
+    {
+        Console.Error.WriteLine("--blocks must be >= 1");
+        return 1;
+    }
+    if (!int.TryParse(iterationsText, NumberStyles.Integer, CultureInfo.InvariantCulture, out int iterations) || iterations < 1)
+    {
+        Console.Error.WriteLine("--iterations must be >= 1");
+        return 1;
+    }
+
+    JsonNode status = SendVmRequest(host, port, new JsonObject { ["command"] = "boot_status" });
+    if (status["fpgaBridgeAvailable"]?.GetValue<bool>() == false)
+    {
+        Console.Error.WriteLine($"FPGA bridge unavailable: {status.ToJsonString()}");
+        return 1;
+    }
+
+    const int BlockSize = 256;
+    var originals = new List<int[]>(blocks);
+    Console.WriteLine($"SPI bridge SDRAM stress: base=0x{baseAddress:X6} blocks={blocks} iterations={iterations}");
+    for (int block = 0; block < blocks; block++)
+        originals.Add(ReadSdramBlock(host, port, baseAddress + block * BlockSize, BlockSize));
+
+    var started = DateTime.UtcNow;
+    try
+    {
+        for (int iteration = 0; iteration < iterations; iteration++)
+        {
+            for (int block = 0; block < blocks; block++)
+            {
+                int address = baseAddress + block * BlockSize;
+                int[] expected = SpiPattern(block, iteration, BlockSize);
+                WriteSdramBlock(host, port, address, expected);
+                int[] actual = ReadSdramBlock(host, port, address, BlockSize);
+                for (int i = 0; i < expected.Length; i++)
+                {
+                    if (actual[i] != expected[i])
+                    {
+                        Console.Error.WriteLine($"SDRAM mismatch at 0x{address + i:X6}: got 0x{actual[i]:X2}, expected 0x{expected[i]:X2}");
+                        return 1;
+                    }
+                }
+            }
+            Console.WriteLine($"  iteration {iteration + 1}/{iterations}: ok");
+        }
+    }
+    finally
+    {
+        if (!noRestore)
+            for (int block = 0; block < originals.Count; block++)
+                WriteSdramBlock(host, port, baseAddress + block * BlockSize, originals[block]);
+    }
+
+    double elapsed = (DateTime.UtcNow - started).TotalSeconds;
+    Console.WriteLine($"PASS: {blocks * BlockSize * iterations} patterned bytes verified in {elapsed:F2}s");
+    return 0;
+}
+
+static int[] SpiPattern(int block, int iteration, int length)
+{
+    int[] result = new int[length];
+    int mode = (block + iteration) % 5;
+    for (int i = 0; i < result.Length; i++)
+    {
+        result[i] = mode switch
+        {
+            0 => (i + block + iteration) & 0xFF,
+            1 => (i & 1) == 0 ? 0x00 : 0xFF,
+            2 => (i & 1) == 0 ? 0xAA : 0x55,
+            3 => ((i * 17) + (block * 31) + iteration) & 0xFF,
+            _ => 0xFF - ((i + block) & 0xFF),
+        };
+    }
+    return result;
+}
+
+static int[] ReadSdramBlock(string host, int port, int address, int count)
+{
+    JsonNode response = SendVmRequest(host, port, new JsonObject
+    {
+        ["command"] = "read_sdram",
+        ["address"] = address,
+        ["count"] = count,
+    });
+    JsonArray? values = response["values"] as JsonArray;
+    if (values is null || values.Count != count)
+        throw new IOException($"read_sdram returned malformed values at 0x{address:X6}: {response.ToJsonString()}");
+    return values.Select(v => v is null ? 0 : v.GetValue<int>() & 0xFF).ToArray();
+}
+
+static void WriteSdramBlock(string host, int port, int address, IReadOnlyList<int> values)
+{
+    var jsonValues = new JsonArray();
+    foreach (int value in values)
+        jsonValues.Add(value & 0xFF);
+    JsonNode response = SendVmRequest(host, port, new JsonObject
+    {
+        ["command"] = "write_sdram",
+        ["address"] = address,
+        ["values"] = jsonValues,
+    });
+    if (response["ok"]?.GetValue<bool>() == false)
+        throw new IOException(response["error"]?.ToString() ?? response.ToJsonString());
+}
+
+static int UnknownCheckCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown check command: {command}");
+    PrintCheckUsage();
+    return 1;
+}
+
+static void PrintCheckUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova check vgc-reset-stale [--remote <host>] [--port 6503] [--settle 0.5]");
+    Console.Error.WriteLine("  nova check spi-bridge [--remote <host>] [--port 6503] [--base 0x7F0000] [--blocks 64] [--iterations 2] [--no-restore]");
+}
+
+static bool CommandExists(string name)
+{
+    string pathVariable = Environment.GetEnvironmentVariable("PATH") ?? "";
+    foreach (string directory in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+    {
+        string path = Path.Combine(directory, name);
+        if (File.Exists(path))
+            return true;
+        if (OperatingSystem.IsWindows() && File.Exists(path + ".exe"))
+            return true;
+    }
+    return false;
+}
+
+static int UnknownDocsCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown docs command: {command}");
+    PrintDocsUsage();
+    return 1;
+}
+
+static void PrintDocsUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova docs basic-user-guide [--repo <repo>]");
+    Console.Error.WriteLine("  nova docs nova-cli-guide [--repo <repo>]");
+    Console.Error.WriteLine("  nova docs fun-n-games [--repo <repo>]");
+    Console.Error.WriteLine("  nova docs showcase-demo [--repo <repo>]");
+}
+
+static int DoFpga(string[] args)
+{
+    if (args.Length < 1 || args[0].Equals("help", StringComparison.OrdinalIgnoreCase))
+    {
+        PrintFpgaUsage();
+        return args.Length < 1 ? 1 : 0;
+    }
+
+    string command = args[0].ToLowerInvariant();
+    var rest = args[1..].ToList();
+    try
+    {
+        return command switch
+        {
+            "check-timing" => DoFpgaCheckTiming(rest),
+            "check-bitstream" => DoFpgaCheckBitstream(rest),
+            _ => UnknownFpgaCommand(command),
+        };
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"fpga {command}: {ex.Message}");
+        return 1;
+    }
+}
+
+static int DoFpgaCheckTiming(List<string> args)
+{
+    string? log = TakeOptionValue(args, "--log");
+    string marginText = TakeOptionValue(args, "--margin-mhz") ?? "0";
+    if (args.Count != 1 || !double.TryParse(marginText, CultureInfo.InvariantCulture, out double marginMhz))
+    {
+        PrintFpgaUsage();
+        return 1;
+    }
+
+    return NovaBuildTools.CheckFpgaTiming(args[0], log, marginMhz);
+}
+
+static int DoFpgaCheckBitstream(List<string> args)
+{
+    string repo = TakeOptionValue(args, "--repo-root") ?? Directory.GetCurrentDirectory();
+    bool includeRoms = TakeFlag(args, "--include-roms");
+    if (args.Count != 1)
+    {
+        PrintFpgaUsage();
+        return 1;
+    }
+
+    return NovaBuildTools.CheckBitstreamFreshness(args[0], repo, includeRoms);
+}
+
+static int UnknownFpgaCommand(string command)
+{
+    Console.Error.WriteLine($"Unknown fpga command: {command}");
+    PrintFpgaUsage();
+    return 1;
+}
+
+static void PrintFpgaUsage()
+{
+    Console.Error.WriteLine("Usage:");
+    Console.Error.WriteLine("  nova fpga check-timing <nextpnr-report.json> [--log <nextpnr.log>] [--margin-mhz <mhz>]");
+    Console.Error.WriteLine("  nova fpga check-bitstream <bitstream> [--repo-root <repo>] [--include-roms]");
+}
+
+static void EnsureParentDirectory(string path)
+{
+    string? directory = Path.GetDirectoryName(Path.GetFullPath(path));
+    if (!string.IsNullOrEmpty(directory))
+        Directory.CreateDirectory(directory);
+}
 
 static int DoWebServer(string[] args, string? host)
 {
@@ -147,6 +2158,7 @@ static int DoModule(string[] args, string? host)
         "put" or "upload"   => DoModulePut(rest, host),
         "get" or "download" => DoModuleGet(rest, host),
         "rm" or "delete"    => DoModuleRm(rest, host),
+        "pack"              => DoModulePack(rest),
         _                   => UnknownModuleCommand(cmd),
     };
 }
@@ -167,6 +2179,34 @@ static void PrintModuleUsage()
     Console.Error.WriteLine("  nova module put <file> [name] --remote <host>");
     Console.Error.WriteLine("  nova module get <name> [local] --remote <host>");
     Console.Error.WriteLine("  nova module rm <name> --remote <host>");
+    Console.Error.WriteLine("  nova module pack --src <module.s> --bin <module.bin> --out <module.nmod> [--syms <file>] [--ndk-dir <dir>]");
+}
+
+static int DoModulePack(string[] args)
+{
+    var rest = args.ToList();
+    string? src = TakeOptionValue(rest, "--src");
+    string? bin = TakeOptionValue(rest, "--bin");
+    string? output = TakeOptionValue(rest, "--out");
+    var syms = TakeRepeatedOptionValues(rest, "--syms");
+    var ndkDirs = TakeRepeatedOptionValues(rest, "--ndk-dir");
+
+    if (src is null || bin is null || output is null || rest.Count > 0)
+    {
+        PrintModuleUsage();
+        return 1;
+    }
+
+    try
+    {
+        NovaBuildTools.PackNmod(src, bin, output, syms, ndkDirs);
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"module pack: {src}: {ex.Message}");
+        return 1;
+    }
 }
 
 // Read a module's bytes from a local file (if it exists), else from the board's /lib.
@@ -1293,12 +3333,14 @@ static int DoVm(string[] args, string? host)
         JsonObject request = command switch
         {
             "raw" => BuildVmRawRequest(rest),
+            "reload-rom" or "reloadrom" => new JsonObject { ["command"] = "reload_rom" },
             "cold-start" or "coldstart" => BuildVmColdStartRequest(rest),
             "reset" or "vm-reset" => BuildVmResetRequest(rest),
             "wait" or "wait-ready" => BuildVmWaitRequest(rest),
             "screen" => new JsonObject { ["command"] = "read_screen" },
             "line" => BuildVmLineRequest(rest),
             "cursor" => new JsonObject { ["command"] = "get_cursor" },
+            "mute-sid" or "mutesid" => new JsonObject { ["command"] = "type_text", ["text"] = "FOR I=54272 TO 54335:POKE I,0:NEXT I\r" },
             "type" or "type-text" => BuildVmTypeTextRequest(rest),
             "line-input" or "enter" => BuildVmLineInputRequest(rest),
             "key" => BuildVmKeyRequest(rest),
@@ -2067,12 +4109,14 @@ static void PrintVmUsage()
     Console.Error.WriteLine();
     Console.Error.WriteLine("Commands:");
     Console.Error.WriteLine("  cold-start [--runtime basic|logo|forth] [--text <text>] [--no-wait]");
+    Console.Error.WriteLine("  reload-rom");
     Console.Error.WriteLine("  reset [--text <text>] [--no-wait]");
     Console.Error.WriteLine("  wait [text] [--timeout-ms <ms>]");
     Console.Error.WriteLine("  screen [--json]");
     Console.Error.WriteLine("  screenshot [out.png] [--gfx-only]   (default: full 720x480 composite)");
     Console.Error.WriteLine("  line <row>");
     Console.Error.WriteLine("  cursor");
+    Console.Error.WriteLine("  mute-sid");
     Console.Error.WriteLine("  type-text <text>");
     Console.Error.WriteLine("  enter <text>");
     Console.Error.WriteLine("  key <key>");
@@ -2996,6 +5040,33 @@ static bool TakeFlag(List<string> args, params string[] names)
     }
 
     return false;
+}
+
+static List<string> TakeRepeatedOptionValues(List<string> args, params string[] names)
+{
+    var values = new List<string>();
+    for (int i = 0; i < args.Count;)
+    {
+        string arg = args[i];
+        string? matchedName = names.FirstOrDefault(name => arg.StartsWith(name + "=", StringComparison.Ordinal));
+        if (matchedName is not null)
+        {
+            values.Add(arg[(matchedName.Length + 1)..]);
+            args.RemoveAt(i);
+            continue;
+        }
+
+        if (names.Contains(arg, StringComparer.Ordinal) && i + 1 < args.Count)
+        {
+            values.Add(args[i + 1]);
+            args.RemoveRange(i, 2);
+            continue;
+        }
+
+        i++;
+    }
+
+    return values;
 }
 
 static string NormalizeSdRelativePath(string path)
@@ -4015,6 +6086,9 @@ static NdiFileType ExtensionToFileType(string ext) =>
     ext.ToLowerInvariant() switch
     {
         ".bas"            => NdiFileType.Bas,
+        ".pas"            => NdiFileType.Pascal,
+        ".logo" or ".lgo" => NdiFileType.Logo,
+        ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
         ".sid"            => NdiFileType.Sid,
         ".bin"            => NdiFileType.Bin,
         ".mid" or ".midi" or ".nms" => NdiFileType.Mid,
@@ -4076,6 +6150,13 @@ static void PrintUsage()
     Console.Error.WriteLine("  rmdir      <file.ndi> <path>");
     Console.Error.WriteLine("  tokenize   <input.txt> <output.bas> [--base <addr>] [--tokens <path>]");
     Console.Error.WriteLine("  detokenize <input.bas> [output.txt] [--tokens <path>]");
+    Console.Error.WriteLine("  convert    hex16-to-bin|bin-header ...");
+    Console.Error.WriteLine("  codegen    tokens|novavm-inc|runtime-abi|ndk-reference ...");
+    Console.Error.WriteLine("  build      browser-rust-core ...");
+    Console.Error.WriteLine("  docs       basic-user-guide|nova-cli-guide|fun-n-games|showcase-demo ...");
+    Console.Error.WriteLine("  fpga       check-timing|check-bitstream ...");
+    Console.Error.WriteLine("  ci         install-linux-deps|install-macos-cc65|mint-github-token ...");
+    Console.Error.WriteLine("  publish    [rid]");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Typed NovaHost SD commands:");
     Console.Error.WriteLine("  device status|reboot --remote <host>");
@@ -4097,6 +6178,47 @@ static void PrintUsage()
     Console.Error.WriteLine("  --remote <host> get <remote-path> [local-path]");
     Console.Error.WriteLine("  --remote <host> rm <remote-path>");
 }
+
+sealed class TempDir : IDisposable
+{
+    private TempDir(string path) => Path = path;
+    public string Path { get; }
+
+    public static TempDir Create(string prefix)
+    {
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), prefix + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return new TempDir(path);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(Path))
+            Directory.Delete(Path, recursive: true);
+    }
+}
+
+sealed class TempFile : IDisposable
+{
+    private TempFile(string path) => Path = path;
+    public string Path { get; }
+
+    public static TempFile Create(string suffix)
+    {
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "nova-" + Guid.NewGuid().ToString("N") + suffix);
+        if (File.Exists(path))
+            File.Delete(path);
+        return new TempFile(path);
+    }
+
+    public void Dispose()
+    {
+        if (File.Exists(Path))
+            File.Delete(Path);
+    }
+}
+
+readonly record struct VgcResetPlane(string Name, int Space, int Length, int DirtyValue, bool ExpectZero);
 
 sealed class KeyboardRepeatFilter
 {

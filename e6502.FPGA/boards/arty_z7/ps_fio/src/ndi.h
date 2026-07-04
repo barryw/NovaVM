@@ -19,7 +19,7 @@ typedef struct {
     int      index;
     int      active;
     int      is_dir;
-    uint8_t  type;            // FT_BAS=0,SID=1,BIN=2,MID=3,GFX=4,DIR=5,FORTH=6
+    uint8_t  type;            // FT_BAS=0,SID=1,BIN=2,MID=3,GFX=4,DIR=5,FORTH=6,LOGO=7,PASCAL=8,ASM=9
     uint16_t parent;
     uint32_t start_sector;
     uint32_t size;

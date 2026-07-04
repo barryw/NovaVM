@@ -182,7 +182,7 @@ task automatic do_reset();
     rst = 0;
     begin
         int timeout = 0;
-        while (!vgc_rdy && timeout < 100000) begin
+        while (!vgc_rdy && timeout < 200000) begin
             @(posedge clk);
             timeout++;
         end
@@ -315,36 +315,36 @@ endfunction
 
 // Sprite memory peek — sprite shape RAM is double-buffered. CPU/commands see
 // the pending bank immediately; PIXIE renders from the active bank. Addresses
-// are {sprite_idx[3:0], row[3:0], col_pair[2:0]}. Each byte packs two 4-bit
+// are {shape_slot[7:0], row[3:0], col_pair[2:0]}. Each byte packs two 4-bit
 // pixels: hi nibble = even column, lo nibble = odd column.
-function automatic logic [10:0] spr_byte_addr(input int spr_idx,
+function automatic logic [14:0] spr_byte_addr(input int spr_idx,
                                                input int row,
                                                input int col_pair);
-    spr_byte_addr = 11'((spr_idx * 16 + row) * 8 + col_pair);
+    spr_byte_addr = 15'((spr_idx * 16 + row) * 8 + col_pair);
 endfunction
 
-function automatic logic [7:0] peek_spr_pending_addr(input logic [10:0] addr);
+function automatic logic [7:0] peek_spr_pending_addr(input logic [14:0] addr);
     if (dut.sprite_inst.pending_shape_bank)
         peek_spr_pending_addr = dut.sprite_inst.spr_mem1.mem[addr];
     else
         peek_spr_pending_addr = dut.sprite_inst.spr_mem0.mem[addr];
 endfunction
 
-function automatic logic [7:0] peek_spr_active_addr(input logic [10:0] addr);
+function automatic logic [7:0] peek_spr_active_addr(input logic [14:0] addr);
     if (dut.sprite_inst.active_shape_bank)
         peek_spr_active_addr = dut.sprite_inst.spr_mem1.mem[addr];
     else
         peek_spr_active_addr = dut.sprite_inst.spr_mem0.mem[addr];
 endfunction
 
-task automatic poke_spr_pending_addr(input logic [10:0] addr, input logic [7:0] val);
+task automatic poke_spr_pending_addr(input logic [14:0] addr, input logic [7:0] val);
     if (dut.sprite_inst.pending_shape_bank)
         dut.sprite_inst.spr_mem1.mem[addr] = val;
     else
         dut.sprite_inst.spr_mem0.mem[addr] = val;
 endtask
 
-task automatic poke_spr_active_addr(input logic [10:0] addr, input logic [7:0] val);
+task automatic poke_spr_active_addr(input logic [14:0] addr, input logic [7:0] val);
     if (dut.sprite_inst.active_shape_bank)
         dut.sprite_inst.spr_mem1.mem[addr] = val;
     else

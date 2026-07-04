@@ -1106,6 +1106,17 @@ Requires:
 - `FIO_NAME`
 - `FIO_NAMELEN`
 
+## FIO.DEVSTATUS
+
+Check whether the device named by FIO.NAME/FIO.NAMELEN is mounted.
+
+- Kind: `routine`
+- Symbol: `fio_devstatus`
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
+
 ## FIO.DIR_OPEN
 
 Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.
@@ -1474,6 +1485,92 @@ Set FIO_STATUS/FIO_ERRCODE to the shared I/O error state.
 
 Outputs:
 - `A`: 1 on error.
+
+## MOUSE.GET_BUTTONS
+
+Return current mouse button mask.
+
+- Kind: `routine`
+- Symbol: `mouse_get_buttons`
+
+Outputs:
+- `A`: VGC_MOUSE_BTN_* bitmask.
+
+## MOUSE.GET_X
+
+Return current mouse X coordinate.
+
+- Kind: `routine`
+- Symbol: `mouse_get_x`
+
+Outputs:
+- `A`: X low byte.
+- `X`: X high bit in bit 0.
+
+## MOUSE.GET_Y
+
+Return current mouse Y coordinate.
+
+- Kind: `routine`
+- Symbol: `mouse_get_y`
+
+Outputs:
+- `A`: Y coordinate.
+
+## MOUSE.HIDE
+
+Hide the hardware mouse pointer.
+
+- Kind: `routine`
+- Symbol: `mouse_hide`
+
+## MOUSE.SET_COLOR
+
+Set fixed pointer colour from A.
+
+- Kind: `routine`
+- Symbol: `mouse_set_color`
+
+Inputs:
+- `A`: Palette index 0..15.
+
+## MOUSE.SET_CTRL
+
+Set VGC mouse control bits from A.
+
+- Kind: `routine`
+- Symbol: `mouse_set_ctrl`
+
+Inputs:
+- `A`: VGC_MOUSE_CTRL_* bitmask.
+
+## MOUSE.SET_HOTSPOT
+
+Set pointer hotspot using A=x and X=y.
+
+- Kind: `routine`
+- Symbol: `mouse_set_hotspot`
+
+Inputs:
+- `A`: Hotspot X, 0..15.
+- `X`: Hotspot Y, 0..15.
+
+## MOUSE.SET_SHAPE
+
+Select the hardware mouse pointer shape slot.
+
+- Kind: `routine`
+- Symbol: `mouse_set_shape`
+
+Inputs:
+- `A`: Shape slot index.
+
+## MOUSE.SHOW
+
+Show the hardware mouse pointer using auto-contrast colour.
+
+- Kind: `routine`
+- Symbol: `mouse_show`
 
 ## NGS.BEGIN_MESSAGE
 

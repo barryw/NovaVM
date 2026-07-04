@@ -6,6 +6,7 @@
 ; routines; dropped otherwise (e.g. an app that only shows transient dialogs).
 
 .include "nui.inc"
+.include "vsprite.inc"
 
       .segment "CODE"
 
@@ -188,15 +189,46 @@ nui_restore_under_full:
 @error:
       JMP   nui_error
 
+nui_save_set_x_pixels:
+      STZ   VSPRITE_XH
+      ASL
+      ROL   VSPRITE_XH
+      ASL
+      ROL   VSPRITE_XH
+      STA   VSPRITE_XL
+      RTS
+
+nui_save_set_width_pixels:
+      STZ   VSPRITE_WIDTHH
+      ASL
+      ROL   VSPRITE_WIDTHH
+      ASL
+      ROL   VSPRITE_WIDTHH
+      STA   VSPRITE_WIDTHL
+      RTS
+
+nui_save_set_y_pixels:
+      ASL
+      ASL
+      STA   VSPRITE_Y
+      RTS
+
+nui_save_set_height_pixels:
+      ASL
+      ASL
+      STA   VSPRITE_HEIGHTL
+      STZ   VSPRITE_HEIGHTH
+      RTS
+
 nui_set_save_gfx_args:
       LDA   NUI_SAVE_LEFT
-      JSR   nui_set_x_pixels
+      JSR   nui_save_set_x_pixels
       LDA   NUI_SAVE_TOP
-      JSR   nui_set_y_pixels
+      JSR   nui_save_set_y_pixels
       LDA   NUI_SAVE_WIDTH
-      JSR   nui_set_width_pixels
+      JSR   nui_save_set_width_pixels
       LDA   NUI_SAVE_HEIGHT
-      JSR   nui_set_height_pixels
+      JSR   nui_save_set_height_pixels
       LDA   #BLT_SPACE_XRAM
       STA   VSPRITE_BGSPACE
       LDA   NUI_SAVE_ADDRL+3

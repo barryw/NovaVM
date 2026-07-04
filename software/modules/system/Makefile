@@ -2,11 +2,19 @@ CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
 NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
+NOVA_CLI_PROJECT = ../../../e6502.Nova/e6502.Nova.csproj
+NOVA_CLI_RID ?= linux-x64
+NOVA_CLI_BIN ?= ../../../e6502.Nova/bin/Release/net10.0/$(NOVA_CLI_RID)/nova
+NOVA_CLI = $(NOVA_CLI_BIN)
+NOVA_CLI_SOURCES = ../../../e6502.Nova/Program.cs ../../../e6502.Nova/BuildTools.cs
 
 all: system.bin system.nmod
 
 $(NOVA_LIB_FILE): FORCE
 	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
+
+$(NOVA_CLI_BIN): FORCE
+	dotnet build $(NOVA_CLI_PROJECT) -c Release -r $(NOVA_CLI_RID) -p:NuGetAudit=false -p:UseSharedCompilation=false -p:BuildInParallel=false -v:minimal
 
 system.o: system.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libsystem.inc \
@@ -16,6 +24,8 @@ system.o: system.s \
             $(NOVA_ASM)/vgc.s \
             $(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s \
             $(NOVA_ASM)/nui.inc $(NOVA_ASM)/nui.s \
+            $(NOVA_ASM)/nui_file.s \
+            $(NOVA_ASM)/nui_text.s \
             $(NOVA_ASM)/vsprite.inc $(NOVA_ASM)/vsprite.s \
             $(NOVA_ASM)/overlay.inc $(NOVA_ASM)/overlay.s \
             $(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s \
@@ -35,10 +45,10 @@ $(NOVA_ASM)/runtime_labels.inc:
 # Self-documenting module: image + NDOC doc (from system.s ;@ comments, ids
 # resolved from libsystem.inc) -> system.nmod. --ndk-dir single-sources each ;@ndk
 # fn's summary from the NDK routine and enforces the wrapper-calls-NDK drift guard.
-system.nmod: system.bin system.s ../../../tools/nmod_pack.py ../../../tools/gen_runtime_abi_docs.py \
+system.nmod: system.bin system.s $(NOVA_CLI_BIN) $(NOVA_CLI_SOURCES) \
             $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/vgc.s \
-            $(NOVA_ASM)/rng.s $(NOVA_ASM)/nui.s $(NOVA_ASM)/overlay.s
-	python3 ../../../tools/nmod_pack.py --src system.s --bin system.bin \
+            $(NOVA_ASM)/rng.s $(NOVA_ASM)/nui.s $(NOVA_ASM)/nui_file.s $(NOVA_ASM)/nui_text.s $(NOVA_ASM)/overlay.s
+	$(NOVA_CLI) module pack --src system.s --bin system.bin \
 	        --out system.nmod --syms $(NOVA_ASM)/libsystem.inc --ndk-dir $(NOVA_ASM)
 
 # Copy the raw 16K image into the Avalonia Resources dir, where CompositeBusDevice

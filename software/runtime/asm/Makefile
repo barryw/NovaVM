@@ -22,24 +22,32 @@ NOVA_LIB_SRCS := \
 	copper.s \
 	copper_split.s \
 	dma.s \
+	docbuf.s \
 	editbuf.s \
 	editui.s \
+	editui_box.s \
+	editui_shutdown.s \
 	fio_clear_error.s \
 	fio.s \
 	gameserver.s \
+	mouse.s \
 	msprite.s \
 	nic.s \
 	nui_state.s \
 	nui_dialog.s \
 	nui_input.s \
 	nui_list.s \
+	nui_file.s \
+	nui_text.s \
 	nui_uisave.s \
+	nui_wait.s \
 	nvg.s \
 	overlay.s \
 	pager.s \
 	replline.s \
 	rng.s \
 	sprite.s \
+	textsvc.s \
 	tween.s \
 	vgc.s \
 	vgc_palette.s \

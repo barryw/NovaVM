@@ -145,6 +145,8 @@ returns failure, so callers can fail visibly instead of freezing the machine.
 | Pager | `pager.inc`, `pager.s` | Load a file slice into XRAM, CPU RAM, or VGC memory. | `pager_load_file_page`, `PAGER_TARGET_XRAM`, `PAGER_TARGET_RAM`, `PAGER_TARGET_VGC` |
 | XRAM | `xram.inc`, `xram.s` | Flat 24-bit expansion RAM reads/writes, DMA copies, fills, and file streaming. | `xram_read8`, `xram_write8`, `xram_copy_from_ram`, `xram_xload`, `xram_xsave` |
 | XMC | `xmc.s` | BASIC-compatible named XRAM allocator and XMC command processor. | `xmc_process`, `xmc_alloc_block`, `xmc_named_stash`, `xmc_named_fetch`, `xmc_map_window` |
+| Text services | `textsvc.inc`, `textsvc.s` | Shared XRAM-backed editor clipboard and undo/redo payload storage. | `textsvc_clip_copy_from_ram`, `textsvc_clip_fetch_to_ram`, `textsvc_undo_capture`, `textsvc_undo_apply`, `textsvc_redo_apply` |
+| Document buffers | `docbuf.inc`, `docbuf.s` | Shared XRAM-backed open-document slots for native language editors. | `docbuf_add_from_ram`, `docbuf_next`, `docbuf_previous`, `docbuf_select`, `docbuf_build_list_rows` |
 | Overlays | `overlay.inc`, `overlay.s` | Fixed-address executable modules with NOVO headers. | `overlay_load_fixed`, `overlay_call_init`, `overlay_call_main`, `overlay_call_tick`, `overlay_unload` |
 
 ### Audio, Networking, And Game Services
@@ -336,6 +338,8 @@ keeps subpixel motion smooth while still writing integer coordinates to the VGC.
 | Generated runtime labels | `docs/assembly/runtime-labels.md` |
 | XRAM runtime | `docs/assembly/xram.md` |
 | XMC notes | `docs/assembly/xmc.md` |
+| Text services | `docs/assembly/textsvc.md` |
+| Document buffers | `docs/assembly/docbuf.md` |
 | Fixed-address overlays | `docs/assembly/overlay.md` |
 | VTEXT runtime | `docs/assembly/vtext.md` |
 | EDITUI runtime | `docs/assembly/editui.md` |

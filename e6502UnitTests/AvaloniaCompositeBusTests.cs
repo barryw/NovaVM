@@ -28,6 +28,33 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(0x00, bus.Read(0x0200));
     }
 
+    [TestMethod]
+    public void ResetCustomChipsClearsRuntimeLowRamStateAndRestoresLoader()
+    {
+        var bus = MakeBus();
+
+        for (int address = 0x0200; address < 0x0900; address++)
+            bus.WriteRam((ushort)address, 0xA5);
+
+        bus.ResetCustomChips();
+
+        for (int address = 0x0275; address < 0x0320; address++)
+            Assert.AreEqual(0x00, bus.ReadRam((ushort)address),
+                $"Reset must clear stale BASIC input/mailbox byte ${address:X4} before cold-starting a runtime.");
+        for (int address = 0x0418; address < 0x041C; address++)
+            Assert.AreEqual(0x00, bus.ReadRam((ushort)address),
+                $"Reset must clear stale shelf tag byte ${address:X4} before cold-starting a runtime.");
+        for (int address = 0x0420; address < 0x0900; address++)
+            Assert.AreEqual(0x00, bus.ReadRam((ushort)address),
+                $"Reset must clear stale module-BSS byte ${address:X4} before cold-starting a runtime.");
+
+        Assert.AreEqual(0xAD, bus.ReadRam(0x0320),
+            "Reset must restage the resident lib_call loader after clearing low runtime RAM.");
+        for (int i = 0; i < 4; i++)
+            Assert.AreEqual((byte)i, bus.ReadRam((ushort)(0x041C + i)),
+                $"Reset must seed shelf LRU slot {i} to a valid slot index.");
+    }
+
     // -------------------------------------------------------------------------
     // Direct screen window — banked plain-STA access to the text planes
     // -------------------------------------------------------------------------
@@ -792,7 +819,6 @@ public class AvaloniaCompositeBusTests
         bus.Write((ushort)VgcConstants.XmcAddrM, 0x20);
         bus.Write((ushort)VgcConstants.XmcData, 0xAA);
         bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdPutByte);
-        bus.Write((ushort)VgcConstants.CmpCmd, VgcConstants.CmpCmdCompile);
         bus.Sid.Write((ushort)(VgcConstants.SidBase + 0x18), 0x0F);
         bus.Sid2.Write((ushort)(VgcConstants.Sid2Base + 0x18), 0x0F);
         bus.Write((ushort)VgcConstants.WtsReverbLevel, 1);
@@ -819,7 +845,6 @@ public class AvaloniaCompositeBusTests
         Assert.AreEqual(VgcConstants.XmcStatusIdle, bus.Read((ushort)VgcConstants.XmcStatus));
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.XmcPagesUsedL));
         Assert.AreEqual(0x0F, bus.Read((ushort)VgcConstants.XmcWinCtl));
-        Assert.AreEqual(VgcConstants.CmpStatusIdle, bus.Read((ushort)VgcConstants.CmpStatus));
         Assert.AreEqual(0, bus.Read((ushort)VgcConstants.NicSlot));
         Assert.AreEqual(0, bus.Sid.Read((ushort)(VgcConstants.SidBase + 0x18)));
         Assert.AreEqual(0, bus.Sid2.Read((ushort)(VgcConstants.Sid2Base + 0x18)));

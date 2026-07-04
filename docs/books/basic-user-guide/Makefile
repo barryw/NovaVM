@@ -1,7 +1,7 @@
 all: pdf
 
 pdf:
-	./build-pdf.sh
+	dotnet run --project ../../../e6502.Nova -c Release -- docs basic-user-guide --repo ../../..
 
 clean:
 	rm -f assembled.md novabasic_user_guide.pdf

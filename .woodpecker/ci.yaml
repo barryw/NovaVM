@@ -17,7 +17,7 @@ steps:
   - name: build-and-test
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
-      - sh .woodpecker/install-linux-ci-deps.sh build
+      - dotnet run --project e6502.Nova -c Release -- ci install-linux-deps build
       - cog check || true
       - dotnet workload install wasm-tools
       # Build + stage all ROM/font resources first via the repo's canonical
@@ -65,7 +65,7 @@ steps:
   - name: version
     image: mcr.microsoft.com/dotnet/sdk:10.0
     commands:
-      - sh .woodpecker/install-linux-ci-deps.sh release
+      - dotnet run --project e6502.Nova -c Release -- ci install-linux-deps release
       - git config --global --add safe.directory "$CI_WORKSPACE"
       - git config user.name "Woodpecker CI"
       - git config user.email "ci@barrywalker.io"

@@ -354,8 +354,10 @@ Standalone runtimes should request private XRAM through the allocator instead
 of claiming fixed addresses. Use the MEMORY module (`MEM_ALLOC`, `MEM_RELEASE`,
 `MEM_RESET_USAGE`) when the runtime already uses `lib_call`, or link `xmc.s`
 and call `xmc_alloc_block` directly in smaller programs. The allocator owns the
-low 256 KB heap; the `$060000-$06FFFF` band is the paged-library shelf and must
-not be used as runtime scratch.
+low 256 KB heap. The platform also owns `$040000-$047FFF` for text-service undo,
+`$048000-$04FFFF` for redo, `$050000-$053FFF` for the shared clipboard,
+`$054000-$05FFFF` for editor/NUI scratch, and `$060000-$06FFFF` for the
+paged-library shelf; none of those ranges should be used as runtime scratch.
 
 Those symbols are aliases over the Nova pseudo-register ABI:
 

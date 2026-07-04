@@ -1110,29 +1110,19 @@ lookup_ext_cmd:
       STA   num_tmp_hi
 
 @scan:
-      ; Read name pointer from table
       LDA   num_tmp_lo
       STA   ptr2_lo
       LDA   num_tmp_hi
       STA   ptr2_hi
       LDY   #0
-      LDA   (ptr2_lo),Y        ; name_ptr low
-      TAX
-      INY
-      LDA   (ptr2_lo),Y        ; name_ptr high
+      LDA   (ptr2_lo),Y        ; inline name length, 0 = end
       BNE   @have_entry
-      CPX   #0
-      BNE   @have_entry
-      ; Null pointer — end of table
       SEC
       RTS
 
 @have_entry:
-      ; X = name_ptr_lo, A = name_ptr_hi
-      STA   ptr2_hi
-      STX   ptr2_lo             ; ptr2 now points to table name string
-
       ; Get token payload pointer
+      TAX                       ; X = length
       LDA   eval_cur_lo
       STA   ptr_lo
       LDA   eval_cur_hi
@@ -1146,48 +1136,41 @@ lookup_ext_cmd:
       BNE   @next
 
       ; Lengths match — compare chars
-      TAX                       ; X = length
-      LDY   #1                  ; offset into table name string (after length)
-      STZ   tok_sign            ; reuse as token char offset counter
+      LDY   #0
 @cmp_loop:
-      LDA   (ptr2_lo),Y        ; table name char
+      INY                       ; table name char offset (1..length)
+      LDA   (ptr2_lo),Y
       PHY
-      LDA   tok_sign
+      TYA
       CLC
-      ADC   #TOK_PAYLOAD+1
+      ADC   #TOK_PAYLOAD
       TAY
       LDA   (ptr_lo),Y         ; token char
       PLY
       CMP   (ptr2_lo),Y        ; compare
       BNE   @next
-      INY
-      INC   tok_sign
       DEX
       BNE   @cmp_loop
 
-      ; Match found — read module_id, fn_id and arity
-      ; Table entry: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
-      LDA   num_tmp_lo
-      STA   ptr_lo
-      LDA   num_tmp_hi
-      STA   ptr_hi
-      LDY   #2
-      LDA   (ptr_lo),Y         ; module_id
+      ; Match found — payload follows the length-prefixed inline name.
+      INY
+      LDA   (ptr2_lo),Y        ; module_id
       STA   ext_mod_id
       INY
-      LDA   (ptr_lo),Y         ; fn_id (legacy EXT_CMD value)
+      LDA   (ptr2_lo),Y        ; fn_id (legacy EXT_CMD value)
       STA   EXT_CMD
       INY
-      LDA   (ptr_lo),Y         ; arity
+      LDA   (ptr2_lo),Y        ; arity
       CLC                       ; found
       RTS
 
 @next:
-      STZ   tok_sign
-      ; Advance to next entry: +5 bytes (2 name + 1 module_id + 1 fn_id + 1 arity)
+      ; Advance by length byte + name + module_id + fn_id + arity.
+      LDY   #0
+      LDA   (ptr2_lo),Y
       CLC
-      LDA   num_tmp_lo
-      ADC   #5
+      ADC   #4
+      ADC   num_tmp_lo
       STA   num_tmp_lo
       BCC   :+
       INC   num_tmp_hi
@@ -1765,407 +1748,92 @@ logo_turtle_textwin:
 
       .segment "RODATA"
 
-; Extension command table: name_ptr(2) + module_id(1) + fn_id(1) + arity(1)
+; Extension command table: len + name + module_id(1) + fn_id(1) + arity(1)
 ; module_id routes each command: a real module id ($01-$7F) -> lib_call(module);
 ; TURTLE_ROUTE_MARK/GFXADAPTER -> foundation adapters. Terminated by $0000 sentinel.
+.macro EXT_ENTRY label, len, text, module, fn, arity
+label:
+      .byte len, text
+      .byte module, fn, arity
+.endmacro
+
 ext_cmd_table:
       ; --- Turtle commands+reporters (4c.2-3-ii: routed to TUR_OP via the
       ;     TURTLE_ROUTE_MARK adapter; fn_id stays the EXT_CMD op id, arity unchanged) ---
-      .word str_ext_fd
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_FD
-      .byte 1                    ; arity: 1 (distance)
-      .word str_ext_forward
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_FD
-      .byte 1                    ; FORWARD alias
-      .word str_ext_bk
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_BK
-      .byte 1                    ; arity: 1 (distance)
-      .word str_ext_back
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_BK
-      .byte 1                    ; BACK alias
-      .word str_ext_backward
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_BK
-      .byte 1                    ; BACKWARD alias
-      .word str_ext_rt
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_RT
-      .byte 1                    ; arity: 1 (degrees)
-      .word str_ext_right
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_RT
-      .byte 1                    ; RIGHT alias
-      .word str_ext_lt
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_LT
-      .byte 1                    ; arity: 1 (degrees)
-      .word str_ext_left
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_LT
-      .byte 1                    ; LEFT alias
-      .word str_ext_cs
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_CS
-      .byte 0                    ; arity: 0
-      .word str_ext_clearscreen
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_CS
-      .byte 0                    ; CLEARSCREEN alias
-      .word str_ext_draw
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_CS
-      .byte 0                    ; DRAW = CS alias
-      .word str_ext_pu
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_PU
-      .byte 0
-      .word str_ext_penup
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_PU
-      .byte 0                    ; PENUP alias
-      .word str_ext_pd
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_PD
-      .byte 0
-      .word str_ext_pendown
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_PD
-      .byte 0                    ; PENDOWN alias
-      .word str_ext_st
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_ST
-      .byte 0
-      .word str_ext_showturtle
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_ST
-      .byte 0                    ; SHOWTURTLE alias
-      .word str_ext_ht
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_HT
-      .byte 0
-      .word str_ext_hideturtle
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_HT
-      .byte 0                    ; HIDETURTLE alias
-      .word str_ext_home
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_HOME
-      .byte 0
+      EXT_ENTRY str_ext_fd, 2, "FD", TURTLE_ROUTE_MARK, EXT_CMD_FD, 1
+      EXT_ENTRY str_ext_forward, 7, "FORWARD", TURTLE_ROUTE_MARK, EXT_CMD_FD, 1
+      EXT_ENTRY str_ext_bk, 2, "BK", TURTLE_ROUTE_MARK, EXT_CMD_BK, 1
+      EXT_ENTRY str_ext_back, 4, "BACK", TURTLE_ROUTE_MARK, EXT_CMD_BK, 1
+      EXT_ENTRY str_ext_backward, 8, "BACKWARD", TURTLE_ROUTE_MARK, EXT_CMD_BK, 1
+      EXT_ENTRY str_ext_rt, 2, "RT", TURTLE_ROUTE_MARK, EXT_CMD_RT, 1
+      EXT_ENTRY str_ext_right, 5, "RIGHT", TURTLE_ROUTE_MARK, EXT_CMD_RT, 1
+      EXT_ENTRY str_ext_lt, 2, "LT", TURTLE_ROUTE_MARK, EXT_CMD_LT, 1
+      EXT_ENTRY str_ext_left, 4, "LEFT", TURTLE_ROUTE_MARK, EXT_CMD_LT, 1
+      EXT_ENTRY str_ext_cs, 2, "CS", TURTLE_ROUTE_MARK, EXT_CMD_CS, 0
+      EXT_ENTRY str_ext_clearscreen, 11, "CLEARSCREEN", TURTLE_ROUTE_MARK, EXT_CMD_CS, 0
+      EXT_ENTRY str_ext_draw, 4, "DRAW", TURTLE_ROUTE_MARK, EXT_CMD_CS, 0
+      EXT_ENTRY str_ext_pu, 2, "PU", TURTLE_ROUTE_MARK, EXT_CMD_PU, 0
+      EXT_ENTRY str_ext_penup, 5, "PENUP", TURTLE_ROUTE_MARK, EXT_CMD_PU, 0
+      EXT_ENTRY str_ext_pd, 2, "PD", TURTLE_ROUTE_MARK, EXT_CMD_PD, 0
+      EXT_ENTRY str_ext_pendown, 7, "PENDOWN", TURTLE_ROUTE_MARK, EXT_CMD_PD, 0
+      EXT_ENTRY str_ext_st, 2, "ST", TURTLE_ROUTE_MARK, EXT_CMD_ST, 0
+      EXT_ENTRY str_ext_showturtle, 10, "SHOWTURTLE", TURTLE_ROUTE_MARK, EXT_CMD_ST, 0
+      EXT_ENTRY str_ext_ht, 2, "HT", TURTLE_ROUTE_MARK, EXT_CMD_HT, 0
+      EXT_ENTRY str_ext_hideturtle, 10, "HIDETURTLE", TURTLE_ROUTE_MARK, EXT_CMD_HT, 0
+      EXT_ENTRY str_ext_home, 4, "HOME", TURTLE_ROUTE_MARK, EXT_CMD_HOME, 0
       ; --- Screen modes ---
-      .word str_ext_textscreen
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_TS
-      .byte 0
-      .word str_ext_ts
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_TS
-      .byte 0
-      .word str_ext_splitscreen
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SS
-      .byte 0
-      .word str_ext_ss
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SS
-      .byte 0
-      .word str_ext_fullscreen
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_FS
-      .byte 0
-      .word str_ext_fs
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_FS
-      .byte 0
+      EXT_ENTRY str_ext_textscreen, 10, "TEXTSCREEN", TURTLE_ROUTE_MARK, EXT_CMD_TS, 0
+      EXT_ENTRY str_ext_ts, 2, "TS", TURTLE_ROUTE_MARK, EXT_CMD_TS, 0
+      EXT_ENTRY str_ext_splitscreen, 11, "SPLITSCREEN", TURTLE_ROUTE_MARK, EXT_CMD_SS, 0
+      EXT_ENTRY str_ext_ss, 2, "SS", TURTLE_ROUTE_MARK, EXT_CMD_SS, 0
+      EXT_ENTRY str_ext_fullscreen, 10, "FULLSCREEN", TURTLE_ROUTE_MARK, EXT_CMD_FS, 0
+      EXT_ENTRY str_ext_fs, 2, "FS", TURTLE_ROUTE_MARK, EXT_CMD_FS, 0
       ; --- Turtle position ---
-      .word str_ext_setxy
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETXY
-      .byte 2                    ; arity: 2 (x, y)
-      .word str_ext_setpos
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETPOS
-      .byte 1                    ; arity: 1 ([x y])
-      .word str_ext_setx
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETX
-      .byte 1                    ; arity: 1 (x)
-      .word str_ext_sety
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETY
-      .byte 1                    ; arity: 1 (y)
-      .word str_ext_setheading
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETH
-      .byte 1                    ; arity: 1 (degrees)
-      .word str_ext_seth
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETH
-      .byte 1                    ; SETH alias
+      EXT_ENTRY str_ext_setxy, 5, "SETXY", TURTLE_ROUTE_MARK, EXT_CMD_SETXY, 2
+      EXT_ENTRY str_ext_setpos, 6, "SETPOS", TURTLE_ROUTE_MARK, EXT_CMD_SETPOS, 1
+      EXT_ENTRY str_ext_setx, 4, "SETX", TURTLE_ROUTE_MARK, EXT_CMD_SETX, 1
+      EXT_ENTRY str_ext_sety, 4, "SETY", TURTLE_ROUTE_MARK, EXT_CMD_SETY, 1
+      EXT_ENTRY str_ext_setheading, 10, "SETHEADING", TURTLE_ROUTE_MARK, EXT_CMD_SETH, 1
+      EXT_ENTRY str_ext_seth, 4, "SETH", TURTLE_ROUTE_MARK, EXT_CMD_SETH, 1
       ; --- Turtle query reporters ---
-      .word str_ext_xcor
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_XCOR
-      .byte 0                    ; arity: 0 (reporter)
-      .word str_ext_ycor
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_YCOR
-      .byte 0
-      .word str_ext_heading
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_HEADING
-      .byte 0
-      .word str_ext_pendownp
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_PENDOWNP
-      .byte 0
-      .word str_ext_shownp
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SHOWNP
-      .byte 0
+      EXT_ENTRY str_ext_xcor, 4, "XCOR", TURTLE_ROUTE_MARK, EXT_CMD_XCOR, 0
+      EXT_ENTRY str_ext_ycor, 4, "YCOR", TURTLE_ROUTE_MARK, EXT_CMD_YCOR, 0
+      EXT_ENTRY str_ext_heading, 7, "HEADING", TURTLE_ROUTE_MARK, EXT_CMD_HEADING, 0
+      EXT_ENTRY str_ext_pendownp, 8, "PENDOWN?", TURTLE_ROUTE_MARK, EXT_CMD_PENDOWNP, 0
+      EXT_ENTRY str_ext_shownp, 6, "SHOWN?", TURTLE_ROUTE_MARK, EXT_CMD_SHOWNP, 0
       ; --- Pen commands ---
-      .word str_ext_setpc
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETPC
-      .byte 1                    ; arity: 1 (color)
-      .word str_ext_setpencolor
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETPC
-      .byte 1                    ; SETPENCOLOR alias
-      .word str_ext_setbg
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETBG
-      .byte 1
-      .word str_ext_setbackground
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_SETBG
-      .byte 1                    ; SETBACKGROUND alias
+      EXT_ENTRY str_ext_setpc, 5, "SETPC", TURTLE_ROUTE_MARK, EXT_CMD_SETPC, 1
+      EXT_ENTRY str_ext_setpencolor, 11, "SETPENCOLOR", TURTLE_ROUTE_MARK, EXT_CMD_SETPC, 1
+      EXT_ENTRY str_ext_setbg, 5, "SETBG", TURTLE_ROUTE_MARK, EXT_CMD_SETBG, 1
+      EXT_ENTRY str_ext_setbackground, 13, "SETBACKGROUND", TURTLE_ROUTE_MARK, EXT_CMD_SETBG, 1
       ; --- TOWARDS reporter ---
-      .word str_ext_towards
-      .byte TURTLE_ROUTE_MARK
-      .byte EXT_CMD_TOWARDS
-      .byte 2                    ; arity: 2 (x, y)
+      EXT_ENTRY str_ext_towards, 7, "TOWARDS", TURTLE_ROUTE_MARK, EXT_CMD_TOWARDS, 2
       ; --- VGC graphics commands (4c.1-3: routed through lib_call(GRAPHICS)) ---
-      .word str_ext_setcolor
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_GCOLOR
-      .byte 1                    ; arity: 1 (color)
-      .word str_ext_plot
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_PLOT
-      .byte 2                    ; arity: 2 (x, y)
-      .word str_ext_unplot
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_UNPLOT
-      .byte 2                    ; arity: 2 (x, y)
-      .word str_ext_line
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_LINE
-      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
-      .word str_ext_circle
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_CIRCLE
-      .byte 3                    ; arity: 3 (x, y, r) — ARG3(ry)=0 -> ry=rx (zero-unused-cells)
-      .word str_ext_rect
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_RECT
-      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
-      .word str_ext_rectangle
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_RECT
-      .byte 4                    ; RECTANGLE alias
-      .word str_ext_fill
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_FILL
-      .byte 4                    ; arity: 4 (x1, y1, x2, y2)
-      .word str_ext_fillrect
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_FILL
-      .byte 4                    ; FILLRECT alias -> GFN_FILL
-      .word str_ext_paint
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_PAINT
-      .byte 2                    ; arity: 2 (x, y)
+      EXT_ENTRY str_ext_setcolor, 8, "SETCOLOR", MODULE_ID_GRAPHICS, GFN_GCOLOR, 1
+      EXT_ENTRY str_ext_plot, 4, "PLOT", MODULE_ID_GRAPHICS, GFN_PLOT, 2
+      EXT_ENTRY str_ext_unplot, 6, "UNPLOT", MODULE_ID_GRAPHICS, GFN_UNPLOT, 2
+      EXT_ENTRY str_ext_line, 4, "LINE", MODULE_ID_GRAPHICS, GFN_LINE, 4
+      EXT_ENTRY str_ext_circle, 6, "CIRCLE", MODULE_ID_GRAPHICS, GFN_CIRCLE, 3
+      EXT_ENTRY str_ext_rect, 4, "RECT", MODULE_ID_GRAPHICS, GFN_RECT, 4
+      EXT_ENTRY str_ext_rectangle, 9, "RECTANGLE", MODULE_ID_GRAPHICS, GFN_RECT, 4
+      EXT_ENTRY str_ext_fill, 4, "FILL", MODULE_ID_GRAPHICS, GFN_FILL, 4
+      EXT_ENTRY str_ext_fillrect, 8, "FILLRECT", MODULE_ID_GRAPHICS, GFN_FILL, 4
+      EXT_ENTRY str_ext_paint, 5, "PAINT", MODULE_ID_GRAPHICS, GFN_PAINT, 2
       ; --- Sprite commands (4c.1-3: routed through lib_call(GRAPHICS)) ---
-      .word str_ext_sprite
-      .byte MODULE_ID_GFXADAPTER
-      .byte GADAPT_SPRITE
-      .byte 3                    ; arity: 3 (n, x, y) — POS then ENABLE adapter
-      .word str_ext_spritepos
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_SPR_POS
-      .byte 3                    ; arity: 3 (n, x, y)
-      .word str_ext_spriteon
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_SPR_ENABLE
-      .byte 1                    ; arity: 1 (n)
-      .word str_ext_spriteoff
-      .byte MODULE_ID_GRAPHICS
-      .byte GFN_SPR_DISABLE
-      .byte 1                    ; arity: 1 (n)
-      .word str_ext_sprcollp
-      .byte MODULE_ID_GFXADAPTER
-      .byte GADAPT_SPRCOLLP
-      .byte 1                    ; arity: 1 (n) — reporter, COLL_MASK + bit-test adapter
+      EXT_ENTRY str_ext_sprite, 6, "SPRITE", MODULE_ID_GFXADAPTER, GADAPT_SPRITE, 3
+      EXT_ENTRY str_ext_spritepos, 9, "SPRITEPOS", MODULE_ID_GRAPHICS, GFN_SPR_POS, 3
+      EXT_ENTRY str_ext_spriteon, 8, "SPRITEON", MODULE_ID_GRAPHICS, GFN_SPR_ENABLE, 1
+      EXT_ENTRY str_ext_spriteoff, 9, "SPRITEOFF", MODULE_ID_GRAPHICS, GFN_SPR_DISABLE, 1
+      EXT_ENTRY str_ext_sprcollp, 16, "SPRITECOLLISION?", MODULE_ID_GFXADAPTER, GADAPT_SPRCOLLP, 1
       ; --- Sound commands (Phase B: SOUND module $02) ---
-      .word str_ext_tone
-      .byte MODULE_ID_SOUND
-      .byte SND_TONE
-      .byte 2                    ; arity: 2 (freq, dur)
-      .word str_ext_noise
-      .byte MODULE_ID_SOUND
-      .byte SND_NOISE
-      .byte 1                    ; arity: 1 (dur)
-      .word str_ext_volume
-      .byte MODULE_ID_SOUND
-      .byte SND_VOLUME
-      .byte 1                    ; arity: 1 (vol)
+      EXT_ENTRY str_ext_tone, 4, "TONE", MODULE_ID_SOUND, SND_TONE, 2
+      EXT_ENTRY str_ext_noise, 5, "NOISE", MODULE_ID_SOUND, SND_NOISE, 1
+      EXT_ENTRY str_ext_volume, 6, "VOLUME", MODULE_ID_SOUND, SND_VOLUME, 1
       ; --- Timing commands (Phase B: SYSTEM module $03) ---
-      .word str_ext_wait
-      .byte MODULE_ID_SYSTEM
-      .byte SYS_FN_WAIT
-      .byte 1                    ; arity: 1 (n)
-      .word str_ext_waitvbl
-      .byte MODULE_ID_SYSTEM
-      .byte SYS_FN_WAITVBL
-      .byte 0                    ; arity: 0
-      .word str_ext_timer
-      .byte MODULE_ID_SYSTEM
-      .byte SYS_FN_TIMER
-      .byte 0                    ; arity: 0 — reporter
-      .word $0000               ; end sentinel
-
-str_ext_fd:
-      .byte 2, "FD"
-str_ext_forward:
-      .byte 7, "FORWARD"
-str_ext_bk:
-      .byte 2, "BK"
-str_ext_back:
-      .byte 4, "BACK"
-str_ext_backward:
-      .byte 8, "BACKWARD"
-str_ext_rt:
-      .byte 2, "RT"
-str_ext_right:
-      .byte 5, "RIGHT"
-str_ext_lt:
-      .byte 2, "LT"
-str_ext_left:
-      .byte 4, "LEFT"
-str_ext_cs:
-      .byte 2, "CS"
-str_ext_clearscreen:
-      .byte 11, "CLEARSCREEN"
-str_ext_draw:
-      .byte 4, "DRAW"
-str_ext_pu:
-      .byte 2, "PU"
-str_ext_penup:
-      .byte 5, "PENUP"
-str_ext_pd:
-      .byte 2, "PD"
-str_ext_pendown:
-      .byte 7, "PENDOWN"
-str_ext_st:
-      .byte 2, "ST"
-str_ext_showturtle:
-      .byte 10, "SHOWTURTLE"
-str_ext_ht:
-      .byte 2, "HT"
-str_ext_hideturtle:
-      .byte 10, "HIDETURTLE"
-str_ext_home:
-      .byte 4, "HOME"
-str_ext_textscreen:
-      .byte 10, "TEXTSCREEN"
-str_ext_ts:
-      .byte 2, "TS"
-str_ext_splitscreen:
-      .byte 11, "SPLITSCREEN"
-str_ext_ss:
-      .byte 2, "SS"
-str_ext_fullscreen:
-      .byte 10, "FULLSCREEN"
-str_ext_fs:
-      .byte 2, "FS"
-str_ext_setxy:
-      .byte 5, "SETXY"
-str_ext_setpos:
-      .byte 6, "SETPOS"
-str_ext_setx:
-      .byte 4, "SETX"
-str_ext_sety:
-      .byte 4, "SETY"
-str_ext_setheading:
-      .byte 10, "SETHEADING"
-str_ext_seth:
-      .byte 4, "SETH"
-str_ext_xcor:
-      .byte 4, "XCOR"
-str_ext_ycor:
-      .byte 4, "YCOR"
-str_ext_heading:
-      .byte 7, "HEADING"
-str_ext_pendownp:
-      .byte 8, "PENDOWN?"
-str_ext_shownp:
-      .byte 6, "SHOWN?"
-str_ext_setpc:
-      .byte 5, "SETPC"
-str_ext_setpencolor:
-      .byte 11, "SETPENCOLOR"
-str_ext_setbg:
-      .byte 5, "SETBG"
-str_ext_setbackground:
-      .byte 13, "SETBACKGROUND"
-str_ext_towards:
-      .byte 7, "TOWARDS"
-str_ext_setcolor:
-      .byte 8, "SETCOLOR"
-str_ext_plot:
-      .byte 4, "PLOT"
-str_ext_unplot:
-      .byte 6, "UNPLOT"
-str_ext_line:
-      .byte 4, "LINE"
-str_ext_circle:
-      .byte 6, "CIRCLE"
-str_ext_rect:
-      .byte 4, "RECT"
-str_ext_rectangle:
-      .byte 9, "RECTANGLE"
-str_ext_fill:
-      .byte 4, "FILL"
-str_ext_fillrect:
-      .byte 8, "FILLRECT"
-str_ext_paint:
-      .byte 5, "PAINT"
-str_ext_sprite:
-      .byte 6, "SPRITE"
-str_ext_spritepos:
-      .byte 9, "SPRITEPOS"
-str_ext_spriteon:
-      .byte 8, "SPRITEON"
-str_ext_spriteoff:
-      .byte 9, "SPRITEOFF"
-str_ext_sprcollp:
-      .byte 16, "SPRITECOLLISION?"
-str_ext_tone:
-      .byte 4, "TONE"
-str_ext_noise:
-      .byte 5, "NOISE"
-str_ext_volume:
-      .byte 6, "VOLUME"
-str_ext_wait:
-      .byte 4, "WAIT"
-str_ext_waitvbl:
-      .byte 7, "WAITVBL"
-str_ext_timer:
-      .byte 5, "TIMER"
+      EXT_ENTRY str_ext_wait, 4, "WAIT", MODULE_ID_SYSTEM, SYS_FN_WAIT, 1
+      EXT_ENTRY str_ext_waitvbl, 7, "WAITVBL", MODULE_ID_SYSTEM, SYS_FN_WAITVBL, 0
+      EXT_ENTRY str_ext_timer, 5, "TIMER", MODULE_ID_SYSTEM, SYS_FN_TIMER, 0
+      .byte 0                    ; end sentinel
 
       .segment "RODATA"
 

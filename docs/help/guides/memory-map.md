@@ -643,7 +643,7 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $B9AC | FioGAddrH | R/W | Graphics/XRAM offset, high byte; `NVGLOAD` bitmap destination high byte. |
 | $B9AD | FioGLenL | R/W | Graphics/XRAM transfer length, low byte; ignored by `NVGLOAD`. |
 | $B9AE | FioGLenH | R/W | Graphics/XRAM transfer length, high byte; ignored by `NVGLOAD`. |
-| $B9AF | FioDirType | RO | Directory entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH. |
+| $B9AF | FioDirType | RO | Directory entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH, 7=LOGO, 8=PASCAL, 9=ASM. |
 | B9B0--B9EF | FioName | R/W | Filename buffer (64 bytes ASCII, not null-terminated). |
 
 ### FIO Command Codes
@@ -706,7 +706,10 @@ instead of claiming fixed addresses.
 | **XRAM range** | **Use** |
 | --- | --- |
 | $000000--$03FFFF | XMC-managed 256-byte-page heap for runtime/application allocations. |
-| $040000--$05FFFF | Reserved for future platform-managed XRAM expansion. Do not use as app scratch. |
+| $040000--$047FFF | Shared text-service undo snapshot arena. |
+| $048000--$04FFFF | Shared text-service redo snapshot arena. |
+| $050000--$053FFF | Shared text-service clipboard arena. |
+| $054000--$05FFFF | Platform-managed editor/NUI scratch, including editui save-under. Do not use as app scratch. |
 | $060000--$06FFFF | Paged shared-library shelf: four 16 KB module-cache slots. Do not use as app scratch. |
 | $070000--$07F9FF | NVG decode staging buffer. |
 | $07FA00--$07FEFF | XMC allocator metadata (control page, page bitmap, and block directory). |

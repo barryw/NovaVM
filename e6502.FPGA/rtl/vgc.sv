@@ -106,7 +106,7 @@ module vgc (
 
     localparam GFX_W    = 320, GFX_H   = 200;
     localparam GFX_SIZE = GFX_W * GFX_H;               // 64000 pixels
-    localparam SPR_SIZE  = 2048;
+    localparam SPR_SIZE  = 32768;
 
     // Address map
     localparam VGC_BASE       = 16'hA000;
@@ -121,6 +121,20 @@ module vgc (
     localparam TEXT_FLAGS_ADDR = 16'hA0E6;
     localparam TEXT_REVATTR_ADDR = 16'hA0E7;
     localparam TEXT_BG_ADDR = 16'hA0C0;        // VGC_TEXT_BG: bit4=transparent default, [3:0]=opaque char bg
+    localparam MOUSE_REG_BASE = 16'hA0D0;
+    localparam MOUSE_REG_END  = 16'hA0DF;
+    localparam MOUSE_XL_ADDR  = 16'hA0D0;
+    localparam MOUSE_XH_ADDR  = 16'hA0D1;
+    localparam MOUSE_Y_ADDR   = 16'hA0D2;
+    localparam MOUSE_BTN_ADDR = 16'hA0D3;
+    localparam MOUSE_CTRL_ADDR = 16'hA0D4;
+    localparam MOUSE_COLOR_ADDR = 16'hA0D5;
+    localparam MOUSE_SHAPE_ADDR = 16'hA0D6;
+    localparam MOUSE_HOTX_ADDR = 16'hA0D7;
+    localparam MOUSE_HOTY_ADDR = 16'hA0D8;
+    localparam MOUSE_CTRL_ENABLE = 8'h01;
+    localparam MOUSE_CTRL_AUTO   = 8'h02;
+    localparam MOUSE_CTRL_COLOR  = 8'h04;
     localparam GFX_TRANS_ADDR = 16'hA0E8;
     localparam PALETTE_MODE_ADDR = 16'hA0E9;
     localparam SCROLL_CTL_ADDR = 16'hA0EA;
@@ -616,7 +630,7 @@ module vgc (
     // =========================================================================
     // Sprite sub-module (PIXIE)
     // =========================================================================
-    logic [10:0] spr_a_addr;
+    logic [14:0] spr_a_addr;
     logic [7:0]  spr_a_din;
     logic        spr_a_we;
     logic        spr_a_re;
@@ -632,7 +646,7 @@ module vgc (
     logic        spr_flip_h [0:15];
     logic        spr_flip_v [0:15];
     logic [1:0]  spr_pri [0:15];
-    logic [3:0]  spr_shape [0:15];
+    logic [7:0]  spr_shape [0:15];
     logic [3:0]  spr_trans [0:15];
 
     // CPU/command writes land in the next-frame sprite state. The renderer
@@ -644,7 +658,7 @@ module vgc (
     logic        spr_next_flip_h [0:15];
     logic        spr_next_flip_v [0:15];
     logic [1:0]  spr_next_pri [0:15];
-    logic [3:0]  spr_next_shape [0:15];
+    logic [7:0]  spr_next_shape [0:15];
     logic [3:0]  spr_next_trans [0:15];
 
     // Keep $A009 sprite-count readback shallow. A procedural loop of
@@ -670,11 +684,11 @@ module vgc (
         for (int i = 0; i < 16; i++) begin
             spr_x[i] = 0; spr_y[i] = 0;
             spr_enable[i] = 0; spr_flip_h[i] = 0; spr_flip_v[i] = 0;
-            spr_pri[i] = 2'd1; spr_shape[i] = i[3:0];
+            spr_pri[i] = 2'd1; spr_shape[i] = 8'(i);
             spr_trans[i] = 4'd0;
             spr_next_x[i] = 0; spr_next_y[i] = 0;
             spr_next_enable[i] = 0; spr_next_flip_h[i] = 0; spr_next_flip_v[i] = 0;
-            spr_next_pri[i] = 2'd1; spr_next_shape[i] = i[3:0];
+            spr_next_pri[i] = 2'd1; spr_next_shape[i] = 8'(i);
             spr_next_trans[i] = 4'd0;
         end
     end
@@ -684,6 +698,18 @@ module vgc (
     logic        spr_pixel_hit;
     logic [3:0]  spr_pixel_owner;
     logic [15:0] spr_collision_ss_bits;
+    logic [3:0]  mouse_cursor_pixel;
+    logic        mouse_cursor_hit;
+    logic [3:0]  mouse_cursor_color;
+
+    logic [8:0] mouse_pending_x, mouse_active_x;
+    logic [7:0] mouse_pending_y, mouse_active_y;
+    logic [7:0] mouse_pending_buttons, mouse_active_buttons;
+    logic [7:0] mouse_pending_ctrl, mouse_active_ctrl;
+    logic [3:0] mouse_pending_color, mouse_active_color;
+    logic [7:0] mouse_pending_shape, mouse_active_shape;
+    logic [3:0] mouse_pending_hot_x, mouse_active_hot_x;
+    logic [3:0] mouse_pending_hot_y, mouse_active_hot_y;
 
     // Pack sprite attribute arrays into flat vectors for sub-module
     logic [16*16-1:0] spr_x_flat;
@@ -692,7 +718,7 @@ module vgc (
     logic [15:0]      spr_flip_h_flat;
     logic [15:0]      spr_flip_v_flat;
     logic [16*2-1:0]  spr_pri_flat;
-    logic [16*4-1:0]  spr_shape_flat;
+    logic [16*8-1:0]  spr_shape_flat;
     logic [16*4-1:0]  spr_trans_flat;
 
     always_comb begin
@@ -703,7 +729,7 @@ module vgc (
             spr_flip_h_flat[i]        = spr_flip_h[i];
             spr_flip_v_flat[i]        = spr_flip_v[i];
             spr_pri_flat[i*2 +: 2]   = spr_pri[i];
-            spr_shape_flat[i*4 +: 4] = spr_shape[i];
+            spr_shape_flat[i*8 +: 8] = spr_shape[i];
             spr_trans_flat[i*4 +: 4] = spr_trans[i];
         end
     end
@@ -732,9 +758,17 @@ module vgc (
         .spr_flip_h_flat(spr_flip_h_flat), .spr_flip_v_flat(spr_flip_v_flat),
         .spr_pri_flat(spr_pri_flat), .spr_shape_flat(spr_shape_flat),
         .spr_trans_flat(spr_trans_flat),
+        .mouse_x(mouse_active_x),
+        .mouse_y(mouse_active_y),
+        .mouse_enable(mouse_active_ctrl[0]),
+        .mouse_shape(mouse_active_shape),
+        .mouse_hot_x(mouse_active_hot_x),
+        .mouse_hot_y(mouse_active_hot_y),
         .spr_pixel(spr_pixel), .spr_pixel_pri(spr_pixel_pri),
         .spr_pixel_hit(spr_pixel_hit),
         .spr_pixel_owner(spr_pixel_owner),
+        .mouse_cursor_pixel(mouse_cursor_pixel),
+        .mouse_cursor_hit(mouse_cursor_hit),
         .collision_ss_bits(spr_collision_ss_bits)
     );
 
@@ -1050,7 +1084,7 @@ module vgc (
     logic [3:0]  cmd_gfx_din;
     logic        cmd_gfx_we;
     logic        cmd_gfx_re;
-    logic [10:0] cmd_spr_addr;
+    logic [14:0] cmd_spr_addr;
     logic [7:0]  cmd_spr_din;
     logic        cmd_spr_we;
     logic        cmd_spr_re;
@@ -1085,6 +1119,14 @@ module vgc (
         scroll_offset = 0; scroll_pending = 0; scroll_clearing = 0; scroll_col = 0;
         key_fifo_rd = 0; cmd_busy = 0; cmd_op = 0;
         font_slot = 0; collision_ss = 0; collision_bg = 0;
+        mouse_pending_x = 0; mouse_active_x = 0;
+        mouse_pending_y = 0; mouse_active_y = 0;
+        mouse_pending_buttons = 0; mouse_active_buttons = 0;
+        mouse_pending_ctrl = 0; mouse_active_ctrl = 0;
+        mouse_pending_color = 4'hF; mouse_active_color = 4'hF;
+        mouse_pending_shape = 8'hFF; mouse_active_shape = 8'hFF;
+        mouse_pending_hot_x = 0; mouse_active_hot_x = 0;
+        mouse_pending_hot_y = 0; mouse_active_hot_y = 0;
         irq_enable = 0; irq_pending = 0;
         irq_timer_period = 0; irq_timer_counter = 0; irq_timer_enable = 1'b0; irq_timer_pulse = 1'b0;
         sprrow_count = 0; sprrow_spr = 0; sprrow_row = 0;
@@ -1203,6 +1245,7 @@ module vgc (
     wire dim_reg_sel   = (cpu_raddr == DIM_REG_ADDR);
     wire text_reg_sel  = (cpu_raddr == TEXT_FLAGS_ADDR || cpu_raddr == TEXT_REVATTR_ADDR || cpu_raddr == TEXT_BG_ADDR);
     wire gfx_trans_sel = (cpu_raddr == GFX_TRANS_ADDR);
+    wire mouse_reg_sel = (cpu_raddr >= MOUSE_REG_BASE && cpu_raddr <= MOUSE_REG_END);
     wire palette_mode_sel = (cpu_raddr == PALETTE_MODE_ADDR);
     wire palette_index_sel = (cpu_raddr == PALETTE_INDEX_ADDR);
     wire palette_data_sel = (cpu_raddr == PALETTE_DATA_ADDR);
@@ -1212,6 +1255,7 @@ module vgc (
     wire screen_plane_sel = (cpu_raddr == SCREENWIN_PLANE);
     wire [11:0] screen_win_off = 12'(cpu_raddr - SCREENWIN_BASE);
     wire collision_hi_sel = (cpu_raddr == COLLST_HI_ADDR || cpu_raddr == COLLBG_HI_ADDR);
+    wire [3:0]  mouse_reg_off = cpu_raddr[3:0];
     wire [4:0]  reg_offset   = cpu_raddr[4:0];
     wire [3:0]  irq_offset   = cpu_raddr[3:0];
     wire [2:0]  vram_reg_off = cpu_raddr[2:0];
@@ -1239,6 +1283,7 @@ module vgc (
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
     wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR || r_cpu_addr_w == TEXT_BG_ADDR);
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
+    wire mouse_reg_sel_w = (r_cpu_addr_w >= MOUSE_REG_BASE && r_cpu_addr_w <= MOUSE_REG_END);
     wire palette_index_sel_w = (r_cpu_addr_w == PALETTE_INDEX_ADDR);
     wire palette_data_sel_w = (r_cpu_addr_w == PALETTE_DATA_ADDR);
     wire [5:0] palette_index_mod_w = palette_index_mod(r_cpu_wdata_w);
@@ -1250,6 +1295,7 @@ module vgc (
     wire collision_hi_sel_w = (r_cpu_addr_w == COLLST_HI_ADDR || r_cpu_addr_w == COLLBG_HI_ADDR);
     wire fio_name_sel_w  = (r_cpu_addr_w >= FIO_NAME && r_cpu_addr_w <= 16'hB9EF);
     wire fio_len_sel_w   = (r_cpu_addr_w == FIO_NAME_LEN);
+    wire [3:0]  mouse_reg_off_w = r_cpu_addr_w[3:0];
     wire [4:0]  reg_offset_w   = r_cpu_addr_w[4:0];
     wire [3:0]  irq_offset_w   = r_cpu_addr_w[3:0];
     wire [2:0]  vram_reg_off_w = r_cpu_addr_w[2:0];
@@ -1462,6 +1508,20 @@ module vgc (
             endcase
         end
         else if (gfx_trans_sel) cpu_rdata = gfx_trans_color;
+        else if (mouse_reg_sel) begin
+            case (mouse_reg_off)
+                4'h0:    cpu_rdata = mouse_pending_x[7:0];
+                4'h1:    cpu_rdata = {7'b0, mouse_pending_x[8]};
+                4'h2:    cpu_rdata = mouse_pending_y;
+                4'h3:    cpu_rdata = mouse_pending_buttons;
+                4'h4:    cpu_rdata = mouse_pending_ctrl;
+                4'h5:    cpu_rdata = {4'h0, mouse_pending_color};
+                4'h6:    cpu_rdata = mouse_pending_shape;
+                4'h7:    cpu_rdata = {4'h0, mouse_pending_hot_x};
+                4'h8:    cpu_rdata = {4'h0, mouse_pending_hot_y};
+                default: cpu_rdata = 8'h00;
+            endcase
+        end
         else if (spr_reg_sel) begin
             // 8 regs per sprite: X lo, X hi, Y lo, Y hi, shape, flags, pri, trans
             // Flags byte layout matches the write path (bit 7 = enable,
@@ -1471,7 +1531,7 @@ module vgc (
                 3'd1: cpu_rdata = spr_next_x[spr_index][15:8];
                 3'd2: cpu_rdata = spr_next_y[spr_index][7:0];
                 3'd3: cpu_rdata = 8'h00;
-                3'd4: cpu_rdata = {4'b0, spr_next_shape[spr_index]};
+                3'd4: cpu_rdata = spr_next_shape[spr_index];
                 3'd5: cpu_rdata = {spr_next_enable[spr_index], 5'b0,
                                    spr_next_flip_v[spr_index], spr_next_flip_h[spr_index]};
                 3'd6: cpu_rdata = {6'b0, spr_next_pri[spr_index]};
@@ -1489,6 +1549,7 @@ module vgc (
     wire dbg_dim_sel   = (dbg_addr == DIM_REG_ADDR);
     wire dbg_text_sel  = (dbg_addr == TEXT_FLAGS_ADDR || dbg_addr == TEXT_REVATTR_ADDR || dbg_addr == TEXT_BG_ADDR);
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
+    wire dbg_mouse_sel = (dbg_addr >= MOUSE_REG_BASE && dbg_addr <= MOUSE_REG_END);
     wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
     wire dbg_palette_index_sel = (dbg_addr == PALETTE_INDEX_ADDR);
     wire dbg_palette_data_sel = (dbg_addr == PALETTE_DATA_ADDR);
@@ -1502,12 +1563,14 @@ module vgc (
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
     wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR || dbg_waddr == TEXT_BG_ADDR);
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
+    wire dbg_write_mouse_sel = dbg_we && (dbg_waddr >= MOUSE_REG_BASE && dbg_waddr <= MOUSE_REG_END);
     wire dbg_write_palette_index_sel = dbg_we && (dbg_waddr == PALETTE_INDEX_ADDR);
     wire dbg_write_palette_data_sel = dbg_we && (dbg_waddr == PALETTE_DATA_ADDR);
     wire dbg_write_scroll_ctl_sel = dbg_we && (dbg_waddr == SCROLL_CTL_ADDR);
     wire dbg_write_text_top_row_sel = dbg_we && (dbg_waddr == TEXT_TOP_ROW_ADDR);
     wire dbg_write_collision_hi_sel = dbg_we && (dbg_waddr == COLLST_HI_ADDR || dbg_waddr == COLLBG_HI_ADDR);
     wire [4:0] dbg_reg_offset_w = dbg_waddr[4:0];
+    wire [3:0] dbg_mouse_reg_off_w = dbg_waddr[3:0];
     wire [2:0] dbg_vram_reg_off_w = dbg_waddr[2:0];
 
     // Debug-side sprite register decode (dbg_addr indexing mirrors the
@@ -1587,13 +1650,27 @@ module vgc (
             endcase
         end
         else if (dbg_gfx_trans_sel) dbg_rdata = gfx_trans_color;
+        else if (dbg_mouse_sel) begin
+            case (dbg_addr[3:0])
+                4'h0:    dbg_rdata = mouse_pending_x[7:0];
+                4'h1:    dbg_rdata = {7'b0, mouse_pending_x[8]};
+                4'h2:    dbg_rdata = mouse_pending_y;
+                4'h3:    dbg_rdata = mouse_pending_buttons;
+                4'h4:    dbg_rdata = mouse_pending_ctrl;
+                4'h5:    dbg_rdata = {4'h0, mouse_pending_color};
+                4'h6:    dbg_rdata = mouse_pending_shape;
+                4'h7:    dbg_rdata = {4'h0, mouse_pending_hot_x};
+                4'h8:    dbg_rdata = {4'h0, mouse_pending_hot_y};
+                default: dbg_rdata = 8'h00;
+            endcase
+        end
         else if (dbg_spr_sel) begin
             case (dbg_spr_field)
                 3'd0: dbg_rdata = spr_next_x[dbg_spr_index][7:0];
                 3'd1: dbg_rdata = spr_next_x[dbg_spr_index][15:8];
                 3'd2: dbg_rdata = spr_next_y[dbg_spr_index][7:0];
                 3'd3: dbg_rdata = 8'h00;
-                3'd4: dbg_rdata = {4'b0, spr_next_shape[dbg_spr_index]};
+                3'd4: dbg_rdata = spr_next_shape[dbg_spr_index];
                 3'd5: dbg_rdata = {spr_next_enable[dbg_spr_index], 5'b0,
                                    spr_next_flip_v[dbg_spr_index], spr_next_flip_h[dbg_spr_index]};
                 3'd6: dbg_rdata = {6'b0, spr_next_pri[dbg_spr_index]};
@@ -1628,6 +1705,14 @@ module vgc (
             cmd_busy <= 0;
             key_fifo_rd <= 0;
             collision_ss <= 16'h0000; collision_bg <= 16'h0000;
+            mouse_pending_x <= 9'd0; mouse_active_x <= 9'd0;
+            mouse_pending_y <= 8'd0; mouse_active_y <= 8'd0;
+            mouse_pending_buttons <= 8'd0; mouse_active_buttons <= 8'd0;
+            mouse_pending_ctrl <= 8'd0; mouse_active_ctrl <= 8'd0;
+            mouse_pending_color <= 4'hF; mouse_active_color <= 4'hF;
+            mouse_pending_shape <= 8'hFF; mouse_active_shape <= 8'hFF;
+            mouse_pending_hot_x <= 4'd0; mouse_active_hot_x <= 4'd0;
+            mouse_pending_hot_y <= 4'd0; mouse_active_hot_y <= 4'd0;
             irq_enable <= 0; irq_pending <= 0;
             irq_timer_period <= 24'd0; irq_timer_counter <= 24'd0; irq_timer_enable <= 1'b0; irq_timer_pulse <= 1'b0;
             copper_enabled <= 0; copper_count <= 0;
@@ -1676,7 +1761,7 @@ module vgc (
             cmd_gfx_din <= 4'h0;
             cmd_gfx_we <= 0;
             cmd_gfx_re <= 0;
-            cmd_spr_addr <= 11'd0;
+            cmd_spr_addr <= 15'd0;
             cmd_spr_din <= 8'h00;
             cmd_spr_we <= 0;
             cmd_spr_re <= 0;
@@ -1777,7 +1862,7 @@ module vgc (
                     end
 
                     RCLR_SPRITE: begin
-                        cmd_spr_addr <= reset_clear_addr[10:0];
+                        cmd_spr_addr <= reset_clear_addr[14:0];
                         cmd_spr_din <= 8'h00;
                         cmd_spr_we <= 1;
                         if (reset_clear_addr == SPR_SIZE - 1) begin
@@ -1891,7 +1976,7 @@ module vgc (
                                     memread_space <= SPACE_GFX;
                                 end
                                 SPACE_SPRITE: begin
-                                    cmd_spr_addr <= {regs[19], regs[18]};
+                                    cmd_spr_addr <= {regs[19][6:0], regs[18]};
                                     cmd_spr_re <= 1;
                                     memread_pending <= 2'd2;
                                     memread_space <= SPACE_SPRITE;
@@ -1922,7 +2007,7 @@ module vgc (
                                     cmd_gfx_we <= 1;
                                 end
                                 SPACE_SPRITE: begin
-                                    cmd_spr_addr <= {regs[19], regs[18]};
+                                    cmd_spr_addr <= {regs[19][6:0], regs[18]};
                                     cmd_spr_din <= regs[20];
                                     cmd_spr_we <= 1;
                                 end
@@ -2216,6 +2301,17 @@ module vgc (
             if (vblank_start)
                 frame_counter <= frame_counter + 1'b1;
 
+            if (vblank_start) begin
+                mouse_active_x <= mouse_pending_x;
+                mouse_active_y <= mouse_pending_y;
+                mouse_active_buttons <= mouse_pending_buttons;
+                mouse_active_ctrl <= mouse_pending_ctrl;
+                mouse_active_color <= mouse_pending_color;
+                mouse_active_shape <= mouse_pending_shape;
+                mouse_active_hot_x <= mouse_pending_hot_x;
+                mouse_active_hot_y <= mouse_pending_hot_y;
+            end
+
             // Copper vblank: swap pending→active list if changed
             if (vblank_start) begin
                 if (copper_pending_list != copper_active_list && !copper_loading) begin
@@ -2250,7 +2346,7 @@ module vgc (
                         3'd1: spr_x[copper_spr_index][15:8] <= copper_fire_val;
                         3'd2: spr_y[copper_spr_index]       <= copper_fire_val;
                         3'd3: ; // Y high byte reserved; Y is unsigned 0..239.
-                        3'd4: spr_shape[copper_spr_index]   <= copper_fire_val[3:0];
+                        3'd4: spr_shape[copper_spr_index]   <= copper_fire_val;
                         3'd5: begin
                             spr_flip_h[copper_spr_index] <= copper_fire_val[0];
                             spr_flip_v[copper_spr_index] <= copper_fire_val[1];
@@ -2607,7 +2703,7 @@ module vgc (
                                 end
                                 SPACE_SPRITE: begin
                                     if (vram_addr < SPR_SIZE) begin
-                                        cmd_spr_addr <= vram_addr[10:0];
+                                        cmd_spr_addr <= vram_addr[14:0];
                                         cmd_spr_din <= r_cpu_wdata_w;
                                         cmd_spr_we <= 1;
                                     end
@@ -2626,6 +2722,21 @@ module vgc (
 
                 if (gfx_trans_sel_w)
                     gfx_trans_color <= r_cpu_wdata_w;
+
+                if (mouse_reg_sel_w) begin
+                    case (mouse_reg_off_w)
+                        4'h0: mouse_pending_x[7:0] <= r_cpu_wdata_w;
+                        4'h1: mouse_pending_x[8] <= r_cpu_wdata_w[0];
+                        4'h2: mouse_pending_y <= (r_cpu_wdata_w > 8'd199) ? 8'd199 : r_cpu_wdata_w;
+                        4'h3: mouse_pending_buttons <= r_cpu_wdata_w & 8'h77;
+                        4'h4: mouse_pending_ctrl <= r_cpu_wdata_w;
+                        4'h5: mouse_pending_color <= r_cpu_wdata_w[3:0];
+                        4'h6: mouse_pending_shape <= r_cpu_wdata_w;
+                        4'h7: mouse_pending_hot_x <= r_cpu_wdata_w[3:0];
+                        4'h8: mouse_pending_hot_y <= r_cpu_wdata_w[3:0];
+                        default: ;
+                    endcase
+                end
 
                 if (palette_index_sel_w) begin
                     palette_write_index <= palette_index_mod_w;
@@ -2712,7 +2823,7 @@ module vgc (
                         3'd1: spr_next_x[spr_index_w][15:8] <= r_cpu_wdata_w;
                         3'd2: spr_next_y[spr_index_w][7:0]  <= r_cpu_wdata_w;
                         3'd3: ; // Y high byte reserved; Y is unsigned 0..239.
-                        3'd4: spr_next_shape[spr_index_w]   <= r_cpu_wdata_w[3:0];
+                        3'd4: spr_next_shape[spr_index_w]   <= r_cpu_wdata_w;
                         3'd5: begin
                             spr_next_flip_h[spr_index_w] <= r_cpu_wdata_w[0];
                             spr_next_flip_v[spr_index_w] <= r_cpu_wdata_w[1];
@@ -2833,6 +2944,21 @@ module vgc (
             if (dbg_write_gfx_trans_sel)
                     gfx_trans_color <= dbg_wdata;
 
+            if (dbg_write_mouse_sel) begin
+                case (dbg_mouse_reg_off_w)
+                    4'h0: mouse_pending_x[7:0] <= dbg_wdata;
+                    4'h1: mouse_pending_x[8] <= dbg_wdata[0];
+                    4'h2: mouse_pending_y <= (dbg_wdata > 8'd199) ? 8'd199 : dbg_wdata;
+                    4'h3: mouse_pending_buttons <= dbg_wdata & 8'h77;
+                    4'h4: mouse_pending_ctrl <= dbg_wdata;
+                    4'h5: mouse_pending_color <= dbg_wdata[3:0];
+                    4'h6: mouse_pending_shape <= dbg_wdata;
+                    4'h7: mouse_pending_hot_x <= dbg_wdata[3:0];
+                    4'h8: mouse_pending_hot_y <= dbg_wdata[3:0];
+                    default: ;
+                endcase
+            end
+
             if (dbg_write_palette_index_sel) begin
                 palette_write_index <= palette_index_mod(dbg_wdata);
                 palette_write_color <= palette_index_color(palette_index_mod(dbg_wdata));
@@ -2875,7 +3001,7 @@ module vgc (
                     3'd1: spr_next_x[dbg_spr_index_w][15:8] <= dbg_wdata;
                     3'd2: spr_next_y[dbg_spr_index_w][7:0]  <= dbg_wdata;
                     3'd3: ; // Y high byte reserved; Y is unsigned 0..239.
-                    3'd4: spr_next_shape[dbg_spr_index_w]   <= dbg_wdata[3:0];
+                    3'd4: spr_next_shape[dbg_spr_index_w]   <= dbg_wdata;
                     3'd5: begin
                         spr_next_flip_h[dbg_spr_index_w] <= dbg_wdata[0];
                         spr_next_flip_v[dbg_spr_index_w] <= dbg_wdata[1];
@@ -2924,7 +3050,7 @@ module vgc (
                             end
                             SPACE_SPRITE: begin
                                 if (vram_addr < SPR_SIZE) begin
-                                    cmd_spr_addr <= vram_addr[10:0];
+                                    cmd_spr_addr <= vram_addr[14:0];
                                     cmd_spr_din <= dbg_wdata;
                                     cmd_spr_we <= 1;
                                 end
@@ -3166,14 +3292,14 @@ module vgc (
         // sprite_shapes port A
         spr_a_we = 0;
         spr_a_re = 0;
-        spr_a_addr = 11'd0;
+        spr_a_addr = 15'd0;
         spr_a_din = 8'd0;
         if (dbg_vmem_spr_we) begin
-            spr_a_addr = dbg_vmem_addr[10:0];
+            spr_a_addr = dbg_vmem_addr[14:0];
             spr_a_din = dbg_vmem_wdata;
             spr_a_we = 1;
         end else if (blt_we && blt_space == 3'd4) begin
-            spr_a_addr = blt_addr[10:0];
+            spr_a_addr = blt_addr[14:0];
             spr_a_din = blt_wdata;
             spr_a_we = 1;
         end else if (cmd_spr_we) begin
@@ -3181,16 +3307,16 @@ module vgc (
             spr_a_din = cmd_spr_din;
             spr_a_we = 1;
         end else if (blt_re && blt_space == 3'd4) begin
-            spr_a_addr = blt_addr[10:0];
+            spr_a_addr = blt_addr[14:0];
             spr_a_re = 1;
         end else if (cmd_spr_re) begin
             spr_a_addr = cmd_spr_addr;
             spr_a_re = 1;
         end else if (vram_spr_read) begin
-            spr_a_addr = vram_port_read_addr[10:0];
+            spr_a_addr = vram_port_read_addr[14:0];
             spr_a_re = 1;
         end else if (dbg_vmem_spr_re) begin
-            spr_a_addr = dbg_vmem_addr[10:0];
+            spr_a_addr = dbg_vmem_addr[14:0];
             spr_a_re = 1;
         end
     end
@@ -3231,8 +3357,8 @@ module vgc (
                 SPACE_SPRITE: begin
                     if (dbg_vram_addr < SPR_SIZE) begin
                         dbg_vram_rdata = sprite_inst.pending_shape_bank
-                            ? sprite_inst.spr_mem1.mem[dbg_vram_addr[10:0]]
-                            : sprite_inst.spr_mem0.mem[dbg_vram_addr[10:0]];
+                            ? sprite_inst.spr_mem1.mem[dbg_vram_addr[14:0]]
+                            : sprite_inst.spr_mem0.mem[dbg_vram_addr[14:0]];
                     end
                 end
                 default: ;
@@ -3312,6 +3438,7 @@ module vgc (
             text_pixel_idx_d2 = pixel_on_d2 ? resolved_bg_d2 : cur_fg_d2;
 
         cur_gfx_d2    = gfx_b_dout;
+        mouse_cursor_color = mouse_cursor_pixel;
 
         // Layer compositing with sprite priorities. `visible_d2` is the
         // physical active-video window; `in_text_area_d2` is the Nova canvas.
@@ -3355,6 +3482,14 @@ module vgc (
                         pixel_color_idx = spr_pixel;
                     end
                 end
+            end
+
+            if (mouse_cursor_hit && in_text_area_d2) begin
+                if ((mouse_active_ctrl & MOUSE_CTRL_AUTO) != 0)
+                    mouse_cursor_color = pixel_color_idx[3] ? 4'h0 : 4'hF;
+                else if ((mouse_active_ctrl & MOUSE_CTRL_COLOR) != 0)
+                    mouse_cursor_color = mouse_active_color;
+                pixel_color_idx = mouse_cursor_color;
             end
         end
     end

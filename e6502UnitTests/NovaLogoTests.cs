@@ -11,10 +11,12 @@ namespace e6502UnitTests;
 [TestClass]
 public class NovaLogoTests
 {
-    private const byte CtrlK = 0x0B;
+    private const byte CtrlS = 0x13;
     private const byte KeyEsc = 0x1B;
-    private const byte SyntaxKeyword = 0x03;
-    private const byte SyntaxNumber = 0x07;
+    private const byte KeyEnter = 0x0D;
+    private const byte KeyRight = 0x1D;
+    private const byte SyntaxKeyword = 0x63;
+    private const byte SyntaxNumber = 0x67;
     private const ushort LogoHeapPtr = 0x0030;
     private const ushort LogoHeapEnd = 0x9800;
     private const int LogoGcHeaderBytes = 2;
@@ -633,7 +635,7 @@ public class NovaLogoTests
         int drawingPixelsBefore = CountNonzeroPixels(bus, 152, 24, 168, 88);
         Assert.IsTrue(drawingPixelsBefore > 0, "Precondition: FD 50 should have drawn a visible line.");
 
-        // Define a procedure through the editor (Ctrl+K S save, Alt-X quit). The
+        // Define a procedure through the editor (Ctrl-S save, Alt-X quit). The
         // editor goes full-screen (copper off) and returns here.
         QueueProcedureDefinition(cpu, bus, editor, "TO FART", "PRINT 4242");
         RunSteps(cpu, bus, 8_000_000);
@@ -667,6 +669,193 @@ public class NovaLogoTests
     }
 
     [TestMethod]
+    public void ProcedureEditorCanDefineAndRunSquareDrawing()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        StageGraphicsModule(bus);
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO SQUARE");
+        RunUntilScreenContains(cpu, bus, "END", 60_000_000);
+
+        string editorScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(bus.Vgc.IsCopperEnabled,
+            $"The procedure editor should take over the full text screen before body entry.\n{editorScreen}");
+        Assert.IsTrue(editorScreen.Contains("TO SQUARE", StringComparison.Ordinal),
+            $"The procedure editor should show the procedure header.\n{editorScreen}");
+        Assert.IsTrue(editorScreen.Contains("END", StringComparison.Ordinal),
+            $"The procedure editor should scaffold the procedure terminator.\n{editorScreen}");
+
+        QueueLine(editor, "REPEAT 4 [FD 50 RT 90];");
+        QueueSave(editor);
+        QueueAltX(editor);
+        RunUntilScreenContains(cpu, bus, "SQUARE DEFINED", 60_000_000);
+
+        QueueLine(editor, "SQUARE");
+        RunUntil(cpu, bus, 60_000_000,
+            () => bus.Vgc.IsCopperEnabled && bus.ReadRam(0xB9F3) == 40 &&
+                  CountNonzeroPixels(bus, 158, 52, 162, 98) > 35 &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal),
+            "SQUARE to finish and return the prompt in split-screen graphics");
+
+        Assert.IsTrue(bus.Vgc.IsCopperEnabled, "Running SQUARE should enter split-screen graphics mode.");
+        Assert.AreEqual(40, bus.ReadRam(0xB9F3), "Running SQUARE should leave the Logo prompt in the split text band.");
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"Running SQUARE should return the prompt to the split text band. cursorY={bus.Vgc.GetCursorY()}");
+        int first = CountNonzeroPixels(bus, 158, 52, 162, 98);
+        int topRight = CountNonzeroPixels(bus, 162, 48, 208, 52);
+        int right = CountNonzeroPixels(bus, 208, 52, 212, 98);
+        int bottomRight = CountNonzeroPixels(bus, 162, 98, 208, 102);
+        string counts = $"counts={first},{topRight},{right},{bottomRight} " +
+            $"turtle=({ReadTurtleWord(bus, TurtleXLo, TurtleXHi)},{ReadTurtleWord(bus, TurtleYLo, TurtleYHi)}) " +
+            $"heading={ReadTurtleWord(bus, TurtleHeadingLo, TurtleHeadingHi)}\n{SnapshotScreen(bus.Vgc)}";
+        Assert.IsTrue(first > 35, $"SQUARE should draw the first side. {counts}");
+        Assert.IsTrue(topRight > 35, $"SQUARE should draw the top side. {counts}");
+        Assert.IsTrue(right > 35, $"SQUARE should draw the right side. {counts}");
+        Assert.IsTrue(bottomRight > 35, $"SQUARE should draw the bottom side. {counts}");
+    }
+
+    [TestMethod]
+    public void ProcedureEditorCanReenterAfterRunningTurtleProcedure()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        StageGraphicsModule(bus);
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO SQUARE2", "REPEAT 4 [FD 20 RT 90];");
+        QueueLine(editor, "SQUARE2");
+        RunUntil(cpu, bus, 60_000_000,
+            () => !editor.HasQueuedInput && bus.Vgc.IsCursorEnabled &&
+                  bus.Vgc.IsCopperEnabled && bus.ReadRam(0xB9F3) == 40 &&
+                  CountNonzeroPixels(bus, 158, 72, 162, 98) > 10 &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal),
+            "SQUARE2 to finish and leave Logo in split-screen graphics");
+        AssertLogoSplitPromptReady(bus, "SQUARE2 should return to an interactive split-screen prompt.");
+
+        QueueLine(editor, "TO SECOND");
+        RunUntilProcedureEditorReady(cpu, bus, "TO SECOND");
+
+        string editorScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsFalse(bus.Vgc.IsCopperEnabled,
+            $"Re-entering EDIT after turtle graphics must take over the full text screen.\n{editorScreen}");
+        Assert.AreEqual(VgcConstants.ModeTextOnly, bus.Vgc.GetMode(),
+            $"Re-entering EDIT after turtle graphics must force visible text mode, not leave graphics-only display state.\n{editorScreen}");
+        Assert.IsTrue(bus.Vgc.IsCursorVisibleInCurrentMode,
+            $"Re-entering EDIT after turtle graphics must leave the text cursor visible in a text-visible mode.\n{editorScreen}");
+        Assert.IsTrue(editorScreen.Contains("TO SECOND", StringComparison.Ordinal),
+            $"The second editor session should show the new procedure header, not a blank screen.\n{editorScreen}");
+        Assert.IsTrue(editorScreen.Contains("END", StringComparison.Ordinal),
+            $"The second editor session should scaffold END.\n{editorScreen}");
+
+        QueueLine(editor, "PRINT 2222");
+        QueueSave(editor);
+        QueueAltX(editor);
+        RunUntilScreenContains(cpu, bus, "SECOND DEFINED", 60_000_000);
+
+        QueueLine(editor, "SECOND");
+        RunUntilScreenContains(cpu, bus, "2222", 60_000_000);
+    }
+
+    [TestMethod]
+    public void EditExistingProcedureAfterRunningItShowsBodyInFullScreenEditor()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        StageGraphicsModule(bus);
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        const string body = "repeat 4 [fd 50 rt 90]";
+        QueueProcedureDefinition(cpu, bus, editor, "TO HWSAVE", body);
+        QueueLine(editor, "HWSAVE");
+        RunUntil(cpu, bus, 60_000_000,
+            () => !editor.HasQueuedInput && bus.Vgc.IsCopperEnabled &&
+                  bus.ReadRam(0xB9F3) == 40 &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal),
+            "HWSAVE to finish in split-screen graphics before editing it");
+
+        QueueLine(editor, "EDIT HWSAVE");
+        RunUntilProcedureEditorReady(cpu, bus, "TO HWSAVE");
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains(body, StringComparison.Ordinal),
+            $"EDIT HWSAVE must reopen the existing procedure body after it ran.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ProcedureEditReconstructClampsStoredBodyToEditorBuffer()
+    {
+        string src = File.ReadAllText(Path.Combine(FindRepoRoot(), "software", "languages", "novalogo", "procedures.s"));
+
+        StringAssert.Contains(src, "PROC_EDIT_BODY_LIMIT = PROC_BODY_BUF_CAP - 4",
+            "EDIT must leave room for the synthesized END line in proc_body_buf.");
+        StringAssert.Contains(src, "CMP   #>PROC_EDIT_BODY_LIMIT",
+            "EDIT must clamp stored body copy by the high byte before reconstructing proc_body_buf.");
+        StringAssert.Contains(src, "CMP   #<PROC_EDIT_BODY_LIMIT",
+            "EDIT must clamp stored body copy by the low byte before reconstructing proc_body_buf.");
+    }
+
+    [TestMethod]
+    public void ProcedureEditorSurvivesRepeatedReentryAcrossTurtleGraphicsAndRepl()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        StageGraphicsModule(bus);
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueProcedureDefinition(cpu, bus, editor, "TO DRAW1", "REPEAT 4 [FD 18 RT 90];");
+        QueueLine(editor, "DRAW1");
+        RunUntil(cpu, bus, 60_000_000,
+            () => !editor.HasQueuedInput && bus.Vgc.IsCursorEnabled &&
+                  bus.Vgc.IsCopperEnabled && bus.ReadRam(0xB9F3) == 40 &&
+                  CountNonzeroPixels(bus, 158, 76, 162, 98) > 8 &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal),
+            "DRAW1 to finish in split-screen graphics before editor re-entry");
+        AssertLogoSplitPromptReady(bus, "DRAW1 should return to an interactive split-screen prompt.");
+
+        QueueLine(editor, "TO TEXT1");
+        RunUntilProcedureEditorReady(cpu, bus, "TO TEXT1");
+        QueueLine(editor, "PRINT 3131");
+        QueueSave(editor);
+        QueueAltX(editor);
+        RunUntilLogoSplitPromptReady(cpu, bus, "TEXT1 DEFINED",
+            "Defining TEXT1 after turtle graphics should restore the bottom split prompt.");
+        QueueLine(editor, "TEXT1");
+        RunUntilScreenContains(cpu, bus, "3131", 60_000_000);
+
+        QueueLine(editor, "DRAW1");
+        RunUntil(cpu, bus, 60_000_000,
+            () => !editor.HasQueuedInput && bus.Vgc.IsCursorEnabled &&
+                  bus.Vgc.IsCopperEnabled && bus.ReadRam(0xB9F3) == 40 &&
+                  SnapshotScreen(bus.Vgc).Contains("?", StringComparison.Ordinal),
+            "DRAW1 to run again after a text procedure");
+        AssertLogoSplitPromptReady(bus, "DRAW1 should still restore the split prompt after editor re-entry.");
+
+        QueueLine(editor, "TO TEXT2");
+        RunUntilProcedureEditorReady(cpu, bus, "TO TEXT2");
+        QueueLine(editor, "PRINT 4242");
+        QueueAltX(editor);
+        editor.QueueInput(KeyEnter);
+        RunUntilLogoSplitPromptReady(cpu, bus, "TEXT2 DEFINED",
+            "Dirty Alt-X save after repeated editor re-entry should restore the bottom split prompt.");
+        QueueLine(editor, "TEXT2");
+        RunUntilScreenContains(cpu, bus, "4242", 60_000_000);
+    }
+
+    [TestMethod]
     public void ProcedureEditorAltXWithoutSaveAbandonsDefinition()
     {
         using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
@@ -679,7 +868,7 @@ public class NovaLogoTests
         QueueLine(editor, "TO ABANDON");
         QueueLine(editor, "PRINT 5151");
         QueueAltX(editor);           // dirty: opens the 3-choice exit dialog
-        editor.QueueInput(0x0D);     // ENTER selects "Exit Anyway" (default), abandons
+        editor.QueueInput((byte)'d'); // Discard abandons
 
         QueueLine(editor, "ABANDON");
         RunUntilScreenContains(cpu, bus, "I DON'T KNOW HOW TO ABANDON", 60_000_000);
@@ -687,6 +876,31 @@ public class NovaLogoTests
         string screen = SnapshotScreen(bus.Vgc);
         Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO ABANDON", StringComparison.Ordinal),
             $"Alt-X + Exit Anyway should abandon the pending procedure definition.\n{screen}");
+    }
+
+    [TestMethod]
+    public void ProcedureEditorDiscardButtonSelectionReturnsToLogoPrompt()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        QueueLine(editor, "TO DISCARDBTN");
+        QueueLine(editor, "PRINT 9191");
+        QueueAltX(editor);
+        editor.QueueInput(KeyRight);
+        editor.QueueInput(KeyEnter);
+        RunUntilScreenContains(cpu, bus, "?", 60_000_000);
+
+        QueueLine(editor, "DISCARDBTN");
+        RunUntilScreenContains(cpu, bus, "I DON'T KNOW HOW TO DISCARDBTN", 60_000_000);
+
+        string screen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(screen.Contains("I DON'T KNOW HOW TO DISCARDBTN", StringComparison.Ordinal),
+            $"Right+Enter on Discard should exit the editor and abandon the procedure.\n{screen}");
     }
 
     [TestMethod]
@@ -710,13 +924,65 @@ public class NovaLogoTests
             $"Editing should set the dirty marker.\n{dirtyScreen}");
 
         QueueSave(editor);
-        // Ctrl+K S clears the dirty marker (the only '*' disappears).
+        // Ctrl-S clears the dirty marker (the only '*' disappears).
         RunUntil(cpu, bus, 30_000_000,
             () => !SnapshotScreen(bus.Vgc).Contains("*", StringComparison.Ordinal),
-            "Ctrl+K S to clear the dirty marker");
+            "Ctrl-S to clear the dirty marker");
+        string immediateSavedScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(immediateSavedScreen.Contains("TO DIRTY", StringComparison.Ordinal),
+            $"Ctrl-S must not blank the procedure header while saving.\n{immediateSavedScreen}");
+        Assert.IsTrue(immediateSavedScreen.Contains("PRINT 1", StringComparison.Ordinal),
+            $"Ctrl-S must not blank the edited procedure body while saving.\n{immediateSavedScreen}");
+        Assert.IsTrue(immediateSavedScreen.Contains("END", StringComparison.Ordinal),
+            $"Ctrl-S must not blank the procedure terminator while saving.\n{immediateSavedScreen}");
+        RunSteps(cpu, bus, 2_500_000);
+        string savedScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(savedScreen.Contains("TO DIRTY", StringComparison.Ordinal),
+            $"Ctrl-S must not erase the procedure header.\n{savedScreen}");
+        Assert.IsTrue(savedScreen.Contains("PRINT 1", StringComparison.Ordinal),
+            $"Ctrl-S must not erase the edited procedure body.\n{savedScreen}");
+        Assert.IsTrue(savedScreen.Contains("END", StringComparison.Ordinal),
+            $"Ctrl-S must not erase the procedure terminator.\n{savedScreen}");
 
         QueueAltX(editor);
         RunSteps(cpu, bus, 5_000_000);
+    }
+
+    [TestMethod]
+    public void ProcedureEditorCtrlSPreservesLongLogoBodyAndAltXDefinesIt()
+    {
+        using var bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
+        var cpu = new Cpu(bus);
+        cpu.Boot();
+        var editor = new ScreenEditor(bus.Vgc);
+        bus.Vgc.SetScreenEditor(editor);
+        RunUntilScreenContains(cpu, bus, "?", 10_000_000);
+
+        const string name = "SAVEBUG";
+        const string body = "repeat 4 [fd 50 rt 90]";
+        QueueLine(editor, $"TO {name}");
+        RunUntilProcedureEditorReady(cpu, bus, $"TO {name}");
+        QueueLine(editor, body);
+        RunUntil(cpu, bus, 30_000_000,
+            () => !editor.HasQueuedInput &&
+                  SnapshotScreen(bus.Vgc).Contains(body, StringComparison.Ordinal) &&
+                  SnapshotScreen(bus.Vgc).Contains("*", StringComparison.Ordinal),
+            "procedure editor to finish accepting the long body before Ctrl-S");
+        QueueSave(editor);
+
+        RunUntil(cpu, bus, 30_000_000,
+            () => !SnapshotScreen(bus.Vgc).Contains("*", StringComparison.Ordinal),
+            "Ctrl-S to clear the dirty marker for a long Logo procedure");
+        string savedScreen = SnapshotScreen(bus.Vgc);
+        Assert.IsTrue(savedScreen.Contains($"TO {name}", StringComparison.Ordinal),
+            $"Ctrl-S must not truncate the procedure header.\n{savedScreen}");
+        Assert.IsTrue(savedScreen.Contains(body, StringComparison.Ordinal),
+            $"Ctrl-S must not truncate the lower-case procedure body.\n{savedScreen}");
+        Assert.IsTrue(savedScreen.Contains("END", StringComparison.Ordinal),
+            $"Ctrl-S must not truncate the procedure terminator.\n{savedScreen}");
+
+        QueueAltX(editor);
+        RunUntilScreenContains(cpu, bus, $"{name} DEFINED", 60_000_000);
     }
 
     [TestMethod]
@@ -2623,9 +2889,9 @@ public class NovaLogoTests
 
         var (row, col) = FindScreenText(bus.Vgc, "PRINT 55");
         Assert.AreEqual(SyntaxKeyword, bus.Vgc.GetScreenColor(col, row),
-            "The Logo profile should color command words in the shared procedure editor.");
+            $"The Logo hook should color command words in the shared procedure editor. {LogoHookBytes(bus)}");
         Assert.AreEqual(SyntaxNumber, bus.Vgc.GetScreenColor(col + 6, row),
-            "The Logo profile should color numeric literals in the shared procedure editor.");
+            $"The Logo hook should color numeric literals in the shared procedure editor. {LogoHookBytes(bus)}");
     }
 
     [TestMethod]
@@ -2645,9 +2911,12 @@ public class NovaLogoTests
         RunSteps(cpu, bus, 5_000_000);
 
         var (row, col) = FindScreenText(bus.Vgc, "PRINT 1");
-        Assert.AreEqual(4, col,
-            "After a Logo line with an unmatched [, auto-indent should add one nested level inside the procedure body.");
+        Assert.AreEqual(2, col,
+            $"After a Logo line with an unmatched [, auto-indent should add one nested level inside the procedure body. {LogoHookBytes(bus)}");
     }
+
+    private static string LogoHookBytes(CompositeBusDevice bus)
+        => $"hook[0800..0809]={bus.ReadRam(0x0800):X2} {bus.ReadRam(0x0801):X2} {bus.ReadRam(0x0802):X2} {bus.ReadRam(0x0803):X2} {bus.ReadRam(0x0804):X2} {bus.ReadRam(0x0805):X2} {bus.ReadRam(0x0806):X2} {bus.ReadRam(0x0807):X2} {bus.ReadRam(0x0808):X2} {bus.ReadRam(0x0809):X2}";
 
     // =====================================================================
     // Error-message characterization tests (Task 4a).
@@ -2911,8 +3180,7 @@ public class NovaLogoTests
 
     private static void QueueSave(ScreenEditor editor)
     {
-        editor.QueueInput(CtrlK);
-        editor.QueueInput((byte)'s');
+        editor.QueueInput(CtrlS);
     }
 
     private static void QueueAltX(ScreenEditor editor)
@@ -2921,9 +3189,57 @@ public class NovaLogoTests
         editor.QueueInput((byte)'x');
     }
 
+    private static void RunUntilProcedureEditorReady(Cpu cpu, CompositeBusDevice bus, string marker)
+    {
+        RunUntil(cpu, bus, 60_000_000,
+            () =>
+            {
+                string screen = SnapshotScreen(bus.Vgc);
+                return screen.Contains(marker, StringComparison.Ordinal) &&
+                       screen.Contains("END", StringComparison.Ordinal) &&
+                       !bus.Vgc.IsCopperEnabled &&
+                       bus.Vgc.GetMode() == VgcConstants.ModeTextOnly &&
+                       bus.Vgc.IsCursorVisibleInCurrentMode;
+            },
+            $"procedure editor to show {marker} in visible, cursor-ready text mode");
+    }
+
+    private static void RunUntilLogoSplitPromptReady(Cpu cpu, CompositeBusDevice bus, string marker, string message)
+    {
+        RunUntil(cpu, bus, 60_000_000,
+            () => SnapshotScreen(bus.Vgc).Contains(marker, StringComparison.Ordinal) &&
+                  bus.Vgc.IsCopperEnabled &&
+                  bus.ReadRam(0xB9F3) == 40 &&
+                  bus.Vgc.GetCursorY() >= 40 &&
+                  bus.Vgc.IsCursorVisibleInCurrentMode,
+            message);
+        AssertLogoSplitPromptReady(bus, message);
+    }
+
+    private static void AssertLogoSplitPromptReady(CompositeBusDevice bus, string message)
+    {
+        string screen = SnapshotScreen(bus.Vgc);
+        string cursorState = $"cursor=({bus.Vgc.GetCursorX()},{bus.Vgc.GetCursorY()}) enabled={bus.Vgc.IsCursorEnabled} mode={bus.Vgc.GetMode()}";
+        Assert.IsTrue(bus.Vgc.IsCopperEnabled,
+            $"{message} Copper split must be active. {cursorState}\n{screen}");
+        Assert.AreEqual(40, bus.ReadRam(0xB9F3),
+            $"{message} Logo text window must start at row 40.");
+        Assert.IsTrue(bus.Vgc.GetCursorY() >= 40,
+            $"{message} Cursor must be in the bottom split text band. {cursorState}\n{screen}");
+        Assert.IsTrue(bus.Vgc.IsCursorVisibleInCurrentMode,
+            $"{message} Prompt cursor must be visible so the REPL does not look hung. {cursorState}\n{screen}");
+
+        for (int row = 0; row < 40; row++)
+        {
+            string line = GetScreenLine(bus.Vgc, row);
+            Assert.IsTrue(string.IsNullOrWhiteSpace(line),
+                $"{message} Logo text must not leak above the bottom 10 rows; row {row}='{line}'. {cursorState}\n{screen}");
+        }
+    }
+
     // Drive the shared EDITUI procedure editor: type the TO line at the prompt
     // (which opens the editor), type the body lines into the editor, then
-    // Ctrl+K S (save) and Alt-X (exit). The editor re-renders on every key, so
+    // Ctrl-S (save) and Alt-X (exit). The editor re-renders on every key, so
     // block until the "<name> DEFINED" confirmation rather than guessing a
     // fixed cycle budget.
     private static void QueueProcedureDefinition(Cpu cpu, CompositeBusDevice bus, ScreenEditor editor, string header, params string[] bodyLines)
@@ -3000,6 +3316,17 @@ public class NovaLogoTests
                 sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
             }
             sb.Append('\n');
+        }
+        return sb.ToString();
+    }
+
+    private static string GetScreenLine(VirtualGraphicsController vgc, int row)
+    {
+        var sb = new StringBuilder(VgcConstants.ScreenCols);
+        for (int col = 0; col < VgcConstants.ScreenCols; col++)
+        {
+            byte ch = vgc.GetScreenChar(col, row);
+            sb.Append(ch >= 0x20 && ch <= 0x7E ? (char)ch : ' ');
         }
         return sb.ToString();
     }

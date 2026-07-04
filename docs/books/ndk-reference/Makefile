@@ -1,7 +1,8 @@
 BOOK = ndk-reference
 ROOT = ../../..
 RUNTIME_DIR = $(ROOT)/software/runtime/asm
-GENERATOR = $(ROOT)/tools/gen_ndk_reference.py
+NOVA_CLI = dotnet run --project $(ROOT)/e6502.Nova -c Release --
+NOVA_CLI_SOURCES = $(ROOT)/e6502.Nova/Program.cs $(ROOT)/e6502.Nova/BuildTools.cs
 RUNTIME_SOURCES = $(wildcard $(RUNTIME_DIR)/*.inc $(RUNTIME_DIR)/*.s)
 LIBRARY_CHAPTERS = $(wildcard libraries/*.tex)
 AUTHORED_CHAPTERS = $(wildcard chapters/*.tex) $(LIBRARY_CHAPTERS)
@@ -16,9 +17,9 @@ pdf: $(BOOK).pdf
 $(BOOK).pdf: $(BOOK).tex ../common/nova-book.cls cover.tex frontmatter/preface.tex backmatter/generated-reference.tex $(AUTHORED_CHAPTERS) $(GENERATED) $(DIAGRAM_SVGS)
 	TEXINPUTS=../common//: latexmk -pdf -shell-escape -interaction=nonstopmode -halt-on-error $(BOOK).tex
 
-generated/library-reference.tex generated/ndk-api.json: $(GENERATOR) $(RUNTIME_SOURCES)
+generated/library-reference.tex generated/ndk-api.json: $(NOVA_CLI_SOURCES) $(RUNTIME_SOURCES)
 	mkdir -p generated
-	python3 $(GENERATOR) --runtime-dir $(RUNTIME_DIR) --tex generated/library-reference.tex --json generated/ndk-api.json
+	$(NOVA_CLI) codegen ndk-reference --runtime-dir $(RUNTIME_DIR) --tex generated/library-reference.tex --json generated/ndk-api.json
 
 build/diagrams/%.svg: diagrams/%.mmd
 	@command -v mmdc >/dev/null || { echo "mmdc is required to render Mermaid diagrams"; exit 1; }

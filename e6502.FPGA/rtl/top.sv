@@ -169,9 +169,7 @@ module top (
 
     // ROM bank switching
     localparam REG_ROMSWAP    = 16'hA03F;
-    localparam ROMSWAP_NCC    = 8'h01;
     localparam ROMSWAP_BASIC  = 8'h02;
-    localparam ROMSWAP_NCCEDIT = 8'h03;
     localparam ROMSWAP_EXT    = 8'h04;
     localparam ROMSWAP_LOGO   = 8'h05;
 
@@ -702,6 +700,7 @@ module top (
     wire usb_hid_sel = (mem_addr >= USB_HID_BASE && mem_addr <= USB_HID_END);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
+                        (mem_addr >= 16'hA0D0 && mem_addr <= 16'hA0DF) ||
                         (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0ED) ||
                         (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF) ||
                         // Direct screen window + plane-select — carve from RAM, route to VGC.
@@ -1002,6 +1001,7 @@ module top (
     wire       dbg_poke_vgc = dbg_poke_en &&
                               (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
                                ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
+                               ((dbg_poke_addr >= 16'hA0D0) && (dbg_poke_addr <= 16'hA0DF)) ||
                                ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0ED)) ||
                                ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire       dbg_poke_blt = dbg_poke_en &&
@@ -1207,12 +1207,11 @@ module top (
         // ROM bank switching: write to $A03F toggles active ROM bank.
         // The FPGA has one primary ROM bank plus one extension bank; NovaHost
         // chooses which runtime occupies the primary bank at boot. Runtime
-        // values for BASIC/NCC/LOGO all mean "return to primary".
+        // values for BASIC/LOGO all mean "return to primary".
         if (cpu_we && cpu_active && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
                 ext_rom_active <= 1;
-            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_NCC ||
-                     cpu_dout == ROMSWAP_NCCEDIT || cpu_dout == ROMSWAP_LOGO)
+            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_LOGO)
                 ext_rom_active <= 0;
         end
 
@@ -1297,11 +1296,12 @@ module top (
     localparam XRAM_SIZE = 524288;
     logic [7:0] xram [0:XRAM_SIZE-1];
     wire xram_busy = 1'b0;
-    wire dbg_poke_vgc = dbg_poke_en &&
-                        (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
-                         ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
-                         ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0ED)) ||
-                         ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
+wire dbg_poke_vgc = dbg_poke_en &&
+                    (((dbg_poke_addr >= 16'hA000) && (dbg_poke_addr <= 16'hA01F)) ||
+                     ((dbg_poke_addr >= 16'hA040) && (dbg_poke_addr <= 16'hA0BF)) ||
+                     ((dbg_poke_addr >= 16'hA0D0) && (dbg_poke_addr <= 16'hA0DF)) ||
+                     ((dbg_poke_addr >= 16'hA0E0) && (dbg_poke_addr <= 16'hA0ED)) ||
+                     ((dbg_poke_addr >= 16'hA0F0) && (dbg_poke_addr <= 16'hA0FF)));
     wire dbg_poke_blt = dbg_poke_en &&
                         (((dbg_poke_addr >= 16'hBA83) &&
                           (dbg_poke_addr <= 16'hBA9B)) ||
@@ -1414,6 +1414,7 @@ module top (
     wire usb_hid_sel = (cpu_addr >= USB_HID_BASE && cpu_addr <= USB_HID_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
+                        (cpu_addr >= 16'hA0D0 && cpu_addr <= 16'hA0DF) ||
                         (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0ED) ||
                         (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF) ||
                         // Direct screen window + plane-select — carve from RAM, route to VGC.
@@ -1501,8 +1502,7 @@ module top (
         if (cpu_we && cpu_addr == REG_ROMSWAP) begin
             if (cpu_dout == ROMSWAP_EXT)
                 ext_rom_active <= 1;
-            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_NCC ||
-                     cpu_dout == ROMSWAP_NCCEDIT || cpu_dout == ROMSWAP_LOGO)
+            else if (cpu_dout == ROMSWAP_BASIC || cpu_dout == ROMSWAP_LOGO)
                 ext_rom_active <= 0;
         end
 
@@ -2046,11 +2046,12 @@ module top (
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
+    wire dbg_vgc_mouse = (dbg_peek_addr >= 16'hA0D0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
     wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0EC);
     wire dbg_fio       = (dbg_peek_addr >= 16'hB9A0 && dbg_peek_addr <= 16'hB9EF);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_mouse | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
 
     // Math register reads are combinational on the selected address. Keep that
     // decode out of the final debug peek mux; the bridge already waits long
@@ -2099,10 +2100,11 @@ module top (
     wire dbg_vgc_regs  = (dbg_peek_addr >= 16'hA000 && dbg_peek_addr <= 16'hA01F) ||
                          (dbg_peek_addr >= 16'hA0F0 && dbg_peek_addr <= 16'hA0FF);
     wire dbg_vgc_spr   = (dbg_peek_addr >= 16'hA040 && dbg_peek_addr <= 16'hA0BF);
+    wire dbg_vgc_mouse = (dbg_peek_addr >= 16'hA0D0 && dbg_peek_addr <= 16'hA0DF);
     wire dbg_vgc_vram  = (dbg_peek_addr >= 16'hA0E0 && dbg_peek_addr <= 16'hA0E4);
     wire dbg_vgc_dim   = (dbg_peek_addr == 16'hA0E5);
     wire dbg_vgc_text  = (dbg_peek_addr >= 16'hA0E6 && dbg_peek_addr <= 16'hA0EC);
-    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
+    assign vgc_dbg_owns = dbg_vgc_regs | dbg_vgc_spr | dbg_vgc_mouse | dbg_vgc_vram | dbg_vgc_dim | dbg_vgc_text;
     wire [7:0] dbg_rom_read_data = ext_rom_active ? ext_rom[dbg_peek_addr - ROM_BASE]
                                                   : basic_rom[dbg_peek_addr - ROM_BASE];
     wire [7:0] dbg_peek_data_mux = dbg_peek_en ? (vgc_dbg_owns     ? vgc_dbg_rdata :

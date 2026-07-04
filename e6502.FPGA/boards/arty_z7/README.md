@@ -8,6 +8,11 @@ programming path before the NovaVM SoC core is ported over.
 The shared, device-independent RTL lives in `../../rtl/`. Board-specific files
 (top level, constraints, build/program scripts) live here.
 
+For live-board deployment and debug, start with
+[`HARDWARE_RUNBOOK.md`](HARDWARE_RUNBOOK.md). It records the current target IP,
+the editor-demo deploy command, SSH host-key handling, and the stale-payload
+guard that must run before hardware testing.
+
 ## Smoke test
 
 `arty_z7_smoke.sv` — no Zynq PS block design required:

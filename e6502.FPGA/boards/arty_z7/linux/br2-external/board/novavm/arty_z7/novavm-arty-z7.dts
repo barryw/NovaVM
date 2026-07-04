@@ -23,6 +23,14 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	usb_phy0: usb_phy@0 {
+		compatible = "ulpi-phy";
+		#phy-cells = <0>;
+		reg = <0xe0002000 0x1000>;
+		view-port = <0x0170>;
+		drv-vbus;
+	};
+
 	/* PS<->PL shared XRAM in PS DDR (XRAM_DDR_BASE=0x10000000), reached by the
 	 * PL via S_AXI_HP0. Carve it out so Linux never allocates it; novavm maps
 	 * it coherently. From build/arty_z7_full.xsa. */
@@ -67,6 +75,12 @@
 
 &sdhci0 {
 	status = "okay";
+};
+
+&usb0 {
+	status = "okay";
+	dr_mode = "host";
+	usb-phy = <&usb_phy0>;
 };
 
 &qspi {

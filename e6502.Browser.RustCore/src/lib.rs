@@ -193,6 +193,7 @@ const FIO_CMD_NVGLOAD: u8 = 0x2B;
 const FIO_CMD_LOAD_MODULE: u8 = 0x2C;
 const FIO_CMD_FOPEN: u8 = 0x2D;
 const FIO_CMD_FRENAME: u8 = 0x39;
+const FIO_CMD_DEVSTATUS: u8 = 0x3A;
 const FIO_STATUS_OK: u8 = 0x02;
 const FIO_STATUS_ERROR: u8 = 0x03;
 const XMC_BASE: u16 = 0xBA00;
@@ -4584,7 +4585,7 @@ fn is_host_fio_command(command: u8) -> bool {
             | FIO_CMD_LOAD_RUNTIME
             | FIO_CMD_XPAGE
             | FIO_CMD_NVGLOAD
-            | FIO_CMD_FOPEN..=FIO_CMD_FRENAME
+            | FIO_CMD_FOPEN..=FIO_CMD_DEVSTATUS
     )
 }
 

@@ -48,7 +48,7 @@ GFX_FIO_NAME_LIMIT = $3F
       lib_module_header MODULE_ID_GRAPHICS, LIB_ABI_VERSION, GFX_FN_COUNT
 
 ; ===========================================================================
-; NDOC documentation (extracted by tools/nmod_pack.py into graphics.nmod).
+; NDOC documentation (extracted by nova module pack into graphics.nmod).
 ; Function ids resolve symbolically from runtime/asm/libgraphics.inc. Every
 ; implemented (non-gfn_unimpl) GFN is documented here.
 ; ===========================================================================

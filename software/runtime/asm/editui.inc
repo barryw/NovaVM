@@ -22,17 +22,17 @@ EDITUI_SCREEN_ROWS = VTEXT_SCREEN_ROWS
 EDITUI_PALETTE_MODE     = $00
 EDITUI_COLOR_BG         = $00      ; black
 EDITUI_COLOR_FG         = $01      ; white
-EDITUI_COLOR_SHELL      = $0F      ; editor background (black bg)
-EDITUI_COLOR_TITLE      = $01      ; title text: white on black
+EDITUI_COLOR_SHELL      = $61      ; blue editor workspace, white text
+EDITUI_COLOR_TITLE      = $61      ; title text on blue workspace
 EDITUI_COLOR_MENU       = $F0      ; light-grey menu bar, black text
 EDITUI_COLOR_MENU_HOT   = $F2      ; light-grey bar, red hotkey
-EDITUI_COLOR_FRAME      = $0F      ; grey frame lines on black
-EDITUI_COLOR_DIM        = $0C      ; grey-med dim text on black
+EDITUI_COLOR_FRAME      = $61      ; white frame lines on blue workspace
+EDITUI_COLOR_DIM        = $6C      ; grey-med dim text on blue workspace
 EDITUI_COLOR_MENU_SEL   = $1F      ; selected dropdown item: white bg
 EDITUI_COLOR_MENU_SEL_HOT = $12    ; selected item hotkey
 EDITUI_COLOR_STATUS     = $F0      ; light-grey status bar
 EDITUI_COLOR_STATUS_HOT = $F6      ; status bar accent
-EDITUI_COLOR_PANEL      = $0F      ; dialog panel: black bg
+EDITUI_COLOR_PANEL      = $61      ; editor panels on blue workspace
 
 EDITUI_STATUS_ROW = EDITUI_SCREEN_ROWS - 1
 ; Dirty marker ('*') cell on the menu bar (right side). The title is drawn just
@@ -73,7 +73,9 @@ EDITUI_KEY_DELETE    = $7F
 EDITUI_KEY_ALT_PREFIX = EDITUI_KEY_ESC
 
 EDITUI_KEY_CTRL_A    = $01
+EDITUI_KEY_CTRL_B    = $02
 EDITUI_KEY_CTRL_C    = $03
+EDITUI_KEY_CTRL_F    = $06
 EDITUI_KEY_CTRL_G    = $07
 EDITUI_KEY_CTRL_K    = $0B
 EDITUI_KEY_CTRL_N    = $0E
@@ -83,16 +85,20 @@ EDITUI_KEY_CTRL_S    = $13
 EDITUI_KEY_CTRL_V    = $16
 EDITUI_KEY_CTRL_W    = $17
 EDITUI_KEY_CTRL_X    = $18
+EDITUI_KEY_CTRL_Y    = $19
 EDITUI_KEY_CTRL_Z    = $1A
 
 ; Editing navigation keys (defined by Nova; the host keyboard maps physical
 ; Home/End/PgUp/PgDn to these bytes).
-EDITUI_KEY_HOME      = $02
+EDITUI_KEY_HOME      = $83
 EDITUI_KEY_END       = $05
 EDITUI_KEY_PGUP      = $10
 EDITUI_KEY_PGDN      = $12
 EDITUI_KEY_CTRL_HOME = $80
 EDITUI_KEY_CTRL_END  = $81
+EDITUI_KEY_F3        = $82
+EDITUI_KEY_F6        = $84
+EDITUI_KEY_SHIFT_F6  = $85
 
 EDITUI_CMD_NONE      = $00
 EDITUI_CMD_NEW       = $01
@@ -110,6 +116,15 @@ EDITUI_CMD_ABOUT     = $0C
 EDITUI_CMD_FIND      = $0D
 EDITUI_CMD_GOTO_LINE = $0E
 EDITUI_CMD_SELECT_ALL = $0F
+EDITUI_CMD_REPLACE   = $10
+EDITUI_CMD_FIND_NEXT = $11
+EDITUI_CMD_REDO      = $12
+EDITUI_CMD_REPLACE_ALL = $13
+EDITUI_CMD_BUFFER_NEXT = $14
+EDITUI_CMD_BUFFER_PREVIOUS = $15
+EDITUI_CMD_BUFFER_LIST = $16
+EDITUI_CMD_WINDOW_NEXT = $17
+EDITUI_CMD_WINDOW_PREVIOUS = $18
 
 EDITUI_MENU_ENTRY_SIZE = 6
 EDITUI_MENU_ITEM_SIZE  = 4
@@ -138,6 +153,17 @@ EDITUI_MENU_ITEM_SIZE  = 4
 .global EDITUI_PRINTY
 .global EDITUI_PRINT_COLOR
 .global EDITUI_HOT_COLOR
+.global EDITUI_TMP
+.global EDITUI_COL
+.global EDITUI_ROW
+.global EDITUI_CH_TL
+.global EDITUI_CH_TR
+.global EDITUI_CH_BL
+.global EDITUI_CH_BR
+.global EDITUI_CH_H
+.global EDITUI_CH_V
+.global EDITUI_CH_TITLE_L
+.global EDITUI_CH_TITLE_R
 .global EDITUI_MENU_CMD
 .global EDITUI_MENU_SELECTED
 

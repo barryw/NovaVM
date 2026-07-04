@@ -20,7 +20,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     private readonly VirtualDmaController _dma;
     private readonly VirtualBlitterController _blitter;
     private readonly MathCoprocessor _math = new();
-    private readonly CompilerController _compiler;
     private readonly SidPlayer _sidPlayer;
     private readonly MusicEngine _musicEngine;
     private readonly MidiPlayback _midiPlayback;
@@ -76,7 +75,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
     public VirtualBlitterController Blitter => _blitter;
     public ZSoundController ZSound => _zsound;
     public MathCoprocessor MathCoprocessor => _math;
-    public CompilerController Compiler => _compiler;
     public SidPlayer SidPlayer => _sidPlayer;
     public MusicEngine Music => _musicEngine;
     public MidiPlayback MidiPlayback => _midiPlayback;
@@ -189,10 +187,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             tryWriteByte: TryDmaWriteByte,
             canWriteRange: CanDmaWriteRange,
             postTransferWrite: PostDmaWrite);
-        _compiler = new CompilerController(
-            readXram: addr => _xmc.TryReadLinear(addr, out byte v) ? v : (byte)0,
-            writeCpuRam: (addr, data) => _ram[addr] = data);
-
         string romPath = Path.Combine(AppContext.BaseDirectory, "Resources", "ehbasic.bin");
         byte[] rom = File.ReadAllBytes(romPath);
         rom.CopyTo(_ram, VgcConstants.RomBase);
@@ -308,6 +302,14 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_libcallResident != null)
             Array.Copy(_libcallResident, 0, _ram, LibCallBand,
                        Math.Min(_libcallResident.Length, 0x0420 - LibCallBand));
+    }
+
+    private void ClearRuntimeLowRamState()
+    {
+        Array.Clear(_ram, 0x0275, 0x0320 - 0x0275);
+        Array.Clear(_ram, 0x0418, 0x0900 - 0x0418);
+        for (int i = 0; i < ShelfN; i++)
+            _ram[ShelfLru + i] = (byte)i;
     }
 
     /// <summary>Write directly to backing RAM, bypassing ROM protection and hardware routing.</summary>
@@ -497,7 +499,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         _fio.Reset();
         _xmc.Reset();
         _nic.ResetAll();
-        _compiler.Reset();
         _midiPlayback.Reset();
         _sidPlayer.Reset();
         _musicEngine.Reset();
@@ -522,6 +523,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (!TrySelectPrimaryRom(bootRom, notifyRomChange))   // also reloads _extBank to the static ext
             TrySelectPrimaryRom(ActiveRom.Basic, notifyRomChange);
 
+        ClearRuntimeLowRamState();
         PokeResidentLoader();   // restore the resident lib_call into $0320 after reset
 
         InitVectorTable();
@@ -674,7 +676,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
         if (_fio.OwnsAddress(address)) return _fio.Read(address);
         if (address >= VgcConstants.WtsBase && address <= VgcConstants.WtsEnd)
             return _wts.ReadRegister(address);
-        if (_compiler.OwnsAddress(address)) return _compiler.Read(address);
         if (_vgc.OwnsAddress(address)) return _vgc.Read(address);
         // Paged-library page-in front-end ($BA77-$BA7C). $BA76 reads stay with ZSound
         // status above (the loader never reads PGD_CMD). Synchronous model: STATUS = DONE.
@@ -811,7 +812,6 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             _wts.WriteRegister(address, data);
             return;
         }
-        if (_compiler.OwnsAddress(address)) { _compiler.Write(address, data); return; }
         if (_vgc.OwnsAddress(address))
         {
             // GTEXT needs FIO name buffer in _ram for VGC to read

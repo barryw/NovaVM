@@ -81,6 +81,7 @@ const FIO_CMD_FFLUSH = 0x36;
 const FIO_CMD_FSTATUS = 0x37;
 const FIO_CMD_FDELETE = 0x38;
 const FIO_CMD_FRENAME = 0x39;
+const FIO_CMD_DEVSTATUS = 0x3A;
 
 const FIO_TYPE_BAS = 0;
 const FIO_TYPE_SID = 1;
@@ -542,6 +543,9 @@ function handleFioCommand(command) {
         case FIO_CMD_FRENAME:
             fioFRename();
             break;
+        case FIO_CMD_DEVSTATUS:
+            fioDevStatus();
+            break;
         case FIO_CMD_MOUNT:
             throw new FioError(FIO_ERR_IO);
         default:
@@ -801,6 +805,11 @@ function fioUnmount() {
     delete mountedMedia[drive];
     if (defaultDrive === drive) defaultDrive = firstMountedDrive() || "fd0";
     postStatus(`${drive.toUpperCase()} unmounted.`);
+}
+
+function fioDevStatus() {
+    const drive = normalizeDrive(fioFilename(true).replace(/:+$/, ""));
+    if (!storageDevices[drive]) throw new FioError(FIO_ERR_NOT_MOUNTED);
 }
 
 function fioPwd() {

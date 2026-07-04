@@ -8,7 +8,7 @@ using KDS.e6502;
 
 /// <summary>
 /// Browser-adapted CompositeBusDevice. Loads ROMs and demo disk from embedded
-/// resources instead of filesystem. No NCC compiler, no help system, no TCP.
+/// resources instead of filesystem. No help system, no TCP.
 /// Named CompositeBusDevice so linked SidPlayer/MusicEngine resolve without changes.
 /// </summary>
 public class CompositeBusDevice : IBusDevice, IDisposable
@@ -353,7 +353,7 @@ public class CompositeBusDevice : IBusDevice, IDisposable
             return;
         }
         if (address == VgcConstants.RegHelp) return;
-        // ROM swap — support basic ↔ extension only (no NCC in browser)
+        // ROM swap — support basic ↔ extension only.
         if (address == VgcConstants.RegRomSwap)
         {
             if (data == VgcConstants.RomSwapBasic)

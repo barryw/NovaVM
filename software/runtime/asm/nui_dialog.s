@@ -6,6 +6,20 @@
 ; nui; the list picker, save/restore-under, and key-input objects layer on top.
 
 .include "nui.inc"
+.include "blitter.inc"
+
+NUI_CH_TL = $C9
+NUI_CH_TR = $BB
+NUI_CH_BL = $C8
+NUI_CH_BR = $BC
+NUI_CH_H  = $CD
+NUI_CH_V  = $BA
+NUI_GFX_STRIDE = 320
+
+      .segment "BSS"
+
+NUI_GFX_Y:   .res 1
+NUI_GFX_TMP: .res 1
 
       .segment "CODE"
 
@@ -32,10 +46,8 @@ nui_dialog_defaults:
       STA   NUI_DIALOG_WIDTH
       LDA   #NUI_DIALOG_DEFAULT_HEIGHT
       STA   NUI_DIALOG_HEIGHT
-      LDA   #<nui_footer_any_key
-      STA   NUI_FOOTERL
-      LDA   #>nui_footer_any_key
-      STA   NUI_FOOTERH
+      STZ   NUI_FOOTERL
+      STZ   NUI_FOOTERH
       JSR   nui_style_defaults
       JMP   nui_ok
 
@@ -79,34 +91,35 @@ nui_validate_dialog:
       JMP   nui_ok
 
 nui_set_x_pixels:
-      STZ   VSPRITE_XH
+      STZ   BLT_DSTM
+      STZ   BLT_DSTH
       ASL
-      ROL   VSPRITE_XH
+      ROL   BLT_DSTM
       ASL
-      ROL   VSPRITE_XH
-      STA   VSPRITE_XL
+      ROL   BLT_DSTM
+      STA   BLT_DSTL
       RTS
 
 nui_set_width_pixels:
-      STZ   VSPRITE_WIDTHH
+      STZ   BLT_WIDTHH
       ASL
-      ROL   VSPRITE_WIDTHH
+      ROL   BLT_WIDTHH
       ASL
-      ROL   VSPRITE_WIDTHH
-      STA   VSPRITE_WIDTHL
+      ROL   BLT_WIDTHH
+      STA   BLT_WIDTHL
       RTS
 
 nui_set_y_pixels:
       ASL
       ASL
-      STA   VSPRITE_Y
+      STA   NUI_GFX_Y
       RTS
 
 nui_set_height_pixels:
       ASL
       ASL
-      STA   VSPRITE_HEIGHTL
-      STZ   VSPRITE_HEIGHTH
+      STA   BLT_HEIGHTL
+      STZ   BLT_HEIGHTH
       RTS
 
 nui_set_dialog_rect_pixels:
@@ -120,52 +133,86 @@ nui_set_dialog_rect_pixels:
       JMP   nui_set_height_pixels
 
 nui_inc_x_pixel:
-      INC   VSPRITE_XL
+      INC   BLT_DSTL
       BNE   @done
-      INC   VSPRITE_XH
+      INC   BLT_DSTM
+      BNE   @done
+      INC   BLT_DSTH
 @done:
       RTS
 
-nui_fill_dialog_rect:
-      JSR   nui_set_x_pixels
-      LDA   NUI_DIALOG_TOP
-      JSR   nui_set_y_pixels
-      LDA   NUI_DIALOG_WIDTH
-      JSR   nui_set_width_pixels
-      LDA   NUI_DIALOG_HEIGHT
-      JSR   nui_set_height_pixels
-      JMP   vsprite_gfx_fill
+nui_gfx_fill:
+      LDA   NUI_GFX_Y
+      CLC
+      ADC   BLT_DSTM
+      STA   BLT_DSTM
+      BCC   @add_y64
+      INC   BLT_DSTH
+
+@add_y64:
+      LDA   NUI_GFX_Y
+      LSR
+      LSR
+      STA   NUI_GFX_TMP
+      LDA   NUI_GFX_Y
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      CLC
+      ADC   BLT_DSTL
+      STA   BLT_DSTL
+      LDA   BLT_DSTM
+      ADC   NUI_GFX_TMP
+      STA   BLT_DSTM
+      BCC   @setup
+      INC   BLT_DSTH
+
+@setup:
+      LDA   #BLT_SPACE_VGC_GFX
+      STA   BLT_DSTSPACE
+      LDA   #<NUI_GFX_STRIDE
+      STA   BLT_DSTSTRL
+      LDA   #>NUI_GFX_STRIDE
+      STA   BLT_DSTSTRH
+      JMP   blitter_fill
 
 nui_draw_chrome:
       LDA   NUI_STYLE_SHADOW
-      STA   VSPRITE_FILLVALUE
+      STA   BLT_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
       JSR   nui_inc_x_pixel
       JSR   nui_inc_x_pixel
-      INC   VSPRITE_Y
-      INC   VSPRITE_Y
-      JSR   vsprite_gfx_fill
+      JSR   nui_inc_x_pixel
+      JSR   nui_inc_x_pixel
+      INC   NUI_GFX_Y
+      INC   NUI_GFX_Y
+      INC   NUI_GFX_Y
+      INC   NUI_GFX_Y
+      JSR   nui_gfx_fill
 
       LDA   NUI_STYLE_PANEL
-      STA   VSPRITE_FILLVALUE
+      STA   BLT_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
-      JSR   vsprite_gfx_fill
+      JSR   nui_gfx_fill
 
       LDA   NUI_STYLE_BORDER
-      STA   VSPRITE_FILLVALUE
+      STA   BLT_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
       LDA   #$02
-      STA   VSPRITE_HEIGHTL
-      STZ   VSPRITE_HEIGHTH
-      JSR   vsprite_gfx_fill
+      STA   BLT_HEIGHTL
+      STZ   BLT_HEIGHTH
+      JSR   nui_gfx_fill
 
       LDA   NUI_STYLE_BORDER
-      STA   VSPRITE_FILLVALUE
+      STA   BLT_FILLVALUE
       JSR   nui_set_dialog_rect_pixels
       LDA   #$02
-      STA   VSPRITE_WIDTHL
-      STZ   VSPRITE_WIDTHH
-      JMP   vsprite_gfx_fill
+      STA   BLT_WIDTHL
+      STZ   BLT_WIDTHH
+      JMP   nui_gfx_fill
 
 nui_clear_text_region:
       LDA   NUI_DIALOG_LEFT
@@ -252,8 +299,87 @@ nui_set_screen_text:
       STZ   VTEXT_FLAGS
       RTS
 
-nui_print_ptr:
+nui_frame_putc:
+      STA   VTEXT_CHAR
+      JMP   vtext_put_char
+
+nui_draw_text_frame:
       JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_TL
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+@top:
+      LDA   #NUI_CH_H
+      JSR   nui_frame_putc
+      DEC   NUI_TEXT_LEN
+      BNE   @top
+      LDA   #NUI_CH_TR
+      JSR   nui_frame_putc
+
+      LDA   NUI_DIALOG_HEIGHT
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   #1
+      STA   VTEXT_CURY
+@sides:
+      LDA   NUI_TEXT_LEN
+      BEQ   @bottom
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_V
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_LEFT
+      CLC
+      ADC   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #1
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_V
+      JSR   nui_frame_putc
+      INC   VTEXT_CURY
+      DEC   NUI_TEXT_LEN
+      BRA   @sides
+
+@bottom:
+      LDA   NUI_DIALOG_LEFT
+      STA   VTEXT_CURX
+      LDA   NUI_DIALOG_TOP
+      CLC
+      ADC   NUI_DIALOG_HEIGHT
+      SEC
+      SBC   #1
+      STA   VTEXT_CURY
+      JSR   vtext_set_cursor
+      LDA   #NUI_CH_BL
+      JSR   nui_frame_putc
+      LDA   NUI_DIALOG_WIDTH
+      SEC
+      SBC   #2
+      STA   NUI_TEXT_LEN
+@bottom_line:
+      LDA   #NUI_CH_H
+      JSR   nui_frame_putc
+      DEC   NUI_TEXT_LEN
+      BNE   @bottom_line
+      LDA   #NUI_CH_BR
+      JMP   nui_frame_putc
+
+nui_print_ptr:
       LDA   NUI_PRINT_X
       STA   VTEXT_CURX
       LDA   VTEXT_CURY
@@ -325,12 +451,34 @@ nui_print_title:
       LDA   NUI_TITLEH
       STA   NUI_PRINTH
       JSR   nui_center_print_x
-      STA   VTEXT_CURX
+      LDA   NUI_PRINT_X
+      CMP   NUI_DIALOG_LEFT
+      BEQ   :+
+      DEC   NUI_PRINT_X
+:
       LDA   NUI_DIALOG_TOP
-      CLC
-      ADC   #1
       STA   VTEXT_CURY
-      JMP   nui_print_ptr
+      JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_PRINT_X
+      STA   VTEXT_CURX
+      JSR   vtext_set_cursor
+      LDA   #' '
+      JSR   nui_frame_putc
+      INC   NUI_PRINT_X
+      LDA   NUI_DIALOG_TOP
+      STA   VTEXT_CURY
+      JSR   nui_set_screen_text
+      LDA   #NUI_TEXT_FRAME
+      STA   VTEXT_COLOR
+      LDA   NUI_TITLEL
+      STA   NUI_PRINTL
+      LDA   NUI_TITLEH
+      STA   NUI_PRINTH
+      JSR   nui_print_ptr
+      LDA   #' '
+      JMP   nui_frame_putc
 @done:
       RTS
 
@@ -347,32 +495,12 @@ nui_print_message:
       ADC   #2
       STA   NUI_PRINT_X
       STA   VTEXT_CURX
+      JSR   nui_set_screen_text
+      LDA   NUI_STYLE_TEXT
+      STA   VTEXT_COLOR
       LDA   NUI_DIALOG_TOP
       CLC
       ADC   #3
-      STA   VTEXT_CURY
-      JMP   nui_print_ptr
-@done:
-      RTS
-
-nui_print_footer:
-      LDA   NUI_FOOTERL
-      ORA   NUI_FOOTERH
-      BEQ   @done
-      LDA   NUI_FOOTERL
-      STA   NUI_PRINTL
-      LDA   NUI_FOOTERH
-      STA   NUI_PRINTH
-      LDA   NUI_DIALOG_LEFT
-      CLC
-      ADC   #2
-      STA   NUI_PRINT_X
-      STA   VTEXT_CURX
-      LDA   NUI_DIALOG_TOP
-      CLC
-      ADC   NUI_DIALOG_HEIGHT
-      SEC
-      SBC   #2
       STA   VTEXT_CURY
       JMP   nui_print_ptr
 @done:
@@ -388,49 +516,9 @@ nui_show_dialog:
       JSR   nui_ensure_style
       JSR   nui_draw_chrome
       JSR   nui_clear_text_region
+      JSR   nui_draw_text_frame
       JSR   nui_print_title
       JSR   nui_print_message
-      JSR   nui_print_footer
       JMP   nui_ok
 @done:
       RTS
-
-; @label NUI.SHOW_DIALOG_WAIT
-; @kind routine
-; @symbol nui_show_dialog_wait
-; @summary Draw the configured modal dialog and wait for one key.
-nui_show_dialog_wait:
-      JSR   nui_show_dialog
-      BNE   @done
-      JSR   nui_wait_key
-      JMP   nui_ok
-@done:
-      RTS
-
-; @label NUI.SHOW_ERROR
-; @kind routine
-; @symbol nui_show_error
-; @summary Draw a modal error dialog and wait for one key.
-nui_show_error:
-      LDA   NUI_DIALOG_WIDTH
-      ORA   NUI_DIALOG_HEIGHT
-      BNE   @have_geometry
-      JSR   nui_dialog_defaults
-@have_geometry:
-      JMP   nui_show_dialog_wait
-
-; @label NUI.WAIT_KEY
-; @kind routine
-; @symbol nui_wait_key
-; @summary Wait for one keyboard byte and return it in A.
-nui_wait_key:
-      LDA   #$01
-      STA   VGC_CURSEN
-      JSR   nui_read_key
-      PHA
-      STZ   VGC_CURSEN
-      PLA
-      RTS
-
-nui_footer_any_key:
-      .byte "PRESS ANY KEY", 0

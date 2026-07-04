@@ -36,6 +36,33 @@ public interface IScreenInput
 /// </summary>
 public class VirtualGraphicsController : IBusDevice
 {
+    public readonly struct MouseCursorState
+    {
+        public MouseCursorState(int x, int y, byte buttons, byte ctrl, byte color, byte shape, byte hotX, byte hotY)
+        {
+            X = Math.Clamp(x, 0, VgcConstants.GfxWidth - 1);
+            Y = Math.Clamp(y, 0, VgcConstants.GfxHeight - 1);
+            Buttons = buttons;
+            Ctrl = ctrl;
+            Color = (byte)(color & 0x0F);
+            Shape = shape;
+            HotX = (byte)Math.Min((int)hotX, VgcConstants.SpritePixelSize - 1);
+            HotY = (byte)Math.Min((int)hotY, VgcConstants.SpritePixelSize - 1);
+        }
+
+        public int X { get; }
+        public int Y { get; }
+        public byte Buttons { get; }
+        public byte Ctrl { get; }
+        public byte Color { get; }
+        public byte Shape { get; }
+        public byte HotX { get; }
+        public byte HotY { get; }
+        public bool Enabled => (Ctrl & VgcConstants.MouseCtrlEnable) != 0;
+        public bool AutoContrast => (Ctrl & VgcConstants.MouseCtrlAutoContrast) != 0;
+        public bool Colorize => (Ctrl & VgcConstants.MouseCtrlColorize) != 0;
+    }
+
     public readonly struct CopperEvent
     {
         public CopperEvent(ushort position, byte registerIndex, byte value)
@@ -55,6 +82,9 @@ public class VirtualGraphicsController : IBusDevice
 
     // Command registers $A010-$A01F (16 bytes: [0]=cmd, [1..15]=P0..P14)
     private readonly byte[] _cmdRegs = new byte[16];
+
+    private readonly byte[] _mousePendingRegs = new byte[16];
+    private readonly byte[] _mouseActiveRegs = new byte[16];
 
     // Sprite shape data: 16 sprites x 128 bytes each (4-bit color, 16x16 pixels)
     // Accessed from CPU thread (bus writes/commands) and UI thread (renderer, sprite editor).
@@ -139,6 +169,10 @@ public class VirtualGraphicsController : IBusDevice
     {
         Array.Clear(_regs);
         Array.Clear(_cmdRegs);
+        Array.Clear(_mousePendingRegs);
+        Array.Clear(_mouseActiveRegs);
+        _mousePendingRegs[VgcConstants.RegMouseShape - VgcConstants.MouseRegBase] = 255;
+        _mouseActiveRegs[VgcConstants.RegMouseShape - VgcConstants.MouseRegBase] = 255;
         Array.Clear(_spriteShapes);
         _spriteShapesDirty = true;
         Array.Clear(_spriteEnabled);
@@ -217,6 +251,9 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
             return true;
 
+        if (address >= VgcConstants.MouseRegBase && address <= VgcConstants.MouseRegEnd)
+            return true;
+
         // VDC-style VRAM port: $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
             return true;
@@ -246,6 +283,9 @@ public class VirtualGraphicsController : IBusDevice
         // Sprite registers $A040-$A0BF
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
             return ReadSpriteRegister(address);
+
+        if (address >= VgcConstants.MouseRegBase && address <= VgcConstants.MouseRegEnd)
+            return ReadMouseRegister(address);
 
         // VDC-style VRAM port $A0E0-$A0E4
         if (address >= VgcConstants.VramRegBase && address <= VgcConstants.VramRegEnd)
@@ -335,6 +375,12 @@ public class VirtualGraphicsController : IBusDevice
         if (address >= VgcConstants.SpriteRegBase && address <= VgcConstants.SpriteRegEnd)
         {
             WriteSpriteRegister(address, data);
+            return;
+        }
+
+        if (address >= VgcConstants.MouseRegBase && address <= VgcConstants.MouseRegEnd)
+        {
+            WriteMouseRegister(address, data);
             return;
         }
 
@@ -697,6 +743,8 @@ public class VirtualGraphicsController : IBusDevice
 
     public byte GetGfxTransparentColor() => _gfxTransparentColor;
 
+    public MouseCursorState GetMouseCursorState() => CreateMouseCursorState(_mouseActiveRegs);
+
     public ReadOnlySpan<byte> GetSpriteShape(int index) =>
         _spriteShapes.AsSpan(_spriteShapeIndex[index] * VgcConstants.SpriteShapeSize, VgcConstants.SpriteShapeSize);
 
@@ -805,6 +853,38 @@ public class VirtualGraphicsController : IBusDevice
                 _spriteShapes[byteIdx] = (byte)((_spriteShapes[byteIdx] & 0xF0) | (color & 0x0F));
             _spriteShapesDirty = true;
         }
+    }
+
+    private byte ReadMouseRegister(int address) =>
+        _mousePendingRegs[address - VgcConstants.MouseRegBase];
+
+    private void WriteMouseRegister(int address, byte data)
+    {
+        int offset = address - VgcConstants.MouseRegBase;
+        _mousePendingRegs[offset] = address switch
+        {
+            VgcConstants.RegMouseXHi => (byte)(data & 0x01),
+            VgcConstants.RegMouseY => (byte)Math.Min((int)data, VgcConstants.GfxHeight - 1),
+            VgcConstants.RegMouseButtons => (byte)(data & 0x77),
+            VgcConstants.RegMouseHotX or VgcConstants.RegMouseHotY => (byte)Math.Min((int)data, VgcConstants.SpritePixelSize - 1),
+            _ => data
+        };
+    }
+
+    private static MouseCursorState CreateMouseCursorState(byte[] regs)
+    {
+        int x = regs[VgcConstants.RegMouseXLo - VgcConstants.MouseRegBase] |
+                ((regs[VgcConstants.RegMouseXHi - VgcConstants.MouseRegBase] & 0x01) << 8);
+        int y = regs[VgcConstants.RegMouseY - VgcConstants.MouseRegBase];
+        return new MouseCursorState(
+            x,
+            y,
+            regs[VgcConstants.RegMouseButtons - VgcConstants.MouseRegBase],
+            regs[VgcConstants.RegMouseCtrl - VgcConstants.MouseRegBase],
+            regs[VgcConstants.RegMouseColor - VgcConstants.MouseRegBase],
+            regs[VgcConstants.RegMouseShape - VgcConstants.MouseRegBase],
+            regs[VgcConstants.RegMouseHotX - VgcConstants.MouseRegBase],
+            regs[VgcConstants.RegMouseHotY - VgcConstants.MouseRegBase]);
     }
 
     private void WriteSpriteRegister(int address, byte data)
@@ -923,6 +1003,7 @@ public class VirtualGraphicsController : IBusDevice
     public void IncrementFrameCounter()
     {
         _regs[VgcConstants.RegStatus - VgcConstants.VgcBase]++;
+        Array.Copy(_mousePendingRegs, _mouseActiveRegs, _mouseActiveRegs.Length);
 
         // Vblank: swap active list and rebuild any dirty copper programs
         _copperActiveList = _copperPendingList;

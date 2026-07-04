@@ -22,7 +22,7 @@
   <!-- ================================================================== -->
 
   <!-- Hardware (shared — excludes CompositeBusDevice, OpenAlRenderer,
-       CompilerController, MidiAutoSoundfont which have browser-specific versions) -->
+       MidiAutoSoundfont which have browser-specific versions) -->
   <ItemGroup>
     <Compile Include="..\e6502.Avalonia\Hardware\VgcConstants.cs" Link="Hardware\VgcConstants.cs" />
     <Compile Include="..\e6502.Avalonia\Hardware\VirtualGraphicsController.cs" Link="Hardware\VirtualGraphicsController.cs" />

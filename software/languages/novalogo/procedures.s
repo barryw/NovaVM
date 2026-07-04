@@ -13,6 +13,12 @@
 ;     2 bytes: body_len_lo, body_len_hi (16-bit)
 ;     body_len bytes: body text (lines separated by $0A)
 
+EDITOR_HOOK_WORK = $0800
+editor_hooks     = EDITOR_HOOK_WORK
+EDITOR_HOOK_LOAD = EDITOR_HOOK_WORK - 2
+PROC_BODY_BUF_CAP = 2048
+PROC_EDIT_BODY_LIMIT = PROC_BODY_BUF_CAP - 4
+
 ; =====================================================================
 ; ZEROPAGE segment — procedure variables
 ; =====================================================================
@@ -100,6 +106,41 @@ proc_init:
       STZ   proc_stopped
       STZ   proc_load_active
       RTS
+
+editor_install_hooks:
+      STZ   LIB_ARG3+2
+      STZ   LIB_ARG3+3
+      LDX   #0
+@copy_name:
+      LDA   editor_hook_file_name,X
+      STA   editor_hooks,X
+      INX
+      CPX   #editor_hook_file_name_len
+      BNE   @copy_name
+      LDA   #<editor_hooks
+      STA   LIB_ARG0+0
+      LDA   #>editor_hooks
+      STA   LIB_ARG0+1
+      LDA   #editor_hook_file_name_len
+      STA   LIB_ARG1+0
+      LDA   #<EDITOR_HOOK_LOAD
+      STA   LIB_ARG2+0
+      LDA   #>EDITOR_HOOK_LOAD
+      STA   LIB_ARG2+1
+      LDA   #MODULE_ID_FILES
+      LDX   #FILE_LOAD
+      JSR   do_lib_call
+      BNE   :+
+      LDA   #<editor_hooks
+      STA   LIB_ARG3+2
+      LDA   #>editor_hooks
+      STA   LIB_ARG3+3
+:
+      RTS
+
+editor_hook_file_name:
+      .byte "LOGOHK.BIN"
+editor_hook_file_name_len = * - editor_hook_file_name
 
 ; ---------------------------------------------------------------------
 ; proc_collect — enter TO/END multi-line collection mode
@@ -384,6 +425,7 @@ proc_edit_run:
 @tt_done:
       LDA   #0
       STA   proc_editor_title,Y
+      JSR   editor_install_hooks
 
       ; --- lib_call(EDITOR, EDITOR_FN_EDIT): the editor lives in its own
       ;     shared module. 32-bit LE mailbox cells at $0303+:
@@ -404,17 +446,17 @@ proc_edit_run:
       STA   LIB_ARG1+0
       LDA   proc_body_len_hi
       STA   LIB_ARG1+1
-      LDA   #<2048
-      STA   LIB_ARG2+0
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+      STZ   LIB_ARG2+0
       LDA   #>2048
       STA   LIB_ARG2+1
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
       LDA   #<proc_editor_title
       STA   LIB_ARG3+0
       LDA   #>proc_editor_title
       STA   LIB_ARG3+1
-      LDA   #EDITOR_EDIT_PROFILE_LOGO
-      STA   LIB_ARG3+2
-      STZ   LIB_ARG3+3
 
       LDA   #MODULE_ID_EDITOR
       LDX   #EDITOR_FN_EDIT
@@ -619,6 +661,14 @@ proc_edit_reconstruct:
       LDA   num_tmp_lo
       ORA   num_tmp_hi
       BEQ   @rc_body_done
+      LDA   proc_body_len_hi
+      CMP   #>PROC_EDIT_BODY_LIMIT
+      BCC   @rc_copy
+      BNE   @rc_body_done
+      LDA   proc_body_len_lo
+      CMP   #<PROC_EDIT_BODY_LIMIT
+      BCS   @rc_body_done
+@rc_copy:
       LDY   #0
       LDA   (proc_ptr_lo),Y
       JSR   proc_buf_put

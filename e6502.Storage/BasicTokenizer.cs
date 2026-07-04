@@ -64,7 +64,7 @@ public sealed class BasicTokenizer
             .ToArray();
     }
 
-    /// <summary>Loads token tables from the JSON file produced by gen_tokens.py.</summary>
+    /// <summary>Loads token tables from the JSON file produced by `nova codegen tokens`.</summary>
     public static BasicTokenizer FromJsonFile(string path)
     {
         using var stream = File.OpenRead(path);

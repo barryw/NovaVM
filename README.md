@@ -55,8 +55,8 @@ Type BASIC at the `Ready` prompt, or use the TCP/MCP tooling to drive the
 machine programmatically.
 
 The Avalonia build currently rebuilds the NovaBASIC ROM and help artifacts
-before launch. For a full local build, have `ca65`, `ld65`, `python3`,
-`pandoc`, and a LaTeX toolchain available.
+before launch. For a full local build, have `ca65`, `ld65`, `pandoc`, and a
+LaTeX toolchain available.
 
 ## Current Focus
 
@@ -81,7 +81,7 @@ behind an old desktop-only demo.
 |---|---|
 | **CPU** | 6502/65C02 core, 12 MHz target, 64 KB address space |
 | **Main memory** | 64 KB CPU-visible RAM/ROM/MMIO map |
-| **ROM** | NovaBASIC/EhBASIC at `$C000-$FFFF`; Avalonia also has NCC/extension ROM switching |
+| **ROM** | NovaBASIC/EhBASIC at `$C000-$FFFF`; alternate runtimes and extension modules use ROM switching |
 | **XRAM** | 512 KB expansion memory, treated as a flat 24-bit byte address space |
 | **XRAM windows** | Four 256-byte mapped windows at `$BC00-$BFFF` |
 | **Display** | VGC output targeting 720x480, with a 640x400 Nova canvas |
@@ -206,7 +206,7 @@ dotnet run --project e6502.Avalonia       # Desktop reference host
 dotnet run --project e6502.CLI            # Headless BASIC host
 dotnet run --project e6502.MCP            # MCP bridge
 dotnet run --project e6502.Nova           # Nova CLI, development mode
-tools/publish-nova-cli.sh                 # NativeAOT single-binary Nova CLI
+dotnet run --project e6502.Nova -- publish # NativeAOT single-binary Nova CLI
 make -C software/languages/ehbasic       # Rebuild NovaBASIC ROM artifacts
 make -C e6502.FPGA                        # Build the Verilator simulator
 make -C e6502.FPGA run                    # Run the Verilator simulator

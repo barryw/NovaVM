@@ -1268,65 +1268,6 @@ string here, then write \$02 to \addr{A020} to execute the search.
 
 
 % ═══════════════════════════════════════════════════════════════════════════════
-\section{Compiler Controller (\$A031--\$A03E)}
-\label{sec:vgc-compiler}
-% ═══════════════════════════════════════════════════════════════════════════════
-
-The NovaVM includes an on-board NCC compiler.  These registers provide
-access to compilation commands, status, and error reporting.
-
-\mementry{A031}{CmpCmd}{W}{---}
-
-Compiler command register.  Write one of:
-\begin{itemize}
-  \item \$01 --- Compile source code from XRAM at the address in \addr{A03B}--\addr{A03D}.
-  \item \$02 --- Populate error fields for the error at index \addr{A03A}.
-  \item \$03 --- Populate warning fields for the warning at index \addr{A03A}.
-\end{itemize}
-
-\mementry{A032}{CmpStatus}{R}{0}
-
-Compiler status:
-\begin{itemize}
-  \item \$00 = idle
-  \item \$01 = compiling
-  \item \$02 = compilation successful
-  \item \$03 = compilation failed with errors
-\end{itemize}
-
-\mementry{A033}{CmpErrCount}{R}{0}
-
-Number of errors from the last compilation.
-
-\mementry{A034}{CmpWarnCount}{R}{0}
-
-Number of warnings from the last compilation.
-
-\memrange{A035}{A036}{CmpErrLine}{R}{0}
-
-16-bit line number (little-endian) of the current error.
-
-\memrange{A037}{A038}{CmpCodeSize}{R}{0}
-
-16-bit size (little-endian) of the compiled code in bytes.
-
-\mementry{A039}{CmpErrMsg}{R}{---}
-
-Read this register repeatedly to retrieve the error message one byte at a
-time.  Returns 0 when the message is exhausted.
-
-\mementry{A03A}{CmpErrIdx}{W}{---}
-
-Write an error or warning index here (0-based), then issue command \$02 or
-\$03 to \addr{A031} to populate the error fields.
-
-\memrange{A03B}{A03D}{CmpSrcAddr}{W}{---}
-
-24-bit little-endian XRAM address of the source code to compile.  Set this
-before issuing the compile command.
-
-
-% ═══════════════════════════════════════════════════════════════════════════════
 \section{ROM Swap Register (\$A03F)}
 \label{sec:vgc-romswap}
 % ═══════════════════════════════════════════════════════════════════════════════
@@ -1336,9 +1277,10 @@ before issuing the compile command.
 Controls which ROM image is active in the \$C000--\$FFFF region.
 
 \begin{itemize}
-  \item \$01 --- Switch to NCC ROM (native code compiler).
-  \item \$02 --- Switch to EhBASIC ROM (the default).
-  \item \$03 --- Activate the NCC editor.
+  \item \$02 --- Switch to the active primary runtime ROM.
+  \item \$04 --- Switch to the extension/module ROM bank.
+  \item \$05 --- Switch to NovaLogo in hosted builds that provide it.
+  \item \$06 --- Switch to NovaForth in hosted builds that provide it.
 \end{itemize}
 
 \begin{warningbox}

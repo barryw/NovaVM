@@ -44,7 +44,6 @@
         <Exec Command="command -v ld65 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: ld65 not found. Install cc65: brew install cc65' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v pandoc &gt; /dev/null 2&gt;&amp;1 || echo 'WARN: pandoc not found; PDF user-guide generation will be skipped (ROM build does not need it)'" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="command -v latexmk &gt; /dev/null 2&gt;&amp;1 || echo 'WARN: latexmk not found; PDF user-guide generation will be skipped (ROM build does not need it)'" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="command -v python3 &gt; /dev/null 2&gt;&amp;1 || (echo 'ERROR: python3 not found. Install Python 3' &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
     <!-- Windows tool validation -->
@@ -53,7 +52,6 @@
         <Exec Command="where.exe ld65 &gt;nul 2&gt;&amp;1 || (echo ERROR: ld65 not found. Install cc65: choco install cc65 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="where.exe pandoc &gt;nul 2&gt;&amp;1 || (echo ERROR: pandoc not found. Install: choco install pandoc &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
         <Exec Command="where.exe pdflatex &gt;nul 2&gt;&amp;1 || (echo ERROR: pdflatex not found. Install MiKTeX: choco install miktex &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
-        <Exec Command="where.exe python3 &gt;nul 2&gt;&amp;1 || where.exe python &gt;nul 2&gt;&amp;1 || (echo ERROR: python3 not found. Install Python 3 &amp;&amp; exit 1)" StandardOutputImportance="low" IgnoreStandardErrorWarningFormat="true" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (POSIX) -->
@@ -72,7 +70,9 @@
         <Exec Command="make -C $(ProjectDir)../software/modules/memory" />
         <Exec Command="make -C $(ProjectDir)../software/modules/net" />
         <Exec Command="make -C $(ProjectDir)../software/modules/turtle" />
+        <Exec Command="make -C $(ProjectDir)../software/assembly editbuf-demo" />
         <Exec Command="make -C $(ProjectDir)../software/languages/novaforth" />
+        <Exec Command="make -C $(ProjectDir)../software/languages/novalogo" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/graphics/graphics.bin" DestinationFiles="$(ProjectDir)Resources/graphics.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/system/system.bin" DestinationFiles="$(ProjectDir)Resources/system.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/editor/editor.bin" DestinationFiles="$(ProjectDir)Resources/editor.bin" />
@@ -81,14 +81,17 @@
         <Copy SourceFiles="$(ProjectDir)../software/modules/memory/memory.bin" DestinationFiles="$(ProjectDir)Resources/memory.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/net/net.bin" DestinationFiles="$(ProjectDir)Resources/net.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/turtle/turtle.bin" DestinationFiles="$(ProjectDir)Resources/turtle.bin" />
+        <Copy SourceFiles="$(ProjectDir)../software/assembly/apps/editbuf_demo/editbuf_demo.bin" DestinationFiles="$(ProjectDir)Resources/editbuf_demo.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/novaforth/novaforth.bin" DestinationFiles="$(ProjectDir)Resources/novaforth.bin" />
+        <Copy SourceFiles="$(ProjectDir)../software/languages/novalogo/novalogo.bin" DestinationFiles="$(ProjectDir)Resources/novalogo.bin" />
+        <Copy SourceFiles="$(ProjectDir)../software/languages/novalogo/LOGOHK.BIN" DestinationFiles="$(ProjectDir)Resources/LOGOHK.BIN" />
     </Target>
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (Windows) -->
     <Target Name="AssembleRomWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateToolsWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
         <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; ca65 --cpu 65c02 -I ..\..\runtime\asm -g -l min_mon.lst --feature labels_without_colons -o basic.o min_mon.asm &amp;&amp; ld65 -C ehbasic.cfg -vm -m basic.map -Ln basic.sym -o basic.bin basic.o" />
-        <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; python3 ..\..\..\tools\gen_novavm_inc.py ..\..\..\e6502.Avalonia\Hardware\VgcConstants.cs basic.sym -o ..\..\runtime\asm\novavm.inc" />
-        <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; python3 ..\..\..\tools\gen_runtime_abi_docs.py ..\..\runtime\asm\nova.inc ..\..\runtime\asm\fio.inc ..\..\runtime\asm\fio.s ..\..\runtime\asm\audio.inc ..\..\runtime\asm\audio.s ..\..\runtime\asm\nic.inc ..\..\runtime\asm\nic.s ..\..\runtime\asm\vgc.inc ..\..\runtime\asm\vgc.s ..\..\runtime\asm\sprite.inc ..\..\runtime\asm\sprite.s ..\..\runtime\asm\dma.inc ..\..\runtime\asm\dma.s ..\..\runtime\asm\blitter.inc ..\..\runtime\asm\blitter.s ..\..\runtime\asm\copper.inc ..\..\runtime\asm\copper.s ..\..\runtime\asm\xram.inc ..\..\runtime\asm\xram.s ..\..\runtime\asm\pager.inc ..\..\runtime\asm\pager.s ..\..\runtime\asm\rng.inc ..\..\runtime\asm\rng.s ..\..\runtime\asm\xmc.s --sym basic.sym --json runtime_labels.json --md ..\..\..\docs\assembly\runtime-labels.md --asm ..\..\runtime\asm\runtime_labels.inc" />
+        <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; dotnet run --project ..\..\..\e6502.Nova -c Release -- codegen novavm-inc ..\..\..\e6502.Avalonia\Hardware\VgcConstants.cs basic.sym -o ..\..\runtime\asm\novavm.inc" />
+        <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; dotnet run --project ..\..\..\e6502.Nova -c Release -- codegen runtime-abi ..\..\runtime\asm\nova.inc ..\..\runtime\asm\fio.inc ..\..\runtime\asm\fio.s ..\..\runtime\asm\audio.inc ..\..\runtime\asm\audio.s ..\..\runtime\asm\nic.inc ..\..\runtime\asm\nic.s ..\..\runtime\asm\vgc.inc ..\..\runtime\asm\vgc.s ..\..\runtime\asm\sprite.inc ..\..\runtime\asm\sprite.s ..\..\runtime\asm\dma.inc ..\..\runtime\asm\dma.s ..\..\runtime\asm\blitter.inc ..\..\runtime\asm\blitter.s ..\..\runtime\asm\copper.inc ..\..\runtime\asm\copper.s ..\..\runtime\asm\xram.inc ..\..\runtime\asm\xram.s ..\..\runtime\asm\pager.inc ..\..\runtime\asm\pager.s ..\..\runtime\asm\rng.inc ..\..\runtime\asm\rng.s ..\..\runtime\asm\xmc.s --sym basic.sym --json runtime_labels.json --md ..\..\..\docs\assembly\runtime-labels.md --asm ..\..\runtime\asm\runtime_labels.inc" />
         <Exec Command="cd $(ProjectDir)..\software\assembly &amp;&amp; ca65 --cpu 65c02 -I ..\runtime\asm apps\keyboard\keyboard.s -o apps\keyboard\keyboard.o &amp;&amp; ld65 -C apps\keyboard\keyboard.cfg -o apps\keyboard\keyboard.bin apps\keyboard\keyboard.o" />
         <Exec Command="cd $(ProjectDir)..\software\languages\ehbasic &amp;&amp; ca65 --cpu 65c02 -I ..\..\runtime\asm extension.s -o extension.o &amp;&amp; ld65 -C extension.cfg -o extension.bin extension.o" />
         <Exec Command="cd $(ProjectDir)..\software\languages\novaforth &amp;&amp; ca65 --cpu 65c02 -I ..\..\runtime\asm -l novaforth.lst -o novaforth.o novaforth.s &amp;&amp; ld65 -C novaforth.cfg -m novaforth.map -o novaforth.bin novaforth.o" />
@@ -100,12 +103,12 @@
 
     <!-- Generate the PDF user guide (POSIX) -->
     <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="bash ../docs/books/basic-user-guide/build-pdf.sh" />
+        <Exec Command="dotnet run --project ../e6502.Nova -c Release -- docs basic-user-guide --repo .." />
     </Target>
 
     <!-- Generate the PDF user guide (Windows) -->
     <Target Name="GeneratePdfWindows" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRomWindows" Condition="$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="bash ../docs/books/basic-user-guide/build-pdf.sh" />
+        <Exec Command="dotnet run --project ../e6502.Nova -c Release -- docs basic-user-guide --repo .." />
     </Target>
 
     <Target Name="CopyEhBasicToOutput" AfterTargets="Build">
@@ -113,6 +116,7 @@
         <Copy SourceFiles="Resources/ehbasic.bin" DestinationFolder="$(OutputPath)Resources" />
         <Copy SourceFiles="Resources/extension.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/extension.bin')" />
         <Copy SourceFiles="Resources/novalogo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novalogo.bin')" />
+        <Copy SourceFiles="Resources/LOGOHK.BIN" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/LOGOHK.BIN')" />
         <Copy SourceFiles="Resources/novaforth.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/novaforth.bin')" />
         <Copy SourceFiles="Resources/libcall.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/libcall.bin')" />
         <Copy SourceFiles="Resources/graphics.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/graphics.bin')" />
@@ -123,6 +127,7 @@
         <Copy SourceFiles="Resources/memory.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/memory.bin')" />
         <Copy SourceFiles="Resources/net.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/net.bin')" />
         <Copy SourceFiles="Resources/turtle.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/turtle.bin')" />
+        <Copy SourceFiles="Resources/editbuf_demo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/editbuf_demo.bin')" />
     </Target>
 
     <ItemGroup>
@@ -176,6 +181,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\turtle.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\editbuf_demo.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>

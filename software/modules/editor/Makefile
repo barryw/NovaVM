@@ -2,11 +2,19 @@ CA65 = ca65 --cpu w65c02 -I ../../runtime/asm
 LD65 = ld65
 NOVA_ASM = ../../runtime/asm
 NOVA_LIB_FILE = $(NOVA_ASM)/build/nova.lib
+NOVA_CLI_PROJECT = ../../../e6502.Nova/e6502.Nova.csproj
+NOVA_CLI_RID ?= linux-x64
+NOVA_CLI_BIN ?= ../../../e6502.Nova/bin/Release/net10.0/$(NOVA_CLI_RID)/nova
+NOVA_CLI = $(NOVA_CLI_BIN)
+NOVA_CLI_SOURCES = ../../../e6502.Nova/Program.cs ../../../e6502.Nova/BuildTools.cs
 
 all: editor.bin editor.nmod
 
 $(NOVA_LIB_FILE): FORCE
 	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
+
+$(NOVA_CLI_BIN): FORCE
+	dotnet build $(NOVA_CLI_PROJECT) -c Release -r $(NOVA_CLI_RID) -p:NuGetAudit=false -p:UseSharedCompilation=false -p:BuildInParallel=false -v:minimal
 
 editor.o: editor.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libeditor.inc \
@@ -23,14 +31,14 @@ editor.bin: editor.o editor.cfg $(NOVA_LIB_FILE)
 
 # Self-documenting module: image + NDOC doc (from editor.s ;@ comments, ids
 # resolved from libeditor.inc) -> editor.nmod.
-editor.nmod: editor.bin editor.s ../../../tools/nmod_pack.py ../../../tools/gen_runtime_abi_docs.py \
+editor.nmod: editor.bin editor.s $(NOVA_CLI_BIN) $(NOVA_CLI_SOURCES) \
             $(NOVA_ASM)/libeditor.inc
-	python3 ../../../tools/nmod_pack.py --src editor.s --bin editor.bin \
+	$(NOVA_CLI) module pack --src editor.s --bin editor.bin \
 	        --out editor.nmod --syms $(NOVA_ASM)/libeditor.inc --ndk-dir $(NOVA_ASM)
 
 # Copy the raw 16K image into the Avalonia Resources dir, where CompositeBusDevice
 # pre-stages it into the XRAM shelf at boot (mirrors firmware boot.json staging).
-install: editor.bin
+install: editor.bin editor.nmod
 	cp editor.bin ../../../e6502.Avalonia/Resources/editor.bin
 
 clean:

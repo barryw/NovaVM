@@ -11,15 +11,14 @@ namespace e6502UnitTests
     /// at $9F80) because reading $C000-$FFFF unmaps the running ROM; this test runs the
     /// real e6502 CPU over the stub against a bus that models only the $A03F ROMSWAP
     /// contract — the same contract the FPGA enforces. The page_dma copy itself is
-    /// Verilator-proven (Phase 2); here we prove the 6502-side readback the HW smoke
-    /// (tools/run-page-in-hardware-smoke.py) depends on.
+    /// Verilator-proven (Phase 2); here we prove the 6502-side readback contract.
     /// </summary>
     [TestClass]
     public class PageInChecksumStubTests
     {
         // Assembled from tools/page_in_checksum_stub.s (ca65). Regenerate with:
         //   ca65 tools/page_in_checksum_stub.s -o /tmp/s.o && ld65 -C <cfg> /tmp/s.o -o /tmp/s.bin
-        // The Python HW smoke embeds the identical bytes. This test is the correctness guard.
+        // Hardware checks use identical bytes. This test is the correctness guard.
         private static readonly byte[] StubBytes =
         {
             0x78, 0xA5, 0xFB, 0x8D, 0xE2, 0x9F, 0xA5, 0xFC, 0x8D, 0xE3, 0x9F, 0xA9,

@@ -46,7 +46,7 @@ NEXTPNR_PLACE_REPORT = $(BUILDDIR)/nextpnr-place-report.json
 NEXTPNR_PLACE_LOG = $(BUILDDIR)/nextpnr-place.log
 NEXTPNR_PLACE_CONFIG = $(BUILDDIR)/$(PROJ).place.config
 NEXTPNR_PLACE_MARGIN_MHZ ?= 0.5
-TIMING_CHECKER ?= ../../../tools/check-fpga-timing.py
+NOVA_CLI ?= dotnet run --project ../../../e6502.Nova -c Release --
 NOVA_FLOORPLAN_MODE ?= critical
 NOVA_FLOORPLAN_ENFORCE ?=
 NEXTPNR_THREAD_FLAGS = $(if $(strip $(NEXTPNR_THREADS)),--threads $(NEXTPNR_THREADS),)
@@ -230,7 +230,7 @@ synth: ehbasic $(BUILDDIR)/$(PROJ).json
 placecheck: ehbasic $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
 	@mkdir -p $(BUILDDIR)
 	$(NEXTPNR_ENV) $(NEXTPNR) $(NEXTPNR_PLACE_FLAGS) --textcfg $(NEXTPNR_PLACE_CONFIG) --json $(BUILDDIR)/$(PROJ).json --lpf $(PIN_DEF)
-	python3 $(TIMING_CHECKER) $(NEXTPNR_PLACE_REPORT) --log $(NEXTPNR_PLACE_LOG) --margin-mhz $(NEXTPNR_PLACE_MARGIN_MHZ)
+	$(NOVA_CLI) fpga check-timing $(NEXTPNR_PLACE_REPORT) --log $(NEXTPNR_PLACE_LOG) --margin-mhz $(NEXTPNR_PLACE_MARGIN_MHZ)
 
 seed-sweep: ehbasic $(BUILDDIR)/$(PROJ).json $(PIN_DEF) $(NEXTPNR_PRE_PLACE_DEPS)
 	@mkdir -p $(BUILDDIR)

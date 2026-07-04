@@ -88,7 +88,7 @@ public class NovaLogoMailboxReservationTests
             "REPEAT :N [MAKE \"A 1 MAKE \"B 2 MAKE \"A :A + 9 MAKE \"B :B + 8 " +
             "MAKE \"A :A + :B MAKE \"B :B + :A MAKE \"A 3 MAKE \"B 4 " +
             "MAKE \"A :A + 7 MAKE \"B :B + 6 MAKE \"C :A]\r");
-        QueueText(editor, "\x0B" + "s" + "\x1B" + "x"); // Ctrl+K S save, Alt-X quit editor
+        QueueText(editor, "\x13" + "\x1B" + "x"); // Ctrl-S save, Alt-X quit editor
         QueueText(editor, "PRINT \"DEFINED\r"); // editor exited + proc record built
         RunUntilScreenContains(cpu, bus, "DEFINED", 200_000_000);
 

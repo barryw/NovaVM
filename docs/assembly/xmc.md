@@ -31,6 +31,27 @@ Allocator metadata lives in the reserved high-XRAM range
 `$07FA00-$07FEFF`; user-visible `XmcPagesUsed`/`XmcPagesFree` counts describe
 only the low 256 KB heap.
 
+## Platform XRAM Reservations
+
+The full 512 KB XRAM device is addressable, but not every address is application
+scratch. Current platform-owned ranges are:
+
+| Range | Owner |
+| --- | --- |
+| `$000000-$03FFFF` | XMC-managed heap for applications and runtimes. |
+| `$040000-$047FFF` | Shared text-service undo snapshots. |
+| `$048000-$04FFFF` | Shared text-service redo snapshots. |
+| `$050000-$053FFF` | Shared text-service clipboard. |
+| `$054000-$054EFF` | Editui menu save-under scratch. |
+| `$055000-$05CFFF` | Shared editor document buffers. |
+| `$05D000-$05FFFF` | Remaining editor/NUI scratch. |
+| `$060000-$06FFFF` | Paged module shelf. |
+| `$070000-$07F9FF` | NVG decode staging. |
+| `$07FA00-$07FEFF` | XMC allocator metadata. |
+
+Assembly programs should allocate transient storage through `MEM_ALLOC` or
+`xmc_alloc_block` instead of claiming these fixed platform ranges.
+
 ## Shared XRAM Runtime
 
 Assembly code should use `software/runtime/asm/xram.inc` and `software/runtime/asm/xram.s` instead of

@@ -42,6 +42,21 @@ NUI_LIST_INDEX:     .res 1
 NUI_LIST_ROWL:      .res 1
 NUI_LIST_ROWH:      .res 1
 NUI_LIST_TMP:       .res 1
+NUI_FILE_OUTL:      .res 1
+NUI_FILE_OUTH:      .res 1
+NUI_FILE_OUT_MAX:   .res 1
+NUI_FILE_OUT_LEN:   .res 1
+NUI_FILE_MODE:      .res 1
+NUI_FILE_TYPE_MASK: .res 1
+NUI_FILE_TYPE_MASKH:.res 1
+NUI_FILE_ROWSL:     .res 1
+NUI_FILE_ROWSH:     .res 1
+NUI_INPUT_OUTL:     .res 1
+NUI_INPUT_OUTH:     .res 1
+NUI_INPUT_OUT_MAX:  .res 1
+NUI_INPUT_OUT_LEN:  .res 1
+NUI_INPUT_LABELL:   .res 1
+NUI_INPUT_LABELH:   .res 1
 NUI_STYLE_SHADOW:   .res 1
 NUI_STYLE_BORDER:   .res 1
 NUI_STYLE_PANEL:    .res 1

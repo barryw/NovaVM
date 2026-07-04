@@ -7,7 +7,7 @@ namespace e6502UnitTests;
 // Regression guard for the Arty Z7-20 PS Ethernet (Zynq GEM0 + Realtek RTL8211F +
 // lwIP) RX fix. The data path took an enormous amount to bring up; these assert the
 // two load-bearing fixes stay in the source so they can't be silently reverted.
-// (End-to-end HW proof lives in boards/arty_z7/net_smoke.sh; this is the CI guard.)
+// End-to-end HW proof is manual/live-board only; this is the CI guard.
 // Root cause recap: (1) the BSP's get_Realtek_phy_speed read the RTL8211E PHYSR (reg
 // 0x11) which fails on the F -> "Phy setup error" -> init_emacps aborts; (2) NET_CFG
 // bit2 = NVLANDISC ("receive only VLAN frames") was set -> the MAC discarded every

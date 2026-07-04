@@ -150,8 +150,8 @@ live at a time, so do not nest an overlay over an already-open dropdown.
 buffer and a three-choice modal dialog on top of EDITUI. It is **language
 neutral**: it owns cursor movement, insert/delete/backspace (including across
 line boundaries), line navigation, horizontal/vertical scrolling, selection,
-cut/copy/paste, the dirty marker, and `Ctrl-S` / `Ctrl-Q` conventions — but it
-knows nothing about any document model.
+cut/copy/paste, the dirty marker, `Ctrl-S` save, `Alt-X` exit, and document
+command dispatch — but it knows nothing about any document model.
 
 Everything language-specific is supplied by the host through **hook vectors**,
 each defaulting to a no-op so the editor works standalone:
@@ -161,6 +161,13 @@ each defaulting to a no-op so the editor works standalone:
 | `EDITBUF_SAVE_VECL/H` | `Ctrl-S`, and the dialog "Save First" choice | Host validates/saves/installs; returns A = `EDITBUF_SAVE_OK` / `_DRAFT` / `_ERROR`, optionally pointing `EDITBUF_STATUS` at a message |
 | `EDITBUF_INDENT_VECL/H` | after a newline | Host returns A = number of leading spaces to auto-indent the new line |
 | `EDITBUF_HILITE_VECL/H` | once per visible line during render | Host fills `EDITBUF_HL_COLORS` (one VGC color byte per char) for syntax highlighting; inputs are `EDITBUF_HL_PTR` and `EDITBUF_HL_LEN` |
+| `EDITBUF_COMMAND_VECL/H` | document/session commands such as `Ctrl-N`, `Ctrl-O`, `F6`, `Shift-F6`, `Ctrl-B`, `Alt-0`, and window-boundary navigation | Host receives A = `EDITUI_CMD_*` and owns the document model, open-buffer list, file picker behavior, and optional XRAM window paging |
+| `EDITBUF_CHANGED_VECL/H` | after edits, save state changes, or active document metadata changes | Host syncs the active document model, usually by copying the RAM edit window back into XRAM-backed document state |
+
+When an XRAM-backed host loads only a slice of a larger document into RAM,
+editbuf sends `EDITUI_CMD_WINDOW_NEXT` or `EDITUI_CMD_WINDOW_PREVIOUS` through
+the command hook when cursor navigation/backspace crosses the loaded slice.
+Hosts that do not support windowed documents can ignore those commands.
 
 Usage:
 
@@ -188,3 +195,41 @@ JSR editbuf_run             ; modal; returns A = exit reason
 dirty-exit dialog (`editbuf_dialog3`) is a true overlapping modal built on
 `editui_save_under` / `editui_restore_under` with three choices: Exit Anyway /
 Save First / Cancel.
+
+## EDITOR module hook table
+
+The paged `EDITOR` module exposes one entry point in `libeditor.inc`:
+
+- `EDITOR_FN_EDIT` uses the RAM-buffer editor contract. `ARG3` low word is the
+  title pointer and `ARG3` high word is either zero for plain Text behavior or a
+  caller-owned `EDITOR_HOOKS_*` table for save, syntax, menus, commands, and
+  XRAM document sync.
+
+`EDITOR_FN_EDIT` copies this 16-byte table into the matching `EDITBUF`
+configuration bytes before running the editor:
+
+```asm
+EDITOR_HOOKS_TYPEL        = 0
+EDITOR_HOOKS_TYPEH        = 1
+EDITOR_HOOKS_STATUSL      = 2
+EDITOR_HOOKS_STATUSH      = 3
+EDITOR_HOOKS_SAVE_VECL    = 4
+EDITOR_HOOKS_SAVE_VECH    = 5
+EDITOR_HOOKS_INDENT_VECL  = 6
+EDITOR_HOOKS_INDENT_VECH  = 7
+EDITOR_HOOKS_HILITE_VECL  = 8
+EDITOR_HOOKS_HILITE_VECH  = 9
+EDITOR_HOOKS_MENU_VECL    = 10
+EDITOR_HOOKS_MENU_VECH    = 11
+EDITOR_HOOKS_COMMAND_VECL = 12
+EDITOR_HOOKS_COMMAND_VECH = 13
+EDITOR_HOOKS_CHANGED_VECL = 14
+EDITOR_HOOKS_CHANGED_VECH = 15
+EDITOR_HOOKS_SIZE         = 16
+```
+
+Zero hook vectors are valid; `editbuf_run` installs its default no-op hooks for
+them. A zero type pointer displays `Text`. Nonzero vectors must be callable while
+the `EDITOR` module is paged in; cross-bank language runtimes should point at
+low-RAM trampolines. The module wraps the SAVE vector so `RESULT` byte 1 still
+records that the user requested save before tail-calling the language hook.

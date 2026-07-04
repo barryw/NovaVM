@@ -220,11 +220,8 @@ module test_romswap_values_top;
         dbg_pause = 0;
 
         wait_marker("ROMSWAP_EXTENSION selects extension", 16'h0200, 8'h10, 1'b1);
-        wait_marker("ROMSWAP_NCC returns primary", 16'h0201, 8'h11, 1'b0);
         wait_marker("ROMSWAP_EXTENSION selects extension again", 16'h0202, 8'h20, 1'b1);
         wait_marker("ROMSWAP_BASIC returns primary", 16'h0203, 8'h21, 1'b0);
-        wait_marker("ROMSWAP_EXTENSION selects extension before NCCEDIT", 16'h0204, 8'h30, 1'b1);
-        wait_marker("ROMSWAP_NCCEDIT returns primary", 16'h0205, 8'h31, 1'b0);
         wait_marker("ROMSWAP_EXTENSION selects extension before LOGO", 16'h0206, 8'h40, 1'b1);
         wait_marker("ROMSWAP_LOGO returns primary", 16'h0207, 8'h41, 1'b0);
 

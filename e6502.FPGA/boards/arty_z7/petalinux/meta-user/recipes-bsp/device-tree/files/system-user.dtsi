@@ -41,18 +41,13 @@
 	};
 };
 
-/* USB host DISABLED for base bring-up. With dr_mode=host the chipidea
- * controller drives 5V VBUS (drv-vbus on usb_phy0) the instant it starts, and
- * that browns the board straight into a power-on reset -- confirmed live:
- * REBOOT_STATUS=0x00400000 (POR) and the serial reset fires EXACTLY at
- * "ci_hdrc ci_hdrc.0: USB 2.0 started". Disabling the node lets the board boot
- * clean to BASIC (verified by hand in u-boot: `fdt set .../usb@e0002000 status
- * disabled` -> full boot). Re-enabling the USB keyboard is a separate increment
- * once the VBUS drive is sorted; the dr_mode/usb-phy host config is kept below,
- * commented, ready to restore. */
+/* USB host for physical keyboard input. Earlier base bring-up disabled this
+ * node after a VBUS/POR fault; keep the host-mode wiring explicit so Linux
+ * binds chipidea + evdev and novavm/nkbd.c can inject keys into R_KEY. */
 &usb0 {
-	status = "disabled";
-	/* dr_mode = "host"; usb-phy = <&usb_phy0>;  -- restore with VBUS fix */
+	status = "okay";
+	dr_mode = "host";
+	usb-phy = <&usb_phy0>;
 };
 
 /* Pin the GEM MAC so it's stable for a static DHCP lease (matches the

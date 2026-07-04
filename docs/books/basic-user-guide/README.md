@@ -15,13 +15,13 @@ make pdf
 Direct command:
 
 ```sh
-./build-pdf.sh
+dotnet run --project ../../../e6502.Nova -c Release -- docs basic-user-guide --repo ../../..
 ```
 
 ## Structure
 
 - `book.yaml`: book order and appendix generation rules.
-- `build-pdf.sh`: assembles the guide and writes `novabasic_user_guide.pdf`.
+- `nova docs basic-user-guide`: assembles the guide and writes `novabasic_user_guide.pdf`.
 - `latex-header.tex`: book-specific LaTeX styling injected into Pandoc output.
 - `nova-filter.lua`: Pandoc filter for NovaBASIC help markup.
 - `cover.tex` and `copyright.tex`: retained book front matter assets.

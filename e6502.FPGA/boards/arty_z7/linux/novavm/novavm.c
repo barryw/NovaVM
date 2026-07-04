@@ -76,6 +76,9 @@
 #define FIO_CMD_PWD    0x26   /* read current drive/subdir -> nfio_pwd */
 #define FIO_CMD_LOAD_MODULE 0x2C
 #define MODULE_BYTES 16384u
+#define SHELF_BASE 0x00060000u
+#define SHELF_SLOT 0x00004000u
+#define SHELF_N 4
 #define FIO_CMD_VOLUME  0x0C   /* -> naudio fio_volume  */
 #define FIO_CMD_MIDPLAY 0x13   /* -> naudio fio_midplay */
 #define FIO_CMD_MIDSTOP 0x14   /* -> naudio fio_midstop */
@@ -91,18 +94,19 @@
 #define FIO_CMD_FSEEK       0x32
 #define FIO_CMD_FTELL       0x33
 #define FIO_CMD_FSIZE       0x34
+#define FIO_CMD_DEVSTATUS   0x3A
 #define FIO_ERR_NOTFOUND 1
 #define FIO_ERR_IO 2
 #define FIO_ERR_EOD 3
 #define DT_BAS 0
 #define DT_BIN 2
-#define DT_DIR 5
 
 #define PROG_DIR "/data/nova/programs"
 
 volatile uint32_t *g_reg;   /* non-static: shared with naudio.c/nservers.c/nkbd.c via novavm.h */
 volatile uint8_t  *g_xram;  /* mmap'd PS-DDR XRAM shelf (nfio.c uses it), NULL if unreserved */
 void kbd_init(void);        /* nkbd.c: physical USB keyboard reader thread */
+void mouse_init(void);      /* nmouse.c: physical USB mouse -> VGC mouse pointer regs */
 void audio_init(void); void audio_start(void);              /* naudio.c */
 void fio_volume(void); void fio_midplay(void); void fio_midstop(void); void fio_sfload(void);
 void servers_init(void);    /* nservers.c: mgmt 6504 / debug 6503 / upload 6502 */
@@ -301,19 +305,24 @@ static int load_rom(const char *path) {
     return 0;
 }
 
-/* Page an embedded 16KB SYSTEM/library module into ext_rom bank-1 (R_ROMW idx=1).
- * The resident loader ($0320) requests this via FIO_CMD_LOAD_MODULE when BASIC
- * lib-calls a routine (e.g. SYS_SCREEN_READLINE, the line editor) that lives in a
- * paged module. Mirrors ps_fio load_module() (main.c:357). id 1..8 per EMBEDDED_MOD. */
-static int load_module(int id) {
-    if (id < 1 || id > 8 || !EMBEDDED_MOD[id]) {
+static void clear_runtime_low_ram(void) {
+    for (unsigned a = 0x0275; a < 0x0320; a++) poke(a, 0);
+    for (unsigned a = 0x0418; a < 0x0900; a++) poke(a, 0);
+    for (unsigned i = 0; i < SHELF_N; i++) poke(0x041C + i, (unsigned char)i);
+}
+
+/* Load an embedded 16KB module into the requested XRAM shelf slot. Also mirror
+ * it into bank-1 for the Arty page-in-bypass bitstream. */
+static int load_module(int id, int slot) {
+    if (id < 1 || id > 8 || !EMBEDDED_MOD[id] || slot < 0 || slot >= SHELF_N || !g_xram) {
         fprintf(stderr, "[novavm] module %d not embedded\n", id);
         return -1;
     }
     const unsigned char *img = EMBEDDED_MOD[id];
+    memcpy((void *)(g_xram + SHELF_BASE + (unsigned)slot * SHELF_SLOT), img, MODULE_BYTES);
     for (unsigned a = 0; a < MODULE_BYTES; a++)
         wr(R_ROMW, (1u << 22) | (a << 8) | img[a]);   /* idx=1 -> ext_rom bank */
-    printf("[novavm] module %d -> bank-1 (%u bytes)\n", id, MODULE_BYTES);
+    printf("[novavm] module %d -> XRAM slot %d + bank-1 (%u bytes)\n", id, slot, MODULE_BYTES);
     return 0;
 }
 
@@ -367,6 +376,7 @@ static int vm_cold_boot(void) {
     wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);
     usleep(150000);
     if (load_rom("/data/nova/roms/ehbasic.bin") != 0) return 1;
+    clear_runtime_low_ram();
     for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
     printf("[novavm] staged resident loader @ $0320 (%zu bytes)\n", sizeof(LOADER_BIN));
     boot_splash();                 /* boot.json logo + fade while the 6502 is held */
@@ -431,10 +441,11 @@ int main(int argc, char **argv) {
     if (vm_cold_boot() != 0) return 1;
     audio_init(); audio_start();   /* naudio.c: real SID/WTS+MIDI feeder (replaces the silence loop) */
     kbd_init();                    /* nkbd.c: physical USB keyboard -> R_KEY */
+    mouse_init();                  /* nmouse.c: physical USB mouse -> VGC mouse pointer regs */
     servers_init();                /* nservers.c: mgmt/debug/upload servers for the nova CLI */
     nfio_init();                   /* nfio.c: XRAM/file/.ndi-drive command state */
     osd_init();                    /* nosd.c: OSD config menu (no-op until OSD-compositor bitstream) */
-    printf("[novavm] 6502 released; VGC on; audio+keyboard+servers live; servicing FIO (programs -> %s)\n", PROG_DIR);
+    printf("[novavm] 6502 released; VGC on; audio+keyboard+mouse+servers live; servicing FIO (programs -> %s)\n", PROG_DIR);
 
     for (;;) {
         if (!fio_pending()) { usleep(300); continue; }
@@ -454,9 +465,9 @@ int main(int argc, char **argv) {
             case FIO_CMD_RMDIR:   nfio_rmdir(); break; /* remove an empty directory */
             case FIO_CMD_PWD:     nfio_pwd(); break;   /* read current drive/subdir */
             case FIO_CMD_LOAD_MODULE: {
-                int id = peek(FIO_SRC_LO);
-                if (load_module(id) == 0) {
-                    for (int s = 0; s < 4; s++) poke(0x0418 + s, 0);   /* clear lib-call retvals */
+                int id = peek(FIO_SRC_LO), slot = peek(FIO_END_LO);
+                if (load_module(id, slot) == 0) {
+                    for (int s = 0; s < 4; s++) poke(0x0418 + s, 0);
                     poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK);    /* (no FIO_CMD clear: matches ps_fio) */
                 } else fio_fail(FIO_ERR_NOTFOUND);
                 break;
@@ -476,6 +487,7 @@ int main(int argc, char **argv) {
             case FIO_CMD_FSEEK:       fio_fseek();        break;
             case FIO_CMD_FTELL:       fio_ftell();        break;
             case FIO_CMD_FSIZE:       fio_fsize();        break;
+            case FIO_CMD_DEVSTATUS:   nfio_devstatus();   break;
             case 0: break;
             default: fio_fail(FIO_ERR_NOTFOUND); break;
         }

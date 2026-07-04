@@ -168,6 +168,8 @@ EXT_DIR:
       BNE   @dir_done         ; no files or error
       JSR   ext_crlf          ; blank line
 @dir_loop:
+      JSR   fio_dir_read
+      BNE   @dir_done
       ; --- right-justified file size (8 columns, 24-bit) ---
       LDA   FIO_SIZEL
       STA   ext_u32_0
@@ -204,9 +206,7 @@ EXT_DIR:
       BNE   @dir_pname
 @dir_nl:
       JSR   ext_crlf
-      ; advance to next entry
-      JSR   fio_dir_read
-      BEQ   @dir_loop
+      BRA   @dir_loop
 @dir_done:
       LDA   #$00
       RTS
