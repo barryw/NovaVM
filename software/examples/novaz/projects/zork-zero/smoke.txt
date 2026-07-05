@@ -16,3 +16,4 @@ wait=>Time passes
 .expect-at 8,1=>Banquet Hall
 .expect-at 8,2=>Moves:  3
 .expect-at 0,34=>          |
+.expect-text-attr Time passes...=>00

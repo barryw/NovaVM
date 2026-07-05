@@ -48,6 +48,7 @@
 #include <dirent.h>
 #include <pthread.h>
 #include <sys/types.h>
+#include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -126,6 +127,11 @@ static int write_all(int fd, const void *buf, size_t n) {
         off += (size_t)w;
     }
     return 1;
+}
+
+static void request_kernel_reboot(void) {
+    sync();
+    reboot(RB_AUTOBOOT);
 }
 
 /* Bind+listen a TCP server socket on `port`, SO_REUSEADDR, INADDR_ANY. */
@@ -419,7 +425,7 @@ static void handle_hello(mgmt_ctx *c, uint32_t reqid) {
     cb_kv_bool(c, "drives", 1);
     cb_kv_bool(c, "runtime", 0);
     cb_kv_bool(c, "vmReset", 1);
-    cb_kv_bool(c, "hostReboot", 0);
+    cb_kv_bool(c, "hostReboot", 1);
     cb_kv_bool(c, "wifi", 0);
     cb_kv_bool(c, "downloadChunks", 1);
     resp_send(c);
@@ -715,6 +721,15 @@ static void handle_vm_reset(mgmt_ctx *c, uint16_t cmd, uint32_t reqid) {
     resp_send(c);
 }
 
+static void handle_host_reboot(mgmt_ctx *c, uint16_t cmd, uint32_t reqid) {
+    printf("[mgmt] host reboot\n");
+    resp_begin(c, cmd, reqid, 1, "ok", NULL);
+    cb_map(c, 1);
+    cb_kv_bool(c, "reboot", 1);
+    resp_send(c);
+    request_kernel_reboot();
+}
+
 /* Dispatch one fully-received frame. */
 static void mgmt_dispatch(mgmt_ctx *c, const uint8_t *frame, uint32_t clen, uint32_t rlen) {
     uint16_t command = (uint16_t)((frame[6] << 8) | frame[7]);
@@ -736,6 +751,7 @@ static void mgmt_dispatch(mgmt_ctx *c, const uint8_t *frame, uint32_t clen, uint
         case 10: handle_mount_drive(c, command, reqid, payload, clen); break;
         case 11: handle_unmount_drive(c, command, reqid, payload, clen); break;
         case 14: handle_vm_reset(c, command, reqid); break;
+        case 15: handle_host_reboot(c, command, reqid); break;
         case 19: handle_read_file_chunk(c, command, reqid, payload, clen); break;
         default: send_error(c, command, reqid, "not_implemented",
                             "command not implemented yet"); break;

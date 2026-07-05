@@ -41,7 +41,8 @@ module osd_overlay #(
     input  wire [31:0] fb_wdata,                  // {transp,bg[3:0],fg[3:0],char[7:0],addr[12:0]}
 
     // ---- composited RGB out (to HDMI encoder; black during blanking) ----
-    output reg  [23:0] rgb_out
+    output reg  [23:0] rgb_out,
+    output reg         active_out
 );
     localparam int NCELL = COLS * ROWS;           // 2700
 
@@ -149,10 +150,12 @@ module osd_overlay #(
     end
 
     // expand RGB444 -> RGB888 ({r,r,g,g,b,b}); black during blanking
-    always_ff @(posedge clk)
+    always_ff @(posedge clk) begin
         rgb_out <= de_2 ? {sel444[11:8], sel444[11:8],
                            sel444[7:4],  sel444[7:4],
                            sel444[3:0],  sel444[3:0]} : 24'h000000;
+        active_out <= de_2;
+    end
 
 endmodule
 

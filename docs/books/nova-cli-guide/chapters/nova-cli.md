@@ -43,19 +43,19 @@ nova validate doc-demo.ndi
 Upload that image to NovaHost as a floppy image:
 
 ```bash
-nova disk upload doc-demo.ndi --remote 192.168.1.65 --floppy --name doc-demo.ndi
+nova disk upload doc-demo.ndi --remote 192.168.1.188 --floppy --name doc-demo.ndi
 ```
 
 Mount it into `fd0`:
 
 ```bash
-nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.65
+nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.188
 ```
 
 Check the board:
 
 ```bash
-nova device status --remote 192.168.1.65
+nova device status --remote 192.168.1.188
 ```
 
 ## Mental Model
@@ -144,9 +144,9 @@ Remote commands talk to NovaHost over TCP.
 `--remote` may appear before or after the command:
 
 ```bash
-nova --remote 192.168.1.65 disk list
-nova disk list --remote 192.168.1.65
-nova disk list --remote=192.168.1.65
+nova --remote 192.168.1.188 disk list
+nova disk list --remote 192.168.1.188
+nova disk list --remote=192.168.1.188
 ```
 
 The host may include a port when testing against a local server:
@@ -158,8 +158,8 @@ nova device status --remote 127.0.0.1:8080
 Remote paths are relative to the NovaHost SD-card root. These are equivalent:
 
 ```bash
-nova get --remote 192.168.1.65 /config/boot.json
-nova get --remote 192.168.1.65 config/boot.json
+nova get --remote 192.168.1.188 /config/boot.json
+nova get --remote 192.168.1.188 config/boot.json
 ```
 
 Backslashes are normalized to `/`. Leading slashes are stripped before building
@@ -516,7 +516,7 @@ protocol.
 Tested example:
 
 ```bash
-nova device status --remote 192.168.1.65
+nova device status --remote 192.168.1.188
 ```
 
 Use this first when the board is behaving oddly.
@@ -532,11 +532,12 @@ nova device reboot --remote <host>
 Tested example:
 
 ```bash
-nova device reboot --remote 192.168.1.65
+nova device reboot --remote 192.168.1.188
 ```
 
-This reboots the ESP-side NovaHost. It is not the same thing as a 6502 warm
-start or cold start.
+On the Arty Linux host this asks the kernel to sync and reboot. On ESP-side
+NovaHost targets it reboots the host controller. It is not the same thing as a
+6502 warm start or cold start.
 
 ## Drive Slot Commands
 
@@ -561,7 +562,7 @@ nova drive list --remote <host>
 Tested example:
 
 ```bash
-nova drive list --remote 192.168.1.65
+nova drive list --remote 192.168.1.188
 ```
 
 ### `drive mount`
@@ -578,8 +579,8 @@ The SD path may be written with or without the leading `/`.
 Tested examples:
 
 ```bash
-nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.65
-nova drive mount hd0 /disks/hard/hd0.ndi --remote 192.168.1.65
+nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.188
+nova drive mount hd0 /disks/hard/hd0.ndi --remote 192.168.1.188
 ```
 
 ### `drive unmount`
@@ -593,7 +594,7 @@ nova drive unmount <slot> --remote <host>
 Tested example:
 
 ```bash
-nova drive unmount fd0 --remote 192.168.1.65
+nova drive unmount fd0 --remote 192.168.1.188
 ```
 
 After unmounting, that image will not come back on the next boot unless it is
@@ -616,7 +617,7 @@ nova wifi connect|disconnect|reconnect|forget --remote <host>
 Read configured and live WiFi state.
 
 ```bash
-nova wifi status --remote 192.168.1.65
+nova wifi status --remote 192.168.1.188
 ```
 
 ### `wifi scan`
@@ -624,7 +625,7 @@ nova wifi status --remote 192.168.1.65
 List nearby WiFi networks visible to NovaHost.
 
 ```bash
-nova wifi scan --remote 192.168.1.65
+nova wifi scan --remote 192.168.1.188
 ```
 
 ### `wifi set`
@@ -634,14 +635,14 @@ Update WiFi configuration.
 DHCP example:
 
 ```bash
-nova wifi set --remote 192.168.1.65 --ssid NovaLab --password secret --dhcp
+nova wifi set --remote 192.168.1.188 --ssid NovaLab --password secret --dhcp
 ```
 
 Static IP example:
 
 ```bash
-nova wifi set --remote 192.168.1.65 --ssid NovaLab --password secret \
-  --static --static-ip 192.168.1.65 --gateway 192.168.1.1 \
+nova wifi set --remote 192.168.1.188 --ssid NovaLab --password secret \
+  --static --static-ip 192.168.1.188 --gateway 192.168.1.1 \
   --subnet 255.255.255.0 --dns 192.168.1.1
 ```
 
@@ -657,10 +658,10 @@ Aliases:
 ### WiFi Actions
 
 ```bash
-nova wifi connect --remote 192.168.1.65
-nova wifi disconnect --remote 192.168.1.65
-nova wifi reconnect --remote 192.168.1.65
-nova wifi forget --remote 192.168.1.65
+nova wifi connect --remote 192.168.1.188
+nova wifi disconnect --remote 192.168.1.188
+nova wifi reconnect --remote 192.168.1.188
+nova wifi forget --remote 192.168.1.188
 ```
 
 `forget` clears the stored WiFi configuration.
@@ -677,8 +678,8 @@ nova audio stop --remote <host>
 Tested examples:
 
 ```bash
-nova audio status --remote 192.168.1.65
-nova audio stop --remote 192.168.1.65
+nova audio status --remote 192.168.1.188
+nova audio stop --remote 192.168.1.188
 ```
 
 ## Remote Keyboard Command
@@ -694,7 +695,7 @@ nova keyboard --remote <host> [--port 6503] [--echo] [--ctrl-c-quits]
 Example:
 
 ```bash
-nova keyboard --remote 192.168.1.65
+nova keyboard --remote 192.168.1.188
 ```
 
 Control keys:
@@ -831,10 +832,10 @@ Sends a hand-written debug command (the JSON must include a `command` field).
 Example session:
 
 ```bash
-nova vm --remote 192.168.1.65 cold-start --runtime basic
-nova vm --remote 192.168.1.65 enter 'PRINT "HELLO"'
-nova vm --remote 192.168.1.65 screen
-nova vm --remote 192.168.1.65 peek $A0ED
+nova vm --remote 192.168.1.188 cold-start --runtime basic
+nova vm --remote 192.168.1.188 enter 'PRINT "HELLO"'
+nova vm --remote 192.168.1.188 screen
+nova vm --remote 192.168.1.188 peek $A0ED
 ```
 
 ## Raw Remote SD Commands
@@ -859,8 +860,8 @@ nova ls --remote <host> [path]
 Tested examples:
 
 ```bash
-nova ls --remote 192.168.1.65
-nova ls --remote 192.168.1.65 disks/floppy
+nova ls --remote 192.168.1.188
+nova ls --remote 192.168.1.188 disks/floppy
 ```
 
 ### `put`
@@ -877,8 +878,8 @@ upload. For all other extensions, bytes are uploaded exactly as supplied.
 Tested examples:
 
 ```bash
-nova put --remote 192.168.1.65 doc-demo.ndi disks/floppy/doc-demo.ndi
-nova put --remote 192.168.1.65 docs/programs/midi/sousa-stars-stripes.mid music/STARS.NMS
+nova put --remote 192.168.1.188 doc-demo.ndi disks/floppy/doc-demo.ndi
+nova put --remote 192.168.1.188 docs/programs/midi/sousa-stars-stripes.mid music/STARS.NMS
 ```
 
 ### `get`
@@ -892,7 +893,7 @@ nova get --remote <host> <remote-path> [local-path]
 Tested example:
 
 ```bash
-nova get --remote 192.168.1.65 config/boot.json ./boot.json
+nova get --remote 192.168.1.188 config/boot.json ./boot.json
 ```
 
 ### `rm`
@@ -906,7 +907,7 @@ nova rm --remote <host> <remote-path>
 Tested example:
 
 ```bash
-nova rm --remote 192.168.1.65 tmp/old.bin
+nova rm --remote 192.168.1.188 tmp/old.bin
 ```
 
 NovaHost rejects writes/deletes against mounted `.ndi` files. Unmount the slot
@@ -944,11 +945,11 @@ Placement rules for upload:
 Tested examples:
 
 ```bash
-nova disk list --remote 192.168.1.65
-nova disk list --remote 192.168.1.65 --floppy
-nova disk upload doc-demo.ndi --remote 192.168.1.65 --floppy --name doc-demo.ndi
-nova disk download doc-demo.ndi --remote 192.168.1.65 --floppy ./doc-demo.downloaded.ndi
-nova disk delete doc-demo.ndi --remote 192.168.1.65 --floppy
+nova disk list --remote 192.168.1.188
+nova disk list --remote 192.168.1.188 --floppy
+nova disk upload doc-demo.ndi --remote 192.168.1.188 --floppy --name doc-demo.ndi
+nova disk download doc-demo.ndi --remote 192.168.1.188 --floppy ./doc-demo.downloaded.ndi
+nova disk delete doc-demo.ndi --remote 192.168.1.188 --floppy
 ```
 
 Uploading a disk image only copies it to the SD card. It does not mount the
@@ -970,9 +971,9 @@ If `--name` has no extension, the local file extension is appended.
 Tested examples:
 
 ```bash
-nova rom upload ehbasic/basic.bin --remote 192.168.1.65 --name novabasic.bin
-nova rom list --remote 192.168.1.65
-nova rom download novabasic.bin --remote 192.168.1.65 ./novabasic.downloaded.bin
+nova rom upload ehbasic/basic.bin --remote 192.168.1.188 --name novabasic.bin
+nova rom list --remote 192.168.1.188
+nova rom download novabasic.bin --remote 192.168.1.188 ./novabasic.downloaded.bin
 ```
 
 Uploading ROM files does not automatically reload them into the running FPGA.
@@ -996,9 +997,9 @@ CLI.
 Tested examples:
 
 ```bash
-nova soundfont upload DocBank.nsfb --remote 192.168.1.65
-nova soundfont list --remote 192.168.1.65
-nova soundfont download DocBank.nsfb --remote 192.168.1.65 ./DocBank.downloaded.nsfb
+nova soundfont upload DocBank.nsfb --remote 192.168.1.188
+nova soundfont list --remote 192.168.1.188
+nova soundfont download DocBank.nsfb --remote 192.168.1.188 ./DocBank.downloaded.nsfb
 ```
 
 ### Music
@@ -1023,9 +1024,9 @@ Behavior:
 Tested examples:
 
 ```bash
-nova music upload docs/programs/midi/sousa-stars-stripes.mid --remote 192.168.1.65 --name STARS.NMS
-nova music list --remote 192.168.1.65
-nova music download STARS.NMS --remote 192.168.1.65 ./STARS.downloaded.NMS
+nova music upload docs/programs/midi/sousa-stars-stripes.mid --remote 192.168.1.188 --name STARS.NMS
+nova music list --remote 192.168.1.188
+nova music download STARS.NMS --remote 192.168.1.188 ./STARS.downloaded.NMS
 ```
 
 MIDI compiler notes:
@@ -1063,10 +1064,10 @@ Tested examples:
 
 ```bash
 nova asset upload e6502.ESP32/novahost/assets/boot/novavm_logo.nvg \
-  --remote 192.168.1.65 --type boot
+  --remote 192.168.1.188 --type boot
 
-nova asset list --remote 192.168.1.65 --type boot
-nova asset download novavm_logo.nvg --remote 192.168.1.65 --type boot ./novavm_logo.downloaded.nvg
+nova asset list --remote 192.168.1.188 --type boot
+nova asset download novavm_logo.nvg --remote 192.168.1.188 --type boot ./novavm_logo.downloaded.nvg
 ```
 
 ### Library Modules
@@ -1117,22 +1118,37 @@ NovaHost currently uses this SD-card layout:
 For normal hardware work, use the first-class `nova` commands:
 
 ```bash
-nova device status --remote 192.168.1.65
-nova drive list --remote 192.168.1.65
-nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.65
-nova drive unmount fd0 --remote 192.168.1.65
-nova wifi status --remote 192.168.1.65
-nova wifi scan --remote 192.168.1.65
-nova wifi set --remote 192.168.1.65 --ssid NovaLab --password secret --dhcp
-nova audio status --remote 192.168.1.65
-nova audio stop --remote 192.168.1.65
-nova keyboard --remote 192.168.1.65
-nova device reboot --remote 192.168.1.65
+nova device status --remote 192.168.1.188
+nova drive list --remote 192.168.1.188
+nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.188
+nova drive unmount fd0 --remote 192.168.1.188
+nova wifi status --remote 192.168.1.188
+nova wifi scan --remote 192.168.1.188
+nova wifi set --remote 192.168.1.188 --ssid NovaLab --password secret --dhcp
+nova audio status --remote 192.168.1.188
+nova audio stop --remote 192.168.1.188
+nova keyboard --remote 192.168.1.188
+nova device reboot --remote 192.168.1.188
+nova capture screen screenshots/hardware/current.png --remote 192.168.1.188
+nova capture record /tmp/novavm.mkv --remote 192.168.1.188 --duration 30
+nova capture devices --remote 192.168.1.188
+nova capture gadget enable --remote 192.168.1.188
 nova capture hdmi screenshots/hardware/current.png
-nova check spi-bridge --remote 192.168.1.65
-nova check vgc-reset-stale --remote 192.168.1.65
+nova check spi-bridge --remote 192.168.1.188
+nova check vgc-reset-stale --remote 192.168.1.188
 nova fpga check-timing e6502.FPGA/boards/ulx3s/build/nextpnr-report.json
 ```
+
+`nova capture screen` uses the NovaVM V4L2 device (`/dev/video0`) and captures
+the post-OSD HDMI image. `nova capture record` records V4L2 video plus ALSA
+audio (`hw:NovaVM,0`); when `--remote` is used, the recording is copied back to
+the requested local output path. `nova capture gadget` configures the standard
+UVC/UAC2 gadget endpoints for capture-card mode; verify streaming on hardware
+with `nova capture devices` and standard Linux capture tools.
+
+The native V4L2 pixel format is `bgr0`, matching the PL capture buffer byte
+order. Use `--format` only when a target tool needs a different ffmpeg input
+format.
 
 The raw NovaHost SD commands are intentionally not the primary user-facing
 workflow. The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
@@ -1143,14 +1159,29 @@ Arty Z7 board workflows also live under `nova arty`:
 ```bash
 nova arty sync-payloads
 nova arty build-linux-host
+nova arty build-linux-image
+nova arty deploy-boot-image --remote 192.168.1.188
 nova arty build-ps-fio
 nova arty deploy-editor-demo --remote 192.168.1.188
+nova arty upload-infocom --remote 192.168.1.188 --infocom-root /mnt/Software/Emulation/Infocom
 nova arty make-boot-bin
 ```
 
 `nova arty make-boot-bin` packages the FSBL, bitstream, and PS FIO ELF into
 `e6502.FPGA/boards/arty_z7/build/BOOT.bin` after refreshing embedded 6502
 payloads.
+
+`nova arty build-linux-image` rebuilds the PetaLinux image from the current repo
+layer and Arty XSA, then packages the Linux `BOOT.BIN`. This is the path that
+installs kernel/device-tree/rootfs features such as the NovaVM V4L2/ALSA capture
+device. `nova arty deploy-boot-image --remote 192.168.1.188` copies the rebuilt
+`image.ub` and Linux `BOOT.BIN` to `/boot`, stages `rootfs.ext4` under `/data`,
+writes it to `/dev/mmcblk0p2`, forces a kernel sync/reboot, verifies all
+deployed bytes by SHA-256 after the board returns, and waits for NovaVM. The
+rootfs path requires `/data` to be a separate staging filesystem. Use
+`--boot-only` only when the rootfs is already known to match the build; combine
+it with `--no-reboot` only when you intentionally want to defer a `/boot`-only
+reboot.
 
 `nova arty deploy-editor-demo` packages the editor demo as a bootable
 `editor-demo.ndi`, uploads it to `/data/nova/disks/floppy`, clears mounted
@@ -1159,6 +1190,15 @@ also passes the current `nova` binary into nested Makefiles as `NOVA_CLI`,
 avoiding stale or environment-specific `dotnet run` calls while refreshing
 payloads. After installing the Linux host, the command restarts NovaVM and
 waits for the management port before returning.
+
+`nova arty deploy-linux-host` places bootable language disks under
+`/data/nova/disks/languages`, currently `novalogo.ndi` and `novaforth.ndi`.
+Pascal images should live there too when NovaPascal lands.
+
+`nova arty upload-infocom` builds the known NovaZ Infocom project images with
+the existing `software/examples/novaz` Makefile and uploads them under
+`/data/nova/disks/infocom` so the Arty OSD disk picker can browse them as
+`/disks/infocom/<project>.ndi`.
 
 ## Runtime Configuration Commands
 
@@ -1205,8 +1245,8 @@ nova webserver --remote <host> [--port 8080] [--bind 127.0.0.1] [--no-open]
 nova create doc-demo.ndi --label DOCDEMO
 nova import doc-demo.ndi AUTOBOOT.bas --tokenize
 nova validate doc-demo.ndi
-nova disk upload doc-demo.ndi --remote 192.168.1.65 --floppy --name doc-demo.ndi
-nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.65
+nova disk upload doc-demo.ndi --remote 192.168.1.188 --floppy --name doc-demo.ndi
+nova drive mount fd0 /disks/floppy/doc-demo.ndi --remote 192.168.1.188
 ```
 
 After a cold start, `fd0` has first boot priority.
@@ -1214,8 +1254,8 @@ After a cold start, `fd0` has first boot priority.
 ### Unmount A Floppy And Fall Back To Default Boot
 
 ```bash
-nova drive unmount fd0 --remote 192.168.1.65
-nova device reboot --remote 192.168.1.65
+nova drive unmount fd0 --remote 192.168.1.188
+nova device reboot --remote 192.168.1.188
 ```
 
 Because unmount clears the persisted path, the image will not come back on the
@@ -1225,8 +1265,8 @@ next boot unless it is mounted again.
 
 ```bash
 nova create hd0.ndi --hd --label HOME
-nova disk upload hd0.ndi --remote 192.168.1.65 --hard --name hd0.ndi
-nova drive mount hd0 /disks/hard/hd0.ndi --remote 192.168.1.65
+nova disk upload hd0.ndi --remote 192.168.1.188 --hard --name hd0.ndi
+nova drive mount hd0 /disks/hard/hd0.ndi --remote 192.168.1.188
 ```
 
 ### Round-Trip A BASIC Program
@@ -1241,9 +1281,9 @@ nova validate doc-demo.ndi
 ### Upload Music And A Soundfont
 
 ```bash
-nova soundfont upload DocBank.nsfb --remote 192.168.1.65
+nova soundfont upload DocBank.nsfb --remote 192.168.1.188
 nova music upload docs/programs/midi/sousa-stars-stripes.mid \
-  --remote 192.168.1.65 --name STARS.NMS
+  --remote 192.168.1.188 --name STARS.NMS
 ```
 
 On NovaBASIC, use the music commands (`SFLOAD`, `MIDPLAY`, `MIDSTOP`) to load

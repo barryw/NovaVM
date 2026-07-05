@@ -68,9 +68,9 @@ answer the question.
    Run live-board debug checks through the Nova CLI:
 
    ```bash
-   dotnet run --project e6502.Nova -c Release -- check spi-bridge --remote 192.168.1.65
-   dotnet run --project e6502.Nova -c Release -- check vgc-reset-stale --remote 192.168.1.65
-   dotnet run --project e6502.Nova -c Release -- vm --remote 192.168.1.65 screen
+   dotnet run --project e6502.Nova -c Release -- check spi-bridge --remote 192.168.1.188
+   dotnet run --project e6502.Nova -c Release -- check vgc-reset-stale --remote 192.168.1.188
+   dotnet run --project e6502.Nova -c Release -- vm --remote 192.168.1.188 screen
    ```
 
    Use the static IP for normal hardware testing. mDNS (`novahost.local`) is
@@ -94,10 +94,28 @@ answer the question.
    Trace records are oldest-to-newest and include PC, address bus, data
    in/out, A, SP, flags, CPU micro-state, opcode, RDY, WE, IRQ, and NMI.
 
-6. **Real HDMI frame capture**
+6. **Exact NovaVM capture**
+
+   Use this first when the question is what NovaVM is outputting after the OSD
+   compositor. It reads the standard V4L2 capture device on the Arty and writes
+   a PNG locally.
+
+   ```bash
+   dotnet run --project e6502.Nova -c Release -- capture screen screenshots/hardware/current.png --remote 192.168.1.188
+   dotnet run --project e6502.Nova -c Release -- capture devices --remote 192.168.1.188
+   dotnet run --project e6502.Nova -c Release -- capture record /tmp/novavm.mkv --remote 192.168.1.188 --duration 30
+   ```
+
+   The video source is `/dev/video0` (V4L2). The audio source is `hw:NovaVM,0`
+   (ALSA). Remote recordings are copied back to the local output path after
+   ffmpeg finishes on the board. Capture-card mode configures standard UVC/UAC2
+   gadget endpoints; verify streaming on hardware with `nova capture devices`
+   and standard Linux capture tools. The native V4L2 pixel format is `bgr0`.
+
+7. **External HDMI frame capture**
 
    Use this when memory/debug reads are not enough and the question is what the
-   monitor or capture device actually sees.
+   monitor or an external capture device sees.
 
    ```bash
    dotnet run --project e6502.Nova -c Release -- capture hdmi
@@ -105,10 +123,13 @@ answer the question.
    dotnet run --project e6502.Nova -c Release -- capture hdmi --list
    ```
 
-   The default input is AVFoundation device `0:none`, which is the Cam Link 4K
-   on the current Mac. Override it if device ordering changes:
+   The default backend is `avfoundation` on macOS and `v4l2` elsewhere. On
+   Linux the default device is `/dev/video0`; on the current Mac the default is
+   AVFoundation device `0:none`, which is the Cam Link 4K. Override either if
+   device ordering changes:
 
    ```bash
+   HDMI_BACKEND=v4l2 HDMI_DEVICE=/dev/video0 dotnet run --project e6502.Nova -c Release -- capture hdmi
    HDMI_DEVICE='1:none' dotnet run --project e6502.Nova -c Release -- capture hdmi
    ```
 

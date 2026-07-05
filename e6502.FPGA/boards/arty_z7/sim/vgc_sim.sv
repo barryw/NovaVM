@@ -209,6 +209,7 @@ module vgc (
     localparam TATTR_FLASH = 8'h01;
     localparam TATTR_REVERSE = 8'h02;
     localparam TATTR_BOLD  = 8'h04;
+    localparam TATTR_BGTRANS = 8'h08;
 
     // Drawing commands
     localparam CMD_PLOT    = 8'h01;
@@ -3240,6 +3241,7 @@ module vgc (
     logic        text_flash_hidden_d2;
     logic        text_reverse_d2;
     logic        text_bold_d2;
+    logic        text_bgtrans_d2;
     logic        cursor_active_d2;
     logic [3:0]  text_pixel_idx_d2;
     logic [3:0]  pixel_color_idx;
@@ -3269,6 +3271,7 @@ module vgc (
     always_comb begin
         text_reverse_d2 = attr_b_dout[1];
         text_bold_d2 = attr_b_dout[2];
+        text_bgtrans_d2 = attr_b_dout[3];
         cur_fg_d2     = text_reverse_d2 ? color_b_dout[7:4] : color_b_dout[3:0];
         cur_bg_d2     = text_reverse_d2 ? color_b_dout[3:0] : color_b_dout[7:4];
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
@@ -3298,7 +3301,7 @@ module vgc (
                     3'd1: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : text_pixel_idx_d2;
                     3'd2: pixel_color_idx = cursor_active_d2 ? text_pixel_idx_d2 :
                                              pixel_on_d2 ? cur_fg_d2 :
-                                             ({4'h0, cur_gfx_d2} != gfx_trans_color && cur_bg_d2 == bg_color && !text_reverse_d2) ? cur_gfx_d2 : cur_bg_d2;
+                                             ({4'h0, cur_gfx_d2} != gfx_trans_color && text_bgtrans_d2 && !text_reverse_d2) ? cur_gfx_d2 : cur_bg_d2;
                     3'd3: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
                     3'd4: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
                     default: pixel_color_idx = text_pixel_idx_d2;

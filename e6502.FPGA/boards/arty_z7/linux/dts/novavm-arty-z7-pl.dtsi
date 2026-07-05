@@ -20,6 +20,11 @@
 			reg = <0x10000000 0x01000000>;	// 16 MB @ 0x10000000
 			no-map;
 		};
+
+		novavm_capture_mem: novavm-capture@11000000 {
+			reg = <0x11000000 0x01000000>;	// 16 MB @ 0x11000000
+			no-map;
+		};
 	};
 
 	// fio_bridge: the PS<->PL register interface (peek/poke/ctrl/vmem/rom/audio,
@@ -38,5 +43,11 @@
 		// interrupt-parent = <&intc>;
 		// interrupts = <0 29 4>;	// fio_event (GIC SPI; wire to actual line)
 		memory-region = <&novavm_xram>;
+	};
+
+	novavm_capture: capture@40010000 {
+		compatible = "novavm,capture";
+		reg = <0x40010000 0x00010000>;
+		memory-region = <&novavm_capture_mem>;
 	};
 };

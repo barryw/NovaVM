@@ -5,7 +5,7 @@
  *     consume): each cell is {char, fg, bg, transparent}.
  *   - A small menu FSM with a screen stack for back-navigation.
  *   - Data from the real filesystem: slots from boot.json (nbootcfg), disks from
- *     scandir(/data/nova/disks) filtered by size to floppy/hdd.
+ *     /data/nova/disks folders filtered by size to floppy/hdd.
  *   - The register backend (OSD_FB/OSD_CTRL/BUTTONS) is gated behind g_osd_hw,
  *     which stays 0 until the compositor bitstream lands; in step 1 the grid is
  *     dumped to stdout by osd_selftest.
@@ -49,11 +49,12 @@ static int slot_is_floppy(int s) { return s < 2; }      /* fd0,fd1 floppy; hd0,h
 /* ---- menu model ---- */
 typedef enum { SC_NONE, SC_CONFIG, SC_SLOTS, SC_SLOTMENU, SC_DISKLIST, SC_AFTER_UNMOUNT } osd_screen;
 
-enum { IT_GOTO_SLOTS, IT_GOTO_SLOTMENU, IT_GOTO_DISKLIST, IT_UNMOUNT, IT_MOUNT, IT_CANCEL, IT_CLOSE, IT_REBOOT_BASIC };
+enum { IT_GOTO_SLOTS, IT_GOTO_SLOTMENU, IT_GOTO_DISKLIST, IT_GOTO_DISKDIR, IT_UNMOUNT, IT_MOUNT, IT_CANCEL, IT_CLOSE, IT_REBOOT_BASIC };
 
 typedef struct { char label[48]; int kind; int arg; } osd_item;
 
 #define MAXITEM 64
+#define DISK_DIR_MAX 88
 static osd_item   g_items[MAXITEM];
 static int        g_nitem;
 static int        g_cursor;
@@ -64,10 +65,11 @@ static int        g_sp;
 static osd_screen g_sc = SC_NONE;
 static int        g_sc_arg;
 
-/* disk-list cache (built on entering SC_DISKLIST; indexes referenced by IT_MOUNT) */
-typedef struct { char name[64]; uint32_t size; } disk_ent;
+/* disk-list cache (built/rebuilt in SC_DISKLIST; indexes referenced by IT_MOUNT/IT_GOTO_DISKDIR) */
+typedef struct { char name[64]; uint32_t size; int is_dir; int is_parent; } disk_ent;
 static disk_ent   g_disks[256];
 static int        g_ndisk;
+static char       g_disk_dir[DISK_DIR_MAX];
 
 static int        g_osd_hw   = 0;   /* set in step 3 once the compositor exists  */
 static int        g_testmode = 0;   /* 1 = dry-run mount-boot (no board reset)    */
@@ -200,29 +202,75 @@ static void render(void)
 
 static int disk_cmp(const void *a, const void *b)
 {
-    return strcasecmp(((const disk_ent *)a)->name, ((const disk_ent *)b)->name);
+    const disk_ent *da = (const disk_ent *)a;
+    const disk_ent *db = (const disk_ent *)b;
+    if (da->is_parent != db->is_parent) return db->is_parent - da->is_parent;
+    if (da->is_dir != db->is_dir)       return db->is_dir - da->is_dir;
+    return strcasecmp(da->name, db->name);
 }
 
-/* Scan /data/nova/disks for *.ndi of the requested kind (0=floppy ≤1.44MB,
- * 1=hdd >1.44MB). */
+static void disk_host_path(char *out, size_t n, const char *rel, const char *name)
+{
+    if (rel && rel[0] && name && name[0])
+        snprintf(out, n, NOVA_FS_ROOT "/disks/%s/%s", rel, name);
+    else if (rel && rel[0])
+        snprintf(out, n, NOVA_FS_ROOT "/disks/%s", rel);
+    else if (name && name[0])
+        snprintf(out, n, NOVA_FS_ROOT "/disks/%s", name);
+    else
+        snprintf(out, n, NOVA_FS_ROOT "/disks");
+}
+
+static void disk_mount_path(char *out, size_t n, const disk_ent *e)
+{
+    if (g_disk_dir[0])
+        snprintf(out, n, "/disks/%s/%s", g_disk_dir, e->name);
+    else
+        snprintf(out, n, "/disks/%s", e->name);
+}
+
+/* Scan the current /data/nova/disks folder for subdirectories plus *.ndi of the
+ * requested kind (0=floppy ≤1.44MB, 1=hdd >1.44MB). */
 static void disks_scan(int want_kind)
 {
     g_ndisk = 0;
-    DIR *d = opendir(NOVA_FS_ROOT "/disks");
+    if (g_disk_dir[0] && g_ndisk < (int)(sizeof g_disks / sizeof g_disks[0])) {
+        snprintf(g_disks[g_ndisk].name, sizeof g_disks[0].name, "..");
+        g_disks[g_ndisk].size = 0;
+        g_disks[g_ndisk].is_dir = 1;
+        g_disks[g_ndisk].is_parent = 1;
+        g_ndisk++;
+    }
+
+    char scan[400];
+    disk_host_path(scan, sizeof scan, g_disk_dir, NULL);
+    DIR *d = opendir(scan);
     if (!d) return;
     struct dirent *de;
     while ((de = readdir(d)) && g_ndisk < (int)(sizeof g_disks / sizeof g_disks[0])) {
         if (de->d_name[0] == '.') continue;
+        if (strchr(de->d_name, '/')) continue;
+        char full[400];
+        disk_host_path(full, sizeof full, g_disk_dir, de->d_name);
+        struct stat st;
+        if (stat(full, &st) != 0) continue;
+        if (S_ISDIR(st.st_mode)) {
+            snprintf(g_disks[g_ndisk].name, sizeof g_disks[0].name, "%.63s", de->d_name);
+            g_disks[g_ndisk].size = 0;
+            g_disks[g_ndisk].is_dir = 1;
+            g_disks[g_ndisk].is_parent = 0;
+            g_ndisk++;
+            continue;
+        }
+        if (!S_ISREG(st.st_mode)) continue;
         const char *ext = strrchr(de->d_name, '.');
         if (!ext || strcasecmp(ext, ".ndi") != 0) continue;   /* disks only */
-        char full[400];
-        snprintf(full, sizeof full, NOVA_FS_ROOT "/disks/%s", de->d_name);
-        struct stat st;
-        if (stat(full, &st) != 0 || !S_ISREG(st.st_mode)) continue;
         int kind = ((uint32_t)st.st_size > FLOPPY_MAX) ? 1 : 0;
         if (kind != want_kind) continue;
         snprintf(g_disks[g_ndisk].name, sizeof g_disks[0].name, "%.63s", de->d_name);
         g_disks[g_ndisk].size = (uint32_t)st.st_size;
+        g_disks[g_ndisk].is_dir = 0;
+        g_disks[g_ndisk].is_parent = 0;
         g_ndisk++;
     }
     closedir(d);
@@ -286,8 +334,18 @@ static void build_disklist(int s)
 {
     g_nitem = 0;
     disks_scan(slot_is_floppy(s) ? 0 : 1);
-    for (int i = 0; i < g_ndisk; i++)
-        add_item(g_disks[i].name, IT_MOUNT, (s << 8) | i);
+    for (int i = 0; i < g_ndisk; i++) {
+        if (g_disks[i].is_dir) {
+            char label[48];
+            if (g_disks[i].is_parent)
+                snprintf(label, sizeof label, "../");
+            else
+                snprintf(label, sizeof label, "%.45s/", g_disks[i].name);
+            add_item(label, IT_GOTO_DISKDIR, i);
+        } else {
+            add_item(g_disks[i].name, IT_MOUNT, (s << 8) | i);
+        }
+    }
     if (g_ndisk == 0)
         add_item("(no disks of this type)", IT_CANCEL, 0);
     add_item("Cancel", IT_CANCEL, 0);
@@ -367,11 +425,30 @@ static void do_mount_boot(int packed)
     int idx = packed & 0xFF;
     if (idx < 0 || idx >= g_ndisk) return;
     char path[160];
-    snprintf(path, sizeof path, "/disks/%s", g_disks[idx].name);
+    disk_mount_path(path, sizeof path, &g_disks[idx]);
     bootcfg_mount_set(SLOT[s], path);
     printf("[osd] mount %s = %s%s\n", SLOT[s], path, g_testmode ? "  (dry-run, no reboot)" : "");
     close_osd();
     if (!g_testmode) host_reboot_vm();   /* clean dbg_system_reset + re-stage */
+}
+
+static void disk_enter_dir(int idx)
+{
+    if (idx < 0 || idx >= g_ndisk || !g_disks[idx].is_dir) return;
+    if (g_disks[idx].is_parent) {
+        char *slash = strrchr(g_disk_dir, '/');
+        if (slash) *slash = 0;
+        else g_disk_dir[0] = 0;
+    } else {
+        size_t base = strlen(g_disk_dir);
+        size_t name_len = strlen(g_disks[idx].name);
+        size_t slash = base ? 1 : 0;
+        if (base + slash + name_len >= sizeof g_disk_dir) return;
+        if (slash) g_disk_dir[base++] = '/';
+        memcpy(g_disk_dir + base, g_disks[idx].name, name_len + 1);
+    }
+    g_cursor = 0;
+    rebuild();
 }
 
 static void select_item(void)
@@ -381,7 +458,8 @@ static void select_item(void)
     switch (it->kind) {
         case IT_GOTO_SLOTS:    push_to(SC_SLOTS, 0);           break;
         case IT_GOTO_SLOTMENU: push_to(SC_SLOTMENU, it->arg);  break;
-        case IT_GOTO_DISKLIST: push_to(SC_DISKLIST, it->arg);  break;
+        case IT_GOTO_DISKLIST: g_disk_dir[0] = 0; push_to(SC_DISKLIST, it->arg); break;
+        case IT_GOTO_DISKDIR:  disk_enter_dir(it->arg);        break;
         case IT_UNMOUNT:       do_unmount(it->arg); push_to(SC_AFTER_UNMOUNT, it->arg); break;
         case IT_MOUNT:         do_mount_boot(it->arg);         break;
         case IT_REBOOT_BASIC:  close_osd(); if (!g_testmode) host_reboot_to_basic(); break;

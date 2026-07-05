@@ -702,6 +702,7 @@ TextFlagBold                        = $08
 TextAttrFlash                       = $01
 TextAttrReverse                     = $02
 TextAttrBold                        = $04
+TextAttrBgTransparent               = $08
 
 ; --- VGC core registers ($A000-$A00F) ---
 RegMode                             = $A000

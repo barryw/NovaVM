@@ -148,14 +148,49 @@ public sealed class NovaZRuntimeLayoutTests
         // behind when the transcript scrolls.
         int flowOwnerTest = IndexOfOrFail(ownership, "AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)", "flow owner test");
         int transparentOverlayTest = IndexOfOrFail(ownership, "AND #NZ6_PIC_FLAG_TRANSPARENT", "transparent overlay test");
+        int transparentAttrSet = IndexOfOrFail(ownership, "LDA #VTXT_ATTR_BGTRANS", "transparent text attr setup");
         int clearCall = IndexOfOrFail(ownership, "JSR vtext_clear_region", "flow cell clear");
         int exposeSpacesCall = IndexOfOrFail(ownership, "JSR vtext_expose_gfx_spaces_region", "overlay space exposure");
         Assert.IsTrue(flowOwnerTest < transparentOverlayTest, "Flow ownership must be decided before transparent-overlay handling.");
+        Assert.IsTrue(transparentAttrSet < clearCall,
+            "Picture-owned cells must clear with transparent text attrs; otherwise the text plane hides the freshly drawn picture.");
+        Assert.IsTrue(transparentAttrSet < exposeSpacesCall,
+            "Transparent picture overlays must expose spaces with transparent text attrs, not the caller's current style.");
         Assert.IsTrue(clearCall < exposeSpacesCall, "Flow pictures must clear owned cells instead of exposing only spaces.");
 
         StringAssert.Contains(record, "AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)");
         StringAssert.Contains(record, "LDA nz6_gfx_replay_fill");
         StringAssert.Contains(record, "STA nz6_gfx_list_fill,X");
+    }
+
+    [TestMethod]
+    public void V6NormalTextBackgroundsAreOpaqueUnlessPictureOwned()
+    {
+        string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
+        string applyStyle = Slice(zvm6, "nz6_apply_colour_style:", "nz6_attr_for_vtext_bg:");
+        string attrForBg = Slice(zvm6, "nz6_attr_for_vtext_bg:", "; Keep the physical display border");
+
+        Assert.IsFalse(applyStyle.Contains("ORA #VTXT_ATTR_BGTRANS", StringComparison.Ordinal),
+            "Normal V6 text must cover stale graphics with its background; picture-owned cells opt into transparency separately.");
+        StringAssert.Contains(applyStyle, "AND #VTXT_ATTR_FLASH",
+            "Applying normal V6 text style must clear stale reverse/bold/background-transparency attrs while preserving flash.");
+        StringAssert.Contains(attrForBg, "LDA #0",
+            "Normal region clears must use opaque text attrs so erased windows cover stale picture pixels.");
+        Assert.IsFalse(attrForBg.Contains("VTXT_ATTR_BGTRANS", StringComparison.Ordinal),
+            "Only picture-owned cells should use transparent text attrs.");
+    }
+
+    [TestMethod]
+    public void V6WholeScreenClearPreservesCurrentBackgroundNibble()
+    {
+        string zvm = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm.s"));
+        string clear = Slice(zvm, "zvm_clear_whole_screen:", "zvm_clear_selected_window:");
+
+        StringAssert.Contains(clear, "CMP #$06");
+        Assert.IsFalse(clear.Contains("AND #$0F", StringComparison.Ordinal),
+            "V6 whole-screen clears must keep the packed current background colour; forcing bg 0 exposes the old Zork Zero title art colour.");
+        StringAssert.Contains(clear, "STZ VTEXT_ATTR",
+            "Whole-screen clears stay opaque; picture-owned cells opt into BGTRANS separately.");
     }
 
     [TestMethod]
@@ -178,7 +213,7 @@ public sealed class NovaZRuntimeLayoutTests
         StringAssert.Contains(helper, "JSR nz6_build_region_tmp_win    ; new writable rect");
         StringAssert.Contains(helper, "Left margin shrank: [new_left, old_left).");
         StringAssert.Contains(helper, "Right margin shrank: [old_right, new_right).");
-        StringAssert.Contains(helper, "LDA nz6_colour                  ; opaque current background");
+        StringAssert.Contains(helper, "LDA nz6_colour                  ; current paper; text owns background");
         StringAssert.Contains(helper, "JSR vtext_fill_gfx_region");
         StringAssert.Contains(helper, "JSR vtext_expose_gfx_spaces_region");
         Assert.IsFalse(helper.Contains("JSR vtext_clear_region", StringComparison.Ordinal),

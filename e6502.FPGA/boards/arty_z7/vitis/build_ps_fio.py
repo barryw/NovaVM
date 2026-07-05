@@ -7,7 +7,7 @@
 #
 # Prereq: build/arty_z7_full.xsa (from build_full.tcl).
 
-import vitis, glob, os
+import vitis, glob, os, shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", "..", ".."))
@@ -18,6 +18,12 @@ DOMAIN = "standalone_ps7_cortexa9_0"
 
 if os.environ.get("NOVA_ARTY_SYNC_PAYLOADS_DONE") != "1":
     raise SystemExit("Run this through `nova arty build-ps-fio`; Nova syncs payloads before Vitis runs.")
+
+ws_real = os.path.abspath(WS)
+if ws_real in ("/", "/tmp"):
+    raise SystemExit(f"Refusing to clean unsafe Vitis workspace: {WS}")
+if os.path.exists(ws_real):
+    shutil.rmtree(WS)
 
 client = vitis.create_client()
 client.set_workspace(WS)

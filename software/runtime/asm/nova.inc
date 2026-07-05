@@ -143,8 +143,7 @@ VGC_MODE_GFX_SPRITES   = $04
 VGC_BGCOL         = $A001
 .endif
 .ifndef VGC_TEXT_BGKEY_DEFAULT
-; In VGC mode 2, unset text pixels fall through to the graphics plane when the
-; cell background nibble matches VGC_BGCOL. This is the default key value.
+; Default live background colour used by transparent text cells in VGC mode 2.
 VGC_TEXT_BGKEY_DEFAULT = $00
 .endif
 .ifndef VGC_FGCOL
@@ -580,6 +579,9 @@ VTXT_ATTR_REV     = $02
 .endif
 .ifndef VTXT_ATTR_BOLD
 VTXT_ATTR_BOLD    = $04
+.endif
+.ifndef VTXT_ATTR_BGTRANS
+VTXT_ATTR_BGTRANS = $08
 .endif
 
 ; VGC IRQ and command constants.

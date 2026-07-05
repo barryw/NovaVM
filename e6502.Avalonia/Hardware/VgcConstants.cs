@@ -882,6 +882,7 @@ public static class VgcConstants
     public const byte TextAttrFlash           = 0x01;
     public const byte TextAttrReverse         = 0x02;
     public const byte TextAttrBold            = 0x04;
+    public const byte TextAttrBgTransparent   = 0x08;
 
     // -------------------------------------------------------------------------
     // VGC core registers ($A000-$A00F)

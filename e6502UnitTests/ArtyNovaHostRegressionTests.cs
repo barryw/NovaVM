@@ -127,6 +127,21 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxManagementHostReboot_UsesKernelSysrq()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nservers.c"));
+
+        StringAssert.Contains(src, "cb_kv_bool(c, \"hostReboot\", 1)",
+            "The Linux host must advertise the management reboot command once it is implemented.");
+        StringAssert.Contains(src, "static void handle_host_reboot",
+            "nova device reboot must be handled by the Linux management server, not left as an unimplemented command.");
+        StringAssert.Contains(src, "case 15: handle_host_reboot",
+            "NovaHostManagementClient.HostRebootAsync sends command 15.");
+        StringAssert.Contains(src, "reboot(RB_AUTOBOOT)",
+            "Host reboot must use the kernel reboot syscall, not an external command on the rootfs.");
+    }
+
+    [TestMethod]
     public void LinuxDebugTypeText_PacesInjectedKeys()
     {
         string src = File.ReadAllText(LinuxNovaVmSrc("nservers.c"));
@@ -208,8 +223,8 @@ public class ArtyNovaHostRegressionTests
             "USB host mode needs the ULPI PHY VBUS drive declared.");
         StringAssert.Contains(dtsi, "&usb0 {\n\tstatus = \"okay\";",
             "The Arty appliance must not ship with the PS USB host disabled.");
-        StringAssert.Contains(dtsi, "dr_mode = \"host\";",
-            "The PS USB controller must be forced to host mode for keyboards.");
+        StringAssert.Contains(dtsi, "dr_mode = \"otg\";",
+            "The PS USB controller must allow OTG so HID keyboards and capture gadget mode can coexist.");
         StringAssert.Contains(dtsi, "usb-phy = <&usb_phy0>;",
             "The PS USB controller must bind the declared ULPI PHY.");
         foreach (string symbol in new[] { "CONFIG_USB_CHIPIDEA_HOST=y", "CONFIG_INPUT_EVDEV=y", "CONFIG_USB_HID=y" })
@@ -236,8 +251,8 @@ public class ArtyNovaHostRegressionTests
             "The live Buildroot Arty image needs the ULPI PHY VBUS drive declared.");
         StringAssert.Contains(dts, "&usb0",
             "The live Buildroot Arty image must enable the PS USB0 controller.");
-        StringAssert.Contains(dts, "dr_mode = \"host\";",
-            "The PS USB controller must be forced to host mode for keyboards.");
+        StringAssert.Contains(dts, "dr_mode = \"otg\";",
+            "The PS USB controller must allow OTG so HID keyboards and capture gadget mode can coexist.");
         StringAssert.Contains(dts, "usb-phy = <&usb_phy0>;",
             "The PS USB controller must bind the declared ULPI PHY.");
         foreach (string symbol in new[] { "CONFIG_INPUT_EVDEV=y", "CONFIG_USB_HID=y", "CONFIG_USB_CHIPIDEA_HOST=y" })
@@ -295,6 +310,34 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxNfio_ReopensCachedImageWhenMountedNdiIsReplaced()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+
+        StringAssert.Contains(src, "g_img_ino",
+            "The Linux FIO host must include the mounted image inode in its cache key; same-path NDI uploads replace the file under an open handle.");
+        StringAssert.Contains(src, "g_img_mtime_nsec",
+            "The Linux FIO host must compare sub-second image mtimes; same-second uploads must not keep stale game data.");
+        StringAssert.Contains(src, "image_signature_matches(&st)",
+            "slot_image must stat the mounted NDI and reopen it when the file identity or content signature changes.");
+        StringAssert.Contains(src, "close_slot_image();",
+            "slot_image must close the cached NDI before reopening, otherwise overwritten game disks can keep serving stale NOVAZ segments.");
+    }
+
+    [TestMethod]
+    public void LinuxNfio_DetectsSameSecondBootJsonMountRewrites()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+
+        StringAssert.Contains(src, "g_mounts_ino",
+            "Mount refresh must not rely only on st_mtime seconds; atomic boot.json rewrites can happen in the same second.");
+        StringAssert.Contains(src, "g_mounts_mtime_nsec",
+            "Mount refresh must track sub-second boot.json mtime so unmount/mount is visible immediately.");
+        StringAssert.Contains(src, "mount_signature_changed(&st)",
+            "drives_refresh must compare the full boot.json signature, not just st_mtime.");
+    }
+
+    [TestMethod]
     public void LinuxLoadModule_StreamsEmbeddedModuleIntoRequestedXramSlot()
     {
         string src = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
@@ -345,6 +388,37 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxColdBoot_ClearsVolatileXramBeforeCpuRelease()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        StringAssert.Contains(src, "#define XRAM_COLD_CLEAR_BYTES 0x00080000u",
+            "Hardware cold start must clear the 6502-visible 512KB XRAM window while preserving host-only config space above it.");
+        StringAssert.Contains(src, "static void clear_cold_xram(void)",
+            "Linux cold boot must explicitly clear volatile XRAM, not rely on allocator metadata already being zero.");
+        StringAssert.Contains(src, "memset((void *)g_xram, 0, XRAM_COLD_CLEAR_BYTES);",
+            "Cold boot must clear stale story data, XMC heap bitmap, and allocator metadata from PS-DDR XRAM.");
+        StringAssert.Contains(src, "clear_cold_xram();\n    clear_runtime_low_ram();",
+            "Cold boot must clear XRAM before releasing the 6502 so NovaZ allocations start from deterministic addresses.");
+    }
+
+    [TestMethod]
+    public void LinuxColdBoot_DoesNotClobberVgcAfterCpuRelease()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+        int start = src.IndexOf("static int vm_cold_boot(void)", StringComparison.Ordinal);
+        Assert.IsTrue(start >= 0, "Linux novavm must keep the shared cold-boot function.");
+        int release = src.IndexOf("cpu_hold(0);", start, StringComparison.Ordinal);
+        Assert.IsTrue(release > start, "Cold boot must explicitly release the 6502.");
+        int end = src.IndexOf("\n}", release, StringComparison.Ordinal);
+        Assert.IsTrue(end > release, "Cold boot should be a normal C function body.");
+
+        string afterRelease = src[release..end];
+        Assert.IsFalse(Regex.IsMatch(afterRelease, @"poke\(0xA0[0-9A-Fa-f]{2},"),
+            "After cpu_hold(0), the 6502 owns the VGC; host post-release VGC pokes clobber language display modes like NovaZ V6 text-over-gfx.");
+    }
+
+    [TestMethod]
     public void PetalinuxUsbMouse_IsEnabledEndToEnd()
     {
         string kernel = File.ReadAllText(PetalinuxMetaUser("recipes-kernel", "linux", "linux-xlnx", "bsp.cfg"));
@@ -378,6 +452,42 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxOsdDiskPicker_BrowsesDiskFoldersAndMountsRelativeNdiPaths()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nosd.c"));
+
+        StringAssert.Contains(src, "IT_GOTO_DISKDIR",
+            "The OSD disk picker must have a directory item type, not only flat mount items.");
+        StringAssert.Contains(src, "g_disk_dir",
+            "The OSD disk picker must remember the current directory under /data/nova/disks.");
+        StringAssert.Contains(src, "\"../\"",
+            "The OSD disk picker must show a parent entry below the disk root.");
+        StringAssert.Contains(src, "S_ISDIR",
+            "The OSD disk picker must detect host directories so folders like infocom are navigable.");
+        StringAssert.Contains(src, "disk_enter_dir",
+            "Selecting a directory must rebuild the disk list inside that folder.");
+        StringAssert.Contains(src, "disk_mount_path",
+            "Mounting from a folder must preserve the relative path, e.g. /disks/infocom/zork-i.ndi.");
+    }
+
+    [TestMethod]
+    public void NovaCliArtyDeployAndInfocomUpload_UseInfocomDiskFolder()
+    {
+        string cli = File.ReadAllText(RepoPath("e6502.Nova", "Program.cs"));
+
+        StringAssert.Contains(cli, "\"upload-infocom\" => DoArtyUploadInfocom",
+            "Nova CLI must expose one Arty command to build and upload the Infocom NDI set.");
+        StringAssert.Contains(cli, "/data/nova/disks/infocom",
+            "Arty deploy should create the infocom disk folder so the OSD can show it immediately.");
+        StringAssert.Contains(cli, "InfocomProjects()",
+            "The upload command must use the known NovaZ Infocom project set.");
+        StringAssert.Contains(cli, "INFOCOM_ROOT=",
+            "The upload command must pass INFOCOM_ROOT through to the existing NovaZ Makefile.");
+        StringAssert.Contains(cli, "disks/infocom",
+            "The upload command must place game NDIs under the infocom folder, not the flat disk root.");
+    }
+
+    [TestMethod]
     public void BuildPsFio_RequiresNovaCliPayloadSyncBeforeVitis()
     {
         string cli = File.ReadAllText(RepoPath("e6502.Nova", "Program.cs"));
@@ -389,6 +499,8 @@ public class ArtyNovaHostRegressionTests
             "nova arty build-ps-fio must mark the Vitis hook as sync-guarded after payload sync succeeds.");
         StringAssert.Contains(hook, "NOVA_ARTY_SYNC_PAYLOADS_DONE",
             "The Vitis hook must fail direct execution so PS firmware cannot be built with stale payload headers.");
+        StringAssert.Contains(hook, "shutil.rmtree(WS",
+            "The Vitis hook must remove its previous workspace before create_platform_component; otherwise stale /tmp projects break repeatable builds.");
         Assert.IsFalse(hook.Contains("\"dotnet\", \"run\"", StringComparison.Ordinal),
             "The Vitis hook must not invoke dotnet inside Vitis' LD_LIBRARY_PATH; Nova CLI owns payload sync.");
     }

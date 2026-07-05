@@ -797,8 +797,8 @@ vtext_fill_style_region:
 ; @summary Apply the current color/attribute only to space cells in the current VTEXT region.
 ; @requires VTEXT_LEFT VTEXT_TOP VTEXT_WIDTH VTEXT_HEIGHT VTEXT_COLOR VTEXT_ATTR
 ; @out A: 0 on success, 1 on error.
-; @note This is for split text/graphics compositing: callers can set VTEXT_COLOR
-;       to a text-background key so blank cells reveal the graphics plane without
+; @note This is for split text/graphics compositing: callers can set VTEXT_ATTR
+;       to VTEXT_ATTR_BGTRANS so blank cells reveal the graphics plane without
 ;       deleting non-space text.
 vtext_expose_gfx_spaces_region:
       JSR   vtext_validate_region

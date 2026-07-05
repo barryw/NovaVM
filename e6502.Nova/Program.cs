@@ -96,9 +96,12 @@ static int DoArty(string[] args, string? host)
         {
             "sync-payloads" => DoArtySyncPayloads(repo, rest),
             "build-linux-host" => DoArtyBuildLinuxHost(repo, rest),
+            "build-linux-image" => DoArtyBuildLinuxImage(repo, rest),
             "build-ps-fio" => DoArtyBuildPsFio(repo, rest),
+            "deploy-boot-image" => DoArtyDeployBootImage(repo, rest, host),
             "deploy-linux-host" => DoArtyDeployLinuxHost(repo, rest, host, editorDemo: TakeFlag(rest, "--editor-demo")),
             "deploy-editor-demo" => DoArtyDeployLinuxHost(repo, rest, host, editorDemo: true),
+            "upload-infocom" => DoArtyUploadInfocom(repo, rest, host),
             "make-boot-bin" => DoArtyMakeBootBin(repo, rest),
             _ => UnknownArtyCommand(command),
         };
@@ -115,9 +118,12 @@ static void PrintArtyUsage()
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  nova arty sync-payloads [--repo <repo>] [--check]");
     Console.Error.WriteLine("  nova arty build-linux-host [--repo <repo>]");
+    Console.Error.WriteLine("  nova arty build-linux-image [--repo <repo>] [--petalinux-project <dir>] [--petalinux-settings <settings.sh>]");
     Console.Error.WriteLine("  nova arty build-ps-fio [--repo <repo>] [--vitis <path>]");
+    Console.Error.WriteLine("  nova arty deploy-boot-image [--repo <repo>] [--remote <ip>] [--petalinux-project <dir>] [--boot-only] [--no-reboot]");
     Console.Error.WriteLine("  nova arty deploy-linux-host [--repo <repo>] [--remote <ip>] [--editor-demo]");
     Console.Error.WriteLine("  nova arty deploy-editor-demo [--repo <repo>] [--remote <ip>]");
+    Console.Error.WriteLine("  nova arty upload-infocom [--repo <repo>] [--remote <ip>] [--infocom-root <path>]");
     Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>]");
 }
 
@@ -268,10 +274,280 @@ static int DoArtyBuildLinuxHost(string repo, List<string> args)
     rc = RunCommand(cc, ["-O2", "-static", "-pthread", "-I.", "-o", "novavm", .. sources, "-lm"], hostDir);
     if (rc != 0) return rc;
 
+    rc = RunCommand(cc, ["-O2", "-static", "-o", "novacap-gadget", "novacap-gadget.c"], hostDir);
+    if (rc != 0) return rc;
+
     _ = RunCommand(cc, ["--version"], hostDir);
     _ = RunCommand("arm-linux-gnueabihf-size", ["novavm"], hostDir);
+    _ = RunCommand("arm-linux-gnueabihf-size", ["novacap-gadget"], hostDir);
     Console.WriteLine($"built: {Path.Combine(hostDir, "novavm")}");
+    Console.WriteLine($"built: {Path.Combine(hostDir, "novacap-gadget")}");
     return 0;
+}
+
+static int DoArtyBuildLinuxImage(string repo, List<string> args)
+{
+    string project = Path.GetFullPath(TakeOptionValue(args, "--petalinux-project", "--project") ??
+                                      Environment.GetEnvironmentVariable("NOVA_PETALINUX_PROJECT") ??
+                                      "/home/barry/nova-arty");
+    string settings = Path.GetFullPath(TakeOptionValue(args, "--petalinux-settings", "--settings") ??
+                                       Environment.GetEnvironmentVariable("PETALINUX_SETTINGS") ??
+                                       "/home/barry/petalinux/2024.2/settings.sh");
+    string xsa = Path.GetFullPath(TakeOptionValue(args, "--xsa") ??
+                                  Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "build", "arty_z7_full.xsa"));
+    string bitstream = Path.GetFullPath(TakeOptionValue(args, "--bitstream", "--bit") ??
+                                        Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "build",
+                                            "ps_full", "ps_full.runs", "impl_1", "arty_z7_full.bit"));
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty build-linux-image argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+
+    int rc = DoArtySyncPayloads(repo, []);
+    if (rc != 0) return rc;
+
+    rc = VerifyPetalinuxInputs(repo, project, settings, xsa, bitstream);
+    if (rc != 0) return rc;
+
+    rc = RunPetalinuxCommand(settings, project, ["petalinux-config", "--silentconfig", "--get-hw-description", xsa, "-p", project]);
+    if (rc != 0) return rc;
+
+    rc = RunPetalinuxCommand(settings, project, ["petalinux-build", "-p", project]);
+    if (rc != 0) return rc;
+
+    string images = Path.Combine(project, "images", "linux");
+    string fsbl = Path.Combine(images, "zynq_fsbl.elf");
+    string uboot = Path.Combine(images, "u-boot.elf");
+    string dtb = Path.Combine(images, "system.dtb");
+    string bootBin = Path.Combine(images, "BOOT.BIN");
+    foreach (string file in new[] { fsbl, uboot, dtb, bitstream })
+    {
+        if (!File.Exists(file))
+        {
+            Console.Error.WriteLine($"ERROR: missing {file}");
+            return 1;
+        }
+    }
+
+    rc = RunPetalinuxCommand(settings, project,
+        ["petalinux-package", "boot", "--force", "-p", project, "--fsbl", fsbl, "--fpga", bitstream,
+         "--u-boot", uboot, "--dtb", dtb, "--output", bootBin]);
+    if (rc != 0) return rc;
+
+    return VerifyPetalinuxCaptureImage(project, bootBin);
+}
+
+static int DoArtyDeployBootImage(string repo, List<string> args, string? host)
+{
+    string project = Path.GetFullPath(TakeOptionValue(args, "--petalinux-project", "--project") ??
+                                      Environment.GetEnvironmentVariable("NOVA_PETALINUX_PROJECT") ??
+                                      "/home/barry/nova-arty");
+    bool noReboot = TakeFlag(args, "--no-reboot");
+    bool bootOnly = TakeFlag(args, "--boot-only");
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty deploy-boot-image argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+    if (!bootOnly && noReboot)
+    {
+        Console.Error.WriteLine("ERROR: --no-reboot cannot be used while deploying rootfs; use --boot-only to update /boot without rebooting.");
+        return 1;
+    }
+
+    host ??= "192.168.1.188";
+    const string bootMount = "/run/media/boot-mmcblk0p1";
+    string imageUb = Path.Combine(project, "images", "linux", "image.ub");
+    string bootBin = Path.Combine(project, "images", "linux", "BOOT.BIN");
+    string rootfsExt4 = Path.Combine(project, "images", "linux", "rootfs.ext4");
+    foreach (string file in bootOnly ? new[] { imageUb, bootBin } : new[] { imageUb, bootBin, rootfsExt4 })
+    {
+        if (!File.Exists(file))
+        {
+            Console.Error.WriteLine($"ERROR: missing {file}; run nova arty build-linux-image first");
+            return 1;
+        }
+    }
+
+    int rc = VerifyPetalinuxCaptureImage(project, bootBin);
+    if (rc != 0) return rc;
+
+    rc = RunSsh(host, "true");
+    if (rc != 0)
+    {
+        Console.Error.WriteLine($"cannot reach root@{host} over SSH");
+        return rc;
+    }
+
+    rc = RunScp(host, imageUb, "/run/image.ub.new");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, bootBin, "/run/BOOT.BIN.new");
+    if (rc != 0) return rc;
+
+    rc = RunSsh(host,
+        "mount -o remount,rw " + bootMount + " && cp /run/image.ub.new " + bootMount + "/image.ub && cp /run/BOOT.BIN.new " + bootMount + "/BOOT.BIN && sync && " +
+        "mount -o remount,ro " + bootMount + " && rm -f /run/image.ub.new /run/BOOT.BIN.new");
+    if (rc != 0) return rc;
+
+    rc = VerifyRemoteFileSha256(host, imageUb, bootMount + "/image.ub");
+    if (rc != 0) return rc;
+
+    rc = VerifyRemoteFileSha256(host, bootBin, bootMount + "/BOOT.BIN");
+    if (rc != 0) return rc;
+
+    if (!bootOnly)
+    {
+        rc = RunSsh(host, "mkdir -p /data/nova");
+        if (rc != 0) return rc;
+
+        rc = VerifyRemoteStagingMount(host, "/data", "/dev/mmcblk0p2");
+        if (rc != 0) return rc;
+
+        rc = RunSsh(host, "cp /bin/busybox /data/nova/busybox.deploy && chmod 755 /data/nova/busybox.deploy");
+        if (rc != 0) return rc;
+
+        rc = RunScp(host, rootfsExt4, "/data/nova/rootfs.ext4.new");
+        if (rc != 0) return rc;
+
+        rc = VerifyRemoteFileSha256(host, rootfsExt4, "/data/nova/rootfs.ext4.new");
+        if (rc != 0) return rc;
+
+        _ = RunSsh(host,
+            "/data/nova/busybox.deploy sh -c 'dd if=/data/nova/rootfs.ext4.new of=/dev/mmcblk0p2 bs=4M && " +
+            "/data/nova/busybox.deploy sync && /data/nova/busybox.deploy reboot -f' >/data/nova/rootfs-deploy.log 2>&1 &");
+    }
+
+    if (noReboot)
+        return 0;
+
+    if (bootOnly)
+        _ = RunSsh(host, "reboot");
+    rc = WaitForSshDown(host, TimeSpan.FromSeconds(30));
+    if (rc != 0) return rc;
+    rc = WaitForSsh(host, TimeSpan.FromSeconds(120));
+    if (rc != 0) return rc;
+    if (!bootOnly)
+    {
+        rc = VerifyRemoteBlockSha256(host, rootfsExt4, "/dev/mmcblk0p2");
+        if (rc != 0) return rc;
+
+        _ = RunSsh(host, "rm -f /data/nova/rootfs.ext4.new /data/nova/busybox.deploy");
+    }
+
+    rc = WaitForRemotePort(host, 6504, TimeSpan.FromSeconds(45));
+    if (rc != 0) return rc;
+    return 0;
+}
+
+static int VerifyPetalinuxInputs(string repo, string project, string settings, string xsa, string bitstream)
+{
+    foreach (string path in new[] { project, settings, xsa, bitstream })
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            Console.Error.WriteLine($"ERROR: missing {path}");
+            return 1;
+        }
+    }
+
+    string expectedLayer = Path.GetFullPath(Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "petalinux", "meta-user"));
+    string projectLayer = Path.Combine(project, "project-spec", "meta-user");
+    DirectoryInfo layerInfo = new(projectLayer);
+    string actualLayer = layerInfo.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? layerInfo.FullName;
+    if (!PathsEqual(expectedLayer, actualLayer))
+    {
+        Console.Error.WriteLine($"ERROR: {projectLayer} must point at {expectedLayer}");
+        Console.Error.WriteLine($"actual: {actualLayer}");
+        return 1;
+    }
+
+    return 0;
+}
+
+static int VerifyPetalinuxCaptureImage(string project, string bootBin)
+{
+    string images = Path.Combine(project, "images", "linux");
+    string imageUb = Path.Combine(images, "image.ub");
+    string systemDtb = Path.Combine(images, "system.dtb");
+    string manifest = Path.Combine(images, "rootfs.manifest");
+    foreach (string file in new[] { imageUb, systemDtb, manifest, bootBin })
+    {
+        if (!File.Exists(file))
+        {
+            Console.Error.WriteLine($"ERROR: missing {file}");
+            return 1;
+        }
+    }
+
+    if (!FileContainsAscii(systemDtb, "novavm,capture"))
+    {
+        Console.Error.WriteLine($"ERROR: {systemDtb} does not contain novavm,capture");
+        return 1;
+    }
+    if (!FileContainsAscii(imageUb, "novavm,capture"))
+    {
+        Console.Error.WriteLine($"ERROR: {imageUb} does not contain novavm,capture");
+        return 1;
+    }
+
+    string manifestText = File.ReadAllText(manifest);
+    foreach (string package in new[] { "ffmpeg", "v4l-utils", "alsa-utils" })
+    {
+        if (!manifestText.Contains(package, StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"ERROR: {manifest} does not list {package}");
+            return 1;
+        }
+    }
+    if (!manifestText.Contains("novacap", StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"ERROR: {manifest} does not list novacap");
+        return 1;
+    }
+
+    if (!FileContainsAscii(bootBin, "U-Boot"))
+    {
+        Console.Error.WriteLine($"ERROR: {bootBin} does not look like a Linux/U-Boot BOOT.BIN");
+        return 1;
+    }
+    if (FileContainsAscii(bootBin, "NovaBASIC v1.0"))
+    {
+        Console.Error.WriteLine($"ERROR: {bootBin} is the bare-metal PS FIO BOOT.bin, not the Linux boot image");
+        return 1;
+    }
+
+    Console.WriteLine($"verified capture-capable image: {imageUb}");
+    Console.WriteLine($"verified Linux boot image: {bootBin}");
+    return 0;
+}
+
+static int RunPetalinuxCommand(string settings, string project, string[] command)
+{
+    string shell = "source " + ShellQuote(settings) + " >/dev/null && " + JoinShell(command);
+    return RunCommand("/bin/bash", ["-lc", shell], project);
+}
+
+static bool FileContainsAscii(string path, string text)
+{
+    byte[] haystack = File.ReadAllBytes(path);
+    byte[] needle = Encoding.ASCII.GetBytes(text);
+    if (needle.Length == 0 || haystack.Length < needle.Length)
+        return false;
+
+    for (int i = 0; i <= haystack.Length - needle.Length; i++)
+    {
+        int j = 0;
+        while (j < needle.Length && haystack[i + j] == needle[j])
+            j++;
+        if (j == needle.Length)
+            return true;
+    }
+
+    return false;
 }
 
 static int DoArtyBuildPsFio(string repo, List<string> args)
@@ -326,19 +602,22 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
         if (rc != 0) return rc;
     }
 
-    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy");
+    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy /data/nova/disks/languages /data/nova/disks/infocom && rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi");
     if (rc != 0) return rc;
 
     rc = RunScp(host, Path.Combine(hostDir, "novavm"), "/run/novavm.new");
     if (rc != 0) return rc;
 
+    rc = RunScp(host, Path.Combine(hostDir, "novacap-gadget"), "/run/novacap-gadget.new");
+    if (rc != 0) return rc;
+
     rc = RunScp(host, Path.Combine(repo, "software", "languages", "ehbasic", "basic.bin"), "/data/nova/roms/ehbasic.bin");
     if (rc != 0) return rc;
 
-    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novalogo", "novalogo.ndi"), "/data/nova/disks/floppy/novalogo.ndi");
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novalogo", "novalogo.ndi"), "/data/nova/disks/languages/novalogo.ndi");
     if (rc != 0) return rc;
 
-    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/floppy/novaforth.ndi");
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/languages/novaforth.ndi");
     if (rc != 0) return rc;
 
     if (editorDemo)
@@ -354,14 +633,19 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     }
 
     string installAndStop = "mount -o remount,rw / || exit 1; " +
-                            "cp /run/novavm.new /usr/bin/novavm && chmod 0755 /usr/bin/novavm && sync; " +
+                            "cp /run/novavm.new /usr/bin/novavm && chmod 0755 /usr/bin/novavm && " +
+                            "cp /run/novacap-gadget.new /usr/bin/novacap-gadget && chmod 0755 /usr/bin/novacap-gadget && sync; " +
                             "rc=$?; mount -o remount,ro / 2>/dev/null || true; rm -f /run/novavm.new; " +
+                            "rm -f /run/novacap-gadget.new; " +
                             "[ \"$rc\" -eq 0 ] || exit \"$rc\"; " +
                             "for p in $(pidof novavm 2>/dev/null); do kill \"$p\" 2>/dev/null || true; done; sleep 1";
     rc = RunSsh(host, installAndStop);
     if (rc != 0) return rc;
 
     rc = VerifyRemoteFileSha256(host, Path.Combine(hostDir, "novavm"), "/usr/bin/novavm");
+    if (rc != 0) return rc;
+
+    rc = VerifyRemoteFileSha256(host, Path.Combine(hostDir, "novacap-gadget"), "/usr/bin/novacap-gadget");
     if (rc != 0) return rc;
 
     rc = RunSsh(host, "/etc/init.d/novavm start");
@@ -428,6 +712,34 @@ static int WaitForRemotePort(string host, int port, TimeSpan timeout)
     return 1;
 }
 
+static int WaitForSsh(string host, TimeSpan timeout)
+{
+    DateTime deadline = DateTime.UtcNow + timeout;
+    while (DateTime.UtcNow < deadline)
+    {
+        if (RunSsh(host, "true") == 0)
+            return 0;
+        Thread.Sleep(1000);
+    }
+
+    Console.Error.WriteLine($"timed out waiting for SSH on {host}");
+    return 1;
+}
+
+static int WaitForSshDown(string host, TimeSpan timeout)
+{
+    DateTime deadline = DateTime.UtcNow + timeout;
+    while (DateTime.UtcNow < deadline)
+    {
+        if (RunSsh(host, "true") != 0)
+            return 0;
+        Thread.Sleep(1000);
+    }
+
+    Console.Error.WriteLine($"timed out waiting for SSH on {host} to stop during reboot");
+    return 1;
+}
+
 static int UnmountAllBootDrives(string host)
 {
     foreach (string slot in new[] { "fd0", "fd1", "fd2", "fd3", "hd0", "hd1" })
@@ -438,6 +750,67 @@ static int UnmountAllBootDrives(string host)
 
     return 0;
 }
+
+static int DoArtyUploadInfocom(string repo, List<string> args, string? host)
+{
+    string infocomRoot = TakeOptionValue(args, "--infocom-root") ??
+        Environment.GetEnvironmentVariable("INFOCOM_ROOT") ??
+        "/mnt/Software/Emulation/Infocom";
+    if (args.Count > 0)
+    {
+        Console.Error.WriteLine($"Unexpected arty upload-infocom argument: {args[0]}");
+        PrintArtyUsage();
+        return 1;
+    }
+    if (host is null)
+    {
+        Console.Error.WriteLine("nova arty upload-infocom needs --remote <ip>.");
+        return 1;
+    }
+
+    string novazDir = Path.Combine(repo, "software", "examples", "novaz");
+    foreach ((string project, string storyVar, string? picturesVar) in InfocomProjects())
+    {
+        var makeArgs = new List<string>(MakeArgsWithCurrentNova(
+            repo,
+            "-C", novazDir,
+            "ndi",
+            "PROJECT=" + project,
+            "INFOCOM_ROOT=" + infocomRoot,
+            "STORY=$(" + storyVar + ")"));
+        if (picturesVar is not null)
+            makeArgs.Add("PICTURES=$(" + picturesVar + ")");
+
+        int rc = RunCommand("make", makeArgs);
+        if (rc != 0) return rc;
+
+        string image = Path.Combine(novazDir, "dist", project, "fd0.ndi");
+        string remote = $"disks/infocom/{project}.ndi";
+        rc = PutFile(image, remote, host);
+        if (rc != 0) return rc;
+    }
+
+    return 0;
+}
+
+static (string Project, string StoryVar, string? PicturesVar)[] InfocomProjects() =>
+[
+    ("zork-i", "ZORK_I_STORY", null),
+    ("zork-ii", "ZORK_II_STORY", null),
+    ("zork-iii", "ZORK_III_STORY", null),
+    ("deadline", "DEADLINE_STORY", null),
+    ("amfv", "AMFV_STORY", null),
+    ("trinity", "TRINITY_STORY", null),
+    ("hhgg", "HHGG_STORY", null),
+    ("beyond-zork", "BEYOND_ZORK_STORY", null),
+    ("border-zone", "BORDER_ZONE_STORY", null),
+    ("sherlock", "SHERLOCK_STORY", null),
+    ("ztuu", "ZTUU_STORY", null),
+    ("lurking-horror", "LURKING_STORY", null),
+    ("zork-zero", "ZORK_ZERO_STORY", "ZORK_ZERO_PICTURES"),
+    ("arthur", "ARTHUR_STORY", "ARTHUR_PICTURES"),
+    ("journey", "JOURNEY_STORY", "JOURNEY_PICTURES"),
+];
 
 static int DoArtyMakeBootBin(string repo, List<string> args)
 {
@@ -591,6 +964,56 @@ static int RunSsh(string host, string remoteCommand) =>
 static int RunScp(string host, string localPath, string remotePath) =>
     RunCommand("scp", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", localPath, "root@" + host + ":" + remotePath]);
 
+static int RunScpFrom(string host, string remotePath, string localPath) =>
+    RunCommand("scp", ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", "root@" + host + ":" + remotePath, localPath]);
+
+static string JoinShell(IEnumerable<string> args) =>
+    string.Join(" ", args.Select(ShellQuote));
+
+static string ShellQuote(string value) =>
+    "'" + value.Replace("'", "'\\''", StringComparison.Ordinal) + "'";
+
+static bool PathsEqual(string left, string right) =>
+    string.Equals(
+        Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+        Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+static int VerifyRemoteStagingMount(string host, string mountPoint, string overwrittenDevice)
+{
+    int rc = RunSshCapture(host, "cat /proc/mounts", out string mounts);
+    if (rc != 0) return rc;
+
+    string? rootSource = null;
+    string? stagingSource = null;
+    foreach (string line in mounts.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+    {
+        string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+            continue;
+
+        if (parts[1] == "/")
+            rootSource = parts[0];
+        if (parts[1] == mountPoint)
+            stagingSource = parts[0];
+    }
+
+    if (stagingSource is null)
+    {
+        Console.Error.WriteLine($"ERROR: {mountPoint} is not a mounted staging filesystem");
+        return 1;
+    }
+
+    if (stagingSource == overwrittenDevice || stagingSource == rootSource)
+    {
+        Console.Error.WriteLine($"ERROR: {mountPoint} is mounted from {stagingSource}; refusing to stage rootfs on the partition being overwritten");
+        return 1;
+    }
+
+    Console.WriteLine($"verified: {mountPoint} staging mount is {stagingSource}");
+    return 0;
+}
+
 static int VerifyRemoteFileSha256(string host, string localPath, string remotePath)
 {
     string localSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(localPath))).ToLowerInvariant();
@@ -614,6 +1037,44 @@ static int VerifyRemoteFileSha256(string host, string localPath, string remotePa
     }
 
     Console.WriteLine($"verified: {remotePath} sha256 {localSha}");
+    return 0;
+}
+
+static int VerifyRemoteBlockSha256(string host, string localPath, string remoteDevice)
+{
+    long size = new FileInfo(localPath).Length;
+    long blockSize = size % 4096 == 0 ? 4096 : 512;
+    if (size % blockSize != 0)
+    {
+        Console.Error.WriteLine($"ERROR: {localPath} size {size} is not block aligned");
+        return 1;
+    }
+
+    long count = size / blockSize;
+    string localSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(localPath))).ToLowerInvariant();
+    string command = "dd if=" + remoteDevice + " bs=" + blockSize.ToString(CultureInfo.InvariantCulture) +
+                     " count=" + count.ToString(CultureInfo.InvariantCulture) +
+                     " 2>/dev/null | sha256sum";
+    int rc = RunSshCapture(host, command, out string stdout);
+    if (rc != 0) return rc;
+
+    string[] parts = stdout.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+    if (parts.Length == 0)
+    {
+        Console.Error.WriteLine($"could not read remote sha256 for {remoteDevice}");
+        return 1;
+    }
+
+    string remoteSha = parts[0].ToLowerInvariant();
+    if (!string.Equals(localSha, remoteSha, StringComparison.Ordinal))
+    {
+        Console.Error.WriteLine($"ERROR: stale deployed artifact: {remoteDevice}");
+        Console.Error.WriteLine($"local  {localSha}  {localPath}");
+        Console.Error.WriteLine($"remote {remoteSha}  {remoteDevice} first {size} bytes");
+        return 1;
+    }
+
+    Console.WriteLine($"verified: {remoteDevice} first {size} bytes sha256 {localSha}");
     return 0;
 }
 
@@ -1646,6 +2107,10 @@ static int DoCapture(string[] args, string? host)
         return command switch
         {
             "hdmi" => DoCaptureHdmi(rest),
+            "screen" or "shot" or "screenshot" => DoCaptureScreen(rest, host),
+            "record" => DoCaptureRecord(rest, host),
+            "devices" => DoCaptureDevices(host),
+            "gadget" => DoCaptureGadget(rest, host),
             _ => UnknownCaptureCommand(command),
         };
     }
@@ -1659,12 +2124,23 @@ static int DoCapture(string[] args, string? host)
 static int DoCaptureHdmi(List<string> args)
 {
     bool list = TakeFlag(args, "--list");
-    string device = TakeOptionValue(args, "--device") ?? Environment.GetEnvironmentVariable("HDMI_DEVICE") ?? "0:none";
+    string backend = (TakeOptionValue(args, "--backend") ?? Environment.GetEnvironmentVariable("HDMI_BACKEND") ?? DefaultHdmiCaptureBackend()).ToLowerInvariant();
+    string device = TakeOptionValue(args, "--device") ?? Environment.GetEnvironmentVariable("HDMI_DEVICE") ?? DefaultHdmiCaptureDevice(backend);
     string size = TakeOptionValue(args, "--size") ?? Environment.GetEnvironmentVariable("HDMI_SIZE") ?? "720x480";
     string framerate = TakeOptionValue(args, "--framerate") ?? Environment.GetEnvironmentVariable("HDMI_FRAMERATE") ?? "30";
 
+    if (backend is not "avfoundation" and not "v4l2")
+    {
+        Console.Error.WriteLine("capture hdmi backend must be avfoundation or v4l2.");
+        return 1;
+    }
+
     if (list)
-        return RunCommand("ffmpeg", ["-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""]);
+    {
+        return backend == "avfoundation"
+            ? RunCommand("ffmpeg", ["-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""])
+            : RunCommand("ffmpeg", ["-hide_banner", "-f", "v4l2", "-list_formats", "all", "-i", device]);
+    }
 
     string output = args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal)
         ? args[0]
@@ -1678,13 +2154,16 @@ static int DoCaptureHdmi(List<string> args)
     }
 
     EnsureParentDirectory(output);
-    int rc = RunCommand("ffmpeg",
-    [
+    var ffmpegArgs = new List<string>
+    {
         "-hide_banner",
         "-loglevel", "warning",
         "-y",
-        "-f", "avfoundation",
-        "-pixel_format", "uyvy422",
+        "-f", backend,
+    };
+    if (backend == "avfoundation")
+        ffmpegArgs.AddRange(["-pixel_format", "uyvy422"]);
+    ffmpegArgs.AddRange([
         "-framerate", framerate,
         "-video_size", size,
         "-i", device,
@@ -1692,10 +2171,161 @@ static int DoCaptureHdmi(List<string> args)
         "-update", "1",
         output
     ]);
+    int rc = RunCommand("ffmpeg", ffmpegArgs);
     if (rc == 0)
         Console.WriteLine(output);
     return rc;
 }
+
+static int DoCaptureScreen(List<string> args, string? host)
+{
+    string device = TakeOptionValue(args, "--device", "--video") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_VIDEO") ?? "/dev/video0";
+    string pixelFormat = TakeOptionValue(args, "--pixel-format", "--format") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_FORMAT") ?? "bgr0";
+    string size = TakeOptionValue(args, "--size") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_SIZE") ?? "720x480";
+    string framerate = TakeOptionValue(args, "--framerate") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_FRAMERATE") ?? "60000/1001";
+    string output = args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal)
+        ? args[0]
+        : Path.Combine("screenshots", "hardware", "novavm-screen-" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".png");
+    if (args.Count > 0 && !args[0].StartsWith("-", StringComparison.Ordinal))
+        args.RemoveAt(0);
+    if (args.Count > 0)
+    {
+        PrintCaptureUsage();
+        return 1;
+    }
+
+    EnsureParentDirectory(output);
+    if (!string.IsNullOrWhiteSpace(host))
+    {
+        string remotePath = "/run/novavm-screen-" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".png";
+        int rc = RunSsh(host, BuildFfmpegStillCommand(device, pixelFormat, size, framerate, remotePath));
+        if (rc != 0)
+            return rc;
+        rc = RunScpFrom(host, remotePath, output);
+        if (rc == 0)
+            _ = RunSsh(host, "rm -f " + ShellQuote(remotePath));
+        if (rc == 0)
+            Console.WriteLine(output);
+        return rc;
+    }
+
+    int localRc = RunCommand("ffmpeg", BuildFfmpegStillArgs(device, pixelFormat, size, framerate, output));
+    if (localRc == 0)
+        Console.WriteLine(output);
+    return localRc;
+}
+
+static int DoCaptureRecord(List<string> args, string? host)
+{
+    string video = TakeOptionValue(args, "--video") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_VIDEO") ?? "/dev/video0";
+    string audio = TakeOptionValue(args, "--audio") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_AUDIO") ?? "hw:NovaVM,0";
+    string pixelFormat = TakeOptionValue(args, "--pixel-format", "--format") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_FORMAT") ?? "bgr0";
+    string size = TakeOptionValue(args, "--size") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_SIZE") ?? "720x480";
+    string framerate = TakeOptionValue(args, "--framerate") ?? Environment.GetEnvironmentVariable("NOVA_CAPTURE_FRAMERATE") ?? "60000/1001";
+    string? duration = TakeOptionValue(args, "--duration", "-t");
+    if (args.Count != 1 || args[0].StartsWith("-", StringComparison.Ordinal))
+    {
+        PrintCaptureUsage();
+        return 1;
+    }
+
+    string output = args[0];
+    EnsureParentDirectory(output);
+    if (!string.IsNullOrWhiteSpace(host))
+    {
+        string extension = Path.GetExtension(output);
+        if (string.IsNullOrWhiteSpace(extension))
+            extension = ".mkv";
+        string remotePath = "/data/nova/novavm-record-" + DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + extension;
+        int rc = RunSsh(host, BuildFfmpegRecordCommand(video, audio, pixelFormat, size, framerate, duration, remotePath));
+        if (rc != 0)
+            return rc;
+        rc = RunScpFrom(host, remotePath, output);
+        _ = RunSsh(host, "rm -f " + ShellQuote(remotePath));
+        if (rc == 0)
+            Console.WriteLine(output);
+        return rc;
+    }
+
+    return RunCommand("ffmpeg", BuildFfmpegRecordArgs(video, audio, pixelFormat, size, framerate, duration, output));
+}
+
+static int DoCaptureDevices(string? host)
+{
+    if (!string.IsNullOrWhiteSpace(host))
+        return RunSsh(host, "printf 'Video devices:\\n'; ls -1 /dev/video* 2>/dev/null || true; printf '\\nALSA cards:\\n'; cat /proc/asound/cards 2>/dev/null || true");
+
+    Console.WriteLine("Video devices:");
+    foreach (string path in Directory.GetFiles("/dev", "video*").OrderBy(static p => p, StringComparer.Ordinal))
+        Console.WriteLine(path);
+    Console.WriteLine();
+    Console.WriteLine("ALSA cards:");
+    string cards = "/proc/asound/cards";
+    if (File.Exists(cards))
+        Console.Write(File.ReadAllText(cards));
+    return 0;
+}
+
+static int DoCaptureGadget(List<string> args, string? host)
+{
+    if (args.Count != 1 || args[0] is not ("enable" or "disable" or "status"))
+    {
+        PrintCaptureUsage();
+        return 1;
+    }
+
+    string command = "novacap-gadget " + args[0];
+    return string.IsNullOrWhiteSpace(host)
+        ? RunCommand("novacap-gadget", [args[0]])
+        : RunSsh(host, command);
+}
+
+static List<string> BuildFfmpegStillArgs(string device, string pixelFormat, string size, string framerate, string output) =>
+[
+    "-hide_banner",
+    "-loglevel", "warning",
+    "-y",
+    "-f", "v4l2",
+    "-video_size", size,
+    "-framerate", framerate,
+    "-pixel_format", pixelFormat,
+    "-i", device,
+    "-frames:v", "1",
+    "-update", "1",
+    output
+];
+
+static List<string> BuildFfmpegRecordArgs(string video, string audio, string pixelFormat, string size, string framerate, string? duration, string output)
+{
+    var result = new List<string>
+    {
+        "-hide_banner",
+        "-y",
+        "-f", "v4l2",
+        "-video_size", size,
+        "-framerate", framerate,
+        "-pixel_format", pixelFormat,
+        "-i", video,
+        "-f", "alsa",
+        "-i", audio,
+    };
+    if (!string.IsNullOrWhiteSpace(duration))
+        result.AddRange(["-t", duration]);
+    result.Add(output);
+    return result;
+}
+
+static string BuildFfmpegStillCommand(string device, string pixelFormat, string size, string framerate, string output) =>
+    JoinShell(["ffmpeg", .. BuildFfmpegStillArgs(device, pixelFormat, size, framerate, output)]);
+
+static string BuildFfmpegRecordCommand(string video, string audio, string pixelFormat, string size, string framerate, string? duration, string output) =>
+    JoinShell(["ffmpeg", .. BuildFfmpegRecordArgs(video, audio, pixelFormat, size, framerate, duration, output)]);
+
+static string DefaultHdmiCaptureBackend() =>
+    RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "avfoundation" : "v4l2";
+
+static string DefaultHdmiCaptureDevice(string backend) =>
+    backend == "avfoundation" ? "0:none" : "/dev/video0";
 
 static int UnknownCaptureCommand(string command)
 {
@@ -1707,7 +2337,11 @@ static int UnknownCaptureCommand(string command)
 static void PrintCaptureUsage()
 {
     Console.Error.WriteLine("Usage:");
-    Console.Error.WriteLine("  nova capture hdmi [out.png] [--device <avfoundation-device>] [--size 720x480] [--framerate 30]");
+    Console.Error.WriteLine("  nova capture screen [out.png] [--device /dev/video0] [--format bgr0|rgb24|yuyv]");
+    Console.Error.WriteLine("  nova capture record <out.mkv> [--video /dev/video0] [--audio hw:NovaVM,0] [--duration <time>]");
+    Console.Error.WriteLine("  nova capture devices");
+    Console.Error.WriteLine("  nova capture gadget enable|disable|status [--remote <host>]");
+    Console.Error.WriteLine("  nova capture hdmi [out.png] [--backend <avfoundation|v4l2>] [--device <device>] [--size 720x480] [--framerate 30]");
     Console.Error.WriteLine("  nova capture hdmi --list");
 }
 
@@ -3898,7 +4532,7 @@ static int WriteCompositeScreenshot(Func<string, JsonNode> Send, string outPath,
         if ((textAttr & 0x04) != 0) rowBits |= rowBits >> 1; // TextAttrBold
         bool set = (rowBits & (0x80 >> gx)) != 0;
         // Flash (TextAttrFlash bit0) is shown lit in a still capture.
-        if (mode == 2 && !set && !isCursor && !reverse && cellBg == bgColor) return false;
+        if (mode == 2 && !set && !isCursor && !reverse && (textAttr & 0x08) != 0) return false;
         idx = set ? fg : cellBg;
         return true;
     }
@@ -6182,6 +6816,7 @@ static void PrintUsage()
     Console.Error.WriteLine("  build      browser-rust-core ...");
     Console.Error.WriteLine("  docs       basic-user-guide|nova-cli-guide|fun-n-games|showcase-demo ...");
     Console.Error.WriteLine("  fpga       check-timing|check-bitstream ...");
+    Console.Error.WriteLine("  capture    screen|record|devices|gadget|hdmi ...");
     Console.Error.WriteLine("  ci         install-linux-deps|install-macos-cc65|mint-github-token ...");
     Console.Error.WriteLine("  publish    [rid]");
     Console.Error.WriteLine();

@@ -955,9 +955,8 @@ nz6_op_reset:
         JSR vtext_set_scroll_hook
         JSR vgc_set_palette_ega         ; fallback for v1/no-palette packs
         LDA #VGC_MODE_TEXT_OVER_GFX     ; mode 2: text over gfx — pictures
-        STA VGC_MODE                    ; show wherever cells keep the global
-                                        ; background colour (mode-2 rule in
-                                        ; the VGC compositor)
+        STA VGC_MODE                    ; transparent text attrs reveal the
+                                        ; picture plane underneath
         LDA #VGC_TEXT_BGKEY_DEFAULT
         STA VGC_BGCOL
         LDA #VGC_GFXTRANS_DISABLE       ; gfx transparency OFF: the plane is
@@ -1304,7 +1303,8 @@ nz6_op_erase:
         STA VTEXT_HEIGHT
         LDA nz6_colour                  ; erase fills with the game's colours
         STA VTEXT_COLOR
-        STZ VTEXT_ATTR
+        JSR nz6_attr_for_vtext_bg
+        STA VTEXT_ATTR
         JSR vtext_clear_region
         PLA
         STA VTEXT_ATTR
@@ -1575,20 +1575,22 @@ nz6_op_text_style:
         ; FALL THROUGH to nz6_apply_colour_style
 
 ; VTEXT_COLOR := nz6_colour. VTEXT_ATTR gets hardware style bits for reverse
-; and bold. Italic/fixed accumulate in zvm_text_style but render as roman.
+; and bold. Normal V6 text owns its background so erased/blank cells cover
+; stale picture pixels; picture-owned cells opt into transparency explicitly.
+; Italic/fixed accumulate in zvm_text_style but render as roman.
 nz6_apply_colour_style:
         LDA nz6_colour
         STA nz6_clr_tmp
         LDA VTEXT_ATTR
-        AND #$F9
+        AND #VTXT_ATTR_FLASH
         STA VTEXT_ATTR
         LDA zvm_text_style
         AND #$01
-        BEQ @reverse_off
+        BEQ @reverse_done
         LDA VTEXT_ATTR
         ORA #VTXT_ATTR_REV
         STA VTEXT_ATTR
-@reverse_off:
+@reverse_done:
         LDA zvm_text_style
         AND #$02
         BEQ @bold_off
@@ -1601,9 +1603,13 @@ nz6_apply_colour_style:
         STA VTEXT_COLOR
         RTS
 
+nz6_attr_for_vtext_bg:
+        LDA #0
+        RTS
+
 ; Keep the physical display border aligned with the V6 logical background.
 ; V6 paper colour lives in nz6_colour and per-cell colour bytes; VGC_BGCOL is
-; only the mode-2 text-background key, so the border must be synced explicitly.
+; only the fallback colour behind transparent text, so the border is explicit.
 nz6_sync_border_to_bg:
         LDA nz6_colour
         LSR A
@@ -1697,7 +1703,8 @@ nz6_clear_scroll_excluded_top_rows:
         STA VTEXT_HEIGHT
         LDA #NZ6_COLOR_DEFAULT          ; bg 0: reveal graphics/chrome
         STA VTEXT_COLOR
-        STZ VTEXT_ATTR
+        LDA #VTXT_ATTR_BGTRANS
+        STA VTEXT_ATTR
         JSR vtext_clear_region
         PLA
         STA VTEXT_ATTR
@@ -1979,9 +1986,10 @@ nz6_restore_space_rect:
         PHA
         LDA VTEXT_ATTR
         PHA
-        LDA nz6_colour                  ; opaque current background
+        LDA nz6_colour                  ; current paper; text owns background
         STA VTEXT_COLOR
-        STZ VTEXT_ATTR
+        JSR nz6_attr_for_vtext_bg
+        STA VTEXT_ATTR
         JSR vtext_expose_gfx_spaces_region
         PLA
         STA VTEXT_ATTR
@@ -2742,8 +2750,8 @@ nz6_pic_draw_current_abs:
 :
         ; MCGA-faithful compositing approximation for the split text/gfx
         ; planes: an opaque picture owns the whole touched cell rectangle, so
-        ; blank those cells (bg 0 = display-transparent) and let the gfx plane
-        ; show through. Flow pictures also own their reserved text-cell box
+        ; blank those cells with transparent attrs and let the gfx plane show
+        ; through. Flow pictures also own their reserved text-cell box
         ; even when the source bitmap is keyed transparent. Other transparent
         ; pictures are overlays: expose only space cells so visible text is not
         ; deleted.
@@ -2766,8 +2774,12 @@ nz6_pic_draw_current_abs:
         STA VTEXT_HEIGHT
         LDA VTEXT_COLOR
         PHA
-        LDA #NZ6_COLOR_DEFAULT          ; bg 0: cells go display-transparent
+        LDA VTEXT_ATTR
+        PHA
+        LDA #NZ6_COLOR_DEFAULT          ; text bg transparent: gfx owns paper
         STA VTEXT_COLOR
+        LDA #VTXT_ATTR_BGTRANS
+        STA VTEXT_ATTR
         LDA nz6_pic_flags
         AND #(NZ6_PIC_FLAG_FLOW_ICON | NZ6_PIC_FLAG_FLOW_CELLTOP)
         BNE @clear_picture_cells
@@ -2780,6 +2792,8 @@ nz6_pic_draw_current_abs:
 @expose_picture_spaces:
         JSR vtext_expose_gfx_spaces_region
 @restore_vtext_color:
+        PLA
+        STA VTEXT_ATTR
         PLA
         STA VTEXT_COLOR
         JMP nz6_apply_current_window
@@ -3418,7 +3432,7 @@ nz6_gfx_replay_erase:
 ; Fill the whole 320x200 gfx plane with colour A. The V6 erase paths pass
 ; the window background — the gfx plane IS the MCGA framebuffer, so the
 ; parchment field lives here and partial picture-edge cells reveal it.
-; Reset passes 0 (display-transparent).
+; Reset passes 0 (default background behind transparent text).
 nz6_gfx_fill_bg:
         JSR nz6_sync_border_to_bg
         LDA nz6_colour                  ; window background colour

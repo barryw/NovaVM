@@ -39,13 +39,15 @@ do_compile() {
         ${NOVAVM_SRC}/nkbd.c ${NOVAVM_SRC}/nmouse.c ${NOVAVM_SRC}/nfio.c ${NOVAVM_SRC}/nsplash.c \
         ${NOVAVM_SRC}/nbootcfg.c ${NOVAVM_SRC}/nosd.c ${NOVAVM_SRC}/cJSON.c \
         -lm -o ${B}/novavm
+    ${CC} ${CFLAGS} ${LDFLAGS} -O2 ${NOVAVM_SRC}/novacap-gadget.c -o ${B}/novacap-gadget
 }
 
 do_install() {
     install -d ${D}${bindir}
     install -m 0755 ${B}/novavm ${D}${bindir}/novavm
+    install -m 0755 ${B}/novacap-gadget ${D}${bindir}/novacap-gadget
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${NOVAVM_SRC}/novavm.init ${D}${sysconfdir}/init.d/novavm
 }
 
-FILES:${PN} = "${bindir}/novavm ${sysconfdir}/init.d/novavm"
+FILES:${PN} = "${bindir}/novavm ${bindir}/novacap-gadget ${sysconfdir}/init.d/novavm"

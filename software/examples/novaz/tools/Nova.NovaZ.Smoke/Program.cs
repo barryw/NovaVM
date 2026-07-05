@@ -10,7 +10,7 @@ using KDS.e6502;
 if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .key, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|], .expect-gfx-color <x,y=>hex>)");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .key, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|], .expect-gfx-color <x,y=>hex>, .expect-text-attr <text=>hex>)");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--auto-read-char-space] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
     return 1;
 }
@@ -207,6 +207,13 @@ try
             string liveScreen = SnapshotScreen(bus.Vgc);
             Console.WriteLine($".expect-text-color {command.Text}");
             RequireTextColor(bus.Vgc, liveScreen, ParseExpectedTextColorSpec(command.Text));
+            continue;
+        }
+        if (command.Mode == SmokeInputMode.ExpectTextAttr)
+        {
+            string liveScreen = SnapshotScreen(bus.Vgc);
+            Console.WriteLine($".expect-text-attr {command.Text}");
+            RequireTextAttr(bus.Vgc, liveScreen, ParseExpectedTextAttrSpec(command.Text));
             continue;
         }
         if (command.Mode == SmokeInputMode.ExpectStop)
@@ -529,6 +536,15 @@ static SmokeCommand ParseCommandSpec(string spec)
         ParseExpectedTextColorSpec(colorSpec); // validate eagerly so bad scripts fail before booting
         return new SmokeCommand(colorSpec, [], SmokeInputMode.ExpectTextColor, WaitForPrompt: false);
     }
+    const string expectTextAttrPrefix = ".expect-text-attr ";
+    if (spec.StartsWith(expectTextAttrPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string attrSpec = spec[expectTextAttrPrefix.Length..].TrimStart();
+        if (attrSpec.Length == 0)
+            throw new ArgumentException($".expect-text-attr requires <text=>hex> in '{spec}'.");
+        ParseExpectedTextAttrSpec(attrSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(attrSpec, [], SmokeInputMode.ExpectTextAttr, WaitForPrompt: false);
+    }
 
     string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
     string command = parts[0];
@@ -786,21 +802,25 @@ static List<ExpectedTextAttr> LoadExpectedTextAttrs(string[] args)
         if (i + 1 >= args.Length)
             throw new ArgumentException("--expect-text-attr requires text=>hex.");
 
-        string spec = args[++i];
-        string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
-        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
-            throw new ArgumentException($"Expected text attr must be '<text=>hex>': {spec}");
-
-        string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
-            ? parts[1][2..]
-            : parts[1];
-        if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte attr))
-            throw new ArgumentException($"Expected text attr must use a one-byte hex value: {spec}");
-
-        expected.Add(new ExpectedTextAttr(parts[0], attr));
+        expected.Add(ParseExpectedTextAttrSpec(args[++i]));
     }
 
     return expected;
+}
+
+static ExpectedTextAttr ParseExpectedTextAttrSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+    if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+        throw new ArgumentException($"Expected text attr must be '<text=>hex>': {spec}");
+
+    string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+        ? parts[1][2..]
+        : parts[1];
+    if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte attr))
+        throw new ArgumentException($"Expected text attr must use a one-byte hex value: {spec}");
+
+    return new ExpectedTextAttr(parts[0], attr);
 }
 
 static List<ExpectedGfxColor> LoadExpectedGfxColors(string[] args)
@@ -2149,7 +2169,8 @@ enum SmokeInputMode
     ExpectStop,
     ExpectAt,
     ExpectGfxColor,
-    ExpectTextColor
+    ExpectTextColor,
+    ExpectTextAttr
 }
 
 sealed record SmokeCommand(

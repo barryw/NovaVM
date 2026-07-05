@@ -43,6 +43,7 @@
 #define VGC_SPACE_CHAR 1u
 #define XRAM_DDR_BASE 0x10000000u   /* PS-DDR XRAM shelf (DT reserved-memory @ 0x10000000) */
 #define XRAM_BYTES    0x100000u     /* 1 MB carve-out */
+#define XRAM_COLD_CLEAR_BYTES 0x00080000u
 
 /* ---- FIO mailbox in 6502 RAM ($B9A0+) ---- */
 #define FIO_CMD 0xB9A0
@@ -224,6 +225,12 @@ static void clear_runtime_low_ram(void) {
     for (unsigned i = 0; i < SHELF_N; i++) poke(0x041C + i, (unsigned char)i);
 }
 
+static void clear_cold_xram(void) {
+    if (!g_xram) return;
+    memset((void *)g_xram, 0, XRAM_COLD_CLEAR_BYTES);
+    __sync_synchronize();
+}
+
 /* Load an embedded 16KB module into the requested XRAM shelf slot. Also mirror
  * it into bank-1 for the Arty page-in-bypass bitstream. */
 static int load_module(int id, int slot) {
@@ -283,12 +290,13 @@ static void boot_wait_msg(void) {
 }
 
 /* Cold-boot the 6502: reset all chips, load the ROM, stage the $0320 resident
- * loader, run the boot splash, release, and bring the VGC up. Used at startup
- * and by host_reboot_vm() for the OSD's mount-and-boot. */
+ * loader, run the boot splash, then release. Once released, the 6502 owns VGC
+ * state; host-side post-release pokes can clobber language display modes. */
 static int vm_cold_boot(void) {
     wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);
     usleep(150000);
     if (load_rom("/data/nova/roms/ehbasic.bin") != 0) return 1;
+    clear_cold_xram();
     clear_runtime_low_ram();
     for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
     printf("[novavm] staged resident loader @ $0320 (%zu bytes)\n", sizeof(LOADER_BIN));
@@ -296,9 +304,6 @@ static int vm_cold_boot(void) {
     poke(AUTOBOOT_SKIP_ADDR, 0);
     cpu_hold(0);                    /* release -> cold start */
     usleep(600000);
-    poke(0xA000, 0x00);            /* VGCR_MODE   = text       */
-    poke(0xA0E5, 0x0F);            /* VGCR_DIM    = full bright */
-    poke(0xA00A, 0x01);            /* VGCR_CURSEN = cursor on   */
     return 0;
 }
 
@@ -347,8 +352,8 @@ int main(int argc, char **argv) {
     } else printf("[novavm] XRAM mapped: %u KB @ %#x\n", XRAM_BYTES >> 10, XRAM_DDR_BASE);
 
 
-    /* Cold-boot the 6502 (reset chips, ROM + $0320 loader, splash, release, VGC
-     * up). Factored so the OSD's mount-and-boot reuses the identical sequence. */
+    /* Cold-boot the 6502 (reset chips, ROM + $0320 loader, splash, release).
+     * Factored so the OSD's mount-and-boot reuses the identical sequence. */
     if (vm_cold_boot() != 0) return 1;
     audio_init(); audio_start();   /* naudio.c: real SID/WTS+MIDI feeder (replaces the silence loop) */
     kbd_init();                    /* nkbd.c: physical USB keyboard -> R_KEY */

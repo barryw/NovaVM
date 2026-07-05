@@ -46,6 +46,35 @@ public class VgcMouseCursorSourceTests
     }
 
     [TestMethod]
+    public void Rtl_Mode2UsesPerCellTransparentBackgroundAttr()
+    {
+        string vgc = File.ReadAllText(RepoPath("e6502.FPGA", "rtl", "vgc.sv"));
+        string vgcSim = File.ReadAllText(RepoPath("e6502.FPGA", "boards", "arty_z7", "sim", "vgc_sim.sv"));
+        string novaCli = File.ReadAllText(RepoPath("e6502.Nova", "Program.cs"));
+
+        StringAssert.Contains(vgc, "TATTR_BGTRANS = 8'h08",
+            "Hardware mode 2 uses a per-cell attr bit for transparent text backgrounds.");
+        StringAssert.Contains(vgc, "text_bgtrans_d2 = attr_b_dout[3]",
+            "The HDMI path must fetch the transparent-background bit from text-attr RAM.");
+        StringAssert.Contains(vgc, "&& text_bgtrans_d2 && !text_reverse_d2",
+            "Mode 2 should reveal graphics only for non-reverse cells with the transparent-background attr set.");
+        StringAssert.Contains(vgc, "!text_reverse_d2",
+            "Reverse text backgrounds stay opaque in mode 2.");
+        Assert.IsFalse(vgc.Contains("cur_bg_d2 == bg_color", StringComparison.Ordinal),
+            "Do not add a dynamic background-colour comparator in the HDMI pixel path; set TATTR_BGTRANS in software instead.");
+        StringAssert.Contains(vgcSim, "TATTR_BGTRANS = 8'h08",
+            "The simulator copy must use the same transparent-background attr bit.");
+        StringAssert.Contains(vgcSim, "text_bgtrans_d2 = attr_b_dout[3]",
+            "The simulator copy must fetch the same transparent-background bit.");
+        Assert.IsFalse(vgcSim.Contains("cur_bg_d2 == bg_color", StringComparison.Ordinal),
+            "The simulator copy must not preserve the old background-colour matching rule.");
+        StringAssert.Contains(novaCli, "textAttr & 0x08",
+            "CLI screenshots must composite mode 2 using the same transparent-background attr bit as HDMI.");
+        Assert.IsFalse(novaCli.Contains("cellBg == bgColor", StringComparison.Ordinal),
+            "CLI screenshots must not preserve the old background-colour matching rule.");
+    }
+
+    [TestMethod]
     public void Ndk_ExposesMousePointerHelpers()
     {
         string nova = File.ReadAllText(RepoPath("software", "runtime", "asm", "nova.inc"));

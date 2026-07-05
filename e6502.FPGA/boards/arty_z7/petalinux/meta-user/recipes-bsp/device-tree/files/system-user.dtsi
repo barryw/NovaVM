@@ -1,11 +1,12 @@
 /include/ "system-conf.dtsi"
 
 / {
-	/* --- USB host (Apple/HID keyboard) ---
+	/* --- USB OTG (keyboard host mode + capture gadget mode) ---
 	 * PetaLinux auto-generates usb@e0002000 with phy_type=ulpi but no usb-phy
-	 * phandle and no dr_mode, so the chipidea driver won't bind (OTG is off in
-	 * the kernel, so it can't infer host mode). Add the classic Zynq ULPI PHY
-	 * (view-port 0x170 == bare-metal USB_ULPIVP) and force host mode. */
+	 * phandle and no dr_mode, so the chipidea driver won't bind reliably. Add
+	 * the classic Zynq ULPI PHY (view-port 0x170 == bare-metal USB_ULPIVP) and
+	 * allow OTG so HID keyboards and UVC/UAC2 capture gadget mode can coexist
+	 * as role-switched modes. */
 	usb_phy0: usb_phy@0 {
 		compatible = "ulpi-phy";
 		#phy-cells = <0>;
@@ -38,15 +39,24 @@
 			reg = <0x10000000 0x00100000>;
 			no-map;
 		};
+
+		novavm_capture_mem: novavm-capture@11000000 {
+			reg = <0x11000000 0x01000000>;
+			no-map;
+		};
+	};
+
+	novavm_capture: capture@40010000 {
+		compatible = "novavm,capture";
+		reg = <0x40010000 0x00010000>;
+		memory-region = <&novavm_capture_mem>;
 	};
 };
 
-/* USB host for physical keyboard input. Earlier base bring-up disabled this
- * node after a VBUS/POR fault; keep the host-mode wiring explicit so Linux
- * binds chipidea + evdev and novavm/nkbd.c can inject keys into R_KEY. */
+/* USB OTG for physical keyboard input and standard USB capture gadget mode. */
 &usb0 {
 	status = "okay";
-	dr_mode = "host";
+	dr_mode = "otg";
 	usb-phy = <&usb_phy0>;
 };
 

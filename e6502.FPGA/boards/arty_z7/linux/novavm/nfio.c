@@ -477,9 +477,41 @@ static void ndi_flush(ndi_t *m) { ndi_flush_metadata(m); }
 static const char *SLOT_NAMES[DRIVE_SLOTS] = { "fd0", "fd1", "fd2", "fd3", "hd0", "hd1" };
 static char  g_drive_path[DRIVE_SLOTS][160];
 static time_t g_mounts_mtime = 0;
+static long   g_mounts_mtime_nsec = -1;
+static ino_t  g_mounts_ino = 0;
+static off_t  g_mounts_size = -1;
+static int    g_mounts_signature_valid = 0;
 static int    g_mounts_loaded = 0;
 
 #define MOUNTS_FILE NOVA_FS_ROOT "/config/boot.json"   /* refresh trigger; parsed via nbootcfg */
+
+static long stat_mtime_nsec(const struct stat *st) {
+    return st->st_mtim.tv_nsec;
+}
+
+static int mount_signature_changed(const struct stat *st) {
+    return !g_mounts_signature_valid ||
+           st->st_mtime != g_mounts_mtime ||
+           stat_mtime_nsec(st) != g_mounts_mtime_nsec ||
+           st->st_ino != g_mounts_ino ||
+           st->st_size != g_mounts_size;
+}
+
+static void mount_signature_store(const struct stat *st) {
+    g_mounts_mtime = st->st_mtime;
+    g_mounts_mtime_nsec = stat_mtime_nsec(st);
+    g_mounts_ino = st->st_ino;
+    g_mounts_size = st->st_size;
+    g_mounts_signature_valid = 1;
+}
+
+static void mount_signature_clear(void) {
+    g_mounts_mtime = 0;
+    g_mounts_mtime_nsec = -1;
+    g_mounts_ino = 0;
+    g_mounts_size = -1;
+    g_mounts_signature_valid = 0;
+}
 
 static int drive_slot_index(const char *name) {
     if (!name) return -1;
@@ -509,12 +541,12 @@ static void drives_load(void) {
 static void drives_refresh(void) {
     struct stat st;
     if (stat(MOUNTS_FILE, &st) != 0) {
-        if (!g_mounts_loaded || g_mounts_mtime != 0) { drives_load(); g_mounts_mtime = 0; }
+        if (!g_mounts_loaded || g_mounts_signature_valid) { drives_load(); mount_signature_clear(); }
         return;
     }
-    if (!g_mounts_loaded || st.st_mtime != g_mounts_mtime) {
+    if (!g_mounts_loaded || mount_signature_changed(&st)) {
         drives_load();
-        g_mounts_mtime = st.st_mtime;
+        mount_signature_store(&st);
     }
 }
 
@@ -528,26 +560,63 @@ static void drives_refresh(void) {
 
 static ndi_t g_img;
 static int   g_img_slot = -1;        /* slot whose .ndi is open in g_img         */
+static char  g_img_open_path[200] = "";
+static dev_t g_img_dev = 0;
+static ino_t g_img_ino = 0;
+static off_t g_img_size = -1;
+static time_t g_img_mtime = 0;
+static long  g_img_mtime_nsec = -1;
+static int   g_img_signature_valid = 0;
 static int   g_cwd_slot = -1;        /* explicit CD target; -1 = follow boot slot */
 static char  g_cwd_dir[160] = "";    /* subdir within the CWD drive ("" = root)  */
+
+static int image_signature_matches(const struct stat *st) {
+    return g_img_signature_valid &&
+           st->st_dev == g_img_dev &&
+           st->st_ino == g_img_ino &&
+           st->st_size == g_img_size &&
+           st->st_mtime == g_img_mtime &&
+           stat_mtime_nsec(st) == g_img_mtime_nsec;
+}
+
+static void image_signature_store(const struct stat *st) {
+    g_img_dev = st->st_dev;
+    g_img_ino = st->st_ino;
+    g_img_size = st->st_size;
+    g_img_mtime = st->st_mtime;
+    g_img_mtime_nsec = stat_mtime_nsec(st);
+    g_img_signature_valid = 1;
+}
+
+static void close_slot_image(void) {
+    if (g_img_slot >= 0) ndi_close(&g_img);
+    g_img_slot = -1;
+    g_img_open_path[0] = 0;
+    g_img_signature_valid = 0;
+}
 
 /* Open a given slot's .ndi into the single cached image (re-open on slot/path
  * change). NULL if the slot is empty / the image won't open. */
 static ndi_t *slot_image(int slot) {
     if (slot < 0 || slot >= DRIVE_SLOTS || !drive_path(slot)[0]) {
-        if (g_img_slot >= 0) { ndi_close(&g_img); g_img_slot = -1; }
+        close_slot_image();
         return 0;
     }
-    static char open_path[200];
     char full[200];
     const char *p = drive_path(slot);
     if (p[0] == '/') snprintf(full, sizeof full, "%s%s", NOVA_FS_ROOT, p);
     else             snprintf(full, sizeof full, "%s/%s", NOVA_FS_ROOT, p);
-    if (slot != g_img_slot || strcmp(full, open_path) != 0) {
-        if (g_img_slot >= 0) ndi_close(&g_img);
+    struct stat st;
+    if (stat(full, &st) != 0) {
+        close_slot_image();
+        return 0;
+    }
+    if (slot != g_img_slot || strcmp(full, g_img_open_path) != 0 || !image_signature_matches(&st)) {
+        close_slot_image();
         if (ndi_open(&g_img, full) != 0) { g_img_slot = -1; return 0; }
         g_img_slot = slot;
-        snprintf(open_path, sizeof open_path, "%s", full);
+        snprintf(g_img_open_path, sizeof g_img_open_path, "%s", full);
+        image_signature_store(&st);
         printf("[fio] image %s = %s\n", drive_slot_name(slot), full);
     }
     return &g_img;

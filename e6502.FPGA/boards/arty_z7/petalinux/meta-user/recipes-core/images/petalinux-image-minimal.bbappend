@@ -13,3 +13,5 @@
 #                     (soft dep), so it needs BAD_RECOMMENDATIONS, not :remove.
 IMAGE_INSTALL:remove = " nfs-utils tcf-agent"
 BAD_RECOMMENDATIONS:append = " busybox-inetd"
+
+IMAGE_INSTALL:append = " kernel-module-novacap ffmpeg v4l-utils alsa-utils"

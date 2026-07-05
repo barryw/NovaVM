@@ -36,9 +36,9 @@ set_property -dict [list \
     CONFIG.PCW_WDT_PERIPHERAL_ENABLE {1} \
 ] [get_bd_cells ps7]
 
-# --- AXI SmartConnect: 32-bit AXI4 slave (PL) -> 64-bit AXI3 HP0 ------------
+# --- AXI SmartConnect: 32-bit AXI4 slaves (PL) -> 64-bit AXI3 HP0 -----------
 create_bd_cell -type ip -vlnv xilinx.com:ip:smartconnect smc
-set_property -dict [list CONFIG.NUM_SI {1} CONFIG.NUM_MI {1}] [get_bd_cells smc]
+set_property -dict [list CONFIG.NUM_SI {2} CONFIG.NUM_MI {1}] [get_bd_cells smc]
 connect_bd_intf_net [get_bd_intf_pins smc/M00_AXI] [get_bd_intf_pins ps7/S_AXI_HP0]
 
 # --- Clocks/resets ----------------------------------------------------------
@@ -67,8 +67,9 @@ connect_bd_net [get_bd_pins rstgen/peripheral_aresetn]  [get_bd_pins conv/areset
 make_bd_intf_pins_external -name M_AXI_FIO [get_bd_intf_pins conv/M_AXI]
 # (fio_bridge is reset from the PL ~reset in arty_z7_full — no BD reset port.)
 
-# Expose the SmartConnect 32-bit slave for the PL axi_xram master.
+# Expose SmartConnect 32-bit slaves for the PL axi_xram and HDMI capture masters.
 make_bd_intf_pins_external -name S_AXI_XRAM [get_bd_intf_pins smc/S00_AXI]
+make_bd_intf_pins_external -name S_AXI_CAPTURE [get_bd_intf_pins smc/S01_AXI]
 # Expose PS fabric clock + reset for the PL.
 make_bd_pins_external -name fclk_clk0    [get_bd_pins ps7/FCLK_CLK0]
 make_bd_pins_external -name fclk_resetn  [get_bd_pins ps7/FCLK_RESET0_N]
@@ -83,13 +84,18 @@ puts "XSPACE: $xspace"
 assign_bd_address -force -target_address_space $xspace \
     [get_bd_addr_segs ps7/S_AXI_HP0/HP0_DDR_LOWOCM] \
     -range 1G -offset 0x00000000
+set cspace [get_bd_addr_spaces -quiet *S_AXI_CAPTURE*]
+puts "CSPACE: $cspace"
+assign_bd_address -force -target_address_space $cspace \
+    [get_bd_addr_segs ps7/S_AXI_HP0/HP0_DDR_LOWOCM] \
+    -range 1G -offset 0x00000000
 puts "=== assigned segs ==="
 foreach seg [get_bd_addr_segs -of_objects $xspace] { puts "SEG: $seg" }
 
 # Map the fio_bridge (external GP0 slave) at 0x40000000 in the PS GP0 space so
 # the PS A9 reaches it at that base (PS app FIO_BASE = 0x40000000).
 assign_bd_address -target_address_space [get_bd_addr_spaces ps7/Data] \
-    [get_bd_addr_segs M_AXI_FIO/Reg] -range 64K -offset 0x40000000
+    [get_bd_addr_segs M_AXI_FIO/Reg] -range 128K -offset 0x40000000
 
 regenerate_bd_layout
 validate_bd_design

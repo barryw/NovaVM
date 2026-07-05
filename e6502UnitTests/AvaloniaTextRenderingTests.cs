@@ -91,7 +91,33 @@ public class AvaloniaTextRenderingTests
     }
 
     [TestMethod]
-    public void TextPixelRenderer_Mode2TreatsMatchingCellBackgroundAsTransparent()
+    public void TextPixelRenderer_Mode2TreatsTransparentBackgroundAttrAsTransparent()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x42, textAttr: 0x08);
+
+        bool opaque = TextPixelRenderer.TrySample(
+            vgc,
+            font,
+            px: 1,
+            py: 0,
+            mode: VgcConstants.ModeTextOverGfx,
+            scrollX: 0,
+            scrollY: 0,
+            bgColor: 3,
+            fontIndex: 0,
+            flashVisible: true,
+            cursorX: 10,
+            cursorY: 10,
+            cursorEnabled: false,
+            out _);
+
+        Assert.IsFalse(opaque);
+    }
+
+    [TestMethod]
+    public void TextPixelRenderer_Mode2KeepsMatchingCellBackgroundOpaqueWithoutTransparentAttr()
     {
         var vgc = new VirtualGraphicsController();
         var font = SinglePixelAFont();
@@ -106,32 +132,6 @@ public class AvaloniaTextRenderingTests
             scrollX: 0,
             scrollY: 0,
             bgColor: 4,
-            fontIndex: 0,
-            flashVisible: true,
-            cursorX: 10,
-            cursorY: 10,
-            cursorEnabled: false,
-            out _);
-
-        Assert.IsFalse(opaque);
-    }
-
-    [TestMethod]
-    public void TextPixelRenderer_Mode2KeepsNonMatchingCellBackgroundOpaque()
-    {
-        var vgc = new VirtualGraphicsController();
-        var font = SinglePixelAFont();
-        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x42, textAttr: 0);
-
-        bool opaque = TextPixelRenderer.TrySample(
-            vgc,
-            font,
-            px: 1,
-            py: 0,
-            mode: VgcConstants.ModeTextOverGfx,
-            scrollX: 0,
-            scrollY: 0,
-            bgColor: 3,
             fontIndex: 0,
             flashVisible: true,
             cursorX: 10,

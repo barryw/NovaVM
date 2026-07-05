@@ -119,6 +119,15 @@ module arty_z7_full (
     wire        x_bvalid, x_bready, x_arvalid, x_arready;
     wire        x_rvalid, x_rready, x_rlast;
 
+    // ---- hdmi_capture master <-> PS BD S_AXI_CAPTURE -----------------------
+    wire [31:0] c_awaddr, c_wdata;
+    wire [7:0]  c_awlen;
+    wire [2:0]  c_awsize;
+    wire [1:0]  c_awburst, c_bresp;
+    wire [3:0]  c_wstrb;
+    wire        c_awvalid, c_awready, c_wvalid, c_wready, c_wlast;
+    wire        c_bvalid, c_bready;
+
     // ---- CPU debug taps (for ILA) ------------------------------------------
     wire [15:0] d_pc, d_addr;
     wire        d_we, d_rdy, d_waiting, d_stopped;
@@ -241,12 +250,24 @@ module arty_z7_full (
     );
 
     // ---- PS M_AXI_GP0 -> fio_bridge (AXI4-Lite) ----------------------------
+    wire [31:0] gp_awaddr, gp_wdata, gp_araddr, gp_rdata;
+    wire [2:0]  gp_awprot, gp_arprot;
+    wire [3:0]  gp_wstrb;
+    wire [1:0]  gp_bresp, gp_rresp;
+    wire        gp_awvalid, gp_awready, gp_wvalid, gp_wready, gp_bvalid, gp_bready;
+    wire        gp_arvalid, gp_arready, gp_rvalid, gp_rready;
+
     wire [31:0] f_awaddr, f_wdata, f_araddr, f_rdata;
-    wire [2:0]  f_awprot, f_arprot;
     wire [3:0]  f_wstrb;
     wire [1:0]  f_bresp, f_rresp;
     wire        f_awvalid, f_awready, f_wvalid, f_wready, f_bvalid, f_bready;
     wire        f_arvalid, f_arready, f_rvalid, f_rready;
+
+    wire [31:0] r_awaddr, r_wdata, r_araddr, r_rdata;
+    wire [3:0]  r_wstrb;
+    wire [1:0]  r_bresp, r_rresp;
+    wire        r_awvalid, r_awready, r_wvalid, r_wready, r_bvalid, r_bready;
+    wire        r_arvalid, r_arready, r_rvalid, r_rready;
 
     ps_full_wrapper ps (
         .DDR_addr(DDR_addr), .DDR_ba(DDR_ba), .DDR_cas_n(DDR_cas_n),
@@ -271,15 +292,28 @@ module arty_z7_full (
         .S_AXI_XRAM_arvalid(x_arvalid), .S_AXI_XRAM_arready(x_arready),
         .S_AXI_XRAM_rdata(x_rdata), .S_AXI_XRAM_rresp(x_rresp), .S_AXI_XRAM_rlast(x_rlast),
         .S_AXI_XRAM_rvalid(x_rvalid), .S_AXI_XRAM_rready(x_rready),
-        .M_AXI_FIO_awaddr(f_awaddr), .M_AXI_FIO_awprot(f_awprot),
-        .M_AXI_FIO_awvalid(f_awvalid), .M_AXI_FIO_awready(f_awready),
-        .M_AXI_FIO_wdata(f_wdata), .M_AXI_FIO_wstrb(f_wstrb),
-        .M_AXI_FIO_wvalid(f_wvalid), .M_AXI_FIO_wready(f_wready),
-        .M_AXI_FIO_bresp(f_bresp), .M_AXI_FIO_bvalid(f_bvalid), .M_AXI_FIO_bready(f_bready),
-        .M_AXI_FIO_araddr(f_araddr), .M_AXI_FIO_arprot(f_arprot),
-        .M_AXI_FIO_arvalid(f_arvalid), .M_AXI_FIO_arready(f_arready),
-        .M_AXI_FIO_rdata(f_rdata), .M_AXI_FIO_rresp(f_rresp),
-        .M_AXI_FIO_rvalid(f_rvalid), .M_AXI_FIO_rready(f_rready)
+        .S_AXI_CAPTURE_awaddr(c_awaddr), .S_AXI_CAPTURE_awlen(c_awlen), .S_AXI_CAPTURE_awsize(c_awsize),
+        .S_AXI_CAPTURE_awburst(c_awburst), .S_AXI_CAPTURE_awlock(1'b0), .S_AXI_CAPTURE_awcache(4'b0011),
+        .S_AXI_CAPTURE_awprot(3'b000), .S_AXI_CAPTURE_awqos(4'b0000),
+        .S_AXI_CAPTURE_awvalid(c_awvalid), .S_AXI_CAPTURE_awready(c_awready),
+        .S_AXI_CAPTURE_wdata(c_wdata), .S_AXI_CAPTURE_wstrb(c_wstrb), .S_AXI_CAPTURE_wlast(c_wlast),
+        .S_AXI_CAPTURE_wvalid(c_wvalid), .S_AXI_CAPTURE_wready(c_wready),
+        .S_AXI_CAPTURE_bresp(c_bresp), .S_AXI_CAPTURE_bvalid(c_bvalid), .S_AXI_CAPTURE_bready(c_bready),
+        .S_AXI_CAPTURE_araddr(32'd0), .S_AXI_CAPTURE_arlen(8'd0), .S_AXI_CAPTURE_arsize(3'd2),
+        .S_AXI_CAPTURE_arburst(2'b01), .S_AXI_CAPTURE_arlock(1'b0), .S_AXI_CAPTURE_arcache(4'b0011),
+        .S_AXI_CAPTURE_arprot(3'b000), .S_AXI_CAPTURE_arqos(4'b0000),
+        .S_AXI_CAPTURE_arvalid(1'b0), .S_AXI_CAPTURE_arready(),
+        .S_AXI_CAPTURE_rdata(), .S_AXI_CAPTURE_rresp(), .S_AXI_CAPTURE_rlast(),
+        .S_AXI_CAPTURE_rvalid(), .S_AXI_CAPTURE_rready(1'b0),
+        .M_AXI_FIO_awaddr(gp_awaddr), .M_AXI_FIO_awprot(gp_awprot),
+        .M_AXI_FIO_awvalid(gp_awvalid), .M_AXI_FIO_awready(gp_awready),
+        .M_AXI_FIO_wdata(gp_wdata), .M_AXI_FIO_wstrb(gp_wstrb),
+        .M_AXI_FIO_wvalid(gp_wvalid), .M_AXI_FIO_wready(gp_wready),
+        .M_AXI_FIO_bresp(gp_bresp), .M_AXI_FIO_bvalid(gp_bvalid), .M_AXI_FIO_bready(gp_bready),
+        .M_AXI_FIO_araddr(gp_araddr), .M_AXI_FIO_arprot(gp_arprot),
+        .M_AXI_FIO_arvalid(gp_arvalid), .M_AXI_FIO_arready(gp_arready),
+        .M_AXI_FIO_rdata(gp_rdata), .M_AXI_FIO_rresp(gp_rresp),
+        .M_AXI_FIO_rvalid(gp_rvalid), .M_AXI_FIO_rready(gp_rready)
     );
 
     // ---- VGC RGB -> OSD compositor -> HDMI ---------------------------------
@@ -287,12 +321,13 @@ module arty_z7_full (
     // enabled; otherwise a (~4px-delayed) passthrough. Pixel coords recovered
     // from vid_de; framebuffer written by the PS via fio_bridge OSD_FB.
     wire [23:0] osd_rgb_out;
+    wire        osd_active_out;
     osd_overlay #(.FONT_HEX("rom/fonts.hex")) osd_inst (
         .clk(clk_pixel), .rst(reset),
         .vid_r(vid_r), .vid_g(vid_g), .vid_b(vid_b), .vid_de(vid_de),
         .osd_enable(fb_osd_enable),
         .fb_we(fb_osd_fb_we), .fb_wdata(fb_osd_fb_wdata),
-        .rgb_out(osd_rgb_out)
+        .rgb_out(osd_rgb_out), .active_out(osd_active_out)
     );
     localparam int HDMI_START_X = 858 - 3;
     localparam int HDMI_START_Y = 525 - 1;
@@ -370,6 +405,24 @@ module arty_z7_full (
     assign hdmi_audio_mixed[1] = (sid_sumR >  25'sd32767)  ? 16'h7FFF :
                                  (sid_sumR < -25'sd32768)  ? 16'h8000 : sid_sumR[15:0];
 
+    wire        cap_enable;
+    wire [31:0] cap_frame_seq, cap_audio_seq, cap_video_drops, cap_audio_drops;
+    wire [31:0] cap_last_frame_index, cap_audio_write_offset;
+    hdmi_capture capture_inst (
+        .clk(clk_pixel), .rst(reset), .enable(cap_enable),
+        .rgb(osd_rgb_out), .active(osd_active_out),
+        .audio_sample_strobe(audio_sample_strobe),
+        .audio_sample_word(hdmi_audio_mixed),
+        .frame_seq(cap_frame_seq), .audio_seq(cap_audio_seq),
+        .video_drops(cap_video_drops), .audio_drops(cap_audio_drops),
+        .last_frame_index(cap_last_frame_index), .audio_write_offset(cap_audio_write_offset),
+        .m_axi_awaddr(c_awaddr), .m_axi_awlen(c_awlen), .m_axi_awsize(c_awsize),
+        .m_axi_awburst(c_awburst), .m_axi_awvalid(c_awvalid), .m_axi_awready(c_awready),
+        .m_axi_wdata(c_wdata), .m_axi_wstrb(c_wstrb), .m_axi_wlast(c_wlast),
+        .m_axi_wvalid(c_wvalid), .m_axi_wready(c_wready),
+        .m_axi_bresp(c_bresp), .m_axi_bvalid(c_bvalid), .m_axi_bready(c_bready)
+    );
+
     // hdmi is provided as an out-of-context checkpoint (build/hdmi_ooc.dcp) with
     // these generics baked in (VIDEO_ID_CODE=2, DVI_OUTPUT=0, IT_CONTENT=1,
     // VIDEO_REFRESH_RATE_MILLIHZ=59940, START_X=855, START_Y=524, AUDIO_RATE=48000,
@@ -391,6 +444,38 @@ module arty_z7_full (
     assign hdmi_tx_hpdn = 1'b0;
 
     // ---- PS FIO host bridge (AXI4-Lite slave on M_AXI_GP0) -----------------
+    axi_lite_demux2 gp0_demux (
+        .aclk(clk_pixel), .aresetn(~reset),
+        .s_awaddr(gp_awaddr), .s_awvalid(gp_awvalid), .s_awready(gp_awready),
+        .s_wdata(gp_wdata), .s_wstrb(gp_wstrb), .s_wvalid(gp_wvalid), .s_wready(gp_wready),
+        .s_bresp(gp_bresp), .s_bvalid(gp_bvalid), .s_bready(gp_bready),
+        .s_araddr(gp_araddr), .s_arvalid(gp_arvalid), .s_arready(gp_arready),
+        .s_rdata(gp_rdata), .s_rresp(gp_rresp), .s_rvalid(gp_rvalid), .s_rready(gp_rready),
+        .m0_awaddr(f_awaddr), .m0_awvalid(f_awvalid), .m0_awready(f_awready),
+        .m0_wdata(f_wdata), .m0_wstrb(f_wstrb), .m0_wvalid(f_wvalid), .m0_wready(f_wready),
+        .m0_bresp(f_bresp), .m0_bvalid(f_bvalid), .m0_bready(f_bready),
+        .m0_araddr(f_araddr), .m0_arvalid(f_arvalid), .m0_arready(f_arready),
+        .m0_rdata(f_rdata), .m0_rresp(f_rresp), .m0_rvalid(f_rvalid), .m0_rready(f_rready),
+        .m1_awaddr(r_awaddr), .m1_awvalid(r_awvalid), .m1_awready(r_awready),
+        .m1_wdata(r_wdata), .m1_wstrb(r_wstrb), .m1_wvalid(r_wvalid), .m1_wready(r_wready),
+        .m1_bresp(r_bresp), .m1_bvalid(r_bvalid), .m1_bready(r_bready),
+        .m1_araddr(r_araddr), .m1_arvalid(r_arvalid), .m1_arready(r_arready),
+        .m1_rdata(r_rdata), .m1_rresp(r_rresp), .m1_rvalid(r_rvalid), .m1_rready(r_rready)
+    );
+
+    capture_regs capture_regs_inst (
+        .aclk(clk_pixel), .aresetn(~reset),
+        .s_awaddr(r_awaddr), .s_awvalid(r_awvalid), .s_awready(r_awready),
+        .s_wdata(r_wdata), .s_wstrb(r_wstrb), .s_wvalid(r_wvalid), .s_wready(r_wready),
+        .s_bresp(r_bresp), .s_bvalid(r_bvalid), .s_bready(r_bready),
+        .s_araddr(r_araddr), .s_arvalid(r_arvalid), .s_arready(r_arready),
+        .s_rdata(r_rdata), .s_rresp(r_rresp), .s_rvalid(r_rvalid), .s_rready(r_rready),
+        .capture_enable(cap_enable),
+        .frame_seq(cap_frame_seq), .audio_seq(cap_audio_seq),
+        .video_drops(cap_video_drops), .audio_drops(cap_audio_drops),
+        .last_frame_index(cap_last_frame_index), .audio_write_offset(cap_audio_write_offset)
+    );
+
     fio_bridge fio_host (
         .aclk(clk_pixel), .aresetn(~reset),
         .s_awaddr(f_awaddr), .s_awvalid(f_awvalid), .s_awready(f_awready),
