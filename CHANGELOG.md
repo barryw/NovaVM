@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.4.0 - 2026-07-05
+#### Features
+- add hardware capture and fix novaz v6 clears - (4ac16b0) - Barry Walker
+
+- - -
+
 ## v0.3.1 - 2026-07-04
 #### Bug Fixes
 - require mounted NDI storage for file IO - (b32af2d) - Barry Walker
