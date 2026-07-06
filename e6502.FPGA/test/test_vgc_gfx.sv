@@ -453,8 +453,7 @@ module test_vgc_gfx;
             dut.gfx_inst.gfx_mem.mem[i] = 4'hD;
 
         for (int i = 0; i < 2048; i++) begin
-            dut.sprite_inst.spr_mem0.mem[i] = 8'hA5;
-            dut.sprite_inst.spr_mem1.mem[i] = 8'h5A;
+            dut.sprite_inst.spr_mem.mem[i] = 8'hA5;
         end
 
         write_cmd(CMD_SYSRESET);
@@ -473,8 +472,7 @@ module test_vgc_gfx;
 
         bad_sprite = 0;
         for (int i = 0; i < 2048; i++) begin
-            if (dut.sprite_inst.spr_mem0.mem[i] != 8'h00) bad_sprite++;
-            if (dut.sprite_inst.spr_mem1.mem[i] != 8'h00) bad_sprite++;
+            if (dut.sprite_inst.spr_mem.mem[i] != 8'h00) bad_sprite++;
         end
 
         check_eq("SYSRESET: no stale text chars remain", bad_char, 0);

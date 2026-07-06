@@ -245,10 +245,7 @@ module test_vgc_sprites;
 
         for (int row = 0; row < 16; row++)
             for (int col_pair = 0; col_pair < 8; col_pair++)
-                if (sprite_probe.active_shape_bank)
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = 8'hFF;
-                else
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = 8'hFF;
     endtask
 
     task automatic probe_config_pattern_sprite(input int y);
@@ -283,10 +280,7 @@ module test_vgc_sprites;
             for (int col_pair = 0; col_pair < 8; col_pair++) begin
                 logic [7:0] value;
                 value = (row == 0) ? row_bytes[col_pair] : 8'h00;
-                if (sprite_probe.active_shape_bank)
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = value;
-                else
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = value;
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = value;
             end
         end
     endtask
@@ -317,13 +311,8 @@ module test_vgc_sprites;
 
         for (int row = 0; row < 16; row++) begin
             for (int col_pair = 0; col_pair < 8; col_pair++) begin
-                if (sprite_probe.active_shape_bank) begin
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = 8'hFF;
-                    sprite_probe.spr_mem1.mem[128 + row * 8 + col_pair] = 8'hEE;
-                end else begin
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
-                    sprite_probe.spr_mem0.mem[128 + row * 8 + col_pair] = 8'hEE;
-                end
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = 8'hFF;
+                sprite_probe.spr_mem.mem[128 + row * 8 + col_pair] = 8'hEE;
             end
         end
     endtask
@@ -476,144 +465,36 @@ module test_vgc_sprites;
                      int'(peek_spr_pixel(0, i, 4)), 0);
     endtask
 
-    task automatic test_shape_publish_at_frame_boundary();
-        $display("");
-        $display("Test: sprite shape RAM publishes only at frame boundary");
-        spr_clr(6);
-        wait_sprite_frame_commit();
-        wait_shape_sync_done();
-
-        begin
-            logic [3:0] pix[16];
-            for (int i = 0; i < 16; i++) pix[i] = 4'hC;
-            spr_row(6, 2, pix);
-        end
-
-        check_eq("pending sprite shape byte changed immediately",
-                 int'(peek_spr_pending_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
-        check_eq("active sprite shape byte unchanged before commit",
-                 int'(peek_spr_active_addr(spr_byte_addr(6, 2, 0))), 8'h00);
-
-        wait_sprite_frame_commit();
-        check_eq("active sprite shape byte updated after commit",
-                 int'(peek_spr_active_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
-        wait_shape_sync_done();
-        check_eq("pending bank resynced after publish",
-                 int'(peek_spr_pending_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
-    endtask
-
-    task automatic test_shape_write_on_publish_cycle_defers();
-        logic [14:0] addr;
-
-        $display("");
-        $display("Test: sprite shape write on publish cycle defers bank flip");
-        addr = spr_byte_addr(9, 1, 0);
-
-        spr_clr(9);
-        wait_sprite_frame_commit();
-        wait_shape_sync_done();
-
-        // Dirty the pending bank so the next sprite frame boundary wants to
-        // publish. Then assert a blitter sprite write on that exact boundary.
-        poke_spr_pending_addr(addr, 8'hAA);
-        dut.sprite_inst.shape_pending_dirty = 1'b1;
-        while (!(dut.h_count == 10'd0 && dut.v_count == 10'd479))
-            @(posedge clk);
-        tb_blt_space <= 3'd4;
-        tb_blt_addr  <= {5'd0, addr};
-        tb_blt_wdata <= 8'hEE;
-        tb_blt_we    <= 1'b1;
-        @(posedge clk);
-        tb_blt_we    <= 1'b0;
-        tb_blt_space <= 3'd0;
-        step(3);
-
-        check_eq("publish blocked while sprite shape port is active",
-                 int'(peek_spr_active_addr(addr)), 8'h00);
-        check_eq("pending shape write still lands",
-                 int'(peek_spr_pending_addr(addr)), 8'hEE);
-
-        wait_sprite_frame_commit();
-        check_eq("deferred publish updates active bank next frame",
-                 int'(peek_spr_active_addr(addr)), 8'hEE);
-    endtask
-
-    task automatic test_shape_write_during_sync_mirrors_banks();
-        logic [14:0] addr;
-
-        $display("");
-        $display("Test: sprite shape write during background sync mirrors both banks");
-        addr = spr_byte_addr(10, 3, 0);
-
-        wait_shape_sync_done();
-        poke_spr_pending_addr(addr, 8'h11);
-        dut.sprite_inst.shape_pending_dirty = 1'b1;
-        // Backdoor pokes bypass the dirty-range tracker, so force a full-length
-        // range: the mid-sync write below needs the background copy still running.
-        dut.sprite_inst.shape_dirty_min = 15'd0;
-        dut.sprite_inst.shape_dirty_max = 15'd32767;
-        wait_sprite_frame_commit();
-        step(4);
-        check("background shape sync is active", dut.sprite_inst.shape_sync_busy);
-        check_eq("precondition: active bank has published byte",
-                 int'(peek_spr_active_addr(addr)), 8'h11);
-
-        tb_blt_space <= 3'd4;
-        tb_blt_addr  <= {1'b0, addr};
-        tb_blt_wdata <= 8'h55;
-        tb_blt_we    <= 1'b1;
-        @(posedge clk);
-        tb_blt_we    <= 1'b0;
-        tb_blt_space <= 3'd0;
-        step(3);
-
-        check_eq("sync-time write updates pending bank",
-                 int'(peek_spr_pending_addr(addr)), 8'h55);
-        check_eq("sync-time write also mirrors active bank to avoid a dirty bitmap",
-                 int'(peek_spr_active_addr(addr)), 8'h55);
-        wait_shape_sync_done();
-        check_eq("mirrored byte survives background sync completion",
-                 int'(peek_spr_pending_addr(addr)), 8'h55);
-    endtask
-
-    // Regression guard for the live-Arty bug: a single-slot shape write must
-    // reconcile the banks in-frame (tight dirty range), NOT walk the whole 32K
-    // RAM. The full-RAM copy never caught up under paced writes, so the render
-    // read a stale/empty active bank and the mouse cursor + sprites never showed.
-    task automatic test_shape_single_slot_reconciles_fast();
-        int cycles;
+    // Single-buffer: a shape write via the real port is IMMEDIATELY in the RAM
+    // the render reads — no bank publish/copy to propagate. The double-buffer
+    // this replaces never propagated writes to the active bank on real Arty
+    // silicon, so the render read empty (mouse cursor + sprites never showed).
+    task automatic test_shape_write_immediately_visible();
         logic [14:0] base;
         $display("");
-        $display("Test: single-slot shape write => tight range => fast reconcile");
+        $display("Test: shape write via port is immediately in the one shape RAM");
         base = spr_byte_addr(255, 0, 0);   // mouse cursor slot
 
-        wait_shape_sync_done();
-        // Clean the range (a prior test backdoor-forced it; real operation resets
-        // it at every publish) so this measures only slot 255's writes.
-        dut.sprite_inst.shape_dirty_min = 15'd32767;
-        dut.sprite_inst.shape_dirty_max = 15'd0;
-        // Write all 128 bytes of slot 255 through the real port (feeds the range).
-        for (int i = 0; i < 128; i++) begin
-            tb_blt_space <= 3'd4;
-            tb_blt_addr  <= {1'b0, base + i[14:0]};
-            tb_blt_wdata <= 8'hC0 | i[5:0];
-            tb_blt_we    <= 1'b1;
-            @(posedge clk);
-        end
-        tb_blt_we <= 1'b0; tb_blt_space <= 3'd0;
+        // Write slot 255 byte 0 and byte 127 through the VMEM/blitter port.
+        tb_blt_space <= 3'd4;
+        tb_blt_addr  <= {1'b0, base};
+        tb_blt_wdata <= 8'hC0;
+        tb_blt_we    <= 1'b1;
         @(posedge clk);
+        tb_blt_addr  <= {1'b0, base + 15'd127};
+        tb_blt_wdata <= 8'hFF;
+        @(posedge clk);
+        tb_blt_we    <= 1'b0;
+        tb_blt_space <= 3'd0;
+        step(2);
 
-        wait_sprite_frame_commit();
-        cycles = 0;
-        while (dut.sprite_inst.shape_sync_busy && cycles < 200000) begin
-            @(posedge clk); cycles++;
-        end
-        check("slot-255 sync completes (not stuck)", !dut.sprite_inst.shape_sync_busy);
-        check("slot-255 reconcile is fast: range copy, not full-RAM walk", cycles < 2000);
-        check_eq("slot255 pending byte0 after sync",   int'(peek_spr_pending_addr(base)),       8'hC0);
-        check_eq("slot255 active  byte0 after sync",   int'(peek_spr_active_addr(base)),        8'hC0);
-        check_eq("slot255 pending byte127 after sync", int'(peek_spr_pending_addr(base + 127)), 8'hFF);
-        check_eq("slot255 active  byte127 after sync", int'(peek_spr_active_addr(base + 127)),  8'hFF);
+        // Immediately readable — no wait_shape_sync_done, no publish, no copy.
+        check_eq("slot255 byte0 immediately in RAM",   int'(peek_spr_pending_addr(base)),       8'hC0);
+        check_eq("slot255 byte127 immediately in RAM", int'(peek_spr_pending_addr(base + 15'd127)), 8'hFF);
+        // pending == active == the one RAM
+        check_eq("slot255 byte0 via active peek",      int'(peek_spr_active_addr(base)),        8'hC0);
+        check("no background shape sync exists in single-buffer",
+              !dut.sprite_inst.shape_sync_busy);
     endtask
 
     task automatic test_sprpos();
@@ -902,10 +783,7 @@ module test_vgc_sprites;
         $display("Test: PIXIE samples dedicated mouse cursor shape slot");
 
         probe_clear_line_buffers();
-        if (sprite_probe.active_shape_bank)
-            sprite_probe.spr_mem1.mem[base] = 8'hD0;
-        else
-            sprite_probe.spr_mem0.mem[base] = 8'hD0;
+        sprite_probe.spr_mem.mem[base] = 8'hD0;
 
         probe_mouse_x = 9'd6;
         probe_mouse_y = 8'd0;
@@ -1000,11 +878,8 @@ module test_vgc_sprites;
         $display("Test: DUT publishes mouse shape slot 255 written via VMEM/blitter port");
         a0 = spr_byte_addr(255, 0, 0);   // 32640
 
-        // Backdoor-clear both banks at slot 255, settle any prior sync.
-        poke_spr_pending_addr(a0, 8'h00);
-        poke_spr_active_addr(a0, 8'h00);
-        wait_sprite_frame_commit();
-        wait_shape_sync_done();
+        poke_spr_pending_addr(a0, 8'h00);   // backdoor clear
+        step(2);
 
         // Write slot 255 byte 0 through the real VMEM/blitter port (space 4).
         @(negedge clk);
@@ -1018,12 +893,9 @@ module test_vgc_sprites;
         tb_blt_space <= 3'd0;
         step(3);
 
-        check_eq("slot255 pending byte written via VMEM port",
+        // single-buffer: immediately in the one RAM the mouse eval reads
+        check_eq("slot255 byte applied immediately (mouse can read it)",
                  int'(peek_spr_pending_addr(a0)), 8'hFF);
-
-        wait_sprite_frame_commit();
-        check_eq("slot255 active byte PUBLISHED after commit (mouse can read it)",
-                 int'(peek_spr_active_addr(a0)), 8'hFF);
     endtask
 
     // Count cycles a top-level DUT signal-of-interest is asserted across exactly
@@ -1167,10 +1039,7 @@ module test_vgc_sprites;
 
         test_sprclr();
         test_sprrow();
-        test_shape_publish_at_frame_boundary();
-        test_shape_write_on_publish_cycle_defers();
-        test_shape_write_during_sync_mirrors_banks();
-        test_shape_single_slot_reconciles_fast();
+        test_shape_write_immediately_visible();
         test_sprpos();
         test_sprena_dis();
         test_sprflip();
