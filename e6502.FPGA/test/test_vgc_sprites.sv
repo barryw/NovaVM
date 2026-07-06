@@ -35,6 +35,7 @@ module test_vgc_sprites;
     localparam logic [15:0] MOUSE_BTN_A   = 16'hA0D3;
     localparam logic [15:0] MOUSE_CTRL_A  = 16'hA0D4;
     localparam logic [15:0] MOUSE_SHAPE_A = 16'hA0D6;
+    localparam logic [15:0] MOUSE_DBG_A   = 16'hA0D9;   // debug render-path capture
 
     // Stand-alone PIXIE instance used for pixel/scanline-buffer regressions.
     // The top-level VGC tests above exercise command wiring; this instance
@@ -1045,6 +1046,19 @@ module test_vgc_sprites;
         wait_sprite_frame_commit();
         dut_count_spr_hits_one_frame(hits_on);       // sprite ENABLED
         check("enabled sprite IS rasterized (spr_pixel_hit fires)", hits_on > 0);
+
+        // The $A0D9 debug capture is what we read on LIVE HARDWARE to see where
+        // the render dies. Prove here (where render works) that it tracks the
+        // signal: clear it, run a frame, bit0 must latch spr_pixel_hit.
+        begin
+            logic [7:0] cap;
+            int junk;
+            bus_write(MOUSE_DBG_A, 8'h00);           // clear sticky bits
+            dut_count_spr_hits_one_frame(junk);      // one frame re-accumulates
+            bus_read(MOUSE_DBG_A, cap);
+            check("dbg $A0D9 bit0 latches spr_pixel_hit when sprite renders",
+                  (cap & 8'h01) != 8'h00);
+        end
     endtask
 
     // DUT-level end-to-end mouse RENDER: load slot 255, enable+position the mouse

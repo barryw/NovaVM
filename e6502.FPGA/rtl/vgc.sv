@@ -772,6 +772,31 @@ module vgc (
         .collision_ss_bits(spr_collision_ss_bits)
     );
 
+    // ---- Debug render-path capture (readable at $A0D9; clear by writing it) ----
+    // Diagnoses why sprites/mouse render nothing on real hardware while every sim
+    // check passes. Sticky "was ever asserted" bits + live state bits:
+    //   b0 = spr_pixel_hit ever   (the sprite LAYER rasterized a pixel)
+    //   b1 = mouse_cursor_hit ever (the mouse overlay rasterized a pixel)
+    //   b2 = sprite_frame_publish ever (pending->active shape swap fired)
+    //   b3 = sprite_shape_sync_busy (live: background bank-copy in progress/stuck)
+    //   b4 = sprite_shape_publish_block (live: publish gated by a sprite cmd)
+    //   b5 = mouse_active_ctrl[0] (live: mouse enable actually committed)
+    reg [7:0] dbg_render_capture;
+    always_ff @(posedge clk) begin
+        if (vgc_module_rst)
+            dbg_render_capture <= 8'h00;
+        else if (write_active && mouse_reg_sel_w && mouse_reg_off_w == 4'h9)
+            dbg_render_capture <= 8'h00;   // CPU write to $A0D9 clears the sticky bits
+        else begin
+            if (spr_pixel_hit)        dbg_render_capture[0] <= 1'b1;
+            if (mouse_cursor_hit)     dbg_render_capture[1] <= 1'b1;
+            if (sprite_frame_publish) dbg_render_capture[2] <= 1'b1;
+            dbg_render_capture[3] <= sprite_shape_sync_busy;
+            dbg_render_capture[4] <= sprite_shape_publish_block;
+            dbg_render_capture[5] <= mouse_active_ctrl[0];
+        end
+    end
+
     // =========================================================================
     // Copper sub-module (CONDUCTOR)
     // =========================================================================
@@ -1690,6 +1715,7 @@ module vgc (
                 4'h6:    cpu_rdata = mouse_pending_shape;
                 4'h7:    cpu_rdata = {4'h0, mouse_pending_hot_x};
                 4'h8:    cpu_rdata = {4'h0, mouse_pending_hot_y};
+                4'h9:    cpu_rdata = dbg_render_capture;   // debug render-path capture
                 default: cpu_rdata = 8'h00;
             endcase
         end
@@ -1832,6 +1858,7 @@ module vgc (
                 4'h6:    dbg_rdata = mouse_pending_shape;
                 4'h7:    dbg_rdata = {4'h0, mouse_pending_hot_x};
                 4'h8:    dbg_rdata = {4'h0, mouse_pending_hot_y};
+                4'h9:    dbg_rdata = dbg_render_capture;   // debug render-path capture
                 default: dbg_rdata = 8'h00;
             endcase
         end
