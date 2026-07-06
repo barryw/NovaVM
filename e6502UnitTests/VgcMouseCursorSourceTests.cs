@@ -41,8 +41,17 @@ public class VgcMouseCursorSourceTests
         StringAssert.Contains(vgc, "logic [7:0]  spr_shape [0:15]");
         StringAssert.Contains(vgc, "spr_shape_flat[i*8 +: 8] = spr_shape[i]");
         StringAssert.Contains(vgc, "SPACE_SPRITE && vram_port_read_addr < SPR_SIZE");
+
+        // SINGLE shape buffer: writes apply immediately and the render reads the
+        // same RAM. The active/pending double-buffer this replaced never
+        // propagated writes to the active bank on real Arty silicon, so the
+        // render read empty (mouse cursor + sprites never showed); the larger
+        // gfx-plane dpram rendered fine, proving the RAM itself is sound.
+        StringAssert.Contains(sprites, "dpram #(.WIDTH(8), .DEPTH(SHAPE_RAM_SIZE)) spr_mem");
         Assert.IsFalse(sprites.Contains("shape_copy_dirty"),
-            "Do not track 32K sprite-shape dirty bits in LUT fabric; sync-time writes must mirror both banks instead.");
+            "No 32K sprite-shape dirty bitmap.");
+        Assert.IsFalse(sprites.Contains("spr_mem1"),
+            "Single shape buffer: no active/pending double-buffer (it read empty on silicon).");
     }
 
     [TestMethod]

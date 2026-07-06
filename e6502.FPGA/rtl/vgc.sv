@@ -3583,9 +3583,7 @@ module vgc (
                 end
                 SPACE_SPRITE: begin
                     if (dbg_vram_addr < SPR_SIZE) begin
-                        dbg_vram_rdata = sprite_inst.pending_shape_bank
-                            ? sprite_inst.spr_mem1.mem[dbg_vram_addr[14:0]]
-                            : sprite_inst.spr_mem0.mem[dbg_vram_addr[14:0]];
+                        dbg_vram_rdata = sprite_inst.spr_mem.mem[dbg_vram_addr[14:0]];
                     end
                 end
                 default: ;
