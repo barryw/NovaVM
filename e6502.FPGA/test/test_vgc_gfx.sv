@@ -452,8 +452,10 @@ module test_vgc_gfx;
         for (int i = 0; i < 64000; i++)
             dut.gfx_inst.gfx_mem.mem[i] = 4'hD;
 
-        for (int i = 0; i < 2048; i++)
-            dut.sprite_inst.spr_mem.mem[i] = 8'hA5;
+        for (int i = 0; i < 2048; i++) begin
+            dut.sprite_inst.spr_mem0.mem[i] = 8'hA5;
+            dut.sprite_inst.spr_mem1.mem[i] = 8'h5A;
+        end
 
         write_cmd(CMD_SYSRESET);
         wait_reset_clear_done();
@@ -470,8 +472,10 @@ module test_vgc_gfx;
             if (dut.gfx_inst.gfx_mem.mem[i] != 4'h0) bad_gfx++;
 
         bad_sprite = 0;
-        for (int i = 0; i < 2048; i++)
-            if (dut.sprite_inst.spr_mem.mem[i] != 8'h00) bad_sprite++;
+        for (int i = 0; i < 2048; i++) begin
+            if (dut.sprite_inst.spr_mem0.mem[i] != 8'h00) bad_sprite++;
+            if (dut.sprite_inst.spr_mem1.mem[i] != 8'h00) bad_sprite++;
+        end
 
         check_eq("SYSRESET: no stale text chars remain", bad_char, 0);
         check_eq("SYSRESET: no stale text colors remain", bad_color, 0);

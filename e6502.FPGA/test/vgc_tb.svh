@@ -324,22 +324,32 @@ function automatic logic [14:0] spr_byte_addr(input int spr_idx,
     spr_byte_addr = 15'((spr_idx * 16 + row) * 8 + col_pair);
 endfunction
 
-// Single-buffer shape RAM now: "pending" and "active" are the same store.
-// Backdoor peek/poke the one dpram directly (bypasses the vblank write FIFO).
 function automatic logic [7:0] peek_spr_pending_addr(input logic [14:0] addr);
-    peek_spr_pending_addr = dut.sprite_inst.spr_mem.mem[addr];
+    if (dut.sprite_inst.pending_shape_bank)
+        peek_spr_pending_addr = dut.sprite_inst.spr_mem1.mem[addr];
+    else
+        peek_spr_pending_addr = dut.sprite_inst.spr_mem0.mem[addr];
 endfunction
 
 function automatic logic [7:0] peek_spr_active_addr(input logic [14:0] addr);
-    peek_spr_active_addr = dut.sprite_inst.spr_mem.mem[addr];
+    if (dut.sprite_inst.active_shape_bank)
+        peek_spr_active_addr = dut.sprite_inst.spr_mem1.mem[addr];
+    else
+        peek_spr_active_addr = dut.sprite_inst.spr_mem0.mem[addr];
 endfunction
 
 task automatic poke_spr_pending_addr(input logic [14:0] addr, input logic [7:0] val);
-    dut.sprite_inst.spr_mem.mem[addr] = val;
+    if (dut.sprite_inst.pending_shape_bank)
+        dut.sprite_inst.spr_mem1.mem[addr] = val;
+    else
+        dut.sprite_inst.spr_mem0.mem[addr] = val;
 endtask
 
 task automatic poke_spr_active_addr(input logic [14:0] addr, input logic [7:0] val);
-    dut.sprite_inst.spr_mem.mem[addr] = val;
+    if (dut.sprite_inst.active_shape_bank)
+        dut.sprite_inst.spr_mem1.mem[addr] = val;
+    else
+        dut.sprite_inst.spr_mem0.mem[addr] = val;
 endtask
 
 // Pending sprite memory peek — matches CPU/debug readback semantics.
