@@ -52,6 +52,8 @@ module vgc_sprites (
     output logic [3:0]  spr_pixel_owner,
     output logic [3:0]  mouse_cursor_pixel,
     output logic        mouse_cursor_hit,
+    output logic        dbg_active_shape_bank,   // live: which shape bank the render reads
+    output logic        dbg_shape_read_nonzero,  // render read a non-empty shape byte this cycle
 
     // --- Collision detection outputs ---
     output logic [15:0] collision_ss_bits
@@ -208,6 +210,16 @@ module vgc_sprites (
     end
 
     assign spr_b_dout = active_shape_b_dout;
+
+    // Debug: expose which bank the render reads, and whether the shape bytes the
+    // sprite/mouse eval just latched are non-empty (proves the active bank the
+    // render reads actually contains the shape data on silicon).
+    assign dbg_active_shape_bank = active_shape_bank;
+    assign dbg_shape_read_nonzero =
+        |{spr_row_data[0],   spr_row_data[1],   spr_row_data[2],   spr_row_data[3],
+          spr_row_data[4],   spr_row_data[5],   spr_row_data[6],   spr_row_data[7],
+          mouse_row_data[0], mouse_row_data[1], mouse_row_data[2], mouse_row_data[3],
+          mouse_row_data[4], mouse_row_data[5], mouse_row_data[6], mouse_row_data[7]};
 
     always_ff @(posedge clk) begin
         if (rst) begin
