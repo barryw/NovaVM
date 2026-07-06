@@ -100,187 +100,102 @@ module vgc_sprites (
     end
 
     // =========================================================================
-    // Sprite shape memory — active/pending banks
+    // Sprite shape memory — SINGLE buffer, vblank-gated writes (tear-free)
+    // =========================================================================
+    // The render reads shapes during ACTIVE video (sprite/mouse eval). To be
+    // tear-free we NEVER write the shape RAM during active video: every write
+    // (SPRDEF/SPRROW commands, VMEM stream, blitter, DMA — all arrive on the
+    // shared spr_a port) queues in a FIFO and is applied to the RAM only during
+    // vblank. Single bank, no background copy => no coherence race. This
+    // replaces the active/pending double-buffer + full-RAM copy, which on real
+    // silicon could not keep the banks coherent under paced writes, so the
+    // render read an empty active bank (mouse cursor + sprites never composited).
+    // Reset-clear bypasses the FIFO (boot-time, render idle => no tear).
+    // Read-back reads the RAM directly, so a byte queued but not yet drained
+    // reads stale until the next vblank (deferred read-back).
+    // ponytail: bulk loads belong on the vblank-native DMA (stage 2); this FIFO
+    // is for incidental direct/command writes (cursor load, SPRROW), and drops
+    // on full rather than tear — a full flag catches that in sim/debug.
     // =========================================================================
     logic [14:0] spr_b_addr;
     logic [7:0]  spr_b_dout;
 
-    logic        active_shape_bank;
-    wire         pending_shape_bank = ~active_shape_bank;
-    logic        shape_pending_dirty;
+    wire in_vblank = (v_count >= V_ACTIVE);
 
-    localparam SHCOPY_IDLE    = 2'd0;
-    localparam SHCOPY_READ    = 2'd1;
-    localparam SHCOPY_CAPTURE = 2'd2;
-    localparam SHCOPY_WRITE   = 2'd3;
-
-    logic [1:0]  shape_copy_state;
-    logic [14:0] shape_copy_addr;
-    logic [14:0] shape_copy_addr_latched;
-    logic [7:0]  shape_copy_data;
+    // Shape-write FIFO: {addr[14:0], data[7:0]} = 23 bits, 1024 deep.
+    wire         shfifo_full;
+    wire         shfifo_empty;
+    wire [22:0]  shfifo_head;                 // combinational head (OPT_ASYNC_READ)
     logic        shape_reset_clearing;
     logic [14:0] shape_reset_addr;
+    wire         drain_fire = in_vblank && !shfifo_empty &&
+                              !shape_reset_clearing && !spr_a_re;
 
-    logic [14:0] spr0_a_addr, spr1_a_addr;
-    logic [7:0]  spr0_a_din,  spr1_a_din;
-    logic        spr0_a_we,   spr1_a_we;
-    logic [7:0]  spr0_a_dout, spr1_a_dout;
-    logic [14:0] spr0_b_addr, spr1_b_addr;
-    logic [7:0]  spr0_b_dout, spr1_b_dout;
-
-    dpram #(.WIDTH(8), .DEPTH(SHAPE_RAM_SIZE)) spr_mem0 (
-        .clk(clk),
-        .addr_a(spr0_a_addr), .din_a(spr0_a_din), .we_a(spr0_a_we), .dout_a(spr0_a_dout),
-        .addr_b(spr0_b_addr), .dout_b(spr0_b_dout)
+    sfifo #(.BW(23), .LGFLEN(10)) shape_fifo (
+        .i_clk(clk), .i_reset(rst),
+        .i_wr(spr_a_we && !shfifo_full), .i_data({spr_a_addr, spr_a_din}),
+        .o_full(shfifo_full), .o_fill(),
+        .i_rd(drain_fire), .o_data(shfifo_head), .o_empty(shfifo_empty)
     );
 
-    dpram #(.WIDTH(8), .DEPTH(SHAPE_RAM_SIZE)) spr_mem1 (
+    // Single shape RAM: port A = drain-write / reset-clear / read-back;
+    // port B = render read.
+    logic [14:0] mem_a_addr;
+    logic [7:0]  mem_a_din;
+    logic        mem_a_we;
+    wire  [7:0]  mem_a_dout;
+
+    dpram #(.WIDTH(8), .DEPTH(SHAPE_RAM_SIZE)) spr_mem (
         .clk(clk),
-        .addr_a(spr1_a_addr), .din_a(spr1_a_din), .we_a(spr1_a_we), .dout_a(spr1_a_dout),
-        .addr_b(spr1_b_addr), .dout_b(spr1_b_dout)
+        .addr_a(mem_a_addr), .din_a(mem_a_din), .we_a(mem_a_we), .dout_a(mem_a_dout),
+        .addr_b(spr_b_addr), .dout_b(spr_b_dout)
     );
 
-    wire [7:0] active_shape_a_dout  = active_shape_bank ? spr1_a_dout : spr0_a_dout;
-    wire [7:0] active_shape_b_dout  = active_shape_bank ? spr1_b_dout : spr0_b_dout;
-
-    wire user_shape_access = spr_a_we || spr_a_re;
-    wire shape_publish_fire = sprite_frame_commit && shape_pending_dirty &&
-                              !shape_sync_busy && !shape_publish_block &&
-                              !user_shape_access;
-    wire spr_a_read_bank = (!shape_sync_busy || (spr_a_addr < shape_copy_addr))
-                           ? pending_shape_bank : active_shape_bank;
-    wire copy_write_fire = shape_sync_busy &&
-                           shape_copy_state == SHCOPY_WRITE &&
-                           !user_shape_access;
-
-    logic spr_a_read_bank_d;
-
-    assign spr_a_dout = spr_a_read_bank_d ? spr1_a_dout : spr0_a_dout;
+    assign spr_a_dout = mem_a_dout;
 
     always_comb begin
-        spr0_a_addr = 15'd0; spr0_a_din = 8'd0; spr0_a_we = 1'b0;
-        spr1_a_addr = 15'd0; spr1_a_din = 8'd0; spr1_a_we = 1'b0;
-        spr0_b_addr = active_shape_bank ? 15'd0 : spr_b_addr;
-        spr1_b_addr = active_shape_bank ? spr_b_addr : 15'd0;
-
+        mem_a_addr = 15'd0;
+        mem_a_din  = 8'd0;
+        mem_a_we   = 1'b0;
         if (shape_reset_clearing) begin
-            spr0_a_addr = shape_reset_addr;
-            spr0_a_din  = 8'd0;
-            spr0_a_we   = 1'b1;
-            spr1_a_addr = shape_reset_addr;
-            spr1_a_din  = 8'd0;
-            spr1_a_we   = 1'b1;
-        end else if (user_shape_access) begin
-            // Read both banks so RMW paths can select the coherent source after
-            // one-cycle BRAM latency. Writes always target the pending bank.
-            spr0_a_addr = spr_a_addr;
-            spr1_a_addr = spr_a_addr;
-            if (spr_a_we) begin
-                if (!pending_shape_bank || shape_sync_busy) begin
-                    spr0_a_din = spr_a_din;
-                    spr0_a_we  = 1'b1;
-                end
-                if (pending_shape_bank || shape_sync_busy) begin
-                    spr1_a_din = spr_a_din;
-                    spr1_a_we  = 1'b1;
-                end
-            end
-        end else if (shape_sync_busy) begin
-            case (shape_copy_state)
-                SHCOPY_READ: begin
-                    if (active_shape_bank)
-                        spr1_a_addr = shape_copy_addr;
-                    else
-                        spr0_a_addr = shape_copy_addr;
-                end
-                SHCOPY_WRITE: begin
-                    if (pending_shape_bank) begin
-                        spr1_a_addr = shape_copy_addr_latched;
-                        spr1_a_din  = shape_copy_data;
-                        spr1_a_we   = copy_write_fire;
-                    end else begin
-                        spr0_a_addr = shape_copy_addr_latched;
-                        spr0_a_din  = shape_copy_data;
-                        spr0_a_we   = copy_write_fire;
-                    end
-                end
-                default: ;
-            endcase
+            mem_a_addr = shape_reset_addr;      // boot clear (render idle, no tear)
+            mem_a_din  = 8'd0;
+            mem_a_we   = 1'b1;
+        end else if (spr_a_re) begin
+            mem_a_addr = spr_a_addr;            // read-back (no write this cycle)
+        end else if (drain_fire) begin
+            mem_a_addr = shfifo_head[22:8];     // apply one queued write — VBLANK ONLY
+            mem_a_din  = shfifo_head[7:0];
+            mem_a_we   = 1'b1;
         end
     end
 
-    assign spr_b_dout = active_shape_b_dout;
+    // spr_b_dout is driven straight from the single RAM (.dout_b above).
 
-    // Debug: expose which bank the render reads, and whether the shape bytes the
-    // sprite/mouse eval just latched are non-empty (proves the active bank the
-    // render reads actually contains the shape data on silicon).
-    assign dbg_active_shape_bank = active_shape_bank;
+    // Pending shape writes not yet applied to the RAM (drives sprite-command
+    // flow control in vgc.sv; also lets a test see the FIFO draining).
+    assign shape_sync_busy = !shfifo_empty;
+
+    // Debug: no banks now (single buffer); expose whether the eval just latched
+    // any non-empty shape byte (the render actually reads shape data).
+    assign dbg_active_shape_bank = 1'b0;
     assign dbg_shape_read_nonzero =
         |{spr_row_data[0],   spr_row_data[1],   spr_row_data[2],   spr_row_data[3],
           spr_row_data[4],   spr_row_data[5],   spr_row_data[6],   spr_row_data[7],
           mouse_row_data[0], mouse_row_data[1], mouse_row_data[2], mouse_row_data[3],
           mouse_row_data[4], mouse_row_data[5], mouse_row_data[6], mouse_row_data[7]};
 
+    // Boot-time clear of the single shape RAM (walks the whole RAM once; render
+    // is idle at reset so these direct writes cannot tear).
     always_ff @(posedge clk) begin
         if (rst) begin
-            active_shape_bank <= 1'b0;
-            shape_pending_dirty <= 1'b0;
-            shape_sync_busy <= 1'b0;
-            shape_copy_state <= SHCOPY_IDLE;
-            shape_copy_addr <= 15'd0;
-            shape_copy_addr_latched <= 15'd0;
-            shape_copy_data <= 8'd0;
-            spr_a_read_bank_d <= 1'b0;
             shape_reset_clearing <= 1'b1;
             shape_reset_addr <= 15'd0;
-        end else begin
-            if (shape_reset_clearing) begin
-                shape_pending_dirty <= 1'b0;
-                shape_sync_busy <= 1'b0;
-                shape_copy_state <= SHCOPY_IDLE;
-                if (shape_reset_addr == SHAPE_LAST_ADDR)
-                    shape_reset_clearing <= 1'b0;
-                else
-                    shape_reset_addr <= shape_reset_addr + 15'd1;
-            end else if (spr_a_re)
-                spr_a_read_bank_d <= spr_a_read_bank;
-
-            if (!shape_reset_clearing && shape_publish_fire) begin
-                active_shape_bank <= pending_shape_bank;
-                shape_pending_dirty <= spr_a_we;
-                shape_sync_busy <= 1'b1;
-                shape_copy_state <= SHCOPY_READ;
-                shape_copy_addr <= 15'd0;
-                shape_copy_addr_latched <= 15'd0;
-            end else if (!shape_reset_clearing && spr_a_we) begin
-                shape_pending_dirty <= 1'b1;
-            end
-
-            if (!shape_reset_clearing && !shape_publish_fire && shape_sync_busy) begin
-                case (shape_copy_state)
-                    SHCOPY_READ: begin
-                        if (!user_shape_access)
-                            shape_copy_state <= SHCOPY_CAPTURE;
-                    end
-                    SHCOPY_CAPTURE: begin
-                        shape_copy_addr_latched <= shape_copy_addr;
-                        shape_copy_data <= active_shape_a_dout;
-                        shape_copy_state <= SHCOPY_WRITE;
-                    end
-                    SHCOPY_WRITE: begin
-                        if (!user_shape_access) begin
-                            if (shape_copy_addr == SHAPE_LAST_ADDR) begin
-                                shape_sync_busy <= 1'b0;
-                                shape_copy_state <= SHCOPY_IDLE;
-                            end else begin
-                                shape_copy_addr <= shape_copy_addr + 15'd1;
-                                shape_copy_state <= SHCOPY_READ;
-                            end
-                        end
-                    end
-                    default: shape_copy_state <= SHCOPY_READ;
-                endcase
-            end
+        end else if (shape_reset_clearing) begin
+            if (shape_reset_addr == SHAPE_LAST_ADDR)
+                shape_reset_clearing <= 1'b0;
+            else
+                shape_reset_addr <= shape_reset_addr + 15'd1;
         end
     end
 
