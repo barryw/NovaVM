@@ -1058,6 +1058,8 @@ module test_vgc_sprites;
             bus_read(MOUSE_DBG_A, cap);
             check("dbg $A0D9 bit0 latches spr_pixel_hit when sprite renders",
                   (cap & 8'h01) != 8'h00);
+            check("dbg $A0D9 bit7 latches shape-read-nonzero when sprite renders",
+                  (cap & 8'h80) != 8'h00);
         end
     endtask
 

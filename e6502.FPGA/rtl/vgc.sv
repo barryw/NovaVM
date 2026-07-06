@@ -701,6 +701,7 @@ module vgc (
     logic [3:0]  mouse_cursor_pixel;
     logic        mouse_cursor_hit;
     logic [3:0]  mouse_cursor_color;
+    logic        dbg_active_shape_bank_w, dbg_shape_read_nonzero_w;
 
     logic [8:0] mouse_pending_x, mouse_active_x;
     logic [7:0] mouse_pending_y, mouse_active_y;
@@ -769,6 +770,8 @@ module vgc (
         .spr_pixel_owner(spr_pixel_owner),
         .mouse_cursor_pixel(mouse_cursor_pixel),
         .mouse_cursor_hit(mouse_cursor_hit),
+        .dbg_active_shape_bank(dbg_active_shape_bank_w),
+        .dbg_shape_read_nonzero(dbg_shape_read_nonzero_w),
         .collision_ss_bits(spr_collision_ss_bits)
     );
 
@@ -794,6 +797,8 @@ module vgc (
             dbg_render_capture[3] <= sprite_shape_sync_busy;
             dbg_render_capture[4] <= sprite_shape_publish_block;
             dbg_render_capture[5] <= mouse_active_ctrl[0];
+            if (dbg_active_shape_bank_w)  dbg_render_capture[6] <= 1'b1;  // bank ever became 1
+            if (dbg_shape_read_nonzero_w) dbg_render_capture[7] <= 1'b1;  // render read non-zero shape
         end
     end
 
