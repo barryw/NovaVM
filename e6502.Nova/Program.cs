@@ -124,7 +124,7 @@ static void PrintArtyUsage()
     Console.Error.WriteLine("  nova arty deploy-linux-host [--repo <repo>] [--remote <ip>] [--editor-demo]");
     Console.Error.WriteLine("  nova arty deploy-editor-demo [--repo <repo>] [--remote <ip>]");
     Console.Error.WriteLine("  nova arty upload-infocom [--repo <repo>] [--remote <ip>] [--infocom-root <path>]");
-    Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>]");
+    Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>] [--vitis <path>]");
 }
 
 static int UnknownArtyCommand(string command)
@@ -305,7 +305,12 @@ static int DoArtyBuildLinuxImage(string repo, List<string> args)
         return 1;
     }
 
-    int rc = DoArtySyncPayloads(repo, []);
+    bitstream = EnsurePetalinuxBitstream(xsa, bitstream) ?? bitstream;
+
+    int rc = VerifyVivadoBitstreamFresh(bitstream);
+    if (rc != 0) return rc;
+
+    rc = DoArtySyncPayloads(repo, []);
     if (rc != 0) return rc;
 
     rc = VerifyPetalinuxInputs(repo, project, settings, xsa, bitstream);
@@ -382,6 +387,13 @@ static int DoArtyDeployBootImage(string repo, List<string> args, string? host)
         return rc;
     }
 
+    string? previousBootId = ReadRemoteBootId(host);
+    if (previousBootId is null)
+    {
+        Console.Error.WriteLine($"cannot read current Linux boot_id from root@{host}");
+        return 1;
+    }
+
     rc = RunScp(host, imageUb, "/run/image.ub.new");
     if (rc != 0) return rc;
 
@@ -416,9 +428,10 @@ static int DoArtyDeployBootImage(string repo, List<string> args, string? host)
         rc = VerifyRemoteFileSha256(host, rootfsExt4, "/data/nova/rootfs.ext4.new");
         if (rc != 0) return rc;
 
-        _ = RunSsh(host,
-            "/data/nova/busybox.deploy sh -c 'dd if=/data/nova/rootfs.ext4.new of=/dev/mmcblk0p2 bs=4M && " +
-            "/data/nova/busybox.deploy sync && /data/nova/busybox.deploy reboot -f' >/data/nova/rootfs-deploy.log 2>&1 &");
+        rc = WriteAndVerifyRemoteRootfs(host, rootfsExt4, "/data/nova/rootfs.ext4.new", "/dev/mmcblk0p2", "/data/nova/busybox.deploy");
+        if (rc != 0) return rc;
+
+        _ = RunSsh(host, "/data/nova/busybox.deploy reboot -f");
     }
 
     if (noReboot)
@@ -426,21 +439,47 @@ static int DoArtyDeployBootImage(string repo, List<string> args, string? host)
 
     if (bootOnly)
         _ = RunSsh(host, "reboot");
-    rc = WaitForSshDown(host, TimeSpan.FromSeconds(30));
-    if (rc != 0) return rc;
-    rc = WaitForSsh(host, TimeSpan.FromSeconds(120));
+    rc = WaitForRemoteBoot(host, previousBootId, TimeSpan.FromSeconds(120));
     if (rc != 0) return rc;
     if (!bootOnly)
     {
-        rc = VerifyRemoteBlockSha256(host, rootfsExt4, "/dev/mmcblk0p2");
-        if (rc != 0) return rc;
-
         _ = RunSsh(host, "rm -f /data/nova/rootfs.ext4.new /data/nova/busybox.deploy");
     }
 
     rc = WaitForRemotePort(host, 6504, TimeSpan.FromSeconds(45));
     if (rc != 0) return rc;
     return 0;
+}
+
+static string? EnsurePetalinuxBitstream(string xsa, string bitstream)
+{
+    if (File.Exists(bitstream))
+        return bitstream;
+
+    string? extracted = ExtractBitstreamFromXsa(xsa, bitstream);
+    if (extracted is not null)
+    {
+        Console.WriteLine($"extracted bitstream from XSA: {extracted}");
+        return extracted;
+    }
+
+    return null;
+}
+
+static string? ExtractBitstreamFromXsa(string xsa, string destination)
+{
+    if (!File.Exists(xsa))
+        return null;
+
+    using ZipArchive archive = ZipFile.OpenRead(xsa);
+    ZipArchiveEntry? entry = archive.Entries
+        .FirstOrDefault(static e => e.FullName.EndsWith(".bit", StringComparison.OrdinalIgnoreCase));
+    if (entry is null)
+        return null;
+
+    EnsureParentDirectory(destination);
+    entry.ExtractToFile(destination, overwrite: true);
+    return destination;
 }
 
 static int VerifyPetalinuxInputs(string repo, string project, string settings, string xsa, string bitstream)
@@ -454,6 +493,9 @@ static int VerifyPetalinuxInputs(string repo, string project, string settings, s
         }
     }
 
+    int rc = VerifyVivadoBitstreamFresh(bitstream);
+    if (rc != 0) return rc;
+
     string expectedLayer = Path.GetFullPath(Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7", "petalinux", "meta-user"));
     string projectLayer = Path.Combine(project, "project-spec", "meta-user");
     DirectoryInfo layerInfo = new(projectLayer);
@@ -466,6 +508,55 @@ static int VerifyPetalinuxInputs(string repo, string project, string settings, s
     }
 
     return 0;
+}
+
+static int VerifyVivadoBitstreamFresh(string bitstream)
+{
+    if (!File.Exists(bitstream))
+    {
+        Console.Error.WriteLine($"ERROR: missing {bitstream}");
+        return 1;
+    }
+
+    string? runDir = Path.GetDirectoryName(bitstream);
+    if (string.IsNullOrWhiteSpace(runDir) || !Directory.Exists(runDir))
+        return 0;
+
+    string[] errorMarkers = Directory.EnumerateFiles(runDir, ".*.error.rst")
+        .Concat(Directory.EnumerateFiles(runDir, "*.error.rst"))
+        .Distinct(StringComparer.Ordinal)
+        .Order(StringComparer.Ordinal)
+        .ToArray();
+    if (errorMarkers.Length > 0)
+        return ReportStaleVivadoBitstream(bitstream, runDir, errorMarkers[0]);
+
+    string runLog = Path.Combine(runDir, "runme.log");
+    if (File.Exists(runLog) &&
+        File.GetLastWriteTimeUtc(runLog) > File.GetLastWriteTimeUtc(bitstream) &&
+        ReadTailText(runLog, 128 * 1024).Contains("ERROR:", StringComparison.Ordinal))
+    {
+        return ReportStaleVivadoBitstream(bitstream, runDir, runLog);
+    }
+
+    return 0;
+}
+
+static int ReportStaleVivadoBitstream(string bitstream, string runDir, string evidence)
+{
+    Console.Error.WriteLine($"ERROR: Vivado implementation failed in {runDir}; refusing stale bitstream {bitstream}");
+    Console.Error.WriteLine($"evidence: {evidence}");
+    Console.Error.WriteLine("Re-run nova arty synth before packaging or deploying hardware.");
+    return 1;
+}
+
+static string ReadTailText(string path, int maxBytes)
+{
+    using FileStream stream = File.OpenRead(path);
+    if (stream.Length > maxBytes)
+        stream.Seek(-maxBytes, SeekOrigin.End);
+
+    using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+    return reader.ReadToEnd();
 }
 
 static int VerifyPetalinuxCaptureImage(string project, string bootBin)
@@ -563,12 +654,16 @@ static int DoArtyBuildPsFio(string repo, List<string> args)
     int rc = DoArtySyncPayloads(repo, []);
     if (rc != 0) return rc;
 
+    return RunPsFioVitisBuild(repo, vitis, payloadsSynced: true);
+}
+
+static int RunPsFioVitisBuild(string repo, string vitis, bool payloadsSynced)
+{
     string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
-    return RunCommand(vitis, ["-s", Path.Combine(boardDir, "vitis", "build_ps_fio.py")], boardDir,
-        new Dictionary<string, string?>
-        {
-            ["NOVA_ARTY_SYNC_PAYLOADS_DONE"] = "1",
-        });
+    var env = payloadsSynced
+        ? new Dictionary<string, string?> { ["NOVA_ARTY_SYNC_PAYLOADS_DONE"] = "1" }
+        : null;
+    return RunCommand(vitis, ["-s", Path.Combine(boardDir, "vitis", "build_ps_fio.py")], boardDir, env);
 }
 
 static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, bool editorDemo)
@@ -712,31 +807,32 @@ static int WaitForRemotePort(string host, int port, TimeSpan timeout)
     return 1;
 }
 
-static int WaitForSsh(string host, TimeSpan timeout)
+static string? ReadRemoteBootId(string host)
 {
-    DateTime deadline = DateTime.UtcNow + timeout;
-    while (DateTime.UtcNow < deadline)
-    {
-        if (RunSsh(host, "true") == 0)
-            return 0;
-        Thread.Sleep(1000);
-    }
+    int rc = RunSshCapture(host, "cat /proc/sys/kernel/random/boot_id", out string stdout);
+    if (rc != 0)
+        return null;
 
-    Console.Error.WriteLine($"timed out waiting for SSH on {host}");
-    return 1;
+    string bootId = stdout.Trim();
+    return string.IsNullOrWhiteSpace(bootId) ? null : bootId;
 }
 
-static int WaitForSshDown(string host, TimeSpan timeout)
+static int WaitForRemoteBoot(string host, string previousBootId, TimeSpan timeout)
 {
     DateTime deadline = DateTime.UtcNow + timeout;
     while (DateTime.UtcNow < deadline)
     {
-        if (RunSsh(host, "true") != 0)
+        string? bootId = ReadRemoteBootId(host);
+        if (bootId is not null && !string.Equals(bootId, previousBootId, StringComparison.Ordinal))
+        {
+            Console.WriteLine($"verified: {host} rebooted from {previousBootId} to {bootId}");
             return 0;
+        }
+
         Thread.Sleep(1000);
     }
 
-    Console.Error.WriteLine($"timed out waiting for SSH on {host} to stop during reboot");
+    Console.Error.WriteLine($"timed out waiting for {host} to reboot from boot_id {previousBootId}");
     return 1;
 }
 
@@ -816,6 +912,7 @@ static int DoArtyMakeBootBin(string repo, List<string> args)
 {
     string workspace = TakeOptionValue(args, "--workspace") ?? Environment.GetEnvironmentVariable("NOVA_FIO_WS") ?? "/tmp/nova_fio_ws";
     string bootgen = TakeOptionValue(args, "--bootgen") ?? Environment.GetEnvironmentVariable("BOOTGEN") ?? "/tools/Xilinx/Vitis/2024.2/bin/bootgen";
+    string vitis = TakeOptionValue(args, "--vitis") ?? Environment.GetEnvironmentVariable("VITIS") ?? "/tools/Xilinx/Vitis/2024.2/bin/vitis";
     if (args.Count > 0)
     {
         Console.Error.WriteLine($"Unexpected arty make-boot-bin argument: {args[0]}");
@@ -823,13 +920,20 @@ static int DoArtyMakeBootBin(string repo, List<string> args)
         return 1;
     }
 
-    int rc = DoArtySyncPayloads(repo, []);
+    string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
+    string bit = Path.Combine(boardDir, "build", "ps_full", "ps_full.runs", "impl_1", "arty_z7_full.bit");
+    int rc = VerifyVivadoBitstreamFresh(bit);
     if (rc != 0) return rc;
 
-    string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
+    rc = DoArtySyncPayloads(repo, []);
+    if (rc != 0) return rc;
+
+    string xsa = Path.Combine(boardDir, "build", "arty_z7_full.xsa");
     string fsbl = Path.Combine(workspace, "nova_fio_plat", "export", "nova_fio_plat", "sw", "boot", "fsbl.elf");
-    string bit = Path.Combine(boardDir, "build", "ps_full", "ps_full.runs", "impl_1", "arty_z7_full.bit");
     string app = Path.Combine(workspace, "ps_fio", "build", "ps_fio.elf");
+    rc = EnsureFreshPsFioBuild(repo, workspace, xsa, fsbl, app, vitis);
+    if (rc != 0) return rc;
+
     foreach (string file in new[] { fsbl, bit, app })
     {
         if (!File.Exists(file))
@@ -839,16 +943,8 @@ static int DoArtyMakeBootBin(string repo, List<string> args)
         }
     }
 
-    DateTime appTime = File.GetLastWriteTimeUtc(app);
-    string psSrc = Path.Combine(boardDir, "ps_fio", "src");
-    string? newer = Directory.GetFiles(psSrc, "*", SearchOption.AllDirectories)
-                             .FirstOrDefault(path => File.GetLastWriteTimeUtc(path) > appTime);
-    if (newer is not null)
-    {
-        Console.Error.WriteLine($"ERROR: {app} is stale; rebuild the PS app with Vitis before packaging BOOT.bin");
-        Console.Error.WriteLine($"newer source: {newer}");
-        return 1;
-    }
+    rc = VerifyVivadoBitstreamFresh(bit);
+    if (rc != 0) return rc;
 
     string buildDir = Path.Combine(boardDir, "build");
     Directory.CreateDirectory(buildDir);
@@ -867,6 +963,52 @@ static int DoArtyMakeBootBin(string repo, List<string> args)
     Console.WriteLine($"BOOT.bin -> {output}");
     Console.WriteLine(new FileInfo(output).FullName);
     return 0;
+}
+
+static int EnsureFreshPsFioBuild(string repo, string workspace, string xsa, string fsbl, string app, string vitis)
+{
+    string boardDir = Path.Combine(repo, "e6502.FPGA", "boards", "arty_z7");
+    string psSrc = Path.Combine(boardDir, "ps_fio", "src");
+    string vitisHook = Path.Combine(boardDir, "vitis", "build_ps_fio.py");
+
+    string? staleReason = FindPsFioStaleReason(xsa, fsbl, app, psSrc, vitisHook);
+    if (staleReason is not null)
+    {
+        Console.WriteLine($"PS FIO build is missing or stale; rebuilding before BOOT.bin packaging: {staleReason}");
+        int rc = RunPsFioVitisBuild(repo, vitis, payloadsSynced: true);
+        if (rc != 0) return rc;
+    }
+
+    staleReason = FindPsFioStaleReason(xsa, fsbl, app, psSrc, vitisHook);
+    if (staleReason is not null)
+    {
+        Console.Error.WriteLine($"ERROR: {workspace} PS FIO outputs are still stale after Vitis rebuild: {staleReason}");
+        return 1;
+    }
+
+    return 0;
+}
+
+static string? FindPsFioStaleReason(string xsa, string fsbl, string app, string psSrc, string vitisHook)
+{
+    if (!File.Exists(fsbl))
+        return $"missing {fsbl}";
+    if (!File.Exists(app))
+        return $"missing {app}";
+
+    DateTime outputTime = new[] { fsbl, app }.Select(File.GetLastWriteTimeUtc).Min();
+    foreach (string input in new[] { xsa, vitisHook })
+    {
+        if (File.Exists(input) && File.GetLastWriteTimeUtc(input) > outputTime)
+            return $"newer input {input}";
+    }
+
+    string? newerSource = Directory.GetFiles(psSrc, "*", SearchOption.AllDirectories)
+                                   .FirstOrDefault(path => File.GetLastWriteTimeUtc(path) > outputTime);
+    if (newerSource is not null)
+        return $"newer source {newerSource}";
+
+    return null;
 }
 
 static string[] ArtyModuleNames() =>
@@ -1040,7 +1182,7 @@ static int VerifyRemoteFileSha256(string host, string localPath, string remotePa
     return 0;
 }
 
-static int VerifyRemoteBlockSha256(string host, string localPath, string remoteDevice)
+static int WriteAndVerifyRemoteRootfs(string host, string localPath, string remoteImage, string remoteDevice, string busybox)
 {
     long size = new FileInfo(localPath).Length;
     long blockSize = size % 4096 == 0 ? 4096 : 512;
@@ -1052,10 +1194,12 @@ static int VerifyRemoteBlockSha256(string host, string localPath, string remoteD
 
     long count = size / blockSize;
     string localSha = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(localPath))).ToLowerInvariant();
-    string command = "dd if=" + remoteDevice + " bs=" + blockSize.ToString(CultureInfo.InvariantCulture) +
-                     " count=" + count.ToString(CultureInfo.InvariantCulture) +
-                     " 2>/dev/null | sha256sum";
-    int rc = RunSshCapture(host, command, out string stdout);
+    string shell = busybox + " dd if=" + remoteImage + " of=" + remoteDevice + " bs=4M && " +
+                   busybox + " sync && " +
+                   busybox + " dd if=" + remoteDevice + " bs=" + blockSize.ToString(CultureInfo.InvariantCulture) +
+                   " count=" + count.ToString(CultureInfo.InvariantCulture) + " 2>/dev/null | " +
+                   busybox + " sha256sum";
+    int rc = RunSshCapture(host, busybox + " sh -c " + ShellQuote(shell), out string stdout);
     if (rc != 0) return rc;
 
     string[] parts = stdout.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
@@ -1070,11 +1214,11 @@ static int VerifyRemoteBlockSha256(string host, string localPath, string remoteD
     {
         Console.Error.WriteLine($"ERROR: stale deployed artifact: {remoteDevice}");
         Console.Error.WriteLine($"local  {localSha}  {localPath}");
-        Console.Error.WriteLine($"remote {remoteSha}  {remoteDevice} first {size} bytes");
+        Console.Error.WriteLine($"remote {remoteSha}  {remoteDevice} first {size} bytes before reboot");
         return 1;
     }
 
-    Console.WriteLine($"verified: {remoteDevice} first {size} bytes sha256 {localSha}");
+    Console.WriteLine($"verified: {remoteDevice} first {size} bytes sha256 {localSha} before reboot");
     return 0;
 }
 
@@ -2290,7 +2434,8 @@ static List<string> BuildFfmpegStillArgs(string device, string pixelFormat, stri
     "-framerate", framerate,
     "-pixel_format", pixelFormat,
     "-i", device,
-    "-frames:v", "1",
+    // capture screen reads the Arty V4L2 device; VM screenshot is only a debug composite.
+    "-frames:v", "2",
     "-update", "1",
     output
 ];
@@ -2678,6 +2823,7 @@ static int DoFpga(string[] args)
         {
             "check-timing" => DoFpgaCheckTiming(rest),
             "check-bitstream" => DoFpgaCheckBitstream(rest),
+            "vivado-utilization" => DoFpgaVivadoUtilization(rest),
             _ => UnknownFpgaCommand(command),
         };
     }
@@ -2714,6 +2860,59 @@ static int DoFpgaCheckBitstream(List<string> args)
     return NovaBuildTools.CheckBitstreamFreshness(args[0], repo, includeRoms);
 }
 
+static int DoFpgaVivadoUtilization(List<string> args)
+{
+    string vivado = TakeOptionValue(args, "--vivado") ??
+                    Environment.GetEnvironmentVariable("VIVADO") ??
+                    "/tools/Xilinx/Vivado/2024.2/bin/vivado";
+    string? output = TakeOptionValue(args, "--out", "-o");
+    if (args.Count != 1 || string.IsNullOrWhiteSpace(output))
+    {
+        PrintFpgaUsage();
+        return 1;
+    }
+
+    string checkpoint = Path.GetFullPath(args[0]);
+    output = Path.GetFullPath(output);
+    if (!File.Exists(checkpoint))
+    {
+        Console.Error.WriteLine($"ERROR: missing {checkpoint}");
+        return 1;
+    }
+
+    EnsureParentDirectory(output);
+    string tcl = Path.Combine(Path.GetTempPath(), "nova-vivado-utilization-" + Guid.NewGuid().ToString("N") + ".tcl");
+    string log = Path.ChangeExtension(output, ".vivado.log");
+    File.WriteAllText(tcl,
+        "open_checkpoint " + TclQuote(checkpoint) + "\n" +
+        "report_utilization -hierarchical -file " + TclQuote(output) + "\n" +
+        "close_design\n" +
+        "exit\n");
+
+    try
+    {
+        int rc = RunCommand(vivado, ["-mode", "batch", "-nojournal", "-notrace", "-log", log, "-source", tcl]);
+        if (rc != 0) return rc;
+        if (!File.Exists(output))
+        {
+            Console.Error.WriteLine($"ERROR: Vivado did not create {output}");
+            return 1;
+        }
+
+        Console.WriteLine($"utilization -> {output}");
+        return 0;
+    }
+    finally
+    {
+        if (File.Exists(tcl))
+            File.Delete(tcl);
+    }
+}
+
+static string TclQuote(string value) =>
+    "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal)
+               .Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+
 static int UnknownFpgaCommand(string command)
 {
     Console.Error.WriteLine($"Unknown fpga command: {command}");
@@ -2726,6 +2925,7 @@ static void PrintFpgaUsage()
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  nova fpga check-timing <nextpnr-report.json> [--log <nextpnr.log>] [--margin-mhz <mhz>]");
     Console.Error.WriteLine("  nova fpga check-bitstream <bitstream> [--repo-root <repo>] [--include-roms]");
+    Console.Error.WriteLine("  nova fpga vivado-utilization <checkpoint.dcp> --out <report.rpt> [--vivado <path>]");
 }
 
 static void EnsureParentDirectory(string path)

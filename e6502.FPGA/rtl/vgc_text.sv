@@ -104,13 +104,13 @@ module vgc_text (
     // Port B address generation — combinational to minimize pipeline depth
     // dpram has 1-cycle read latency. With combinational addresses:
     //   Cycle N: char_b_addr = f(text_col(N)) → dpram reads
-    //   Cycle N+1: char_b_dout valid → font_b_addr = f(char, font_line) → dpram reads
+    //   Cycle N+1: char_b_dout valid → font_b_addr = f(char, font_line_d1) → dpram reads
     //   Cycle N+2: font_b_dout valid → compositing uses font_pixel_d2(N+2) = font_pixel(N)
     // Total 2-cycle pipeline matches the d2 delay on output signals.
     // =========================================================================
     assign char_b_addr  = text_addr(real_row, text_col);
     assign color_b_addr = text_addr(real_row, text_col);
     assign attr_b_addr  = text_addr(real_row, text_col);
-    assign font_b_addr  = {font_slot, char_b_dout, font_line};  // 2+8+3 = 13
+    assign font_b_addr  = {font_slot, char_b_dout, font_line_d1};  // 2+8+3 = 13
 
 endmodule

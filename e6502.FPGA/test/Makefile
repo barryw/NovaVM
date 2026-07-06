@@ -179,8 +179,8 @@ test_hdmi_start_offset: test_hdmi_start_offset.sv $(HDMI)
 test_sid_hdmi_audio: test_sid_hdmi_audio.sv $(RTL)/sid_hdmi_audio.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/sid_hdmi_audio.sv $< && $(RUN) test/$(BD)/$@/$@
 
-test_audio_pcm_fifo: test_audio_pcm_fifo.sv $(RTL)/audio_pcm_fifo.sv
-	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/audio_pcm_fifo.sv $< && $(RUN) test/$(BD)/$@/$@
+test_audio_pcm_fifo: test_audio_pcm_fifo.sv $(RTL)/audio_pcm_fifo.sv $(RTL)/dpram.sv
+	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/dpram.sv $(RTL)/audio_pcm_fifo.sv $< && $(RUN) test/$(BD)/$@/$@
 
 test_audio_led_meter: test_audio_led_meter.sv $(RTL)/audio_led_meter.sv
 	$(PREP_BUILD) $(VERILATOR) $(VFLAGS) --top-module $@ --Mdir $(BD)/$@ -o $@ $(RTL)/audio_led_meter.sv $< && $(RUN) test/$(BD)/$@/$@

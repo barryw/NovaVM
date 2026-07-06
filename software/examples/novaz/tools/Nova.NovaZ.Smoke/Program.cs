@@ -10,7 +10,7 @@ using KDS.e6502;
 if (args.Length < 1)
 {
     Console.Error.WriteLine("usage: Nova.NovaZ.Smoke <fd0.ndi> [command[=>expected] ...]");
-    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .key, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|], .expect-gfx-color <x,y=>hex>, .expect-text-attr <text=>hex>)");
+    Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --script <file>   (script lines: cmd[=>expected], !cmd, .raw, .key, .wait, .expect-stop, .expect-at <col>,<row>=><text>[|], .expect-gfx-color <x,y=>hex>, .expect-text-attr <text=>hex>, .expect-text-attr-at <col,row=>hex>)");
     Console.Error.WriteLine("       Nova.NovaZ.Smoke <fd0.ndi> --generic-boot [--boot-only] [--screen-only] [--screen-input <text>] [--auto-read-char-space] [--expect-more] [--expect-time-status] [--expect-screen <text>] [--expect-at <col>,<row>=><text>] [--expect-text-color <text=>hex>] [--expect-text-attr <text=>hex>] [--expect-gfx-color <x,y=>hex>] [--expect-stop <byte>] [--dump-gfx <path>] [--expect-zork0-boot-gfx-replay] [--skip-manifest-check]");
     return 1;
 }
@@ -214,6 +214,13 @@ try
             string liveScreen = SnapshotScreen(bus.Vgc);
             Console.WriteLine($".expect-text-attr {command.Text}");
             RequireTextAttr(bus.Vgc, liveScreen, ParseExpectedTextAttrSpec(command.Text));
+            continue;
+        }
+        if (command.Mode == SmokeInputMode.ExpectTextAttrAt)
+        {
+            string liveScreen = SnapshotScreen(bus.Vgc);
+            Console.WriteLine($".expect-text-attr-at {command.Text}");
+            RequireTextAttrAt(bus.Vgc, liveScreen, ParseExpectedTextAttrAtSpec(command.Text));
             continue;
         }
         if (command.Mode == SmokeInputMode.ExpectStop)
@@ -545,6 +552,15 @@ static SmokeCommand ParseCommandSpec(string spec)
         ParseExpectedTextAttrSpec(attrSpec); // validate eagerly so bad scripts fail before booting
         return new SmokeCommand(attrSpec, [], SmokeInputMode.ExpectTextAttr, WaitForPrompt: false);
     }
+    const string expectTextAttrAtPrefix = ".expect-text-attr-at ";
+    if (spec.StartsWith(expectTextAttrAtPrefix, StringComparison.OrdinalIgnoreCase))
+    {
+        string attrSpec = spec[expectTextAttrAtPrefix.Length..].TrimStart();
+        if (attrSpec.Length == 0)
+            throw new ArgumentException($".expect-text-attr-at requires <col,row=>hex> in '{spec}'.");
+        ParseExpectedTextAttrAtSpec(attrSpec); // validate eagerly so bad scripts fail before booting
+        return new SmokeCommand(attrSpec, [], SmokeInputMode.ExpectTextAttrAt, WaitForPrompt: false);
+    }
 
     string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
     string command = parts[0];
@@ -821,6 +837,29 @@ static ExpectedTextAttr ParseExpectedTextAttrSpec(string spec)
         throw new ArgumentException($"Expected text attr must use a one-byte hex value: {spec}");
 
     return new ExpectedTextAttr(parts[0], attr);
+}
+
+static ExpectedTextAttrAt ParseExpectedTextAttrAtSpec(string spec)
+{
+    string[] parts = spec.Split("=>", 2, StringSplitOptions.TrimEntries);
+    if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+        throw new ArgumentException($"Expected text attr coordinate must be '<col,row=>hex>': {spec}");
+
+    string[] xy = parts[0].Split(',', 2, StringSplitOptions.TrimEntries);
+    if (xy.Length != 2 ||
+        !int.TryParse(xy[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int col) ||
+        !int.TryParse(xy[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int row))
+        throw new ArgumentException($"Expected text attr coordinate must be 'col,row': {spec}");
+    if ((uint)col >= VgcConstants.ScreenCols || (uint)row >= VgcConstants.ScreenRows)
+        throw new ArgumentOutOfRangeException(nameof(spec), $"Text coordinate out of range in '{spec}'.");
+
+    string hex = parts[1].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+        ? parts[1][2..]
+        : parts[1];
+    if (!byte.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte attr))
+        throw new ArgumentException($"Expected text attr coordinate must use a one-byte hex value: {spec}");
+
+    return new ExpectedTextAttrAt(col, row, attr);
 }
 
 static List<ExpectedGfxColor> LoadExpectedGfxColors(string[] args)
@@ -1701,6 +1740,17 @@ static bool MatchesTextAttr(VirtualGraphicsController vgc, string screen, Expect
     return true;
 }
 
+static void RequireTextAttrAt(VirtualGraphicsController vgc, string screen, ExpectedTextAttrAt expected)
+{
+    byte actual = vgc.GetScreenTextAttr(expected.Col, expected.Row);
+    if (actual == expected.Attr)
+        return;
+
+    throw new InvalidOperationException(
+        $"Expected text attr at {expected.Col},{expected.Row} to be ${expected.Attr:X2}; " +
+        $"was ${actual:X2}.\n{screen}");
+}
+
 static void RequireGfxColor(VirtualGraphicsController vgc, string screen, ExpectedGfxColor expected)
 {
     byte actual = vgc.GetGfxPixelColor(expected.X, expected.Y);
@@ -2170,7 +2220,8 @@ enum SmokeInputMode
     ExpectAt,
     ExpectGfxColor,
     ExpectTextColor,
-    ExpectTextAttr
+    ExpectTextAttr,
+    ExpectTextAttrAt
 }
 
 sealed record SmokeCommand(
@@ -2180,6 +2231,7 @@ sealed record SmokeCommand(
     bool WaitForPrompt = true);
 sealed record ExpectedTextColor(string Text, byte Color);
 sealed record ExpectedTextAttr(string Text, byte Attr);
+sealed record ExpectedTextAttrAt(int Col, int Row, byte Attr);
 sealed record ExpectedAt(int Col, int Row, string Text);
 sealed record ExpectedGfxColor(int X, int Y, byte Color);
 sealed record PictureEntry(int Width, int Height, byte Flags, int Offset, int Length);

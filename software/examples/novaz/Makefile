@@ -126,6 +126,21 @@ ifneq ($(strip $(PICTURES)),)
 PACK_ARGS += --pictures "$(PICTURES)"
 endif
 
+NOVAZ_LOCK_ID := $(shell printf '%s' '$(CURDIR)' | sha256sum | cut -c1-16)
+NOVAZ_BUILD_LOCK ?= /tmp/novavm-novaz-$(NOVAZ_LOCK_ID).lock
+
+ifeq ($(NOVAZ_MAKE_LOCKED),)
+.DEFAULT_GOAL := __novaz_locked
+
+__novaz_locked:
+	@flock "$(NOVAZ_BUILD_LOCK)" $(MAKE) NOVAZ_MAKE_LOCKED=1 $(if $(MAKECMDGOALS),$(MAKECMDGOALS),all)
+
+%: __novaz_locked
+	@:
+
+.PHONY: __novaz_locked
+else
+
 all: $(AUTOBOOT) $(RUNTIME) $(NOVAZ6_BIN) $(SAVE_LOAD_OVERLAY)
 
 $(NOVA_LIB_FILE): FORCE
@@ -324,6 +339,7 @@ test-infocom-v45-smokes:
 
 test-infocom-v6-smokes:
 	$(MAKE) test-project PROJECT=zork-zero STORY="$(ZORK_ZERO_STORY)" PICTURES="$(ZORK_ZERO_PICTURES)"
+	$(MAKE) test-project PROJECT=zork-zero STORY="$(ZORK_ZERO_STORY)" PICTURES="$(ZORK_ZERO_PICTURES)" PROJECT_SMOKE=projects/zork-zero/scroll.txt
 	$(MAKE) test-project PROJECT=arthur STORY="$(ARTHUR_STORY)" PICTURES="$(ARTHUR_PICTURES)"
 	$(MAKE) test-project PROJECT=journey STORY="$(JOURNEY_STORY)" PICTURES="$(JOURNEY_PICTURES)"
 
@@ -365,3 +381,5 @@ clean:
 	rm -rf $(BUILD_DIR) $(DIST_DIR)
 
 .PHONY: all ndi smoke test-zork-state test-zork-house test-zork-save test-zork-torture test-z3-spec test-z4-styles test-z4-spec test-z5-spec test-z6-spec test-z6-v7-rejected test-z6-no-segment test-z6-main-returns test-z6-suite test-spec-suites test-jukebox jukebox-lurking jukebox-sherlock test-project test-project-save-restore test-project-longplay test-infocom-z3-smokes test-infocom-v45-smokes test-infocom-v6-smokes test-infocom-smokes test-infocom-z3-longplays test-infocom-v45-longplays test-infocom-longplays test-infocom-z5-longplays clean FORCE
+
+endif

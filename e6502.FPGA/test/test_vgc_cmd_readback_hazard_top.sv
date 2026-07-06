@@ -145,6 +145,75 @@ module test_vgc_cmd_readback_hazard_top;
         dbg_rom_we <= 0;
     endtask
 
+    int emit_addr;
+    task automatic emit(input logic [7:0] data);
+        rom_write(1'b0, 14'(emit_addr), data);
+        emit_addr++;
+    endtask
+
+    task automatic emit_lda_sta(input logic [15:0] addr, input logic [7:0] data);
+        emit(8'hA9); emit(data);
+        emit(8'h8D); emit(addr[7:0]); emit(addr[15:8]);
+    endtask
+
+    task automatic emit_vram_char_write(input logic [15:0] addr, input logic [7:0] data);
+        emit_lda_sta(16'hA0E0, 8'h01);
+        emit_lda_sta(16'hA0E1, addr[7:0]);
+        emit_lda_sta(16'hA0E2, addr[15:8]);
+        emit_lda_sta(16'hA0E4, 8'h00);
+        emit_lda_sta(16'hA0E3, data);
+    endtask
+
+    task automatic load_scroll_wait_program();
+        int halt_addr;
+        emit_addr = 0;
+
+        // Seed the row that should move into the Zork Zero body top after a
+        // one-row mixed scroll.
+        emit_vram_char_write(16'h032B, 8'h41); // row 10, col 11 = 'A'
+
+        emit_lda_sta(16'hA011, 8'd11);  // text left
+        emit_lda_sta(16'hA012, 8'd9);   // text top
+        emit_lda_sta(16'hA013, 8'd58);  // text width
+        emit_lda_sta(16'hA014, 8'd40);  // text height
+        emit_lda_sta(16'hA015, 8'd1);   // text rows
+        emit_lda_sta(16'hA016, 8'h00);  // gfx fill
+        emit_lda_sta(16'hA017, 8'd43);  // gfx left lo
+        emit_lda_sta(16'hA018, 8'd0);   // gfx left hi
+        emit_lda_sta(16'hA019, 8'd39);  // gfx top
+        emit_lda_sta(16'hA01A, 8'd234); // gfx width lo
+        emit_lda_sta(16'hA01B, 8'd0);   // gfx width hi
+        emit_lda_sta(16'hA01C, 8'd160); // gfx height
+        emit_lda_sta(16'hA01D, 8'd4);   // gfx rows
+        emit_lda_sta(16'hA01E, 8'hF0);  // text fill color
+        emit_lda_sta(16'hA01F, 8'h00);  // text fill attr
+
+        emit_lda_sta(16'hA010, 8'h23);  // VCMD_SCROLLMIXED
+
+        // Runtime wait-loop shape: arm briefly, then wait until the busy bit
+        // clears if it ever observed the command.
+        emit(8'hA0); emit(8'h20);       // LDY #$20
+        emit(8'hAD); emit(8'h10); emit(8'hA0); // arm: LDA $A010
+        emit(8'h29); emit(8'h01);       // AND #$01
+        emit(8'hD0); emit(8'h05);       // BNE wait
+        emit(8'h88);                    // DEY
+        emit(8'hD0); emit(8'hF6);       // BNE arm
+        emit(8'h80); emit(8'h07);       // BRA after
+        emit(8'hAD); emit(8'h10); emit(8'hA0); // wait: LDA $A010
+        emit(8'h29); emit(8'h01);       // AND #$01
+        emit(8'hD0); emit(8'hF9);       // BNE wait
+
+        // This bottom-row write must survive. If the command was still
+        // pending when the wait loop returned, the later mixed-scroll fill
+        // will erase this cell.
+        emit_vram_char_write(16'h0F0B, 8'h5A); // row 48, col 11 = 'Z'
+
+        halt_addr = 16'hC000 + emit_addr;
+        emit(8'h4C); emit(halt_addr[7:0]); emit(halt_addr[15:8]);
+        rom_write(1'b0, 14'h3FFC, 8'h00);
+        rom_write(1'b0, 14'h3FFD, 8'hC0);
+    endtask
+
     task automatic wait_vgc_ready();
         while (dut.vgc_rdy !== 1'b1) @(posedge clk);
         repeat(4) @(posedge clk);
@@ -227,6 +296,35 @@ module test_vgc_cmd_readback_hazard_top;
         check_eq_int("copper setup does not issue artist commands", artist_count, 0);
         check_eq_int("P5=3 followed by VGC_CMD read does not become CMD_LINE", line_count, 0);
         check_eq_int("copper setup does not draw into graphics plane", nonzero_gfx, 0);
+
+        rst = 1;
+        dbg_pause = 1;
+        dbg_cpu_reset = 1;
+        repeat(20) @(posedge clk);
+        rst = 0;
+        repeat(10) @(posedge clk);
+
+        load_scroll_wait_program();
+        repeat(4) @(posedge clk);
+        wait_vgc_ready();
+
+        dbg_cpu_reset = 0;
+        repeat(4) @(posedge clk);
+        dbg_pause = 0;
+
+        repeat(900000) @(posedge clk);
+
+        $display("Scroll wait CPU PC=0x%04X top=0x%02X bottom=0x%02X cmd_busy=%0b",
+                 dbg_cpu_pc,
+                 dut.vgc_inst.text_inst.char_mem.mem[16'h02DB],
+                 dut.vgc_inst.text_inst.char_mem.mem[16'h0F0B],
+                 dut.vgc_inst.cmd_busy);
+        check("scroll wait program reached halt loop",
+              (dbg_cpu_pc >= 16'hC097) && (dbg_cpu_pc <= 16'hC09A));
+        check_eq_int("mixed scroll moved seeded source row into body top",
+                     dut.vgc_inst.text_inst.char_mem.mem[16'h02DB], 8'h41);
+        check_eq_int("post-wait bottom row write survived mixed scroll",
+                     dut.vgc_inst.text_inst.char_mem.mem[16'h0F0B], 8'h5A);
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

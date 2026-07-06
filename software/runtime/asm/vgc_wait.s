@@ -18,6 +18,14 @@ VGC_WAIT_IMPLEMENTATION_INCLUDED = 1
 ; @symbol vgc_wait_cmd
 ; @summary Wait for the active VGC hardware command to complete.
 vgc_wait_cmd:
+      LDY   #$20
+@arm:
+      LDA   VGC_CMD
+      AND   #$01
+      BNE   @wait
+      DEY
+      BNE   @arm
+      RTS
 @wait:
       LDA   VGC_CMD
       AND   #$01

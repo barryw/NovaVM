@@ -91,6 +91,43 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void StandardCaptureScreenUsesFreshV4l2FrameWithoutDebugFallback()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
+            int start = program.IndexOf("static int DoCaptureScreen", StringComparison.Ordinal);
+            int end = program.IndexOf("static int DoCaptureRecord", StringComparison.Ordinal);
+
+            Assert.IsTrue(start >= 0 && end > start, "DoCaptureScreen must stay a distinct hardware capture path.");
+            string captureScreen = program[start..end];
+            StringAssert.Contains(program, "BuildFfmpegStillArgs");
+            StringAssert.Contains(captureScreen, "BuildFfmpegStillCommand",
+                "Remote hardware screenshots must use the standard V4L2 capture command on the Arty.");
+            StringAssert.Contains(program, "\"-frames:v\", \"2\"",
+                "Hardware screenshots must ask V4L2 for two frames and write the last one; one-frame ffmpeg captures leave buffers owned on close and can return a stale first frame.");
+            StringAssert.Contains(program, "capture screen reads the Arty V4L2 device",
+                "The CLI source must make the hardware screenshot contract explicit so debug-composite capture is not reintroduced by accident.");
+            Assert.IsFalse(captureScreen.Contains("DoVmScreenshot", StringComparison.Ordinal),
+                "nova capture screen must not route through the VM/debug-composite screenshot path.");
+        }
+
+        [TestMethod]
+        public void NovaCapReportsStreamParametersForFfmpeg()
+        {
+            string repo = FindRepoRoot();
+            string driver = File.ReadAllText(Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-kernel/novacap/files/novacap.c"));
+
+            StringAssert.Contains(driver, "novacap_g_parm",
+                "The V4L2 driver must implement VIDIOC_G_PARM so standard tools can read the capture cadence without warnings.");
+            StringAssert.Contains(driver, ".vidioc_g_parm = novacap_g_parm",
+                "The stream-parameter ioctl must be registered with V4L2.");
+            StringAssert.Contains(driver, "V4L2_CAP_TIMEPERFRAME",
+                "The driver must advertise that timeperframe is fixed and known.");
+            StringAssert.Contains(driver, "1001");
+            StringAssert.Contains(driver, "60000");
+        }
+
+        [TestMethod]
         public void ArtyCaptureUsesBlockRamBuffering()
         {
             string repo = FindRepoRoot();
@@ -195,6 +232,22 @@ namespace e6502UnitTests
             StringAssert.Contains(program, "petalinux-package");
             StringAssert.Contains(program, "VerifyPetalinuxCaptureImage",
                 "The build must fail loudly if image.ub does not contain the novavm capture node/packages.");
+            StringAssert.Contains(program, "EnsurePetalinuxBitstream",
+                "The build must use the bitstream embedded in the XSA when the loose Vivado .bit file is absent.");
+            StringAssert.Contains(program, "ExtractBitstreamFromXsa",
+                "The XSA is the authoritative hardware handoff; do not require stale loose bitstream files for Linux image packaging.");
+            StringAssert.Contains(program, "VerifyVivadoBitstreamFresh(bitstream)",
+                "Linux image packaging must fail loudly when the latest Vivado implementation run failed, instead of packaging a stale bitstream.");
+            StringAssert.Contains(program, "VerifyVivadoBitstreamFresh(bit)",
+                "Baremetal BOOT.bin packaging must fail loudly when the latest Vivado implementation run failed, instead of packaging a stale bitstream.");
+            StringAssert.Contains(program, "\".*.error.rst\"",
+                "Vivado writes hidden error marker files beside failed implementation runs; the CLI must treat those as stale-bitstream blockers.");
+            StringAssert.Contains(program, "refusing stale bitstream",
+                "The CLI error should clearly explain that an existing .bit file is stale after a failed Vivado run.");
+            StringAssert.Contains(program, "EnsureFreshPsFioBuild",
+                "make-boot-bin must rebuild a missing or stale PS FIO ELF itself, so hardware packaging never depends on a remembered second command.");
+            StringAssert.Contains(program, "NOVA_ARTY_SYNC_PAYLOADS_DONE",
+                "PS FIO rebuilds launched by make-boot-bin must reuse the payloads it just synchronized.");
             StringAssert.Contains(program, "RunScp(host, imageUb, \"/run/image.ub.new\")");
             StringAssert.Contains(program, "RunScp(host, bootBin, \"/run/BOOT.BIN.new\")");
             StringAssert.Contains(program, "const string bootMount = \"/run/media/boot-mmcblk0p1\"",
@@ -207,27 +260,30 @@ namespace e6502UnitTests
                 "Capture packages live in the rootfs, so deploy must not stop at /boot/image.ub.");
             StringAssert.Contains(program, "VerifyRemoteStagingMount(host, \"/data\", \"/dev/mmcblk0p2\")",
                 "Rootfs staging must refuse to read the new image from the root partition it is about to overwrite.");
+            StringAssert.Contains(program, "WriteAndVerifyRemoteRootfs",
+                "Rootfs deploy must verify the bytes immediately after dd and before reboot; mounted ext4 metadata can change after boot.");
             StringAssert.Contains(program, "VerifyRemoteFileSha256(host, imageUb, bootMount + \"/image.ub\")");
             StringAssert.Contains(program, "VerifyRemoteFileSha256(host, bootBin, bootMount + \"/BOOT.BIN\")");
-            StringAssert.Contains(program, "VerifyRemoteBlockSha256(host, rootfsExt4, \"/dev/mmcblk0p2\")",
-                "The rootfs partition write must be verified by content, not assumed.");
+            Assert.IsFalse(program.Contains("VerifyRemoteBlockSha256(host, rootfsExt4, \"/dev/mmcblk0p2\")", StringComparison.Ordinal),
+                "Do not byte-compare the rootfs block device after boot; the mounted ext4 filesystem is not a stable raw image.");
+            Assert.IsFalse(program.Contains("static int VerifyRemoteBlockSha256", StringComparison.Ordinal),
+                "Dead post-boot raw rootfs verification code should not stay around.");
             Assert.IsFalse(program.Contains("conv=fsync", StringComparison.Ordinal),
                 "The Arty BusyBox dd does not support conv=fsync; use dd followed by sync.");
-            Assert.IsFalse(program.Contains("dd if=/data/nova/rootfs.ext4.new of=/dev/mmcblk0p2 bs=4M && sync", StringComparison.Ordinal),
-                "Do not keep executing from a root filesystem after overwriting it.");
             StringAssert.Contains(program, "cp /bin/busybox /data/nova/busybox.deploy",
                 "Rootfs deploy must stage a reboot-capable binary on /data before overwriting /.");
-            StringAssert.Contains(program, "/data/nova/busybox.deploy sync");
+            StringAssert.Contains(program, "busybox + \" sync && \"");
             StringAssert.Contains(program, "/data/nova/busybox.deploy reboot -f");
-            StringAssert.Contains(program, "rootfs-deploy.log 2>&1 &",
-                "The rootfs write/reboot worker must be detached before overwriting the running rootfs.");
-            StringAssert.Contains(program, "WaitForSshDown(host, TimeSpan.FromSeconds(30))",
-                "Deploy must not declare reboot complete before the old SSH session has even gone away.");
-            StringAssert.Contains(program, "WaitForSsh(host, TimeSpan.FromSeconds(120))",
-                "After replacing BOOT.BIN/image.ub, deploy must reboot and wait for the board to come back.");
+            StringAssert.Contains(program, "ReadRemoteBootId(host)",
+                "Deploy must capture the current Linux boot ID before rebooting.");
+            StringAssert.Contains(program, "WaitForRemoteBoot(host, previousBootId, TimeSpan.FromSeconds(120))",
+                "Fast reboots can be missed by a down-only poll; deploy must wait for boot_id to change.");
+            Assert.IsFalse(program.Contains("WaitForSshDown(host, TimeSpan.FromSeconds(30))", StringComparison.Ordinal),
+                "Do not require observing SSH down; the board can reboot and come back between polls.");
 
             StringAssert.Contains(guide, "nova arty build-linux-image");
             StringAssert.Contains(guide, "nova arty deploy-boot-image --remote 192.168.1.188");
+            StringAssert.Contains(guide, "rebuilds the PS FIO app when the ELF is missing or older");
         }
 
         [TestMethod]
@@ -265,6 +321,36 @@ namespace e6502UnitTests
                 "Do not document the stale Arty IP; stale hardware addresses waste debugging time.");
             Assert.IsFalse(workflow.Contains("192.168.1.65", StringComparison.Ordinal),
                 "Do not document the stale Arty IP; stale hardware addresses waste debugging time.");
+        }
+
+        [TestMethod]
+        public void FpgaVivadoUtilizationIsFirstClassNovaCommand()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs/books/nova-cli-guide/chapters/nova-cli.md"));
+
+            StringAssert.Contains(program, "\"vivado-utilization\" => DoFpgaVivadoUtilization",
+                "Vivado utilization reports must be generated through nova, not through one-off Tcl scripts.");
+            StringAssert.Contains(program, "report_utilization -hierarchical",
+                "The Arty placement failures need hierarchical utilization, not just a flat summary.");
+            StringAssert.Contains(program, "File.Delete(tcl)",
+                "The CLI may generate Vivado Tcl internally, but must not leave ad hoc helper scripts behind.");
+            StringAssert.Contains(guide, "nova fpga vivado-utilization");
+        }
+
+        [TestMethod]
+        public void NovaZMakefileSerializesSharedBuildDirectory()
+        {
+            string repo = FindRepoRoot();
+            string makefile = File.ReadAllText(Path.Combine(repo, "software/examples/novaz/Makefile"));
+
+            StringAssert.Contains(makefile, "NOVAZ_BUILD_LOCK",
+                "NovaZ make invocations share build/ and must take an inter-process lock before building.");
+            StringAssert.Contains(makefile, "NOVAZ_MAKE_LOCKED",
+                "The lock must cover prerequisites too, not only individual target recipes.");
+            StringAssert.Contains(makefile, "flock",
+                "Separate make processes must serialize instead of corrupting shared linker inputs.");
         }
 
         [TestMethod]

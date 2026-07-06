@@ -122,11 +122,38 @@ module test_audio_pcm_fifo;
         check("completed right word", sample_word[1] == 16'h2211);
     endtask
 
+    task automatic test_backlog_uses_memory_path();
+        $display("");
+        $display("Test: queued backlog frame survives BRAM path");
+        reset_dut();
+
+        push_byte(8'h01);
+        push_byte(8'h02);
+        push_byte(8'h03);
+        push_byte(8'h04);
+        push_byte(8'h11);
+        push_byte(8'h12);
+        push_byte(8'h13);
+        push_byte(8'h14);
+
+        pop_frame();
+        check("first queued frame valid", sample_valid);
+        check("first queued left word", sample_word[0] == 16'h0201);
+        check("first queued right word", sample_word[1] == 16'h0403);
+
+        repeat(3) @(posedge clk);
+        pop_frame();
+        check("second queued frame valid after prefetch", sample_valid);
+        check("second queued left word", sample_word[0] == 16'h1211);
+        check("second queued right word", sample_word[1] == 16'h1413);
+    endtask
+
     initial begin
         $display("=== host PCM FIFO tests ===");
         test_frame_order();
         test_underrun_silence();
         test_partial_frame_not_popped();
+        test_backlog_uses_memory_path();
 
         $display("");
         $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);

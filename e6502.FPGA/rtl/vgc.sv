@@ -1379,6 +1379,177 @@ module vgc (
         normalize_scroll_y = (value >= 8'd200) ? 8'(value - 8'd200) : value;
     endfunction
 
+    task automatic start_vgc_command(input logic [7:0] command_code);
+        if (!cmd_busy && !artist_busy) begin
+            cmd_x  <= {regs[18][1:0], regs[17]};
+            cmd_y  <= {regs[20][1:0], regs[19]};
+            cmd_x2 <= {regs[22][1:0], regs[21]};
+            cmd_y2 <= {regs[24][1:0], regs[23]};
+
+            case (command_code)
+                CMD_PLOT, CMD_UNPLOT, CMD_LINE,
+                CMD_CIRCLE, CMD_RECT, CMD_FILL,
+                CMD_GCLS, CMD_PAINT, CMD_GTEXT: begin
+                    artist_cmd_valid <= 1;
+                    artist_cmd_code <= command_code;
+                end
+
+                CMD_GCOLOR: begin
+                    gfx_color <= regs[17][3:0];
+                end
+                CMD_SPRDEF: begin
+                    if (regs[17] < NUM_SPRITES && regs[18] < SPR_W && regs[19] < SPR_H) begin
+                        cmd_spr_addr <= {regs[17][3:0], regs[19][3:0], regs[18][3:1]};
+                        cmd_spr_re <= 1;
+                        cmd_busy <= 1; cmd_op <= CMD_SPRDEF;
+                        sprdef_wait <= 1;
+                    end
+                end
+                CMD_SPRROW: begin
+                    if (regs[17] < NUM_SPRITES && regs[18] < SPR_H) begin
+                        sprrow_spr <= regs[17][3:0];
+                        sprrow_row <= regs[18][3:0];
+                        sprrow_data[0] <= regs[19];
+                        sprrow_data[1] <= regs[20];
+                        sprrow_data[2] <= regs[21];
+                        sprrow_data[3] <= regs[22];
+                        sprrow_data[4] <= regs[23];
+                        sprrow_data[5] <= regs[24];
+                        sprrow_data[6] <= regs[25];
+                        sprrow_data[7] <= regs[26];
+                        sprrow_count <= 0;
+                        cmd_busy <= 1; cmd_op <= CMD_SPRROW;
+                    end
+                end
+                CMD_SPRCLR: begin
+                    if (regs[17] < NUM_SPRITES) begin
+                        cmd_cx <= 0; cmd_cy <= 0;
+                        cmd_x <= {5'b0, regs[17][3:0], 1'b0};
+                        cmd_busy <= 1; cmd_op <= CMD_SPRCLR;
+                    end
+                end
+                CMD_SPRPOS: begin
+                    if (regs[17] < NUM_SPRITES) begin
+                        spr_next_x[regs[17][3:0]] <= {regs[19], regs[18]};
+                        spr_next_y[regs[17][3:0]] <= regs[20];
+                    end
+                end
+                CMD_SPRENA: begin
+                    if (regs[17] < NUM_SPRITES)
+                        spr_next_enable[regs[17][3:0]] <= 1;
+                end
+                CMD_SPRDIS: begin
+                    if (regs[17] < NUM_SPRITES)
+                        spr_next_enable[regs[17][3:0]] <= 0;
+                end
+                CMD_SPRFLIP: begin
+                    if (regs[17] < NUM_SPRITES) begin
+                        spr_next_flip_h[regs[17][3:0]] <= regs[18][0];
+                        spr_next_flip_v[regs[17][3:0]] <= regs[18][1];
+                    end
+                end
+                CMD_SPRPRI: begin
+                    if (regs[17] < NUM_SPRITES)
+                        spr_next_pri[regs[17][3:0]] <= regs[18][1:0];
+                end
+                8'h13: begin
+                    if (regs[17] < NUM_SPRITES && regs[18] < NUM_SPRITES) begin
+                        cmd_x <= {6'b0, regs[17][3:0]};
+                        cmd_y <= {6'b0, regs[18][3:0]};
+                        cmd_cx <= 0; cmd_cy <= 0;
+                        sprcopy_phase <= 0;
+                        cmd_busy <= 1; cmd_op <= 8'h13;
+                    end
+                end
+                8'h1F: begin
+                    vgc_cmd_reset_req <= 1'b1;
+                    sys_reset_req <= 1'b1;
+                end
+                CMD_SCROLLMIXED: begin
+                    if (valid_text_scroll_rect(regs[17], regs[18], regs[19], regs[20], regs[21]) ||
+                        valid_gfx_scroll_rect({regs[24][0], regs[23]}, regs[25],
+                                              {regs[27][0], regs[26]}, regs[28], regs[29])) begin
+                        smix_do_text <= valid_text_scroll_rect(regs[17], regs[18], regs[19], regs[20], regs[21]);
+                        smix_do_gfx <= valid_gfx_scroll_rect({regs[24][0], regs[23]}, regs[25],
+                                                            {regs[27][0], regs[26]}, regs[28], regs[29]);
+                        smix_text_left <= regs[17][6:0];
+                        smix_text_top <= regs[18][5:0];
+                        smix_text_width <= regs[19][6:0];
+                        smix_text_height <= regs[20][5:0];
+                        smix_text_rows <= (regs[21] >= regs[20])
+                            ? regs[20][5:0]
+                            : regs[21][5:0];
+                        smix_gfx_fill <= regs[22][3:0];
+                        smix_gfx_left <= {regs[24][0], regs[23]};
+                        smix_gfx_top <= regs[25];
+                        smix_gfx_width <= {regs[27][0], regs[26]};
+                        smix_gfx_height <= regs[28];
+                        smix_gfx_rows <= (regs[29] >= regs[28])
+                            ? regs[28]
+                            : regs[29];
+                        smix_text_fill_color <= regs[30];
+                        smix_text_fill_attr <= regs[31];
+                        cmd_cx <= 0;
+                        cmd_cy <= 0;
+                        smix_phase <= SMIX_WAIT_VBLANK;
+                        cmd_busy <= 1;
+                        cmd_op <= CMD_SCROLLMIXED;
+                    end
+                end
+                8'h1B: begin
+                    if (copper_list_count[copper_target_list] < COPPER_MAX) begin
+                        copper_list_wr_addr <= copper_entry_addr(
+                            copper_target_list,
+                            copper_list_count[copper_target_list][COPPER_INDEX_BITS-1:0]
+                        );
+                        copper_list_wr_data <= pack_copper_entry(
+                            gfx_addr_xy({regs[18][0], regs[17]}, regs[19]),
+                            regs[20],
+                            regs[22]
+                        );
+                        copper_list_wr_we <= 1'b1;
+                        copper_list_count[copper_target_list] <= copper_list_count[copper_target_list] + 1;
+                        if (copper_target_list == copper_active_list) begin
+                            copper_pos[copper_count] <= gfx_addr_xy({regs[18][0], regs[17]}, regs[19]);
+                            copper_reg[copper_count] <= regs[20];
+                            copper_val[copper_count] <= regs[22];
+                            copper_count <= copper_count + 1;
+                        end
+                    end
+                end
+                8'h1C: begin
+                    copper_list_count[copper_target_list] <= 0;
+                    if (copper_target_list == copper_active_list) begin
+                        copper_count <= 0;
+                    end
+                end
+                8'h1D: begin
+                    copper_enabled <= 1;
+                end
+                8'h1E: begin
+                    copper_enabled <= 0;
+                end
+                CMD_COPPERLIST: begin
+                    copper_target_list <= regs[17][COPPER_LIST_BITS-1:0];
+                end
+                CMD_COPPERUSE: begin
+                    copper_pending_list <= regs[17][COPPER_LIST_BITS-1:0];
+                end
+                CMD_COPPERLISTEND: begin
+                    copper_target_list <= copper_active_list;
+                end
+                CMD_MEMREAD, CMD_MEMWRITE: begin
+                    if (!memcmd_pending) begin
+                        memcmd_code <= command_code;
+                        memcmd_delay <= 3'd2;
+                        memcmd_pending <= 1'b1;
+                    end
+                end
+                default: ;
+            endcase
+        end
+    endtask
+
     wire vram_data_read = read_active && vram_reg_sel && vram_reg_off == VR_DATA;
     // A direct-window read reuses the VRAM read latch pipeline: same plane BRAM,
     // same multi-stage capture (cpu_raddr -> vram_port_read_active ->
@@ -2896,7 +3067,8 @@ module vgc (
                     5'd11:       collision_ss[7:0] <= 8'h00;
                     5'd12:       collision_bg[7:0] <= 8'h00;
                     REG_BORDER:  border_color <= dbg_wdata[3:0];
-                    default: ;
+                    REG_CMD:     start_vgc_command(dbg_wdata);
+                    default:     regs[dbg_reg_offset_w] <= dbg_wdata;
                 endcase
             end
 
@@ -3162,6 +3334,23 @@ module vgc (
     wire dbg_vmem_spr_re = dbg_vmem_re && dbg_vmem_space == SPACE_SPRITE &&
                            (dbg_vmem_addr < SPR_SIZE);
 
+    // Command-engine port-A READS must win the char/color/attr port over
+    // opportunistic VRAM/debug snapshot reads — exactly as cmd_gfx_re does for
+    // the gfx plane below. Without this, a host screen poll (nservers.c
+    // do_read_screen through the dbg bridge) or any VRAM read that lands during
+    // an atomic SCROLLMIXED steals port A, so the scroll's source read returns
+    // the wrong cell and the copied rows come back blank (icons scroll fine
+    // because cmd_gfx_re already wins the gfx mux). Honors the invariant noted
+    // below for char/color/attr, which previously only the gfx plane obeyed.
+    wire smix_text_reading = cmd_busy && cmd_op == CMD_SCROLLMIXED && smix_do_text &&
+                             (smix_phase == SMIX_TEXT_READ || smix_phase == SMIX_TEXT_WAIT);
+    wire cmd_char_re  = smix_text_reading ||
+                        (memread_pending != 2'd0 && memread_space == SPACE_CHAR);
+    wire cmd_color_re = smix_text_reading ||
+                        (memread_pending != 2'd0 && memread_space == SPACE_COLOR);
+    wire cmd_attr_re  = smix_text_reading ||
+                        (memread_pending != 2'd0 && memread_space == SPACE_TEXTATTR);
+
     // Port A address/data/we mux for each memory.
     //
     // Debug reads are deliberately lowest priority. The host polls screen RAM
@@ -3187,6 +3376,8 @@ module vgc (
             char_a_we = 1;
         end else if (blt_re && blt_space == 3'd1) begin
             char_a_addr = blt_addr[11:0];
+        end else if (cmd_char_re) begin
+            char_a_addr = cmd_char_addr;
         end else if (vram_char_read) begin
             char_a_addr = vram_port_read_addr[11:0];
         end else if (dbg_vmem_char_re) begin
@@ -3213,6 +3404,8 @@ module vgc (
             color_a_we = 1;
         end else if (blt_re && blt_space == 3'd2) begin
             color_a_addr = blt_addr[11:0];
+        end else if (cmd_color_re) begin
+            color_a_addr = cmd_color_addr;
         end else if (vram_color_read) begin
             color_a_addr = vram_port_read_addr[11:0];
         end else if (dbg_vmem_color_re) begin
@@ -3239,6 +3432,8 @@ module vgc (
             attr_a_we = 1;
         end else if (blt_re && blt_space == SPACE_TEXTATTR) begin
             attr_a_addr = blt_addr[11:0];
+        end else if (cmd_attr_re) begin
+            attr_a_addr = cmd_attr_addr;
         end else if (vram_attr_read) begin
             attr_a_addr = vram_port_read_addr[11:0];
         end else if (dbg_vmem_attr_re) begin

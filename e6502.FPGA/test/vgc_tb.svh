@@ -155,6 +155,7 @@ task automatic summary();
     $display("=== Results: %0d passed, %0d failed ===", pass_count, fail_count);
     if (fail_count == 0) $display("ALL TESTS PASSED");
     else                 $display("SOME TESTS FAILED");
+    $finish(fail_count);
 endtask
 
 // ---------------------------------------------------------------------------
@@ -378,6 +379,14 @@ task automatic write_param(input int idx, input logic [7:0] data);
 endtask
 
 task automatic write_cmd(input logic [7:0] cmd);
+    int timeout;
+    timeout = 0;
+    while ((dut.cmd_busy || dut.artist_inst.busy || dut.memcmd_pending) &&
+           timeout < 500000) begin
+        @(posedge clk);
+        timeout++;
+    end
+    check("VGC command port idle before command write", timeout < 500000);
     bus_write(REG_CMD_A, cmd);
 endtask
 
@@ -385,10 +394,15 @@ task automatic wait_cmd_done();
     int timeout;
     timeout = 0;
     repeat(2) @(posedge clk);
-    while ((dut.cmd_busy || dut.artist_inst.busy) && timeout < 500000) begin
+    while (!(dut.cmd_busy || dut.artist_inst.busy) && timeout < 64) begin
         @(posedge clk);
         timeout++;
     end
+    while ((dut.cmd_busy || dut.artist_inst.busy) && timeout < 1000000) begin
+        @(posedge clk);
+        timeout++;
+    end
+    check("VGC command completed before timeout", timeout < 1000000);
     // After busy deasserts, give the last pending gfx write two more clocks
     // to propagate through port A → dpram. Without this the assertion can
     // fire before the final pixel commits to memory, masking a real success

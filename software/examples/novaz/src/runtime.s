@@ -200,6 +200,7 @@ nz6_load_segment:
 init_screen:
         JSR init_video_colors
         JSR nz_cursor_off
+        JSR zvm_reset_text_ring
         STZ nz_word_len
         STZ nz_raw_input_mode
         STZ nz_more_enabled
@@ -276,6 +277,7 @@ init_game_screen:
         STZ nz_auto_wrap
         LDA #$01
         STA nz_more_enabled
+        JSR zvm_reset_text_ring
         JSR setup_text_region
         STZ VTEXT_CURX
         STZ VTEXT_CURY

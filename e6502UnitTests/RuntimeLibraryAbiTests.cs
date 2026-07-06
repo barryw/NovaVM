@@ -644,6 +644,43 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void VgcWaitCommandArmsBeforeAcceptingIdle()
+    {
+        string vgc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vgc.s"));
+        string wait = File.ReadAllText(RepoPath("software", "runtime", "asm", "vgc_wait.s"));
+        string mixed = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext_mixed.s"));
+
+        AssertArmedWait(vgc);
+        AssertArmedWait(wait);
+
+        string composite = Slice(mixed, "vtext_scroll_composite_up:", "; @label VTEXT.FILL_GFX_REGION");
+        StringAssert.Contains(composite, "STA   VGC_CMD");
+        StringAssert.Contains(composite, "LDY   #$20");
+        StringAssert.Contains(composite, "@arm:");
+        StringAssert.Contains(composite, "BNE   @arm");
+        StringAssert.Contains(composite, "@wait:");
+
+        static void AssertArmedWait(string source)
+        {
+            string routine = Slice(source, "vgc_wait_cmd:", ".endif");
+            StringAssert.Contains(routine, "LDY   #$20");
+            StringAssert.Contains(routine, "@arm:");
+            StringAssert.Contains(routine, "DEY");
+            StringAssert.Contains(routine, "BNE   @arm");
+            StringAssert.Contains(routine, "@wait:");
+        }
+
+        static string Slice(string source, string startMarker, string endMarker)
+        {
+            int start = source.IndexOf(startMarker, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0, $"Missing start marker {startMarker}.");
+            int end = source.IndexOf(endMarker, start, StringComparison.Ordinal);
+            Assert.IsTrue(end > start, $"Missing end marker {endMarker} after {startMarker}.");
+            return source[start..end];
+        }
+    }
+
+    [TestMethod]
     public void VSpriteRotateAbiUsesCallerOwnedBuffersAndStableRoutineSymbols()
     {
         string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "vsprite.inc"));

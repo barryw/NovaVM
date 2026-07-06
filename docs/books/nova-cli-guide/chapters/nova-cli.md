@@ -1137,6 +1137,7 @@ nova capture hdmi screenshots/hardware/current.png
 nova check spi-bridge --remote 192.168.1.188
 nova check vgc-reset-stale --remote 192.168.1.188
 nova fpga check-timing e6502.FPGA/boards/ulx3s/build/nextpnr-report.json
+nova fpga vivado-utilization e6502.FPGA/boards/arty_z7/build/ps_full/ps_full.runs/synth_1/arty_z7_full.dcp --out /tmp/arty-hier-util.rpt
 ```
 
 `nova capture screen` uses the NovaVM V4L2 device (`/dev/video0`) and captures
@@ -1154,6 +1155,10 @@ The raw NovaHost SD commands are intentionally not the primary user-facing
 workflow. The CLI still exposes raw SD file operations as `nova ls`, `nova put`,
 `nova get`, and `nova rm` for compatibility and diagnostics.
 
+Use `nova fpga vivado-utilization` when an Arty Vivado build fails placement.
+It opens the given checkpoint with Vivado, writes a hierarchical utilization
+report, and removes its generated Tcl helper before returning.
+
 Arty Z7 board workflows also live under `nova arty`:
 
 ```bash
@@ -1169,15 +1174,20 @@ nova arty make-boot-bin
 
 `nova arty make-boot-bin` packages the FSBL, bitstream, and PS FIO ELF into
 `e6502.FPGA/boards/arty_z7/build/BOOT.bin` after refreshing embedded 6502
-payloads.
+payloads. It rebuilds the PS FIO app when the ELF is missing or older than the
+current hardware handoff, Vitis hook, or PS sources. It refuses to package an
+existing `.bit` file when the Vivado implementation run directory contains
+failure markers, because that means the file can be stale.
 
 `nova arty build-linux-image` rebuilds the PetaLinux image from the current repo
 layer and Arty XSA, then packages the Linux `BOOT.BIN`. This is the path that
 installs kernel/device-tree/rootfs features such as the NovaVM V4L2/ALSA capture
-device. `nova arty deploy-boot-image --remote 192.168.1.188` copies the rebuilt
+device. It uses the same Vivado failure-marker check before `petalinux-package`
+so the Linux boot image cannot accidentally embed an older bitstream after a
+failed implementation. `nova arty deploy-boot-image --remote 192.168.1.188` copies the rebuilt
 `image.ub` and Linux `BOOT.BIN` to `/boot`, stages `rootfs.ext4` under `/data`,
-writes it to `/dev/mmcblk0p2`, forces a kernel sync/reboot, verifies all
-deployed bytes by SHA-256 after the board returns, and waits for NovaVM. The
+writes it to `/dev/mmcblk0p2`, verifies the rootfs bytes by SHA-256 before
+reboot, forces a kernel sync/reboot, verifies boot files, and waits for NovaVM. The
 rootfs path requires `/data` to be a separate staging filesystem. Use
 `--boot-only` only when the rootfs is already known to match the build; combine
 it with `--no-reboot` only when you intentionally want to defer a `/boot`-only

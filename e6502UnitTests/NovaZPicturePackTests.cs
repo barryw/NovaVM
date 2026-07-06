@@ -289,6 +289,7 @@ public sealed class NovaZPicturePackTests
         int prev = -1;
         bool sawDropCap = false;
         bool sawRoomIcon = false;
+        bool sawKitchenIcon = false;
         for (int i = 0; i < count; i++)
         {
             int e = HeaderSize + i * IndexEntrySize;
@@ -311,6 +312,14 @@ public sealed class NovaZPicturePackTests
                 sawRoomIcon = true;
                 Assert.AreEqual(0x04, flags & 0x04, "Zork Zero room icons should use padded framed-icon flow");
             }
+            if (z == 0x00D9)
+            {
+                sawKitchenIcon = true;
+                Assert.AreEqual(21, w, "Zork Zero Kitchen icon width must match the original 21px framed room icon.");
+                Assert.AreEqual(21, h, "Zork Zero Kitchen icon height must match the original 21px framed room icon.");
+                Assert.AreEqual(0x04, flags & 0x04, "Zork Zero Kitchen icon should use padded framed-icon flow.");
+                Assert.AreEqual(0x01, flags & 0x01, "Zork Zero Kitchen icon should preserve source transparency.");
+            }
             if (len > 0)
             {
                 Assert.AreEqual(((w + 1) / 2) * h, len, $"pic {z} bitmap length");
@@ -321,6 +330,7 @@ public sealed class NovaZPicturePackTests
 
         Assert.IsTrue(sawDropCap, "expected Zork Zero drop-cap picture $0002");
         Assert.IsTrue(sawRoomIcon, "expected Zork Zero room-icon picture $00D8");
+        Assert.IsTrue(sawKitchenIcon, "expected Zork Zero Kitchen room-icon picture $00D9");
     }
 
     // --- helpers --------------------------------------------------------------
@@ -331,10 +341,15 @@ public sealed class NovaZPicturePackTests
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            string candidate = Path.Combine(dir.FullName,
+            string current = Path.Combine(dir.FullName,
+                "software", "examples", "novaz", "projects", "zork-zero", "PICS.BLB");
+            if (File.Exists(current))
+                return current;
+
+            string legacy = Path.Combine(dir.FullName,
                 "examples", "novaz", "projects", "zork-zero", "PICS.BLB");
-            if (File.Exists(candidate))
-                return candidate;
+            if (File.Exists(legacy))
+                return legacy;
             dir = dir.Parent;
         }
         return null;

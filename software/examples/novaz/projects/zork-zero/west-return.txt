@@ -1,0 +1,6 @@
+# Zork Zero (V6) regression for returning west from Kitchen to Banquet Hall.
+# This path used to leave the hardware screen with only the status bar, prompt,
+# one stale room picture, and maroon gutter pixels.
+ne=>Scullery
+s=>Kitchen&&orders, aiming you westward
+w=>Banquet Hall

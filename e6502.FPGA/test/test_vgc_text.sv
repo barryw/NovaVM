@@ -99,6 +99,35 @@ module test_vgc_text;
         check_eq("style flags off leaves only transparent bg", peek_text_attr(5), 8'h08);
     endtask
 
+    task automatic test_font_lookup_uses_delayed_scanline();
+        $display("");
+        $display("Test: font lookup uses the delayed scanline that matches char_b_dout");
+
+        dut.text_inst.char_mem.mem[0] = 8'h01;
+        dut.text_inst.font_mem.mem[{8'h01, 3'd0}] = 8'h11;
+        dut.text_inst.font_mem.mem[{8'h01, 3'd1}] = 8'h22;
+
+        force dut.real_row = 6'd0;
+        force dut.text_col = 7'd0;
+        force dut.font_slot = 3'd0;
+        force dut.font_line = 3'd1;
+        force dut.font_line_d1 = 3'd0;
+        step(1);
+        #1;
+        check_eq("font address uses delayed line bits",
+                 dut.text_inst.font_b_addr[2:0], 3'd0);
+        step(1);
+
+        check_eq("font data came from delayed line 0, not current line 1",
+                 dut.text_inst.font_b_dout, 8'h11);
+
+        release dut.real_row;
+        release dut.text_col;
+        release dut.font_slot;
+        release dut.font_line;
+        release dut.font_line_d1;
+    endtask
+
     task automatic test_scrollmixed_command_scrolls_all_planes();
         $display("");
         $display("Test: VCMD_SCROLLMIXED scrolls text/color/attr/gfx together");
@@ -139,6 +168,221 @@ module test_vgc_text;
         check_eq("vacated text attr filled", peek_text_attr(3 * COLS_TB + 1), 8'h01);
         check_eq("gfx pixel moved upward", peek_gfx(4, 5), 4'hB);
         check_eq("vacated gfx pixel filled", peek_gfx(4, 6), 4'h7);
+    endtask
+
+    task automatic test_regcmd_read_is_busy_while_command_write_is_pending();
+        $display("");
+        $display("Test: REG_CMD reports busy while a command write is in the write slice");
+
+        write_param(0, 8'd11);
+        write_param(1, 8'd9);
+        write_param(2, 8'd58);
+        write_param(3, 8'd40);
+        write_param(4, 8'd1);
+        write_param(5, 8'h0F);
+        write_param(6, 8'd43);
+        write_param(7, 8'd0);
+        write_param(8, 8'd39);
+        write_param(9, 8'd234);
+        write_param(10, 8'd0);
+        write_param(11, 8'd160);
+        write_param(12, 8'd4);
+        write_param(13, 8'hF0);
+        write_param(14, 8'h00);
+
+        @(posedge clk);
+        cpu_addr  <= REG_CMD_A;
+        cpu_wdata <= CMD_SCROLLMIXED_A;
+        cpu_we    <= 1;
+        cpu_re    <= 0;
+        cpu_ce    <= 1;
+        @(posedge clk);
+        cpu_addr  <= REG_CMD_A;
+        cpu_wdata <= 8'h00;
+        cpu_we    <= 0;
+        cpu_re    <= 1;
+        cpu_ce    <= 1;
+        #1;
+        check("REG_CMD read sees pending command write as busy", cpu_rdata[0] == 1'b1);
+        @(posedge clk);
+        cpu_re <= 0;
+        cpu_ce <= 0;
+        wait_cmd_done();
+    endtask
+
+    task automatic issue_scrollmixed(
+        input int text_left,
+        input int text_top,
+        input int text_width,
+        input int text_height,
+        input int text_rows,
+        input int gfx_left,
+        input int gfx_top,
+        input int gfx_width,
+        input int gfx_height,
+        input int gfx_rows
+    );
+        write_param(0, 8'(text_left));
+        write_param(1, 8'(text_top));
+        write_param(2, 8'(text_width));
+        write_param(3, 8'(text_height));
+        write_param(4, 8'(text_rows));
+        write_param(5, 8'h0);
+        write_param(6, 8'(gfx_left & 8'hFF));
+        write_param(7, 8'((gfx_left >> 8) & 8'h01));
+        write_param(8, 8'(gfx_top));
+        write_param(9, 8'(gfx_width & 8'hFF));
+        write_param(10, 8'((gfx_width >> 8) & 8'h01));
+        write_param(11, 8'(gfx_height));
+        write_param(12, 8'(gfx_rows));
+        write_param(13, 8'h0F);
+        write_param(14, 8'h00);
+        write_cmd(CMD_SCROLLMIXED_A);
+        wait_cmd_done();
+    endtask
+
+    task automatic test_scrollmixed_zork_zero_body_region();
+        localparam int LEFT = 11;
+        localparam int TOP = 9;
+        localparam int WIDTH = 58;
+        localparam int HEIGHT = 40;
+        $display("");
+        $display("Test: VCMD_SCROLLMIXED preserves the real Zork Zero body region");
+
+        for (int row = TOP; row < TOP + HEIGHT; row++) begin
+            for (int col = LEFT; col < LEFT + WIDTH; col++) begin
+                dut.text_inst.char_mem.mem[row * COLS_TB + col] = 8'h41 + 8'((row - TOP) % 26);
+                dut.text_inst.color_mem.mem[row * COLS_TB + col] = 8'hF0;
+                dut.text_inst.attr_mem.mem[row * COLS_TB + col] = 8'h00;
+            end
+        end
+        dut.text_inst.char_mem.mem[1 * COLS_TB + 8] = 8'h4B; // status/header row must not move.
+        // Kitchen-like icon block: yellow frame/art over gray paper inside the
+        // real Zork Zero gfx scroll rect. The paper pixels are the ones that
+        // visibly mutate when the mixed scroll path corrupts inline icons.
+        for (int y = 0; y < 21; y++) begin
+            for (int x = 0; x < 21; x++)
+                dut.gfx_inst.gfx_mem.mem[(153 + y) * 320 + 43 + x] = 4'hF;
+        end
+        for (int x = 0; x < 21; x++) begin
+            dut.gfx_inst.gfx_mem.mem[153 * 320 + 43 + x] = 4'hB;
+            dut.gfx_inst.gfx_mem.mem[173 * 320 + 43 + x] = 4'hB;
+        end
+        for (int y = 0; y < 21; y++) begin
+            dut.gfx_inst.gfx_mem.mem[(153 + y) * 320 + 43] = 4'hB;
+            dut.gfx_inst.gfx_mem.mem[(153 + y) * 320 + 63] = 4'hB;
+        end
+        dut.gfx_inst.gfx_mem.mem[158 * 320 + 48] = 4'hB;
+        dut.gfx_inst.gfx_mem.mem[162 * 320 + 54] = 4'hB;
+        dut.gfx_inst.gfx_mem.mem[168 * 320 + 58] = 4'hB;
+        step(2);
+
+        for (int i = 0; i < 8; i++)
+            issue_scrollmixed(LEFT, TOP, WIDTH, HEIGHT, 1, 43, 39, 234, 160, 4);
+
+        check_eq("header row survived body scroll", peek_char_cell(8, 1), 8'h4B);
+        check_eq("left gutter before body is untouched", peek_char_cell(LEFT - 1, TOP), 8'h20);
+        check_eq("body top row shifted by 8 rows", peek_char_cell(LEFT, TOP), 8'h49);
+        check_eq("body middle row still contains shifted text", peek_char_cell(LEFT + 10, TOP + 10), 8'h53);
+        check_eq("vacated body bottom row cleared", peek_char_cell(LEFT, TOP + HEIGHT - 1), 8'h20);
+        check_eq("right gutter after body is untouched", peek_char_cell(LEFT + WIDTH, TOP), 8'h20);
+        check_eq("kitchen icon top border scrolled with gfx", peek_gfx(43, 121), 4'hB);
+        check_eq("kitchen icon bottom border scrolled with gfx", peek_gfx(63, 141), 4'hB);
+        check_eq("kitchen icon interior paper scrolled unchanged", peek_gfx(50, 126), 4'hF);
+        check_eq("kitchen icon interior art scrolled unchanged", peek_gfx(54, 130), 4'hB);
+        check_eq("kitchen icon old location was cleared to fill color", peek_gfx(43, 153), 4'h0);
+    endtask
+
+    // Regression for the Zork Zero "text disappears on hardware scroll" bug.
+    // nservers.c do_read_screen() reads the whole char plane through the dbg
+    // bridge; when one of those reads landed DURING an atomic SCROLLMIXED it
+    // stole port A from the scroll's source read (char/color/attr had no
+    // cmd_*_re priority, unlike gfx's cmd_gfx_re), so the copied rows came back
+    // as the polled cell instead of the real text. Reproduced by holding a
+    // char-plane debug read asserted across the whole scroll: fails before the
+    // mux fix (body == POISON), passes after (body keeps its shifted text).
+    task automatic test_scrollmixed_survives_concurrent_host_char_read();
+        localparam int LEFT = 11;
+        localparam int TOP = 9;
+        localparam int WIDTH = 58;
+        localparam int HEIGHT = 40;
+        localparam logic [7:0] POISON = 8'h2A; // '*' — must never end up in the body
+        $display("");
+        $display("Test: VCMD_SCROLLMIXED body survives a concurrent host char read");
+
+        for (int row = TOP; row < TOP + HEIGHT; row++) begin
+            for (int col = LEFT; col < LEFT + WIDTH; col++) begin
+                dut.text_inst.char_mem.mem[row * COLS_TB + col] = 8'h41 + 8'((row - TOP) % 26);
+                dut.text_inst.color_mem.mem[row * COLS_TB + col] = 8'hF0;
+                dut.text_inst.attr_mem.mem[row * COLS_TB + col] = 8'h00;
+            end
+        end
+        // The cell the hijacked read lands on (row 0, well outside the scroll).
+        dut.text_inst.char_mem.mem[0] = POISON;
+        step(2);
+
+        // Hold a char-plane debug read asserted for the entire scroll, mimicking
+        // the host hammering do_read_screen while the game scrolls the window.
+        dbg_vmem_space <= VPLANE_CHAR_A;
+        dbg_vmem_addr  <= 17'd0;
+        dbg_vmem_re    <= 1'b1;
+        @(posedge clk);
+
+        for (int i = 0; i < 8; i++)
+            issue_scrollmixed(LEFT, TOP, WIDTH, HEIGHT, 1, 43, 39, 234, 160, 4);
+
+        dbg_vmem_re <= 1'b0;
+        step(2);
+
+        check_eq("body top row shifted by 8 rows despite host poll", peek_char_cell(LEFT, TOP), 8'h49);
+        check_eq("body middle row still holds shifted text", peek_char_cell(LEFT + 10, TOP + 10), 8'h53);
+        check("body top not overwritten by the polled cell", peek_char_cell(LEFT, TOP) != POISON);
+        check("body middle not overwritten by the polled cell", peek_char_cell(LEFT + 10, TOP + 10) != POISON);
+    endtask
+
+    task automatic test_debug_writes_parameters_and_scrollmixed_command();
+        logic [7:0] rb;
+        localparam int LEFT = 11;
+        localparam int TOP = 9;
+        localparam int WIDTH = 58;
+        localparam int HEIGHT = 40;
+        $display("");
+        $display("Test: debug writes update VGC params and can issue VCMD_SCROLLMIXED");
+
+        dbg_vmem_write(VPLANE_CHAR_A, (TOP + 1) * COLS_TB + LEFT, 8'h51);
+        dbg_vmem_write(VPLANE_COLOR_A, (TOP + 1) * COLS_TB + LEFT, 8'hF0);
+        dbg_vmem_write(VPLANE_TEXTATTR_A, (TOP + 1) * COLS_TB + LEFT, 8'h04);
+
+        dbg_write(REG_PARAM0_A + 0, 8'(LEFT));
+        dbg_write(REG_PARAM0_A + 1, 8'(TOP));
+        dbg_write(REG_PARAM0_A + 2, 8'(WIDTH));
+        dbg_write(REG_PARAM0_A + 3, 8'(HEIGHT));
+        dbg_write(REG_PARAM0_A + 4, 8'd1);
+        dbg_write(REG_PARAM0_A + 5, 8'h0F);
+        dbg_write(REG_PARAM0_A + 6, 8'd43);
+        dbg_write(REG_PARAM0_A + 7, 8'd0);
+        dbg_write(REG_PARAM0_A + 8, 8'd39);
+        dbg_write(REG_PARAM0_A + 9, 8'd234);
+        dbg_write(REG_PARAM0_A + 10, 8'd0);
+        dbg_write(REG_PARAM0_A + 11, 8'd160);
+        dbg_write(REG_PARAM0_A + 12, 8'd4);
+        dbg_write(REG_PARAM0_A + 13, 8'hF0);
+        dbg_write(REG_PARAM0_A + 14, 8'h00);
+
+        dbg_read(REG_PARAM0_A + 0, rb);
+        check_eq("debug P0 readback", rb, LEFT);
+        dbg_read(REG_PARAM0_A + 4, rb);
+        check_eq("debug P4 readback", rb, 1);
+        dbg_read(REG_PARAM0_A + 14, rb);
+        check_eq("debug P14 readback", rb, 0);
+
+        dbg_write(REG_CMD_A, CMD_SCROLLMIXED_A);
+        wait_cmd_done();
+
+        check_eq("debug mixed scroll moved char into body top", peek_char_cell(LEFT, TOP), 8'h51);
+        check_eq("debug mixed scroll moved color with char", peek_color(TOP * COLS_TB + LEFT), 8'hF0);
+        check_eq("debug mixed scroll moved attr with char", peek_text_attr(TOP * COLS_TB + LEFT), 8'h04);
+        check_eq("debug mixed scroll filled vacated row", peek_char_cell(LEFT, TOP + HEIGHT - 1), 8'h20);
     endtask
 
     // T3: typing a full row advances cursor_y to the next row and the next
@@ -435,7 +679,12 @@ module test_vgc_text;
         test_char_ram_roundtrip();
         test_regcharout_basic();
         test_regcharout_text_attributes();
+        test_font_lookup_uses_delayed_scanline();
         test_scrollmixed_command_scrolls_all_planes();
+        test_regcmd_read_is_busy_while_command_write_is_pending();
+        test_scrollmixed_zork_zero_body_region();
+        test_scrollmixed_survives_concurrent_host_char_read();
+        test_debug_writes_parameters_and_scrollmixed_command();
         test_row_wrap();
         test_newline_no_scroll();
         test_newline_at_bottom_scrolls();

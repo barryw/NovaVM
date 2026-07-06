@@ -101,6 +101,10 @@ static unsigned char vmem_read(unsigned sp, unsigned a) {
     return (unsigned char)rd(R_VMEM_DATA);
 }
 
+static void vmem_write(unsigned sp, unsigned a, unsigned char v) {
+    wr(R_VMEM_DATA, ((sp & 7u) << 25) | ((a & 0x1FFFFu) << 8) | v);
+}
+
 /* VM reset over R_CTRL. cold==1 also pulses the custom-chip (system) reset, the
  * same combination novavm.c uses at boot. The 6502 re-runs its cold start. */
 static void vm_reset_ctrl_locked(int cold) {
@@ -978,6 +982,20 @@ static void do_read_vram(dbg_ctx *c, const char *s) {
     write_all(c->fd, c->tx, (size_t)pos);
 }
 
+static void do_fill_vram(dbg_ctx *c, const char *s) {
+    int space = json_int(s, "space", -1);
+    int addr = json_int(s, "address", -1);
+    int value = json_int(s, "value", -1);
+    int length = json_int(s, "length", -1);
+    if (space < 0 || space > 7) { dbg_respond_err(c, "Missing/invalid 'space'"); return; }
+    if (addr < 0) { dbg_respond_err(c, "Missing 'address'"); return; }
+    if (value < 0 || value > 255) { dbg_respond_err(c, "Missing/invalid 'value'"); return; }
+    if (length < 1 || length > 65536) { dbg_respond_err(c, "'length' must be 1..65536"); return; }
+    for (int i = 0; i < length; i++)
+        vmem_write((unsigned)space, (unsigned)(addr + i), (unsigned char)value);
+    dbg_respond_ok(c);
+}
+
 static void do_send_key(dbg_ctx *c, const char *s) {
     char key[24];
     json_str(s, "key", key, sizeof key);
@@ -1067,6 +1085,7 @@ static void dbg_dispatch(dbg_ctx *c, const char *line) {
     else if (!strcmp(cmd, "peek_block"))  do_peek_block(c, line);
     else if (!strcmp(cmd, "poke"))        do_poke(c, line);
     else if (!strcmp(cmd, "read_vram"))   do_read_vram(c, line);
+    else if (!strcmp(cmd, "fill_vram"))   do_fill_vram(c, line);
     else if (!strcmp(cmd, "send_key"))    do_send_key(c, line);
     else if (!strcmp(cmd, "type_text"))   do_type_text(c, line);
     else if (!strcmp(cmd, "read_screen")) do_read_screen(c);

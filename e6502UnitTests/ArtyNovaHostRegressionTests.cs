@@ -127,6 +127,21 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxDebugFillVram_ImplementsNovaCliVerb()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nservers.c"));
+
+        StringAssert.Contains(src, "static void vmem_write",
+            "Linux debug server must expose the VGC vmem write path used by nova vm fill-vram.");
+        StringAssert.Contains(src, "static void do_fill_vram",
+            "nova vm fill-vram must not be accepted by the CLI but rejected by the Arty debug server.");
+        StringAssert.Contains(src, "\"fill_vram\"",
+            "Debug dispatch must route the CLI fill_vram command.");
+        StringAssert.Contains(src, "vmem_write((unsigned)space, (unsigned)(addr + i), (unsigned char)value);",
+            "fill_vram must write through the VGC vmem port, not 6502 RAM poke.");
+    }
+
+    [TestMethod]
     public void LinuxManagementHostReboot_UsesKernelSysrq()
     {
         string src = File.ReadAllText(LinuxNovaVmSrc("nservers.c"));

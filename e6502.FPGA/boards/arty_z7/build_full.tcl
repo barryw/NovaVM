@@ -93,7 +93,7 @@ set_property STEPS.SYNTH_DESIGN.TCL.PRE $pre_tcl [get_runs synth_1]
 
 # SYNTHESIS / VIDEO_720X480 defines for hdl-util-hdmi (OSERDESE2 + 720x480).
 set_property -name {STEPS.SYNTH_DESIGN.ARGS.MORE OPTIONS} \
-    -value {-verilog_define SYNTHESIS=1 -verilog_define VIDEO_720X480=1} \
+    -value {-verilog_define SYNTHESIS=1 -verilog_define VIDEO_720X480=1 -verilog_define NOVA_VIVADO=1} \
     -objects [get_runs synth_1]
 
 # Link the OOC hdmi checkpoint into the black-box cell before opt_design (a manual

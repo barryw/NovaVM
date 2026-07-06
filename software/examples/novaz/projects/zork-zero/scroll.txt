@@ -1,0 +1,21 @@
+# Zork Zero (V6) mixed-scroll regression.
+# This is the shortest path from the first prompt that reaches the Kitchen
+# description and forces the V6 body window to scroll. It must run separately
+# from smoke.txt because the prologue clock starts killing the player after a
+# few turns.
+ne=>Scullery
+s=>Kitchen&&orders, aiming you westward
+.expect-at 8,1=>Kitchen
+.expect-at 8,2=>Moves:  2
+.expect-at 11,36=>>s
+.expect-at 11,37=>Kitchen
+.expect-at 16,38=>  You|
+.expect-at 16,41=>  stair|
+.expect-at 11,46=>orders, aiming you westward
+.expect-gfx-color 43,153=>0b
+.expect-gfx-color 63,153=>0b
+.expect-gfx-color 43,173=>0b
+.expect-gfx-color 63,173=>0b
+.expect-gfx-color 43,163=>0b
+.expect-gfx-color 63,163=>0b
+.expect-text-attr-at 10,38=>08

@@ -171,6 +171,11 @@ nz6_brd_w_hi:    .res 1
 nz6_brd_h:       .res 1          ; fill height rows
 nz6_brd_t0:      .res 1          ; mul-by-320 scratch
 nz6_brd_t1:      .res 1
+nz6_scan_l:      .res 1          ; text-plane scan scratch
+nz6_scan_h:      .res 1
+nz6_scan_rows:   .res 1
+nz6_scroll_left_col: .res 1      ; left gutter column index (VTEXT_LEFT-1)
+nz6_margin_row:  .res 1          ; absolute row where a live margin changed
 
 nz6_saved_word_len: .res 1
 nz6_saved_word_buf: .res NZ6_WORD_SAVE_MAX
@@ -1731,7 +1736,85 @@ nz6_scroll_live_rows_composite:
         LSR A
         TAX
         LDA nz6_tmp_lines
-        JMP vtext_scroll_composite_up
+        JSR vtext_scroll_composite_up
+        PHA
+        CMP #0
+        BNE :+
+        JSR nz6_scroll_left_bgtrans_column
+:
+        PLA
+        RTS
+
+; Col VTEXT_LEFT-1 is a pure gutter cell: text only ever starts at VTEXT_LEFT,
+; so this column must always be transparent, letting the gfx behind it (pillar
+; edge or plain background) show through — never an opaque text-bg cell. The old
+; code only touched this column when it already held BGTRANS somewhere, copied
+; existing (possibly opaque) attrs up, and filled newly exposed rows with
+; VTEXT_ATTR (opaque during normal text). That left opaque bg-index-0 (maroon)
+; cells in the left gutter on scrolled rows — the Zork Zero "maroon bars". Force
+; the whole column transparent after every composite scroll instead.
+nz6_scroll_left_bgtrans_column:
+        LDA VTEXT_LEFT
+        BEQ @rts
+        LDA VTEXT_HEIGHT
+        BEQ @rts
+        STA nz6_scan_rows
+        LDA VTEXT_LEFT
+        SEC
+        SBC #$01
+        STA nz6_scroll_left_col
+        STZ nz6_tmp_mod
+@loop:
+        LDA VTEXT_TOP
+        CLC
+        ADC nz6_tmp_mod
+        JSR nz6_calc_left_attr_addr
+        LDA #VTXT_ATTR_BGTRANS
+        JSR nz6_write_attr_at_scan
+        INC nz6_tmp_mod
+        DEC nz6_scan_rows
+        BNE @loop
+@rts:
+        RTS
+
+nz6_calc_left_attr_addr:
+        STA nz6_scan_l
+        ASL A
+        ASL A
+        CLC
+        ADC nz6_scan_l                 ; row * 5
+        STA nz6_scan_l
+        STZ nz6_scan_h
+        ASL nz6_scan_l
+        ROL nz6_scan_h
+        ASL nz6_scan_l
+        ROL nz6_scan_h
+        ASL nz6_scan_l
+        ROL nz6_scan_h
+        ASL nz6_scan_l
+        ROL nz6_scan_h                 ; row * 80
+
+        LDA nz6_scroll_left_col
+        CLC
+        ADC nz6_scan_l
+        STA nz6_scan_l
+        BCC :+
+        INC nz6_scan_h
+:
+        RTS
+
+nz6_write_attr_at_scan:
+        PHA
+        LDA #VGC_PLANE_TEXTATTR
+        STA VGC_VRAM_PLANE
+        LDA nz6_scan_l
+        STA VGC_VRAM_ADDRL
+        LDA nz6_scan_h
+        STA VGC_VRAM_ADDRH
+        STZ VGC_VRAM_CTRL
+        PLA
+        STA VGC_VRAM_DATA
+        RTS
 
 ; ROM newline hook (NZ6_OP_NEWLINE): the V6 carriage-return interrupt
 ; (YZIP "CRCNT/CRFUNC", window props 9/8). A non-zero countdown decrements
@@ -1877,9 +1960,7 @@ nz6_ext_set_margins:
         LDA VTEXT_TOP
         CLC
         ADC VTEXT_CURY
-        CLC
-        ADC #1
-        STA nz6_rect_top                ; release starts below current row
+        STA nz6_margin_row              ; growth starts on current row
 @write_props:
         LDA zvm_operand_lo
         STA nz6_unit_lo
@@ -1893,17 +1974,18 @@ nz6_ext_set_margins:
         STA nz6_unit_hi
         LDX #7
         JSR nz6_write_prop_unit
-        JSR nz6_restore_released_margin_spaces
+        JSR nz6_reconcile_margin_surface
         JMP nz6_geom_epilogue
 @rts:
         RTS
 
-; When a V6 flow picture releases a temporary text margin, cells in the newly
-; writable columns are ordinary background again. They must not keep the
-; transparent picture style or stale icon pixels will show through later blank
-; text. Restyle only space cells below the current output row; rows at/above
-; the cursor may still belong to the inline picture/text already printed.
-nz6_restore_released_margin_spaces:
+; Keep Nova's split text/gfx planes consistent with Frotz's V6 pixel-surface
+; model when margins change in the live window. New margin columns become
+; transparent text spaces from the current output row down so later full-window
+; scrolls move picture/background pixels, not stale hidden glyphs. Released
+; margin columns become ordinary background below the current row; rows at/above
+; the cursor may still belong to already-printed inline picture/text.
+nz6_reconcile_margin_surface:
         LDA nz6_tmp_win
         CMP nz6_win_current
         BEQ :+
@@ -1921,8 +2003,53 @@ nz6_restore_released_margin_spaces:
         ADC VTEXT_HEIGHT
         STA nz6_stk_hi                  ; new bottom edge
 
-        ; Clamp release top into the new window.
-        LDA nz6_rect_top
+        ; Margin growth: [old_left,new_left) and [new_right,old_right) are no
+        ; longer writable text. Make those cells transparent spaces before
+        ; they can be picked up by a later full-window scroll.
+        LDA nz6_margin_row
+        CMP nz6_stk_lo
+        BCS :+
+        LDA nz6_stk_lo
+:
+        STA nz6_rect_top
+        CMP nz6_stk_hi
+        BCS @release
+        LDA nz6_stk_hi
+        SEC
+        SBC nz6_rect_top
+        STA nz6_rect_h
+        BEQ @release
+
+        ; Left margin grew: [old_left, new_left).
+        LDA nz6_rect_left
+        CMP nz6_marg_l
+        BCS @grow_right
+        LDA nz6_marg_l
+        SEC
+        SBC nz6_rect_left
+        BEQ @grow_right
+        STA nz6_tmp_lines
+        LDA nz6_rect_left
+        JSR nz6_exclude_margin_rect
+
+@grow_right:
+        ; Right margin grew: [new_right, old_right).
+        LDA nz6_marg_r
+        CMP nz6_rect_w
+        BCS @release
+        LDA nz6_rect_w
+        SEC
+        SBC nz6_marg_r
+        BEQ @release
+        STA nz6_tmp_lines
+        LDA nz6_marg_r
+        JSR nz6_exclude_margin_rect
+
+@release:
+        ; Margin release starts below the current output row.
+        LDA nz6_margin_row
+        CLC
+        ADC #1
         CMP nz6_stk_lo
         BCS :+
         LDA nz6_stk_lo
@@ -1967,7 +2094,59 @@ nz6_restore_released_margin_spaces:
         RTS
 
 ; A = left, nz6_tmp_lines = width, nz6_rect_top/h = absolute row/height.
+nz6_exclude_margin_rect:
+        STA nz6_clr_tmp
+        LDA VTEXT_LEFT
+        PHA
+        LDA VTEXT_TOP
+        PHA
+        LDA VTEXT_WIDTH
+        PHA
+        LDA VTEXT_HEIGHT
+        PHA
+        LDA nz6_clr_tmp
+        STA VTEXT_LEFT
+        LDA nz6_rect_top
+        STA VTEXT_TOP
+        LDA nz6_tmp_lines
+        STA VTEXT_WIDTH
+        LDA nz6_rect_h
+        STA VTEXT_HEIGHT
+        LDA VTEXT_COLOR
+        PHA
+        LDA VTEXT_ATTR
+        PHA
+        LDA #NZ6_COLOR_DEFAULT
+        STA VTEXT_COLOR
+        LDA #VTXT_ATTR_BGTRANS
+        STA VTEXT_ATTR
+        JSR vtext_clear_region
+        PLA
+        STA VTEXT_ATTR
+        PLA
+        STA VTEXT_COLOR
+        PLA
+        STA VTEXT_HEIGHT
+        PLA
+        STA VTEXT_WIDTH
+        PLA
+        STA VTEXT_TOP
+        PLA
+        STA VTEXT_LEFT
+        RTS
+
+; A = left, nz6_tmp_lines = width, nz6_rect_top/h = absolute row/height.
 nz6_restore_space_rect:
+        STA nz6_clr_tmp
+        LDA VTEXT_LEFT
+        PHA
+        LDA VTEXT_TOP
+        PHA
+        LDA VTEXT_WIDTH
+        PHA
+        LDA VTEXT_HEIGHT
+        PHA
+        LDA nz6_clr_tmp
         STA VTEXT_LEFT
         LDA nz6_rect_top
         STA VTEXT_TOP
@@ -1995,6 +2174,14 @@ nz6_restore_space_rect:
         STA VTEXT_ATTR
         PLA
         STA VTEXT_COLOR
+        PLA
+        STA VTEXT_HEIGHT
+        PLA
+        STA VTEXT_WIDTH
+        PLA
+        STA VTEXT_TOP
+        PLA
+        STA VTEXT_LEFT
         RTS
 
 ; Shared tail for move_window/window_size: operand1 -> prop X, operand2 ->

@@ -3849,6 +3849,7 @@ zvm_erase_window:
         RTS
 
 zvm_clear_whole_screen:
+        JSR zvm_reset_text_ring
         STZ VTEXT_LEFT
         STZ VTEXT_TOP
         LDA #80
@@ -3873,6 +3874,15 @@ zvm_clear_whole_screen:
         STZ zvm_upper_x
         STZ zvm_upper_y
         JMP zvm_select_active_window
+
+zvm_reset_text_ring:
+        STZ VGC_TEXT_TOPROW
+        STZ VTEXT_TOPROW
+        STZ VTEXT_SCROLL_TOP
+        STZ VTEXT_SCROLL_ROWS
+        LDA #$0C
+        STA VGC_CHAROUT
+        RTS
 
 zvm_clear_selected_window:
         STZ VTEXT_CURX

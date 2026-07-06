@@ -4930,7 +4930,7 @@
     {
       "label": "VGC.CHARBG_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 180,
+      "line": 188,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4941,7 +4941,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 406,
+      "line": 414,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4961,7 +4961,7 @@
     {
       "label": "VGC.CLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 128,
+      "line": 136,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4999,7 +4999,7 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 200,
+      "line": 208,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5010,7 +5010,7 @@
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 191,
+      "line": 199,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5021,7 +5021,7 @@
     {
       "label": "VGC.EXEC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 87,
+      "line": 95,
       "inputs": [
         {
           "name": "A",
@@ -5037,7 +5037,7 @@
     {
       "label": "VGC.FILL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 433,
+      "line": 441,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5057,7 +5057,7 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 351,
+      "line": 359,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5068,7 +5068,7 @@
     {
       "label": "VGC.FLASH_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 341,
+      "line": 349,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5079,7 +5079,7 @@
     {
       "label": "VGC.GCLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 362,
+      "line": 370,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5090,7 +5090,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../../runtime/asm/vgc.s",
-      "line": 370,
+      "line": 378,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5115,7 +5115,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 415,
+      "line": 423,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5135,7 +5135,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../../runtime/asm/vgc.s",
-      "line": 245,
+      "line": 253,
       "inputs": [
         {
           "name": "A",
@@ -5151,7 +5151,7 @@
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 234,
+      "line": 242,
       "inputs": [
         {
           "name": "A",
@@ -5167,7 +5167,7 @@
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 223,
+      "line": 231,
       "inputs": [
         {
           "name": "A",
@@ -5183,7 +5183,7 @@
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 209,
+      "line": 217,
       "inputs": [
         {
           "name": "A",
@@ -5203,7 +5203,7 @@
     {
       "label": "VGC.LINE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 397,
+      "line": 405,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5223,7 +5223,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 254,
+      "line": 262,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -5243,7 +5243,7 @@
     {
       "label": "VGC.MEM_READ",
       "source": "../../runtime/asm/vgc.s",
-      "line": 285,
+      "line": 293,
       "inputs": [],
       "outputs": [
         {
@@ -5264,7 +5264,7 @@
     {
       "label": "VGC.MEM_WRITE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 295,
+      "line": 303,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5281,7 +5281,7 @@
     {
       "label": "VGC.PAINT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 442,
+      "line": 450,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5345,7 +5345,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 379,
+      "line": 387,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5361,7 +5361,7 @@
     {
       "label": "VGC.RECT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 424,
+      "line": 432,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5381,7 +5381,7 @@
     {
       "label": "VGC.REVERSE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 306,
+      "line": 314,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5392,7 +5392,7 @@
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 318,
+      "line": 326,
       "inputs": [
         {
           "name": "A",
@@ -5408,7 +5408,7 @@
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 331,
+      "line": 339,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5419,7 +5419,7 @@
     {
       "label": "VGC.SET_BG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 151,
+      "line": 159,
       "inputs": [
         {
           "name": "X",
@@ -5435,7 +5435,7 @@
     {
       "label": "VGC.SET_BORDER",
       "source": "../../runtime/asm/vgc.s",
-      "line": 160,
+      "line": 168,
       "inputs": [
         {
           "name": "X",
@@ -5451,7 +5451,7 @@
     {
       "label": "VGC.SET_CHARBG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 169,
+      "line": 177,
       "inputs": [
         {
           "name": "X",
@@ -5467,7 +5467,7 @@
     {
       "label": "VGC.SET_FG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 142,
+      "line": 150,
       "inputs": [
         {
           "name": "X",
@@ -5483,7 +5483,7 @@
     {
       "label": "VGC.SET_FONT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 276,
+      "line": 284,
       "inputs": [
         {
           "name": "X",
@@ -5499,7 +5499,7 @@
     {
       "label": "VGC.SET_MODE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 267,
+      "line": 275,
       "inputs": [
         {
           "name": "X",
@@ -5580,7 +5580,7 @@
     {
       "label": "VGC.UNPLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 388,
+      "line": 396,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5617,7 +5617,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 98,
+      "line": 106,
       "inputs": [],
       "outputs": [
         {
@@ -5644,7 +5644,7 @@
     {
       "label": "VGC.WAIT_FRAMES",
       "source": "../../runtime/asm/vgc.s",
-      "line": 111,
+      "line": 119,
       "inputs": [
         {
           "name": "A",
@@ -6969,7 +6969,7 @@
     {
       "label": "VTEXT.FILL_GFX_REGION",
       "source": "../../runtime/asm/vtext_mixed.s",
-      "line": 176,
+      "line": 188,
       "inputs": [
         {
           "name": "X",
@@ -7314,7 +7314,7 @@
     {
       "label": "VTEXT.SCROLL_GFX_PIXELS_UP",
       "source": "../../runtime/asm/vtext_mixed.s",
-      "line": 203,
+      "line": 215,
       "inputs": [
         {
           "name": "A",

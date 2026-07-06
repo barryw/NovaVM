@@ -123,9 +123,13 @@ vtext_scroll_composite_up:
       STA   VTEXT_MIXED_ROWS
       STX   VTEXT_MIXED_FILL
       JSR   vtext_mixed_validate_region
-      BNE   @done
+      BEQ   :+
+      JMP   @done
+:
       JSR   vtext_gfx_validate_region
-      BNE   @done
+      BEQ   :+
+      JMP   @done
+:
       LDA   VTEXT_MIXED_ROWS
       BEQ   @ok
       ASL   A
@@ -164,6 +168,14 @@ vtext_scroll_composite_up:
       STA   VGC_P14
       LDA   #VCMD_SCROLLMIXED
       STA   VGC_CMD
+      LDY   #$20
+@arm:
+      LDA   VGC_CMD
+      AND   #$01
+      BNE   @wait
+      DEY
+      BNE   @arm
+      BRA   @ok
 @wait:
       LDA   VGC_CMD
       AND   #$01

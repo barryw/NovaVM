@@ -75,6 +75,32 @@ public class VgcMouseCursorSourceTests
     }
 
     [TestMethod]
+    public void Rtl_TextScanoutPipelineUsesDelayedFontLine()
+    {
+        string vgcText = File.ReadAllText(RepoPath("e6502.FPGA", "rtl", "vgc_text.sv"));
+
+        StringAssert.Contains(vgcText, "font_b_addr  = {font_slot, char_b_dout, font_line_d1}",
+            "The glyph lookup must use the delayed font line that matches char_b_dout.");
+    }
+
+    [TestMethod]
+    public void Rtl_HostAudioPcmFifoUsesBlockRam()
+    {
+        string fifo = File.ReadAllText(RepoPath("e6502.FPGA", "rtl", "audio_pcm_fifo.sv"));
+
+        StringAssert.Contains(fifo, "`ifdef NOVA_VIVADO",
+            "The host HDMI PCM FIFO needs a Vivado-specific block RAM path because inference regressed to LUTRAM.");
+        StringAssert.Contains(fifo, "xpm_memory_sdpram",
+            "Vivado must use an explicit XPM block RAM for the host HDMI PCM FIFO backlog.");
+        StringAssert.Contains(fifo, ".MEMORY_PRIMITIVE        (\"block\")",
+            "The XPM memory must force block RAM, not leave Vivado free to choose LUTRAM.");
+        StringAssert.Contains(fifo, "dpram #(.WIDTH(32), .DEPTH(FRAME_DEPTH)) frame_mem",
+            "Non-Vivado tests and toolchains should keep using the shared BRAM-style dpram fallback.");
+        Assert.IsFalse(fifo.Contains("logic [31:0] frame_mem", StringComparison.Ordinal),
+            "A plain SystemVerilog array regressed to thousands of LUTRAMs in Vivado; keep frame storage in dpram.");
+    }
+
+    [TestMethod]
     public void Ndk_ExposesMousePointerHelpers()
     {
         string nova = File.ReadAllText(RepoPath("software", "runtime", "asm", "nova.inc"));

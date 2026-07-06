@@ -300,6 +300,26 @@ static int novacap_s_input(struct file *file, void *priv, unsigned int i)
     return i ? -EINVAL : 0;
 }
 
+static int novacap_g_parm(struct file *file, void *priv, struct v4l2_streamparm *parm)
+{
+    struct v4l2_captureparm *capture = &parm->parm.capture;
+
+    if (parm->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+        return -EINVAL;
+
+    memset(capture, 0, sizeof(*capture));
+    capture->capability = V4L2_CAP_TIMEPERFRAME;
+    capture->timeperframe.numerator = 1001;
+    capture->timeperframe.denominator = 60000;
+    capture->readbuffers = 2;
+    return 0;
+}
+
+static int novacap_s_parm(struct file *file, void *priv, struct v4l2_streamparm *parm)
+{
+    return novacap_g_parm(file, priv, parm);
+}
+
 static const struct v4l2_ioctl_ops novacap_ioctl_ops = {
     .vidioc_querycap = novacap_querycap,
     .vidioc_enum_fmt_vid_cap = novacap_enum_fmt,
@@ -309,6 +329,8 @@ static const struct v4l2_ioctl_ops novacap_ioctl_ops = {
     .vidioc_enum_input = novacap_enum_input,
     .vidioc_g_input = novacap_g_input,
     .vidioc_s_input = novacap_s_input,
+    .vidioc_g_parm = novacap_g_parm,
+    .vidioc_s_parm = novacap_s_parm,
     .vidioc_reqbufs = vb2_ioctl_reqbufs,
     .vidioc_create_bufs = vb2_ioctl_create_bufs,
     .vidioc_querybuf = vb2_ioctl_querybuf,

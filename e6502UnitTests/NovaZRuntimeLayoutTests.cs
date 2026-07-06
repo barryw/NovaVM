@@ -184,39 +184,75 @@ public sealed class NovaZRuntimeLayoutTests
     public void V6WholeScreenClearPreservesCurrentBackgroundNibble()
     {
         string zvm = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm.s"));
+        string runtime = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "runtime.s"));
         string clear = Slice(zvm, "zvm_clear_whole_screen:", "zvm_clear_selected_window:");
+        string initScreen = Slice(runtime, "init_screen:", "init_video_colors:");
+        string initGame = Slice(runtime, "init_game_screen:", "; A/Y = pointer to null-terminated string.");
 
         StringAssert.Contains(clear, "CMP #$06");
+        StringAssert.Contains(clear, "JSR zvm_reset_text_ring");
+        StringAssert.Contains(clear, "STA VGC_CHAROUT",
+            "Whole-screen clears must issue VGC form-feed before VTEXT clear so hardware ring-scroll state cannot survive into mixed V6 scrolling.");
+        Assert.IsTrue(
+            IndexOfOrFail(clear, "JSR zvm_reset_text_ring", "hardware text-ring reset") <
+            IndexOfOrFail(clear, "JSR vtext_clear_region", "VTEXT full clear"),
+            "The hardware text-ring reset must run before VTEXT repaints the full-screen logical region.");
         Assert.IsFalse(clear.Contains("AND #$0F", StringComparison.Ordinal),
             "V6 whole-screen clears must keep the packed current background colour; forcing bg 0 exposes the old Zork Zero title art colour.");
         StringAssert.Contains(clear, "STZ VTEXT_ATTR",
             "Whole-screen clears stay opaque; picture-owned cells opt into BGTRANS separately.");
+
+        StringAssert.Contains(clear, "STZ VGC_TEXT_TOPROW",
+            "The hardware display top-row register must be reset with the hidden FF scroll offset.");
+        StringAssert.Contains(clear, "STZ VTEXT_TOPROW",
+            "VTEXT's software row mapper must be reset before NovaZ takes over the screen.");
+        StringAssert.Contains(initScreen, "JSR zvm_reset_text_ring",
+            "NovaZ boot clear must reset inherited hardware text-ring state before showing loader/game text.");
+        StringAssert.Contains(initGame, "JSR zvm_reset_text_ring",
+            "NovaZ game-entry clear must reset inherited hardware text-ring state before the story starts drawing V6 windows.");
     }
 
     [TestMethod]
-    public void V6MarginReleaseRestylesOnlyReleasedBlankCells()
+    public void V6MarginChangesMaintainThePixelSurfaceContract()
     {
         string zvm6 = File.ReadAllText(RepoPath("software", "examples", "novaz", "src", "zvm6.s"));
         string setMargins = Slice(zvm6, "nz6_ext_set_margins:", "; Shared tail for move_window/window_size");
-        string helper = Slice(zvm6, "nz6_restore_released_margin_spaces:", "; Shared tail for move_window/window_size");
+        string reconcile = Slice(zvm6, "nz6_reconcile_margin_surface:", "; Shared tail for move_window/window_size");
+        string exclude = Slice(zvm6, "nz6_exclude_margin_rect:", "nz6_restore_space_rect:");
+        string restore = Slice(zvm6, "nz6_restore_space_rect:", "; Shared tail for move_window/window_size");
 
-        // Z6 flow pictures reserve temporary left/right margins. When a story
-        // releases that margin, the newly writable blank cells become normal
-        // background again; otherwise text-transparent picture cells scroll
-        // forward and stale icon edges show as vertical stripes.
+        // Z6 flow pictures reserve temporary left/right margins on a single
+        // pixel surface. Nova has split text/gfx planes, so margin growth must
+        // turn newly hidden text cells into transparent spaces before later
+        // full-window scrolls can copy stale glyph bytes into view. Margin
+        // release then restores only the newly writable blank cells to normal
+        // background below the current output row.
         StringAssert.Contains(setMargins, "STA nz6_rect_left               ; old writable left edge");
         StringAssert.Contains(setMargins, "STA nz6_rect_w                  ; old writable right edge");
         StringAssert.Contains(setMargins, "ADC VTEXT_CURY");
-        StringAssert.Contains(setMargins, "ADC #1");
-        StringAssert.Contains(setMargins, "JSR nz6_restore_released_margin_spaces");
+        StringAssert.Contains(setMargins, "STA nz6_margin_row              ; growth starts on current row");
+        StringAssert.Contains(setMargins, "JSR nz6_reconcile_margin_surface");
 
-        StringAssert.Contains(helper, "JSR nz6_build_region_tmp_win    ; new writable rect");
-        StringAssert.Contains(helper, "Left margin shrank: [new_left, old_left).");
-        StringAssert.Contains(helper, "Right margin shrank: [old_right, new_right).");
-        StringAssert.Contains(helper, "LDA nz6_colour                  ; current paper; text owns background");
-        StringAssert.Contains(helper, "JSR vtext_fill_gfx_region");
-        StringAssert.Contains(helper, "JSR vtext_expose_gfx_spaces_region");
-        Assert.IsFalse(helper.Contains("JSR vtext_clear_region", StringComparison.Ordinal),
+        StringAssert.Contains(reconcile, "JSR nz6_build_region_tmp_win    ; new writable rect");
+        StringAssert.Contains(reconcile, "Left margin grew: [old_left, new_left).");
+        StringAssert.Contains(reconcile, "Right margin grew: [new_right, old_right).");
+        StringAssert.Contains(reconcile, "JSR nz6_exclude_margin_rect");
+        StringAssert.Contains(reconcile, "Margin release starts below the current output row.");
+        StringAssert.Contains(reconcile, "Left margin shrank: [new_left, old_left).");
+        StringAssert.Contains(reconcile, "Right margin shrank: [old_right, new_right).");
+        StringAssert.Contains(reconcile, "JSR nz6_restore_space_rect");
+
+        StringAssert.Contains(exclude, "LDA #VTXT_ATTR_BGTRANS");
+        StringAssert.Contains(exclude, "JSR vtext_clear_region");
+        AssertVtextBorrowedRectangleIsRestored(exclude, "JSR vtext_clear_region");
+        Assert.IsFalse(exclude.Contains("JSR vtext_fill_gfx_region", StringComparison.Ordinal),
+            "Growing a margin must not erase the gfx pixels that the text plane should reveal.");
+
+        StringAssert.Contains(restore, "LDA nz6_colour                  ; current paper; text owns background");
+        StringAssert.Contains(restore, "JSR vtext_fill_gfx_region");
+        StringAssert.Contains(restore, "JSR vtext_expose_gfx_spaces_region");
+        AssertVtextBorrowedRectangleIsRestored(restore, "JSR vtext_expose_gfx_spaces_region");
+        Assert.IsFalse(restore.Contains("JSR vtext_clear_region", StringComparison.Ordinal),
             "Margin release must restyle blank cells only; clearing would erase already printed text.");
     }
 
@@ -254,15 +290,27 @@ public sealed class NovaZRuntimeLayoutTests
         StringAssert.Contains(clearTop, "LDA #NZ6_COLOR_DEFAULT");
         StringAssert.Contains(clearTop, "JSR vtext_clear_region");
 
-        // The composite scroll now builds the exact gfx pixel window into the
-        // VTEXT_GFX_* registers, then issues one vblank-aligned hardware
-        // transaction (vtext_scroll_composite_up -> VCMD_SCROLLMIXED) that scrolls
-        // the gfx, character, colour, and attribute planes together. This replaces
-        // the old two-pass software scroll and removes the tear between planes.
+        // The composite scroll builds the exact gfx pixel window into the
+        // VTEXT_GFX_* registers, scrolls the snapped text-cell window, then
+        // forces the left partial-cell column (VTEXT_LEFT-1) transparent so the
+        // gfx behind it (pillar edge or plain background) shows through instead
+        // of an opaque text-bg cell — the Zork Zero left-gutter "maroon bars".
+        // It must not derive the gfx rectangle from the snapped VTEXT cell rect.
         StringAssert.Contains(rows, "JSR nz6_build_gfx_region_tmp_win");
-        StringAssert.Contains(rows, "JMP vtext_scroll_composite_up");
+        StringAssert.Contains(rows, "JSR vtext_scroll_composite_up");
+        StringAssert.Contains(rows, "JSR nz6_scroll_left_bgtrans_column");
         Assert.IsFalse(rows.Contains("vtext_scroll_mixed_up", StringComparison.Ordinal),
             "Z6 composite scroll must not derive the gfx rectangle from the snapped VTEXT cell rectangle.");
+
+        // The left-gutter column must be forced transparent unconditionally for
+        // every window row; the old flag-gated copy/fill left opaque bg-index-0
+        // (maroon) cells on scrolled rows.
+        string leftCol = Slice(zvm6, "nz6_scroll_left_bgtrans_column:", "nz6_calc_left_attr_addr:");
+        StringAssert.Contains(leftCol, "LDA #VTXT_ATTR_BGTRANS");
+        Assert.IsFalse(leftCol.Contains("LDA nz6_scroll_left_flag", StringComparison.Ordinal),
+            "Left-gutter column must be normalized unconditionally, not gated on a prior-BGTRANS flag.");
+        Assert.IsFalse(leftCol.Contains("LDA VTEXT_ATTR", StringComparison.Ordinal),
+            "Left-gutter fill must use BGTRANS, not the live VTEXT_ATTR (opaque during normal text).");
     }
 
     private static bool Contains(byte[] haystack, params byte[] needle)
@@ -312,6 +360,28 @@ public sealed class NovaZRuntimeLayoutTests
         int index = source.IndexOf(value, StringComparison.Ordinal);
         Assert.IsTrue(index >= 0, $"{name} missing {value}.");
         return index;
+    }
+
+    private static void AssertVtextBorrowedRectangleIsRestored(string routine, string workCall)
+    {
+        int saveLeft = IndexOfOrFail(routine, "LDA VTEXT_LEFT\n        PHA", "VTEXT_LEFT save");
+        int saveTop = IndexOfOrFail(routine, "LDA VTEXT_TOP\n        PHA", "VTEXT_TOP save");
+        int saveWidth = IndexOfOrFail(routine, "LDA VTEXT_WIDTH\n        PHA", "VTEXT_WIDTH save");
+        int saveHeight = IndexOfOrFail(routine, "LDA VTEXT_HEIGHT\n        PHA", "VTEXT_HEIGHT save");
+        int borrow = IndexOfOrFail(routine, "LDA nz6_clr_tmp\n        STA VTEXT_LEFT", "borrowed VTEXT_LEFT");
+        int call = IndexOfOrFail(routine, workCall, "borrowed rectangle work");
+        int restoreHeight = IndexOfOrFail(routine, "PLA\n        STA VTEXT_HEIGHT", "VTEXT_HEIGHT restore");
+        int restoreWidth = IndexOfOrFail(routine, "PLA\n        STA VTEXT_WIDTH", "VTEXT_WIDTH restore");
+        int restoreTop = IndexOfOrFail(routine, "PLA\n        STA VTEXT_TOP", "VTEXT_TOP restore");
+        int restoreLeft = IndexOfOrFail(routine, "PLA\n        STA VTEXT_LEFT", "VTEXT_LEFT restore");
+
+        Assert.IsTrue(saveLeft < saveTop && saveTop < saveWidth && saveWidth < saveHeight,
+            "Borrowed VTEXT rectangle must save current LEFT/TOP/WIDTH/HEIGHT before mutation.");
+        Assert.IsTrue(saveHeight < borrow && borrow < call,
+            "Borrowed VTEXT rectangle must be installed only after the current rectangle is saved.");
+        Assert.IsTrue(call < restoreHeight && restoreHeight < restoreWidth &&
+                      restoreWidth < restoreTop && restoreTop < restoreLeft,
+            "Borrowed VTEXT rectangle must be restored after the helper work finishes.");
     }
 
     private static string RepoPath(params string[] parts)
