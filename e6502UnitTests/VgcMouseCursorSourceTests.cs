@@ -41,8 +41,17 @@ public class VgcMouseCursorSourceTests
         StringAssert.Contains(vgc, "logic [7:0]  spr_shape [0:15]");
         StringAssert.Contains(vgc, "spr_shape_flat[i*8 +: 8] = spr_shape[i]");
         StringAssert.Contains(vgc, "SPACE_SPRITE && vram_port_read_addr < SPR_SIZE");
+
+        // Shape RAM is a SINGLE tear-free buffer: every write is queued and
+        // applied to the RAM ONLY during vblank (vgc_sprites.sv). The old
+        // active/pending double-buffer + background copy is GONE — under paced
+        // writes it could not keep the banks coherent on real silicon, so the
+        // render read an empty active bank (mouse/sprites never composited).
         Assert.IsFalse(sprites.Contains("shape_copy_dirty"),
-            "Do not track 32K sprite-shape dirty bits in LUT fabric; sync-time writes must mirror both banks instead.");
+            "No 32K sprite-shape dirty bitmap.");
+        Assert.IsFalse(sprites.Contains("spr_mem1"),
+            "No sprite-shape double-buffer: single buffer + vblank-gated write FIFO.");
+        StringAssert.Contains(sprites, "in_vblank");
     }
 
     [TestMethod]

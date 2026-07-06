@@ -360,10 +360,8 @@ module test_custom_reset_top;
                   dut.vgc_inst.text_inst.color_mem.mem[0], 8'h0F);
         check_eq8("gfx RAM reset to transparent/zero",
                   {4'h0, dut.vgc_inst.gfx_inst.gfx_mem.mem[1234]}, 8'h00);
-        check_eq8("sprite shape RAM bank 0 reset",
-                  dut.vgc_inst.sprite_inst.spr_mem0.mem[0], 8'h00);
-        check_eq8("sprite shape RAM bank 1 reset",
-                  dut.vgc_inst.sprite_inst.spr_mem1.mem[0], 8'h00);
+        check_eq8("sprite shape RAM reset",
+                  dut.vgc_inst.sprite_inst.spr_mem.mem[0], 8'h00);
         check("copper active state reset",
               dut.vgc_inst.copper_enabled == 0 &&
               dut.vgc_inst.copper_count == 0 &&

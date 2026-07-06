@@ -117,6 +117,7 @@ module test_vgc_sprites;
         write_param(0, idx[7:0]);
         write_cmd(CMD_SPRCLR);
         wait_cmd_done();
+        wait_shape_sync_done();   // drain vblank-gated shape writes so read-back sees them
     endtask
 
     // Write one 16-pixel row of a sprite. `pixels` is a 16-entry array of 4-bit
@@ -129,6 +130,7 @@ module test_vgc_sprites;
             write_param(2 + i, {pixels[2*i], pixels[2*i + 1]});
         write_cmd(CMD_SPRROW);
         wait_cmd_done();
+        wait_shape_sync_done();   // drain vblank-gated shape writes so read-back sees them
     endtask
 
     task automatic spr_pos(input int idx, input int x, input int y);
@@ -172,6 +174,7 @@ module test_vgc_sprites;
         write_param(1, src[7:0]);
         write_cmd(CMD_SPRCOPY);
         wait_cmd_done();
+        wait_shape_sync_done();   // drain vblank-gated shape writes so read-back sees them
     endtask
 
     // Set one pixel via SPRDEF (the read-modify-write path — must preserve
@@ -183,6 +186,7 @@ module test_vgc_sprites;
         write_param(3, color[7:0]);
         write_cmd(CMD_SPRDEF);
         wait_cmd_done();
+        wait_shape_sync_done();   // drain vblank-gated shape writes so read-back sees them
     endtask
 
     task automatic wait_sprite_frame_commit();
@@ -211,13 +215,15 @@ module test_vgc_sprites;
         step(2);
     endtask
 
+    // Wait for queued shape writes to drain into the RAM. Draining happens only
+    // during vblank, so this can take up to a full frame (the DUT raster free-runs).
     task automatic wait_shape_sync_done();
         int timeout = 0;
-        while (dut.sprite_inst.shape_sync_busy && timeout < 150000) begin
+        while (dut.sprite_inst.shape_sync_busy && timeout < 900000) begin
             @(posedge clk);
             timeout++;
         end
-        check("sprite shape background sync completed", timeout < 150000);
+        check("sprite shape FIFO drained (writes applied at vblank)", timeout < 900000);
     endtask
 
     task automatic probe_clear_line_buffers();
@@ -245,10 +251,7 @@ module test_vgc_sprites;
 
         for (int row = 0; row < 16; row++)
             for (int col_pair = 0; col_pair < 8; col_pair++)
-                if (sprite_probe.active_shape_bank)
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = 8'hFF;
-                else
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = 8'hFF;
     endtask
 
     task automatic probe_config_pattern_sprite(input int y);
@@ -283,10 +286,7 @@ module test_vgc_sprites;
             for (int col_pair = 0; col_pair < 8; col_pair++) begin
                 logic [7:0] value;
                 value = (row == 0) ? row_bytes[col_pair] : 8'h00;
-                if (sprite_probe.active_shape_bank)
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = value;
-                else
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = value;
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = value;
             end
         end
     endtask
@@ -317,13 +317,8 @@ module test_vgc_sprites;
 
         for (int row = 0; row < 16; row++) begin
             for (int col_pair = 0; col_pair < 8; col_pair++) begin
-                if (sprite_probe.active_shape_bank) begin
-                    sprite_probe.spr_mem1.mem[row * 8 + col_pair] = 8'hFF;
-                    sprite_probe.spr_mem1.mem[128 + row * 8 + col_pair] = 8'hEE;
-                end else begin
-                    sprite_probe.spr_mem0.mem[row * 8 + col_pair] = 8'hFF;
-                    sprite_probe.spr_mem0.mem[128 + row * 8 + col_pair] = 8'hEE;
-                end
+                sprite_probe.spr_mem.mem[row * 8 + col_pair] = 8'hFF;
+                sprite_probe.spr_mem.mem[128 + row * 8 + col_pair] = 8'hEE;
             end
         end
     endtask
@@ -369,11 +364,14 @@ module test_vgc_sprites;
 
     task automatic probe_wait_sync_done();
         int timeout = 0;
+        // The probe shape FIFO drains only during vblank; hold the probe raster
+        // there so queued writes are applied to the RAM (caller sets v_count next).
+        probe_v_count = 10'd500;
         while (probe_shape_sync_busy && timeout < 200000) begin
             @(posedge clk);
             timeout++;
         end
-        check("probe shape background sync completed", timeout < 200000);
+        check("probe shape FIFO drained (writes applied at vblank)", timeout < 200000);
     endtask
 
     task automatic probe_prepare_then_display(input int prep_v, input int display_v);
@@ -476,100 +474,87 @@ module test_vgc_sprites;
                      int'(peek_spr_pixel(0, i, 4)), 0);
     endtask
 
-    task automatic test_shape_publish_at_frame_boundary();
+    // Write a shape byte through the blitter/VMEM port (space 4) while the
+    // raster is in ACTIVE video (v_count < V_ACTIVE).
+    task automatic port_write_shape_active(input logic [14:0] addr, input logic [7:0] data);
+        int guard = 0;
+        while (!(dut.v_count < 10'd200 && dut.h_count > 10'd50) && guard < 700000) begin
+            @(posedge clk); guard++;
+        end
+        tb_blt_space <= 3'd4; tb_blt_addr <= {5'd0, addr}; tb_blt_wdata <= data; tb_blt_we <= 1'b1;
+        @(posedge clk);
+        tb_blt_we <= 1'b0; tb_blt_space <= 3'd0;
+        step(2);
+    endtask
+
+    // NEW CONTRACT #1: a shape write is queued and NOT applied to the RAM until
+    // the next vblank (tear-free by construction — the render never sees a
+    // half-updated shape mid-frame).
+    task automatic test_shape_write_deferred_to_vblank();
+        logic [14:0] addr;
         $display("");
-        $display("Test: sprite shape RAM publishes only at frame boundary");
-        spr_clr(6);
-        wait_sprite_frame_commit();
+        $display("Test: shape write is deferred to vblank (not applied mid-frame)");
+        addr = spr_byte_addr(6, 2, 0);
+        poke_spr_pending_addr(addr, 8'h00);          // clean (backdoor)
         wait_shape_sync_done();
 
-        begin
-            logic [3:0] pix[16];
-            for (int i = 0; i < 16; i++) pix[i] = 4'hC;
-            spr_row(6, 2, pix);
+        port_write_shape_active(addr, 8'hCC);        // write during active video
+        check_eq("shape write NOT applied to RAM during active video",
+                 int'(peek_spr_pending_addr(addr)), 8'h00);
+        check("FIFO reports the write is still pending", dut.sprite_inst.shape_sync_busy);
+
+        wait_shape_sync_done();                      // drains at the next vblank
+        check_eq("shape write applied to RAM after vblank drain",
+                 int'(peek_spr_pending_addr(addr)), 8'hCC);
+    endtask
+
+    // NEW CONTRACT #2 (the crown jewel): the shape RAM is written ONLY during
+    // vblank. Queue writes during active video, then monitor until the FIFO
+    // drains and assert every RAM write coincides with vblank.
+    task automatic test_shape_writes_only_in_vblank();
+        int guard;
+        logic [14:0] base;
+        $display("");
+        $display("Test: TEAR-FREE INVARIANT — shape RAM written ONLY during vblank");
+        base = spr_byte_addr(3, 0, 0);
+        for (int i = 0; i < 8; i++)
+            port_write_shape_active(15'(base + i), 8'(8'hA0 + i));
+
+        guard = 0;
+        while (dut.sprite_inst.shape_sync_busy && guard < 900000) begin
+            if (dut.sprite_inst.mem_a_we && !dut.sprite_inst.shape_reset_clearing)
+                check("shape RAM write coincides with vblank", dut.sprite_inst.in_vblank);
+            @(posedge clk); guard++;
+        end
+        check("shape FIFO drained within a frame", guard < 900000);
+    endtask
+
+    // NEW CONTRACT #3 (HW regression lock): a full 128-byte shape streamed as
+    // writes spread across active video lands COMPLETE — the exact failure mode
+    // where the old double-buffer copy lost/scattered bytes on real silicon.
+    task automatic test_shape_streaming_lands_complete();
+        int base;
+        int errors;
+        $display("");
+        $display("Test: full shape streamed during active video lands COMPLETE (HW regression)");
+        base = 7 * 128;                              // slot 7
+        for (int i = 0; i < 128; i++) poke_spr_pending_addr(15'(base + i), 8'h00);
+        wait_shape_sync_done();
+
+        for (int i = 0; i < 128; i++) begin
+            @(posedge clk);
+            tb_blt_space <= 3'd4; tb_blt_addr <= {5'd0, 15'(base + i)};
+            tb_blt_wdata <= 8'(i + 1); tb_blt_we <= 1'b1;
+            @(posedge clk);
+            tb_blt_we <= 1'b0; tb_blt_space <= 3'd0;
+            step(3);
         end
 
-        check_eq("pending sprite shape byte changed immediately",
-                 int'(peek_spr_pending_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
-        check_eq("active sprite shape byte unchanged before commit",
-                 int'(peek_spr_active_addr(spr_byte_addr(6, 2, 0))), 8'h00);
-
-        wait_sprite_frame_commit();
-        check_eq("active sprite shape byte updated after commit",
-                 int'(peek_spr_active_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
         wait_shape_sync_done();
-        check_eq("pending bank resynced after publish",
-                 int'(peek_spr_pending_addr(spr_byte_addr(6, 2, 0))), 8'hCC);
-    endtask
-
-    task automatic test_shape_write_on_publish_cycle_defers();
-        logic [14:0] addr;
-
-        $display("");
-        $display("Test: sprite shape write on publish cycle defers bank flip");
-        addr = spr_byte_addr(9, 1, 0);
-
-        spr_clr(9);
-        wait_sprite_frame_commit();
-        wait_shape_sync_done();
-
-        // Dirty the pending bank so the next sprite frame boundary wants to
-        // publish. Then assert a blitter sprite write on that exact boundary.
-        poke_spr_pending_addr(addr, 8'hAA);
-        dut.sprite_inst.shape_pending_dirty = 1'b1;
-        while (!(dut.h_count == 10'd0 && dut.v_count == 10'd479))
-            @(posedge clk);
-        tb_blt_space <= 3'd4;
-        tb_blt_addr  <= {5'd0, addr};
-        tb_blt_wdata <= 8'hEE;
-        tb_blt_we    <= 1'b1;
-        @(posedge clk);
-        tb_blt_we    <= 1'b0;
-        tb_blt_space <= 3'd0;
-        step(3);
-
-        check_eq("publish blocked while sprite shape port is active",
-                 int'(peek_spr_active_addr(addr)), 8'h00);
-        check_eq("pending shape write still lands",
-                 int'(peek_spr_pending_addr(addr)), 8'hEE);
-
-        wait_sprite_frame_commit();
-        check_eq("deferred publish updates active bank next frame",
-                 int'(peek_spr_active_addr(addr)), 8'hEE);
-    endtask
-
-    task automatic test_shape_write_during_sync_mirrors_banks();
-        logic [14:0] addr;
-
-        $display("");
-        $display("Test: sprite shape write during background sync mirrors both banks");
-        addr = spr_byte_addr(10, 3, 0);
-
-        wait_shape_sync_done();
-        poke_spr_pending_addr(addr, 8'h11);
-        dut.sprite_inst.shape_pending_dirty = 1'b1;
-        wait_sprite_frame_commit();
-        step(4);
-        check("background shape sync is active", dut.sprite_inst.shape_sync_busy);
-        check_eq("precondition: active bank has published byte",
-                 int'(peek_spr_active_addr(addr)), 8'h11);
-
-        tb_blt_space <= 3'd4;
-        tb_blt_addr  <= {1'b0, addr};
-        tb_blt_wdata <= 8'h55;
-        tb_blt_we    <= 1'b1;
-        @(posedge clk);
-        tb_blt_we    <= 1'b0;
-        tb_blt_space <= 3'd0;
-        step(3);
-
-        check_eq("sync-time write updates pending bank",
-                 int'(peek_spr_pending_addr(addr)), 8'h55);
-        check_eq("sync-time write also mirrors active bank to avoid a dirty bitmap",
-                 int'(peek_spr_active_addr(addr)), 8'h55);
-        wait_shape_sync_done();
-        check_eq("mirrored byte survives background sync completion",
-                 int'(peek_spr_pending_addr(addr)), 8'h55);
+        errors = 0;
+        for (int i = 0; i < 128; i++)
+            if (peek_spr_pending_addr(15'(base + i)) != 8'(i + 1)) errors++;
+        check_eq("all 128 streamed shape bytes landed intact", errors, 0);
     endtask
 
     task automatic test_sprpos();
@@ -858,10 +843,7 @@ module test_vgc_sprites;
         $display("Test: PIXIE samples dedicated mouse cursor shape slot");
 
         probe_clear_line_buffers();
-        if (sprite_probe.active_shape_bank)
-            sprite_probe.spr_mem1.mem[base] = 8'hD0;
-        else
-            sprite_probe.spr_mem0.mem[base] = 8'hD0;
+        sprite_probe.spr_mem.mem[base] = 8'hD0;
 
         probe_mouse_x = 9'd6;
         probe_mouse_y = 8'd0;
@@ -953,16 +935,14 @@ module test_vgc_sprites;
         logic [14:0] a0;
 
         $display("");
-        $display("Test: DUT publishes mouse shape slot 255 written via VMEM/blitter port");
+        $display("Test: DUT applies mouse shape slot 255 written via VMEM/blitter port");
         a0 = spr_byte_addr(255, 0, 0);   // 32640
 
-        // Backdoor-clear both banks at slot 255, settle any prior sync.
-        poke_spr_pending_addr(a0, 8'h00);
-        poke_spr_active_addr(a0, 8'h00);
-        wait_sprite_frame_commit();
+        poke_spr_pending_addr(a0, 8'h00);   // backdoor clear
         wait_shape_sync_done();
 
-        // Write slot 255 byte 0 through the real VMEM/blitter port (space 4).
+        // Write slot 255 byte 0 through the real VMEM/blitter port (space 4),
+        // then drain — the mouse reads it out of the single shape RAM.
         @(negedge clk);
         tb_blt_space <= 3'd4;
         tb_blt_addr  <= {1'b0, a0};
@@ -972,14 +952,10 @@ module test_vgc_sprites;
         @(negedge clk);
         tb_blt_we    <= 1'b0;
         tb_blt_space <= 3'd0;
-        step(3);
 
-        check_eq("slot255 pending byte written via VMEM port",
+        wait_shape_sync_done();
+        check_eq("slot255 applied after vblank drain (mouse can read it)",
                  int'(peek_spr_pending_addr(a0)), 8'hFF);
-
-        wait_sprite_frame_commit();
-        check_eq("slot255 active byte PUBLISHED after commit (mouse can read it)",
-                 int'(peek_spr_active_addr(a0)), 8'hFF);
     endtask
 
     // Count cycles a top-level DUT signal-of-interest is asserted across exactly
@@ -1123,9 +1099,9 @@ module test_vgc_sprites;
 
         test_sprclr();
         test_sprrow();
-        test_shape_publish_at_frame_boundary();
-        test_shape_write_on_publish_cycle_defers();
-        test_shape_write_during_sync_mirrors_banks();
+        test_shape_write_deferred_to_vblank();
+        test_shape_writes_only_in_vblank();
+        test_shape_streaming_lands_complete();
         test_sprpos();
         test_sprena_dis();
         test_sprflip();
