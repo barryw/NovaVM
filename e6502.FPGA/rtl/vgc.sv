@@ -702,6 +702,8 @@ module vgc (
     logic        mouse_cursor_hit;
     logic [3:0]  mouse_cursor_color;
     logic        dbg_active_shape_bank_w, dbg_shape_read_nonzero_w;
+    logic        dbg_in_vblank_w, dbg_drain_fire_w, dbg_shfifo_full_w, dbg_reset_clearing_w;
+    logic [10:0] dbg_shfifo_fill_w;
 
     logic [8:0] mouse_pending_x, mouse_active_x;
     logic [7:0] mouse_pending_y, mouse_active_y;
@@ -772,6 +774,11 @@ module vgc (
         .mouse_cursor_hit(mouse_cursor_hit),
         .dbg_active_shape_bank(dbg_active_shape_bank_w),
         .dbg_shape_read_nonzero(dbg_shape_read_nonzero_w),
+        .dbg_in_vblank(dbg_in_vblank_w),
+        .dbg_drain_fire(dbg_drain_fire_w),
+        .dbg_shfifo_full(dbg_shfifo_full_w),
+        .dbg_reset_clearing(dbg_reset_clearing_w),
+        .dbg_shfifo_fill(dbg_shfifo_fill_w),
         .collision_ss_bits(spr_collision_ss_bits)
     );
 
@@ -801,6 +808,36 @@ module vgc (
             if (dbg_shape_read_nonzero_w) dbg_render_capture[7] <= 1'b1;  // render read non-zero shape
         end
     end
+
+    // ---- Stage-1 drain diagnostics: $A0DA (sticky/live), clear by writing it ----
+    //   b0 = in_vblank ever seen (the drain window opens)
+    //   b1 = drain_fire ever (a queued write was actually applied to the RAM)
+    //   b2 = a read blocked the drain during vblank (in_vblank & !empty & spr_a_re)
+    //   b3 = a shape write was DROPPED because the FIFO was full
+    //   b4 = reset-clear blocked the drain during vblank
+    //   b5 = any shape write seen; b6 = any shape read seen; b7 = FIFO full (live)
+    // $A0DB = FIFO occupancy saturated to 8 bits (live).
+    reg [7:0] dbg_drain_capture;
+    always_ff @(posedge clk) begin
+        if (vgc_module_rst)
+            dbg_drain_capture <= 8'h00;
+        else if (write_active && mouse_reg_sel_w && mouse_reg_off_w == 4'hA)
+            dbg_drain_capture <= 8'h00;
+        else begin
+            if (dbg_in_vblank_w)  dbg_drain_capture[0] <= 1'b1;
+            if (dbg_drain_fire_w) dbg_drain_capture[1] <= 1'b1;
+            if (dbg_in_vblank_w && sprite_shape_sync_busy && spr_a_re)
+                                  dbg_drain_capture[2] <= 1'b1;
+            if (spr_a_we && dbg_shfifo_full_w) dbg_drain_capture[3] <= 1'b1;
+            if (dbg_in_vblank_w && sprite_shape_sync_busy && dbg_reset_clearing_w)
+                                  dbg_drain_capture[4] <= 1'b1;
+            if (spr_a_we)         dbg_drain_capture[5] <= 1'b1;
+            if (spr_a_re)         dbg_drain_capture[6] <= 1'b1;
+            dbg_drain_capture[7] <= dbg_shfifo_full_w;
+        end
+    end
+    wire [7:0] dbg_shfifo_fill_sat = (dbg_shfifo_fill_w > 11'd255) ? 8'hFF
+                                                                   : dbg_shfifo_fill_w[7:0];
 
     // =========================================================================
     // Copper sub-module (CONDUCTOR)
@@ -1721,6 +1758,8 @@ module vgc (
                 4'h7:    cpu_rdata = {4'h0, mouse_pending_hot_x};
                 4'h8:    cpu_rdata = {4'h0, mouse_pending_hot_y};
                 4'h9:    cpu_rdata = dbg_render_capture;   // debug render-path capture
+                4'hA:    cpu_rdata = dbg_drain_capture;    // stage-1 drain diagnostics
+                4'hB:    cpu_rdata = dbg_shfifo_fill_sat;  // FIFO occupancy
                 default: cpu_rdata = 8'h00;
             endcase
         end
@@ -1864,6 +1903,8 @@ module vgc (
                 4'h7:    dbg_rdata = {4'h0, mouse_pending_hot_x};
                 4'h8:    dbg_rdata = {4'h0, mouse_pending_hot_y};
                 4'h9:    dbg_rdata = dbg_render_capture;   // debug render-path capture
+                4'hA:    dbg_rdata = dbg_drain_capture;    // stage-1 drain diagnostics
+                4'hB:    dbg_rdata = dbg_shfifo_fill_sat;  // FIFO occupancy
                 default: dbg_rdata = 8'h00;
             endcase
         end

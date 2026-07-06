@@ -54,6 +54,12 @@ module vgc_sprites (
     output logic        mouse_cursor_hit,
     output logic        dbg_active_shape_bank,   // live: which shape bank the render reads
     output logic        dbg_shape_read_nonzero,  // render read a non-empty shape byte this cycle
+    // --- stage-1 drain diagnostics (why does the vblank drain stall on HW?) ---
+    output logic        dbg_in_vblank,           // vblank detected (drain window)
+    output logic        dbg_drain_fire,          // a queued write is being applied this cycle
+    output logic        dbg_shfifo_full,         // write FIFO full
+    output logic        dbg_reset_clearing,      // boot reset-clear in progress
+    output logic [10:0] dbg_shfifo_fill,         // FIFO occupancy
 
     // --- Collision detection outputs ---
     output logic [15:0] collision_ss_bits
@@ -126,6 +132,7 @@ module vgc_sprites (
     wire         shfifo_full;
     wire         shfifo_empty;
     wire [22:0]  shfifo_head;                 // combinational head (OPT_ASYNC_READ)
+    wire [10:0]  shfifo_fill;                 // occupancy (diagnostic)
     logic        shape_reset_clearing;
     logic [14:0] shape_reset_addr;
     wire         drain_fire = in_vblank && !shfifo_empty &&
@@ -134,9 +141,16 @@ module vgc_sprites (
     sfifo #(.BW(23), .LGFLEN(10)) shape_fifo (
         .i_clk(clk), .i_reset(rst),
         .i_wr(spr_a_we && !shfifo_full), .i_data({spr_a_addr, spr_a_din}),
-        .o_full(shfifo_full), .o_fill(),
+        .o_full(shfifo_full), .o_fill(shfifo_fill),
         .i_rd(drain_fire), .o_data(shfifo_head), .o_empty(shfifo_empty)
     );
+
+    // stage-1 drain diagnostics
+    assign dbg_in_vblank      = in_vblank;
+    assign dbg_drain_fire     = drain_fire;
+    assign dbg_shfifo_full    = shfifo_full;
+    assign dbg_reset_clearing = shape_reset_clearing;
+    assign dbg_shfifo_fill    = shfifo_fill;
 
     // Single shape RAM: port A = drain-write / reset-clear / read-back;
     // port B = render read.
