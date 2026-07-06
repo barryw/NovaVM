@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.4.1 - 2026-07-06
+#### Bug Fixes
+- Zork Zero on Arty — hardware scroll text-wipe + maroon gutter bars - (2b3ffc5) - Barry Walker
+
+- - -
+
 ## v0.4.0 - 2026-07-05
 #### Features
 - add hardware capture and fix novaz v6 clears - (4ac16b0) - Barry Walker
