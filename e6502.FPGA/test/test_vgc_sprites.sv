@@ -343,6 +343,38 @@ module test_vgc_sprites;
         color = int'(probe_mouse_cursor_pixel);
     endtask
 
+    // Write one shape byte through the real spr_a/VMEM write port (the path the
+    // Linux host's vmem_write uses), NOT by poking the dpram backing array.
+    task automatic probe_write_shape_byte(input logic [14:0] addr, input logic [7:0] data);
+        @(negedge clk);
+        probe_spr_a_addr = addr;
+        probe_spr_a_din  = data;
+        probe_spr_a_we   = 1'b1;
+        @(posedge clk);
+        @(negedge clk);
+        probe_spr_a_we   = 1'b0;
+        probe_spr_a_addr = 15'd0;
+        probe_spr_a_din  = 8'd0;
+    endtask
+
+    // Pulse a sprite frame commit so a dirty pending bank publishes to active.
+    task automatic probe_publish_pulse();
+        @(negedge clk);
+        probe_sprite_frame_commit = 1'b1;
+        @(posedge clk);
+        @(negedge clk);
+        probe_sprite_frame_commit = 1'b0;
+    endtask
+
+    task automatic probe_wait_sync_done();
+        int timeout = 0;
+        while (probe_shape_sync_busy && timeout < 200000) begin
+            @(posedge clk);
+            timeout++;
+        end
+        check("probe shape background sync completed", timeout < 200000);
+    endtask
+
     task automatic probe_prepare_then_display(input int prep_v, input int display_v);
         probe_h_count <= 10'd0;
         probe_v_count <= prep_v[9:0];
@@ -846,6 +878,215 @@ module test_vgc_sprites;
         check_eq("mouse cursor transparent low nibble does not hit", hit, 0);
     endtask
 
+    // Faithful reproduction of the live-hardware path: the host writes the
+    // mouse cursor shape into slot 255 through the spr_a/VMEM port, the design
+    // publishes pending->active, and only THEN can the mouse overlay sample it.
+    // The existing mouse test hand-pokes the active dpram bank, so it never
+    // exercised this. Slot 255 row 0 = solid (0xFF) -> mouse must hit color 15.
+    task automatic test_mouse_shape_via_write_port();
+        int hit;
+        int color;
+        int base = 255 * 128;
+
+        $display("");
+        $display("Test: mouse shape written via spr_a port publishes to the bank the mouse reads");
+
+        probe_wait_sync_done();
+        probe_clear_line_buffers();
+        // Write slot 255 row 0 (8 bytes) through the real write port.
+        for (int b = 0; b < 8; b++)
+            probe_write_shape_byte(15'(base + b), 8'hFF);
+        // Publish pending->active, let the background bank-sync finish.
+        probe_publish_pulse();
+        probe_wait_sync_done();
+
+        probe_mouse_x = 9'd6;
+        probe_mouse_y = 8'd0;
+        probe_mouse_enable = 1'b1;
+        probe_mouse_shape = 8'd255;
+        probe_mouse_hot_x = 4'd0;
+        probe_mouse_hot_y = 4'd0;
+
+        probe_prepare_then_display(39, 40);
+        probe_sample_mouse_pixel(6, hit, color);
+        check_eq("port-written mouse shape hits after publish", hit, 1);
+        check_eq("port-written mouse shape color is 15", color, 15);
+    endtask
+
+    // Same, but a frame commit lands BETWEEN each byte write, modelling the
+    // network-paced host writes racing the 60Hz publish on real hardware.
+    task automatic test_mouse_shape_write_port_interleaved();
+        int hit;
+        int color;
+        int base = 255 * 128;
+
+        $display("");
+        $display("Test: mouse shape survives publishes interleaved with per-byte writes");
+
+        probe_wait_sync_done();
+        probe_clear_line_buffers();
+        for (int b = 0; b < 8; b++) begin
+            probe_write_shape_byte(15'(base + b), 8'hFF);
+            probe_publish_pulse();   // a 60Hz commit fires mid-fill
+        end
+        probe_publish_pulse();
+        probe_wait_sync_done();
+
+        probe_mouse_x = 9'd6;
+        probe_mouse_y = 8'd0;
+        probe_mouse_enable = 1'b1;
+        probe_mouse_shape = 8'd255;
+        probe_mouse_hot_x = 4'd0;
+        probe_mouse_hot_y = 4'd0;
+
+        probe_prepare_then_display(39, 40);
+        probe_sample_mouse_pixel(6, hit, color);
+        check_eq("interleaved-write mouse shape still hits", hit, 1);
+        check_eq("interleaved-write mouse shape color is 15", color, 15);
+    endtask
+
+    // DUT-level: does the full VGC publish the MOUSE slot (255) written through
+    // the VMEM/blitter port (space 4) exactly like the host's vmem_write? The
+    // existing publish test only ever exercises low sprite slots (0-15).
+    task automatic test_dut_publishes_mouse_slot_255();
+        logic [14:0] a0;
+
+        $display("");
+        $display("Test: DUT publishes mouse shape slot 255 written via VMEM/blitter port");
+        a0 = spr_byte_addr(255, 0, 0);   // 32640
+
+        // Backdoor-clear both banks at slot 255, settle any prior sync.
+        poke_spr_pending_addr(a0, 8'h00);
+        poke_spr_active_addr(a0, 8'h00);
+        wait_sprite_frame_commit();
+        wait_shape_sync_done();
+
+        // Write slot 255 byte 0 through the real VMEM/blitter port (space 4).
+        @(negedge clk);
+        tb_blt_space <= 3'd4;
+        tb_blt_addr  <= {1'b0, a0};
+        tb_blt_wdata <= 8'hFF;
+        tb_blt_we    <= 1'b1;
+        @(posedge clk);
+        @(negedge clk);
+        tb_blt_we    <= 1'b0;
+        tb_blt_space <= 3'd0;
+        step(3);
+
+        check_eq("slot255 pending byte written via VMEM port",
+                 int'(peek_spr_pending_addr(a0)), 8'hFF);
+
+        wait_sprite_frame_commit();
+        check_eq("slot255 active byte PUBLISHED after commit (mouse can read it)",
+                 int'(peek_spr_active_addr(a0)), 8'hFF);
+    endtask
+
+    // Count cycles a top-level DUT signal-of-interest is asserted across exactly
+    // one full frame (v_count/h_count free-run off clk). Used to prove the DUT
+    // RASTERIZES sprite/mouse pixels — no existing test checks the rendered pixel,
+    // only registers/memory. This is the gap that let both HW render bugs hide.
+    task automatic dut_count_spr_hits_one_frame(output int count);
+        int guard;
+        count = 0;
+        guard = 0;
+        while (!(dut.v_count == 10'd0 && dut.h_count == 10'd0) && guard < 700000) begin
+            @(posedge clk); guard++;
+        end
+        @(posedge clk);
+        guard = 0;
+        while (!(dut.v_count == 10'd0 && dut.h_count == 10'd0) && guard < 700000) begin
+            if (dut.spr_pixel_hit) count++;
+            @(posedge clk); guard++;
+        end
+    endtask
+
+    task automatic dut_count_mouse_hits_one_frame(output int count);
+        int guard;
+        count = 0;
+        guard = 0;
+        while (!(dut.v_count == 10'd0 && dut.h_count == 10'd0) && guard < 700000) begin
+            @(posedge clk); guard++;
+        end
+        @(posedge clk);
+        guard = 0;
+        while (!(dut.v_count == 10'd0 && dut.h_count == 10'd0) && guard < 700000) begin
+            if (dut.mouse_cursor_hit) count++;
+            @(posedge clk); guard++;
+        end
+    endtask
+
+    // DUT-level end-to-end sprite RENDER: load slot 0 via the real SPRROW command
+    // path, position/enable sprite 0, and confirm the raster pipeline actually
+    // produces spr_pixel_hit. Reproduces the live-hardware "sprite is blank"
+    // symptom if the DUT render pipeline is broken.
+    task automatic test_dut_renders_enabled_sprite();
+        int hits_off, hits_on;
+        logic [3:0] pix[16];
+
+        $display("");
+        $display("Test: DUT rasterizes an enabled sprite (spr_pixel_hit fires)");
+
+        // Isolate: earlier tests leave several sprites enabled — start clean.
+        for (int i = 0; i < 16; i++) spr_dis(i);
+        wait_sprite_frame_commit();
+
+        spr_clr(0);
+        for (int i = 0; i < 16; i++) pix[i] = 4'hF;   // solid color 15
+        for (int r = 0; r < 16; r++) spr_row(0, r, pix);
+        spr_pos(0, 100, 80);
+        spr_pri(0, 2);
+        wait_sprite_frame_commit();
+        wait_shape_sync_done();
+
+        dut_count_spr_hits_one_frame(hits_off);      // sprite still DISABLED
+        check_eq("disabled sprite produces no rasterized pixels", hits_off, 0);
+
+        spr_ena(0);
+        wait_sprite_frame_commit();
+        dut_count_spr_hits_one_frame(hits_on);       // sprite ENABLED
+        check("enabled sprite IS rasterized (spr_pixel_hit fires)", hits_on > 0);
+    endtask
+
+    // DUT-level end-to-end mouse RENDER: load slot 255, enable+position the mouse
+    // via its registers, confirm the overlay produces mouse_cursor_hit.
+    task automatic test_dut_renders_mouse_cursor();
+        int hits_off, hits_on;
+        int base = 255 * 128;
+
+        $display("");
+        $display("Test: DUT rasterizes the mouse cursor (mouse_cursor_hit fires)");
+
+        // Load slot 255 solid via the VMEM/blitter port, publish.
+        for (int b = 0; b < 128; b++) begin
+            @(negedge clk);
+            tb_blt_space <= 3'd4;
+            tb_blt_addr  <= 16'(base + b);
+            tb_blt_wdata <= 8'hFF;
+            tb_blt_we    <= 1'b1;
+            @(posedge clk);
+        end
+        @(negedge clk);
+        tb_blt_we    <= 1'b0;
+        tb_blt_space <= 3'd0;
+        wait_sprite_frame_commit();
+        wait_shape_sync_done();
+
+        // Position mouse mid-canvas, shape 255, but DISABLED (ctrl=0) → baseline.
+        bus_write(MOUSE_XL_A, 8'd100);
+        bus_write(MOUSE_XH_A, 8'd0);
+        bus_write(MOUSE_Y_A, 8'd80);
+        bus_write(MOUSE_SHAPE_A, 8'd255);
+        bus_write(MOUSE_CTRL_A, 8'h00);
+        wait_vblank_start();
+        dut_count_mouse_hits_one_frame(hits_off);
+        check_eq("disabled mouse cursor produces no rasterized pixels", hits_off, 0);
+
+        bus_write(MOUSE_CTRL_A, 8'h03);   // ENABLE | AUTO
+        wait_vblank_start();
+        dut_count_mouse_hits_one_frame(hits_on);
+        check("enabled mouse cursor IS rasterized (mouse_cursor_hit fires)", hits_on > 0);
+    endtask
+
     task automatic test_top_sprite_read_uses_canvas_x();
         $display("");
         $display("Test: top-level VGC samples sprite buffer in Nova canvas X coordinates");
@@ -882,6 +1123,11 @@ module test_vgc_sprites;
         test_sprite_probe_reports_sprite_sprite_collision_mask();
         test_mouse_registers_commit_at_vblank();
         test_mouse_probe_reads_shape_slot();
+        test_mouse_shape_via_write_port();
+        test_mouse_shape_write_port_interleaved();
+        test_dut_publishes_mouse_slot_255();
+        test_dut_renders_enabled_sprite();
+        test_dut_renders_mouse_cursor();
         test_top_sprite_read_uses_canvas_x();
 
         summary();
