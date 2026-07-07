@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.11.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_build_vis — NSPR character -> msprite VIS descriptor - (03c6e79) - Barry Walker
+
+- - -
+
 ## v0.10.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_char_seek — walk the NSPR character table - (5f1a1c0) - Barry Walker
