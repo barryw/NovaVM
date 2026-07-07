@@ -90,6 +90,11 @@ static pthread_mutex_t g_bridge = PTHREAD_MUTEX_INITIALIZER;
 #define BRIDGE_LOCK()   pthread_mutex_lock(&g_bridge)
 #define BRIDGE_UNLOCK() pthread_mutex_unlock(&g_bridge)
 
+/* Public bridge lock so other threads (nmouse's shape loader) can serialise
+ * their R_VMEM_ADDR/R_VMEM_DATA pairs against the servers' screen dumps/peeks. */
+void vgc_bridge_lock(void)   { BRIDGE_LOCK(); }
+void vgc_bridge_unlock(void) { BRIDGE_UNLOCK(); }
+
 /* ---- machine access via novavm.h primitives ------------------------------- */
 
 /* VGC video-memory debug read (same sequence as novavm.c's vmem_read): latch

@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/file.h>       /* flock: single-instance guard */
 #include <pthread.h>
 #include "loader_bin.h"     /* LOADER_BIN[248]: resident lib_call loader, staged @ $0320 */
 #include "modules_embedded.h" /* EMBEDDED_MOD[1..8], 16KB each (3=MOD_SYSTEM: line input) */
@@ -342,6 +343,20 @@ int main(int argc, char **argv) {
         }
         return 0;
     }
+    /* Single-instance guard. BusyBox has no pkill, so a botched redeploy used to
+     * leave old novavm instances running; they ALL drove the VGC mouse registers,
+     * so the pointer strobed between their positions. Hold an exclusive flock for
+     * the process lifetime — a second daemon exits instead of stacking. (The
+     * one-shot subcommands above return before this, so they never contend.) */
+    {
+        int lk = open("/run/novavm.lock", O_CREAT | O_RDWR, 0644);
+        if (lk < 0 || flock(lk, LOCK_EX | LOCK_NB) != 0) {
+            fprintf(stderr, "[novavm] another instance already running; exiting\n");
+            return 1;
+        }
+        /* lk intentionally leaked: held until the process exits, releasing the lock */
+    }
+
     /* Map the PS-DDR XRAM shelf (DT reserved-memory @ XRAM_DDR_BASE). NULL if the
      * reserve is absent -> nfio.c's XRAM commands return FIO_ERR instead of
      * scribbling on kernel RAM. */
