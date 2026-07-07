@@ -71,6 +71,12 @@ extern volatile uint8_t *g_xram;
 
 /* ---- core register access (g_reg owned by novavm.c) ---- */
 extern volatile uint32_t *g_reg;
+
+/* Serialise R_VMEM_ADDR/R_VMEM_DATA (and R_PEEK) across threads. Defined in
+ * nservers.c; used by nmouse.c's shape loader so its 384-byte VMEM burst can't
+ * be interleaved by a screen dump/peek (which corrupts the shared addr latch). */
+void vgc_bridge_lock(void);
+void vgc_bridge_unlock(void);
 static inline void     wr(unsigned o, uint32_t v) { g_reg[o >> 2] = v; }
 static inline uint32_t rd(unsigned o)             { return g_reg[o >> 2]; }
 static inline void     poke(unsigned a, unsigned char d) { wr(R_POKE, ((a & 0xFFFFu) << 8) | d); }
