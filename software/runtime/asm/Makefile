@@ -48,6 +48,7 @@ NOVA_LIB_SRCS := \
 	replline.s \
 	rng.s \
 	sprite.s \
+	spritebank.s \
 	textsvc.s \
 	tween.s \
 	vgc.s \

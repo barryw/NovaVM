@@ -167,6 +167,14 @@ Status log below is the async message board — the other agent pulls and reads 
     path (decode → DMA shapes to XRAM → `msprite_spawn` per character → register
     anim descriptors), verified against the same `sample.nsp` fixture.
 
+- **Linux agent** — `spritebank_open` (6502) **slice 1 landed**: parses + indexes
+  an in-RAM NSPR buffer — validates `NSPR`/v1, reads shape/char counts + palette
+  flag, computes the shape-pool + character-table pointers. New `nova.lib` module
+  `spritebank.s`/`.inc`; headless `SpriteBankLoadTests` parses the shared
+  `sample.nsp` and confirms `shape_count=5`, `char_count=2`, `chars_ptr → "HERO"`.
+  **All three codecs (C#, Swift, 6502) now agree on the fixture.** Next: DMA the
+  shape pool to XRAM, then walk characters → `msprite_spawn` + anim descriptors.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:
