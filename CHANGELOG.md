@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.13.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_spawn — bank character -> live hardware sprites - (a72b430) - Barry Walker
+
+- - -
+
 ## v0.12.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_load_to_sprites — stage the pool into sprite RAM - (8beb47a) - Barry Walker
