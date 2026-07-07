@@ -60,6 +60,19 @@ public class SpriteBankLoadTests
         Assert.AreEqual(0x10, bus.ReadXram(xramBase + 127), "shape 0 last byte");
         Assert.AreEqual(0x11, bus.ReadXram(xramBase + 128), "shape 1");
         Assert.AreEqual(0x14, bus.ReadXram(xramBase + 4 * 128), "shape 4");
+
+        // Slice 3: spritebank_char_seek(1) walked past HERO's variable-length
+        // record to BOSS (4 parts, 1 anim). HERO occupies 27 bytes: name(8) +
+        // part_count(1) + 1*3 parts + anim_count(1) + IDLE[name(8)+fc(1)+ticks(1)
+        // +flags(1)+3*1 frames].
+        Assert.AreEqual(4, bus.ReadRam(Results + 0x10), "BOSS part count");
+        int bossPartsPtr = bus.ReadRam(Results + 0x11) | (bus.ReadRam(Results + 0x12) << 8);
+        Assert.AreEqual(1, bus.ReadRam(Results + 0x13), "BOSS anim count");
+        int bossCharPtr = bus.ReadRam(Results + 0x14) | (bus.ReadRam(Results + 0x15) << 8);
+        Assert.AreEqual(charsPtr + 27, bossCharPtr, "BOSS record follows HERO's 27-byte record");
+        Assert.AreEqual((byte)'B', bus.ReadRam((ushort)bossCharPtr), "BOSS name");
+        // parts are {dx,dy,flags} triples; BOSS is a 2x2 grid so part[1].dx = 16.
+        Assert.AreEqual(16, bus.ReadRam((ushort)(bossPartsPtr + 3)), "BOSS part[1].dx");
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

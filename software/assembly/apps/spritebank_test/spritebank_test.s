@@ -49,5 +49,20 @@ start:
       LDA   spritebank_chars_ptr+1
       STA   RESULTS + 6
 
+      LDA   #1                         ; seek character 1 (BOSS)
+      JSR   spritebank_char_seek
+      LDA   spritebank_char_part_count
+      STA   RESULTS + $10
+      LDA   spritebank_char_parts_ptr
+      STA   RESULTS + $11
+      LDA   spritebank_char_parts_ptr+1
+      STA   RESULTS + $12
+      LDA   spritebank_char_anim_count
+      STA   RESULTS + $13
+      LDA   spritebank_char_ptr
+      STA   RESULTS + $14
+      LDA   spritebank_char_ptr+1
+      STA   RESULTS + $15
+
 halt:
       BRA   halt

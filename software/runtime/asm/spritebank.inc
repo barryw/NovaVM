@@ -30,4 +30,14 @@ SPRITEBANK_SHAPE_BYTES = 128         ; 16x16 4bpp cell
 .global spritebank_chars_ptr         ; -> first character record
 .global spritebank_xram_base         ; 3-byte flat XRAM dest (caller sets before load_shapes)
 
+; spritebank_char_seek (A = character index) walks the (variable-length)
+; character table and fills the fields below for that character.
+.global spritebank_char_seek
+.globalzp spritebank_walk            ; ZP scratch pointer used while walking
+.global spritebank_char_ptr          ; -> the sought character record
+.global spritebank_char_part_count
+.global spritebank_char_parts_ptr    ; -> parts block: { dx, dy, flags } * part_count
+.global spritebank_char_anim_count
+.global spritebank_char_anims_ptr    ; -> animations block
+
 .endif

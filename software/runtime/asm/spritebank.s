@@ -8,6 +8,7 @@ SPRITEBANK_IMPL_INCLUDED = 1
 
       .segment "ZEROPAGE"
 spritebank_src:   .res 2             ; ZP so (spritebank_src),Y indirection works
+spritebank_walk:  .res 2             ; ZP scratch pointer for table walking
 
       .segment "BSS"
 spritebank_result:      .res 1
@@ -19,10 +20,26 @@ spritebank_shapes_len:  .res 2        ; shape_count * 128
 spritebank_chars_ptr:   .res 2
 spritebank_xram_base:   .res 3        ; flat 24-bit XRAM destination for the pool
 
+spritebank_char_ptr:        .res 2
+spritebank_char_part_count: .res 1
+spritebank_char_parts_ptr:  .res 2
+spritebank_char_anim_count: .res 1
+spritebank_char_anims_ptr:  .res 2
+sb_seek_index:  .res 1
+sb_tmp_parts:   .res 1
+sb_tmp_anims:   .res 1
+sb_tmp_frames:  .res 1
+
       .segment "CODE"
 
       .export spritebank_open
       .export spritebank_load_shapes
+      .export spritebank_char_seek
+      .export spritebank_char_ptr
+      .export spritebank_char_part_count
+      .export spritebank_char_parts_ptr
+      .export spritebank_char_anim_count
+      .export spritebank_char_anims_ptr
       .export spritebank_result
       .export spritebank_shape_count
       .export spritebank_char_count
@@ -148,5 +165,114 @@ spritebank_load_shapes:
       LDA   spritebank_shapes_len+1
       STA   XRAM_LENH
       JMP   xram_copy_from_ram         ; tail-call; its RTS returns to our caller
+
+; Walk the character table to character A and fill spritebank_char_*.
+; @label SPRITEBANK.CHAR_SEEK
+; @kind routine
+; @symbol spritebank_char_seek
+; @summary Locate character A and expose its parts/animations.
+; @in A: character index (0-based).
+spritebank_char_seek:
+      STA   sb_seek_index
+      LDA   spritebank_chars_ptr
+      STA   spritebank_walk
+      LDA   spritebank_chars_ptr+1
+      STA   spritebank_walk+1
+@skip_chars:                            ; count in memory: sb_skip_char clobbers X
+      LDA   sb_seek_index
+      BEQ   @found
+      JSR   sb_skip_char
+      DEC   sb_seek_index
+      BRA   @skip_chars
+@found:
+      LDA   spritebank_walk            ; record start
+      STA   spritebank_char_ptr
+      LDA   spritebank_walk+1
+      STA   spritebank_char_ptr+1
+      LDA   #8                         ; past name -> part_count
+      JSR   sb_advance
+      LDY   #0
+      LDA   (spritebank_walk),Y
+      STA   spritebank_char_part_count
+      LDA   #1                         ; -> parts block
+      JSR   sb_advance
+      LDA   spritebank_walk
+      STA   spritebank_char_parts_ptr
+      LDA   spritebank_walk+1
+      STA   spritebank_char_parts_ptr+1
+      LDX   spritebank_char_part_count ; skip parts (part_count*3)
+@skip_parts:
+      BEQ   @at_anims
+      LDA   #3
+      JSR   sb_advance
+      DEX
+      BRA   @skip_parts
+@at_anims:
+      LDY   #0
+      LDA   (spritebank_walk),Y
+      STA   spritebank_char_anim_count
+      LDA   #1                         ; -> animations block
+      JSR   sb_advance
+      LDA   spritebank_walk
+      STA   spritebank_char_anims_ptr
+      LDA   spritebank_walk+1
+      STA   spritebank_char_anims_ptr+1
+      RTS
+
+; Advance spritebank_walk past one whole character record (name + parts +
+; animations, walking each variable-length section by loop).
+sb_skip_char:
+      LDA   #8
+      JSR   sb_advance                 ; name
+      LDY   #0
+      LDA   (spritebank_walk),Y        ; part_count
+      STA   sb_tmp_parts
+      LDA   #1
+      JSR   sb_advance
+      LDX   sb_tmp_parts               ; skip parts (part_count*3)
+@parts:
+      BEQ   @after_parts
+      LDA   #3
+      JSR   sb_advance
+      DEX
+      BRA   @parts
+@after_parts:
+      LDY   #0
+      LDA   (spritebank_walk),Y        ; anim_count
+      STA   sb_tmp_anims
+      LDA   #1
+      JSR   sb_advance
+@anims:
+      LDA   sb_tmp_anims
+      BEQ   @done
+      LDA   #8
+      JSR   sb_advance                 ; anim name
+      LDY   #0
+      LDA   (spritebank_walk),Y        ; frame_count
+      STA   sb_tmp_frames
+      LDA   #3                         ; past frame_count + ticks + flags
+      JSR   sb_advance
+      LDX   sb_tmp_frames              ; skip frames (frame_count*part_count)
+@frames:
+      BEQ   @after_frames
+      LDA   sb_tmp_parts
+      JSR   sb_advance
+      DEX
+      BRA   @frames
+@after_frames:
+      DEC   sb_tmp_anims
+      BRA   @anims
+@done:
+      RTS
+
+; spritebank_walk += A (unsigned 8-bit).
+sb_advance:
+      CLC
+      ADC   spritebank_walk
+      STA   spritebank_walk
+      BCC   @done
+      INC   spritebank_walk+1
+@done:
+      RTS
 
 .endif
