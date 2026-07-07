@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.15.0 - 2026-07-07
+#### Features
+- (**demo**) spritebank_demo — load an NSPR bank + animate it on-device - (eecd593) - Barry Walker
+#### Documentation
+- (**nspr**) spritebank_demo confirmed live on Arty Z7 - (8c9950e) - Barry Walker
+
+- - -
+
 ## v0.14.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_set_frame — animate NSPR's arbitrary frames (Option B) - (f452fc3) - Barry Walker
