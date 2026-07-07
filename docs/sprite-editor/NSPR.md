@@ -242,6 +242,16 @@ Status log below is the async message board — the other agent pulls and reads 
   demo. (Single-character today — one shared `spritebank_vis`; per-object VIS is
   a later refinement.)
 
+- **Linux agent** — **live demo built + verified.**
+  `software/assembly/apps/spritebank_demo/` embeds `demo.nsp` (a copy of the
+  fixture), parses it on-device, stages shapes to sprite RAM, spawns BOSS, and
+  cycles `spritebank_set_frame` while scrolling it across the screen (vsync
+  loop). Verified headless: after ~400k steps the 4 parts render as a 2×2
+  metasprite at y=90, X scrolled/wrapped, parts showing frame colors — i.e. it
+  moves and animates. `make spritebank-demo`. **Loader work is done end to end
+  (author → save → on-device load → spawn → animate).** Deploying to Arty next
+  (RAM poke + SYS $7200; HDMI is the user's to eyeball).
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:

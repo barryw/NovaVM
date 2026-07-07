@@ -11,6 +11,7 @@ EDITUI_SHELL_DIR := apps/editui_shell
 EDITBUF_TEST_DIR := apps/editbuf_test
 EDITBUF_DEMO_DIR := apps/editbuf_demo
 MOUSEDEMO_DIR := apps/mousedemo
+SPRITEBANK_DEMO_DIR := apps/spritebank_demo
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 VGC_VSYNC_OBJ := $(KEYBOARD_DIR)/vgc_vsync.o
 VGC_KEYBOARD_OBJS := $(VGC_WAIT_OBJ) $(VGC_VSYNC_OBJ)
@@ -21,7 +22,7 @@ NOVA_LIB := $(NOVA_ASM)/build/nova.lib
 $(NOVA_LIB):
 	$(MAKE) -C $(NOVA_ASM)
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo spritebank-demo
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -110,6 +111,14 @@ $(MOUSEDEMO_DIR)/mousedemo.bin: $(MOUSEDEMO_DIR)/mousedemo.o $(NOVA_LIB) $(MOUSE
 
 $(MOUSEDEMO_DIR)/mousedemo.o: $(MOUSEDEMO_DIR)/mousedemo.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/novavm.inc $(NOVA_ASM)/mouse.inc $(NOVA_ASM)/mouse_events.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
+
+spritebank-demo: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin
+
+$(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(NOVA_LIB) $(SPRITEBANK_DEMO_DIR)/spritebank_demo.cfg
+	ld65 -C $(SPRITEBANK_DEMO_DIR)/spritebank_demo.cfg -o $@ $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(NOVA_LIB)
+
+$(SPRITEBANK_DEMO_DIR)/spritebank_demo.o: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.s $(SPRITEBANK_DEMO_DIR)/demo.nsp $(NOVA_ASM)/nova.inc $(NOVA_ASM)/spritebank.inc $(NOVA_ASM)/msprite.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) --bin-include-dir $(SPRITEBANK_DEMO_DIR) $< -o $@
 
 editui-shell: $(EDITUI_SHELL_DIR)/editui_shell.bin
 
