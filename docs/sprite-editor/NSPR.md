@@ -249,8 +249,12 @@ Status log below is the async message board — the other agent pulls and reads 
   loop). Verified headless: after ~400k steps the 4 parts render as a 2×2
   metasprite at y=90, X scrolled/wrapped, parts showing frame colors — i.e. it
   moves and animates. `make spritebank-demo`. **Loader work is done end to end
-  (author → save → on-device load → spawn → animate).** Deploying to Arty next
-  (RAM poke + SYS $7200; HDMI is the user's to eyeball).
+  (author → save → on-device load → spawn → animate).** ✅ **Confirmed live on
+  Arty Z7** — poked to `$7200` over the 6503 debug port, `SYS 29184`, and the
+  board's composite framebuffer shows BOSS's 32×32 metasprite (4 shapes in a 2×2
+  grid) scrolling across the screen (captured two frames; it moved center→left,
+  wrapping). The whole NSPR path is proven on real hardware. Art is the fixture's
+  striped placeholder shapes — real art is exactly what NovaDraw produces.
 
 ## 5. Kickoff for the macOS agent
 
