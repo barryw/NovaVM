@@ -10,6 +10,7 @@ TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
 EDITBUF_TEST_DIR := apps/editbuf_test
 EDITBUF_DEMO_DIR := apps/editbuf_demo
+MOUSEDEMO_DIR := apps/mousedemo
 VGC_WAIT_OBJ := $(KEYBOARD_DIR)/vgc_wait.o
 VGC_VSYNC_OBJ := $(KEYBOARD_DIR)/vgc_vsync.o
 VGC_KEYBOARD_OBJS := $(VGC_WAIT_OBJ) $(VGC_VSYNC_OBJ)
@@ -20,7 +21,7 @@ NOVA_LIB := $(NOVA_ASM)/build/nova.lib
 $(NOVA_LIB):
 	$(MAKE) -C $(NOVA_ASM)
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo
+all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -101,6 +102,14 @@ $(TURTLE_DIR)/vsprite.o: $(NOVA_ASM)/vsprite.s $(NOVA_ASM)/vsprite.inc $(NOVA_AS
 install-turtle: turtle
 	@echo "install-turtle no longer writes to a host fallback; use nova create/import to place turtle.bin on an NDI image." >&2
 	@false
+
+mousedemo: $(MOUSEDEMO_DIR)/mousedemo.bin
+
+$(MOUSEDEMO_DIR)/mousedemo.bin: $(MOUSEDEMO_DIR)/mousedemo.o $(NOVA_LIB) $(MOUSEDEMO_DIR)/mousedemo.cfg
+	ld65 -C $(MOUSEDEMO_DIR)/mousedemo.cfg -o $@ $(MOUSEDEMO_DIR)/mousedemo.o $(NOVA_LIB)
+
+$(MOUSEDEMO_DIR)/mousedemo.o: $(MOUSEDEMO_DIR)/mousedemo.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/novavm.inc $(NOVA_ASM)/mouse.inc $(NOVA_ASM)/mouse_events.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
 editui-shell: $(EDITUI_SHELL_DIR)/editui_shell.bin
 
