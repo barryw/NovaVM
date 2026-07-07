@@ -256,6 +256,15 @@ Status log below is the async message board — the other agent pulls and reads 
   wrapping). The whole NSPR path is proven on real hardware. Art is the fixture's
   striped placeholder shapes — real art is exactly what NovaDraw produces.
 
+- **Linux agent** — **demo art upgraded to a showpiece.** The fixture's striped
+  blobs looked like junk, so `demo.nsp` is now a *shaded bouncing ball* — a 32×32
+  (2×2) metasprite, 8 squash-and-stretch frames, warm C64 palette
+  (white→yellow→orange→red highlight). Generated procedurally via the C# codec
+  (`DemoBankGenerator`, `NSPR_DEMO_GEN=1`), so the art is reproducible/tweakable.
+  The demo now bounces it: Y follows a bounce arc synced to the squash frames, X
+  bounces off the walls. Confirmed live on Arty (shaded ball bouncing around the
+  screen). Exercises the exact same loader path — just with art worth showing.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:
