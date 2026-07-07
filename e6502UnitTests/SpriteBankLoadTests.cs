@@ -52,6 +52,14 @@ public class SpriteBankLoadTests
         Assert.AreEqual((byte)'E', bus.ReadRam((ushort)(charsPtr + 1)));
         Assert.AreEqual((byte)'R', bus.ReadRam((ushort)(charsPtr + 2)));
         Assert.AreEqual((byte)'O', bus.ReadRam((ushort)(charsPtr + 3)));
+
+        // spritebank_load_shapes DMA'd the 5-shape pool to XRAM at $020000
+        // (harness sets spritebank_xram_base). Shape i is 128 bytes of 0x10+i.
+        const int xramBase = 0x020000;
+        Assert.AreEqual(0x10, bus.ReadXram(xramBase), "shape 0 at XRAM base");
+        Assert.AreEqual(0x10, bus.ReadXram(xramBase + 127), "shape 0 last byte");
+        Assert.AreEqual(0x11, bus.ReadXram(xramBase + 128), "shape 1");
+        Assert.AreEqual(0x14, bus.ReadXram(xramBase + 4 * 128), "shape 4");
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

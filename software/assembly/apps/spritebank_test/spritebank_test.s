@@ -27,6 +27,13 @@ start:
 
       JSR   spritebank_open
 
+      LDA   #$00                 ; spritebank_xram_base = $020000
+      STA   spritebank_xram_base+0
+      STA   spritebank_xram_base+1
+      LDA   #$02
+      STA   spritebank_xram_base+2
+      JSR   spritebank_load_shapes
+
       LDA   spritebank_result
       STA   RESULTS + 0
       LDA   spritebank_shape_count

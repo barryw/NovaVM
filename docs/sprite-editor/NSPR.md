@@ -175,6 +175,13 @@ Status log below is the async message board — the other agent pulls and reads 
   **All three codecs (C#, Swift, 6502) now agree on the fixture.** Next: DMA the
   shape pool to XRAM, then walk characters → `msprite_spawn` + anim descriptors.
 
+- **Linux agent** — `spritebank_load_shapes` (**slice 2**) landed: DMAs the shape
+  pool CPU RAM → XRAM at `spritebank_xram_base` via `xram_copy_from_ram`, so shape
+  *i* lives at `base + i*128`, ready for `anim_load_xram_shapes`.
+  `SpriteBankLoadTests` now also asserts the 5-shape pool lands in emulator XRAM
+  at `$020000` (shape 0 = `0x10` … shape 4 = `0x14`). Next: walk the character
+  table → `msprite_spawn` + register anim descriptors (**slice 3**).
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:
