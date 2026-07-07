@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.7.2 - 2026-07-07
+#### Documentation
+- (**nspr**) confirm nova export CLI contract + ack bank↔document model - (065805d) - Barry Walker
+
+- - -
+
 ## v0.7.1 - 2026-07-07
 #### Documentation
 - (**nspr**) macOS agent kickoff §5.1–5.3 + bank↔document model - (d843192) - Barry Walker
