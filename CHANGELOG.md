@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.5.1 - 2026-07-07
+#### Bug Fixes
+- (**nmouse**) handle USB mouse hotplug/disconnect (hub swaps) - (df47b4b) - Barry Walker
+
+- - -
+
 ## v0.5.0 - 2026-07-07
 #### Features
 - (**novavm**) hw mouse pointer shapes, OSD mouse controls, single-instance guard - (84dbb53) - Barry Walker
