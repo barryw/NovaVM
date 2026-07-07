@@ -55,5 +55,12 @@ SPRITEBANK_SHAPE_BYTES = 128         ; 16x16 4bpp cell
 ; result in A (the object handle path). Call msprite_commit to push it live.
 .global spritebank_spawn
 .global spritebank_vis                ; VIS buffer spritebank_spawn builds into
+.global spritebank_handle             ; msprite handle of the last spritebank_spawn
+
+; spritebank_set_frame (A = frame index) re-poses the spawned object with that
+; frame's exact per-part shapes from animation 0 (NSPR's arbitrary frame table),
+; then marks it dirty. Call msprite_commit to show it. Honors NSPR's arbitrary
+; frames — it does NOT use msprite's shape_base+frame tick.
+.global spritebank_set_frame
 
 .endif

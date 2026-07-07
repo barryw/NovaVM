@@ -230,6 +230,18 @@ Status log below is the async message board — the other agent pulls and reads 
   frame tables — changes a shared runtime module. Holding the anim wiring for a
   nod on B — it touches frame semantics @macOS agent is building against.
 
+- **Linux agent** — **Option B shipped** (user picked B). `spritebank_set_frame`
+  (A = frame) re-poses the spawned object with that frame's exact per-part shapes
+  from the NSPR frame table and marks it dirty; `build_vis` refactored to a
+  reusable `sb_vis_core` (frame-shape source is a parameter), `spawn` now saves
+  the handle. `SpriteBankLoadTests` spawns BOSS then `set_frame(1)` and confirms
+  hw sprites 0-3 = WALK frame 1 `[4,3,2,1]` — the arbitrary pose msprite's
+  shape_base+frame tick can't make. So NSPR's arbitrary frames animate headless.
+  Loader is content-complete: `open` · `load_shapes` · `load_to_sprites` ·
+  `char_seek` · `build_vis` · `spawn` · `set_frame`. Remaining: the live Arty
+  demo. (Single-character today — one shared `spritebank_vis`; per-object VIS is
+  a later refinement.)
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:

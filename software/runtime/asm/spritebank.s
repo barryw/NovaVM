@@ -35,6 +35,7 @@ sb_parts_off:   .res 1
 sb_frame_off:   .res 1
 sb_dst_off:     .res 1
 sb_has_anim:    .res 1
+spritebank_handle: .res 1
 spritebank_vis: .res (2 + MSPRITE_MAX_PARTS * 4)   ; header + up to 16 parts * 4
 
       .segment "CODE"
@@ -50,7 +51,9 @@ spritebank_vis: .res (2 + MSPRITE_MAX_PARTS * 4)   ; header + up to 16 parts * 4
       .export spritebank_char_anims_ptr
       .export spritebank_build_vis
       .export spritebank_spawn
+      .export spritebank_set_frame
       .export spritebank_vis
+      .export spritebank_handle
       .export spritebank_result
       .export spritebank_shape_count
       .export spritebank_char_count
@@ -314,11 +317,7 @@ sb_advance:
 ; @symbol spritebank_build_vis
 ; @summary Build an msprite VIS descriptor from the seeked character.
 spritebank_build_vis:
-      LDA   spritebank_char_parts_ptr   ; src = parts block
-      STA   spritebank_src
-      LDA   spritebank_char_parts_ptr+1
-      STA   spritebank_src+1
-      LDA   spritebank_char_anim_count  ; walk = anims_ptr + 11 (frame 0 shapes)
+      LDA   spritebank_char_anim_count  ; frame 0 of animation 0
       BEQ   @no_anim
       LDA   #1
       STA   sb_has_anim
@@ -329,10 +328,19 @@ spritebank_build_vis:
       LDA   spritebank_char_anims_ptr+1
       ADC   #0
       STA   spritebank_walk+1
-      BRA   @header
+      BRA   sb_vis_core
 @no_anim:
       STZ   sb_has_anim
-@header:
+      ; fall through to sb_vis_core
+
+; Build the VIS at (spritebank_dst) from the seeked character's parts, taking
+; each part's shape_base from (spritebank_walk) — the frame's shape row — when
+; sb_has_anim is set (else 0).
+sb_vis_core:
+      LDA   spritebank_char_parts_ptr   ; src = parts block
+      STA   spritebank_src
+      LDA   spritebank_char_parts_ptr+1
+      STA   spritebank_src+1
       LDY   #0
       LDA   spritebank_char_part_count  ; dst[0] = part_count
       STA   (spritebank_dst),Y
@@ -409,6 +417,43 @@ spritebank_spawn:
       STA   MSPRITE_DESC_L
       LDA   #>spritebank_vis
       STA   MSPRITE_DESC_H
-      JMP   msprite_spawn               ; tail-call; returns handle/result
+      JSR   msprite_spawn
+      STA   spritebank_handle           ; remember the object handle
+      RTS
+
+; Re-pose the spawned object with animation-0 frame A's exact per-part shapes
+; (NSPR's arbitrary frame table) and mark it dirty. Call msprite_commit to show.
+; @label SPRITEBANK.SET_FRAME
+; @kind routine
+; @symbol spritebank_set_frame
+; @summary Show a specific animation frame of the spawned character.
+; @in A: frame index (within animation 0).
+spritebank_set_frame:
+      STA   sb_seek_index               ; frame countdown
+      CLC                               ; walk = anims_ptr + 11 (frame 0 shapes)
+      LDA   spritebank_char_anims_ptr
+      ADC   #11
+      STA   spritebank_walk
+      LDA   spritebank_char_anims_ptr+1
+      ADC   #0
+      STA   spritebank_walk+1
+@fadv:                                  ; walk += frame * part_count
+      LDA   sb_seek_index
+      BEQ   @build
+      LDA   spritebank_char_part_count
+      JSR   sb_advance
+      DEC   sb_seek_index
+      BRA   @fadv
+@build:
+      LDA   #1
+      STA   sb_has_anim
+      LDA   #<spritebank_vis
+      STA   spritebank_dst
+      LDA   #>spritebank_vis
+      STA   spritebank_dst+1
+      JSR   sb_vis_core
+      LDA   spritebank_handle           ; reset frame counter + mark dirty
+      LDX   #0
+      JMP   msprite_set_frame           ; tail-call
 
 .endif

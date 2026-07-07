@@ -94,13 +94,13 @@ public class SpriteBankLoadTests
         Assert.AreEqual(3, bus.ReadRam((ushort)(vis + 16)), "VIS part3 shape_base");
         Assert.AreEqual(1, bus.ReadRam((ushort)(vis + 17)), "VIS part3 flags");
 
-        // Capstone: spritebank_spawn(1) + msprite_commit turned BOSS's 4 parts
-        // into hardware sprites 0-3 showing shape slots 0-3 (VIS shape_base from
-        // frame 0 = [0,1,2,3]).
-        Assert.AreEqual(0, bus.Vgc.GetSpriteShapeIndex(0), "sprite 0 shape slot");
-        Assert.AreEqual(1, bus.Vgc.GetSpriteShapeIndex(1), "sprite 1 shape slot");
-        Assert.AreEqual(2, bus.Vgc.GetSpriteShapeIndex(2), "sprite 2 shape slot");
-        Assert.AreEqual(3, bus.Vgc.GetSpriteShapeIndex(3), "sprite 3 shape slot");
+        // Capstone: spritebank_spawn(1) made BOSS's 4 parts hw sprites 0-3, then
+        // spritebank_set_frame(1) re-posed them to WALK frame 1 = [4,3,2,1] — the
+        // *arbitrary* frame msprite's shape_base+frame tick could never produce.
+        Assert.AreEqual(4, bus.Vgc.GetSpriteShapeIndex(0), "sprite 0 = frame1[0]");
+        Assert.AreEqual(3, bus.Vgc.GetSpriteShapeIndex(1), "sprite 1 = frame1[1]");
+        Assert.AreEqual(2, bus.Vgc.GetSpriteShapeIndex(2), "sprite 2 = frame1[2]");
+        Assert.AreEqual(1, bus.Vgc.GetSpriteShapeIndex(3), "sprite 3 = frame1[3]");
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

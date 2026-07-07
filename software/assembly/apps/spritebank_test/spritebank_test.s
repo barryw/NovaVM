@@ -78,5 +78,9 @@ start:
       JSR   spritebank_spawn
       JSR   msprite_commit
 
+      LDA   #1                         ; re-pose to WALK frame 1 = [4,3,2,1]
+      JSR   spritebank_set_frame
+      JSR   msprite_commit
+
 halt:
       BRA   halt
