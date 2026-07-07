@@ -64,5 +64,11 @@ start:
       LDA   spritebank_char_ptr+1
       STA   RESULTS + $15
 
+      LDA   #$00                        ; build BOSS's VIS descriptor at $6E00
+      STA   spritebank_dst
+      LDA   #$6E
+      STA   spritebank_dst+1
+      JSR   spritebank_build_vis
+
 halt:
       BRA   halt

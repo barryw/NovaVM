@@ -40,4 +40,12 @@ SPRITEBANK_SHAPE_BYTES = 128         ; 16x16 4bpp cell
 .global spritebank_char_anim_count
 .global spritebank_char_anims_ptr    ; -> animations block
 
+; spritebank_build_vis writes an msprite visual descriptor for the seeked
+; character (call spritebank_char_seek first) into the buffer at spritebank_dst:
+;   [0]=part_count [1]=flags then part_count * { dx, dy, shape_base, flags }.
+; shape_base per part = that part's shape in frame 0 of the character's first
+; animation (0 if the character has no animations).
+.global spritebank_build_vis
+.globalzp spritebank_dst             ; ZP: caller sets -> destination VIS buffer
+
 .endif

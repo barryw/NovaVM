@@ -9,6 +9,7 @@ SPRITEBANK_IMPL_INCLUDED = 1
       .segment "ZEROPAGE"
 spritebank_src:   .res 2             ; ZP so (spritebank_src),Y indirection works
 spritebank_walk:  .res 2             ; ZP scratch pointer for table walking
+spritebank_dst:   .res 2             ; ZP: destination VIS buffer for build_vis
 
       .segment "BSS"
 spritebank_result:      .res 1
@@ -29,6 +30,10 @@ sb_seek_index:  .res 1
 sb_tmp_parts:   .res 1
 sb_tmp_anims:   .res 1
 sb_tmp_frames:  .res 1
+sb_parts_off:   .res 1
+sb_frame_off:   .res 1
+sb_dst_off:     .res 1
+sb_has_anim:    .res 1
 
       .segment "CODE"
 
@@ -40,6 +45,7 @@ sb_tmp_frames:  .res 1
       .export spritebank_char_parts_ptr
       .export spritebank_char_anim_count
       .export spritebank_char_anims_ptr
+      .export spritebank_build_vis
       .export spritebank_result
       .export spritebank_shape_count
       .export spritebank_char_count
@@ -272,6 +278,91 @@ sb_advance:
       STA   spritebank_walk
       BCC   @done
       INC   spritebank_walk+1
+@done:
+      RTS
+
+; Build an msprite visual descriptor for the seeked character into
+; (spritebank_dst). NSPR part {dx,dy,flags} -> VIS part {dx,dy,shape_base,flags},
+; shape_base = the part's shape in frame 0 of the first animation.
+; @label SPRITEBANK.BUILD_VIS
+; @kind routine
+; @symbol spritebank_build_vis
+; @summary Build an msprite VIS descriptor from the seeked character.
+spritebank_build_vis:
+      LDA   spritebank_char_parts_ptr   ; src = parts block
+      STA   spritebank_src
+      LDA   spritebank_char_parts_ptr+1
+      STA   spritebank_src+1
+      LDA   spritebank_char_anim_count  ; walk = anims_ptr + 11 (frame 0 shapes)
+      BEQ   @no_anim
+      LDA   #1
+      STA   sb_has_anim
+      CLC
+      LDA   spritebank_char_anims_ptr
+      ADC   #11
+      STA   spritebank_walk
+      LDA   spritebank_char_anims_ptr+1
+      ADC   #0
+      STA   spritebank_walk+1
+      BRA   @header
+@no_anim:
+      STZ   sb_has_anim
+@header:
+      LDY   #0
+      LDA   spritebank_char_part_count  ; dst[0] = part_count
+      STA   (spritebank_dst),Y
+      INY
+      LDA   #0                          ; dst[1] = flags
+      STA   (spritebank_dst),Y
+      STZ   sb_parts_off
+      STZ   sb_frame_off
+      LDA   #2
+      STA   sb_dst_off
+      LDX   spritebank_char_part_count
+@loop:
+      BEQ   @done
+      LDY   sb_parts_off                ; dx
+      LDA   (spritebank_src),Y
+      LDY   sb_dst_off
+      STA   (spritebank_dst),Y
+      LDY   sb_parts_off                ; dy
+      INY
+      LDA   (spritebank_src),Y
+      LDY   sb_dst_off
+      INY
+      STA   (spritebank_dst),Y
+      LDA   sb_has_anim                  ; shape_base = frame0[part] (or 0)
+      BEQ   @sb_zero
+      LDY   sb_frame_off
+      LDA   (spritebank_walk),Y
+      BRA   @sb_store
+@sb_zero:
+      LDA   #0
+@sb_store:
+      LDY   sb_dst_off
+      INY
+      INY
+      STA   (spritebank_dst),Y
+      LDY   sb_parts_off                ; flags
+      INY
+      INY
+      LDA   (spritebank_src),Y
+      LDY   sb_dst_off
+      INY
+      INY
+      INY
+      STA   (spritebank_dst),Y
+      LDA   sb_parts_off                ; advance offsets
+      CLC
+      ADC   #3
+      STA   sb_parts_off
+      INC   sb_frame_off
+      LDA   sb_dst_off
+      CLC
+      ADC   #4
+      STA   sb_dst_off
+      DEX
+      BRA   @loop
 @done:
       RTS
 

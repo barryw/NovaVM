@@ -73,6 +73,21 @@ public class SpriteBankLoadTests
         Assert.AreEqual((byte)'B', bus.ReadRam((ushort)bossCharPtr), "BOSS name");
         // parts are {dx,dy,flags} triples; BOSS is a 2x2 grid so part[1].dx = 16.
         Assert.AreEqual(16, bus.ReadRam((ushort)(bossPartsPtr + 3)), "BOSS part[1].dx");
+
+        // Slice 4: spritebank_build_vis wrote BOSS's msprite VIS at $6E00 =
+        // [part_count][flags] then 4x {dx,dy,shape_base,flags}. shape_base comes
+        // from WALK's frame 0 = [0,1,2,3].
+        const int vis = 0x6E00;
+        Assert.AreEqual(4, bus.ReadRam(vis), "VIS part count");
+        Assert.AreEqual(0, bus.ReadRam(vis + 1), "VIS flags");
+        // part 1 (bytes 6..9): dx=16, dy=0, shape_base=1, flags=0
+        Assert.AreEqual(16, bus.ReadRam((ushort)(vis + 6)), "VIS part1 dx");
+        Assert.AreEqual(0, bus.ReadRam((ushort)(vis + 7)), "VIS part1 dy");
+        Assert.AreEqual(1, bus.ReadRam((ushort)(vis + 8)), "VIS part1 shape_base");
+        // part 3 (bytes 14..17): dx=16, dy=16, shape_base=3, flags=1
+        Assert.AreEqual(16, bus.ReadRam((ushort)(vis + 14)), "VIS part3 dx");
+        Assert.AreEqual(3, bus.ReadRam((ushort)(vis + 16)), "VIS part3 shape_base");
+        Assert.AreEqual(1, bus.ReadRam((ushort)(vis + 17)), "VIS part3 flags");
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

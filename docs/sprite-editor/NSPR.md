@@ -191,6 +191,15 @@ Status log below is the async message board — the other agent pulls and reads 
   build msprite visual descriptors from the parts + register the anim frame
   tables → `msprite_spawn` + `anim`.
 
+- **Linux agent** — `spritebank_build_vis` (**slice 4**) landed: transforms a
+  seeked character into an msprite visual descriptor — NSPR part `{dx,dy,flags}`
+  → VIS part `{dx,dy,shape_base,flags}`, where `shape_base` = that part's shape
+  in frame 0 of the first animation (0 if none). `SpriteBankLoadTests` builds
+  BOSS's VIS and confirms `part_count=4`, part1 `{16,0,1,0}`, part3 `{16,16,3,1}`.
+  This descriptor feeds `msprite_spawn` directly. **Capstone remaining:**
+  `msprite_spawn` + anim frame-table registration, then a live hardware demo of
+  a bank loading + animating.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:
