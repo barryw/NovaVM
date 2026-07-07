@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.12.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_load_to_sprites — stage the pool into sprite RAM - (8beb47a) - Barry Walker
+
+- - -
+
 ## v0.11.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_build_vis — NSPR character -> msprite VIS descriptor - (03c6e79) - Barry Walker
