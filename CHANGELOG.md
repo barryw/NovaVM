@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.10.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_char_seek — walk the NSPR character table - (5f1a1c0) - Barry Walker
+
+- - -
+
 ## v0.9.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_load_shapes — DMA the NSPR shape pool to XRAM - (0255fbb) - Barry Walker
