@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.14.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_set_frame — animate NSPR's arbitrary frames (Option B) - (f452fc3) - Barry Walker
+
+- - -
+
 ## v0.13.1 - 2026-07-07
 #### Documentation
 - (**nspr**) surface the animation-model fork (msprite shape_base+frame vs NSPR arbitrary frames) - (8a1a56c) - Barry Walker
