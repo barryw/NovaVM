@@ -233,6 +233,7 @@ static void *mouse_thread(void *arg) {
     (void)arg;
     struct pollfd pfd[MAX_MOUSE];
     int fds[MAX_MOUSE], nfd = 0;
+    int idle_ticks = 0;
 
     load_mouse_prefs();
     init_cursor_shape();
@@ -261,12 +262,31 @@ static void *mouse_thread(void *arg) {
 
         int pr = poll(pfd, nfd, 2000);
         if (pr <= 0) {
-            /* Mouse idle: same self-heal, unconditionally. */
+            /* Mouse idle: self-heal shapes, and periodically drop all fds so a
+             * mouse hot-plugged (e.g. onto a hub) while we already hold one gets
+             * rescanned. */
             load_pointer_shapes();
+            if (++idle_ticks >= 8) {   /* ~16s */
+                idle_ticks = 0;
+                for (int i = 0; i < nfd; i++) close(fds[i]);
+                nfd = 0;
+            }
             continue;
         }
+        idle_ticks = 0;
         refresh_prefs();   /* pick up live OSD tuning from /run/mouse_{gain,accel} */
         for (int i = 0; i < nfd; i++) {
+            /* Unplugged device: poll flags POLLHUP/POLLERR, never POLLIN, so the
+             * read-based disconnect path below never fires and we'd spin on a dead
+             * fd forever. Drop it here; the top of the loop rescans — this is what
+             * a hub swap needs when the new device reuses the old event node. */
+            if (pfd[i].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                close(fds[i]);
+                for (int j = i; j < nfd - 1; j++) { fds[j] = fds[j+1]; pfd[j] = pfd[j+1]; }
+                nfd--; i--;
+                if (nfd == 0) set_cursor_visible(0);
+                continue;
+            }
             if (!(pfd[i].revents & POLLIN)) continue;
             struct input_event ev;
             ssize_t n;
