@@ -129,4 +129,29 @@ public class VgcMouseCursorSourceTests
         StringAssert.Contains(runtimeMake, "mouse.s");
         StringAssert.Contains(basicMake, "$(NOVA_ASM)/mouse.inc $(NOVA_ASM)/mouse.s");
     }
+
+    [TestMethod]
+    public void Ndk_ExposesMouseEventHelpers()
+    {
+        string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "mouse_events.inc"));
+        string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "mouse_events.s"));
+        string runtimeMake = File.ReadAllText(RepoPath("software", "runtime", "asm", "Makefile"));
+
+        // Polled click-callback API + areas-of-interest.
+        StringAssert.Contains(inc, ".global mouse_poll");
+        StringAssert.Contains(inc, ".global mouse_set_click_handler");
+        StringAssert.Contains(inc, ".global mouse_add_area");
+        StringAssert.Contains(inc, ".global mouse_evt_button");
+        StringAssert.Contains(inc, ".global mouse_evt_area");
+
+        // Handler gets which button + x/y; edge-detected off the raw button reg.
+        StringAssert.Contains(impl, "LDA   VGC_MOUSE_BUTTONS");
+        StringAssert.Contains(impl, "STA   mouse_evt_button");
+        StringAssert.Contains(impl, "STA   mouse_evt_xl");
+        StringAssert.Contains(impl, "JMP   (mouse_click_vecl)");
+        StringAssert.Contains(impl, "mouse_area_tag");
+
+        // Built into the shared nova.lib so NDK apps can link it.
+        StringAssert.Contains(runtimeMake, "mouse_events.s");
+    }
 }

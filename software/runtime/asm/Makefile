@@ -31,6 +31,7 @@ NOVA_LIB_SRCS := \
 	fio.s \
 	gameserver.s \
 	mouse.s \
+	mouse_events.s \
 	msprite.s \
 	nic.s \
 	nui_state.s \
