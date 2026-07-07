@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.9.0 - 2026-07-07
+#### Features
+- (**ndk**) spritebank_load_shapes — DMA the NSPR shape pool to XRAM - (0255fbb) - Barry Walker
+
+- - -
+
 ## v0.8.0 - 2026-07-07
 #### Features
 - (**ndk**) spritebank_open — parse + index an NSPR bank on the 6502 - (407f475) - Barry Walker
