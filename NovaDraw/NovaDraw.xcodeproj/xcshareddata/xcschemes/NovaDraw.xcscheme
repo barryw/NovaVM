@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1600"
+   LastUpgradeVersion = "2600"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
-      buildImplicitDependencies = "YES"
-      buildArchitectures = "Automatic">
+      buildImplicitDependencies = "YES">
       <BuildActionEntries>
          <BuildActionEntry
             buildForTesting = "YES"
@@ -15,23 +14,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "1A00000000000000000000A1"
+               BlueprintIdentifier = "1A0000000000000000000500"
                BuildableName = "NovaDraw.app"
                BlueprintName = "NovaDraw"
-               ReferencedContainer = "container:NovaDraw.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "NO"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "1A00000000000000000000A2"
-               BuildableName = "NovaDrawTests.xctest"
-               BlueprintName = "NovaDrawTests"
                ReferencedContainer = "container:NovaDraw.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -41,20 +26,7 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
-      <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "1A00000000000000000000A2"
-               BuildableName = "NovaDrawTests.xctest"
-               BlueprintName = "NovaDrawTests"
-               ReferencedContainer = "container:NovaDraw.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
+      shouldUseLaunchSchemeArgsEnv = "YES">
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -70,7 +42,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1A00000000000000000000A1"
+            BlueprintIdentifier = "1A0000000000000000000500"
             BuildableName = "NovaDraw.app"
             BlueprintName = "NovaDraw"
             ReferencedContainer = "container:NovaDraw.xcodeproj">
@@ -87,7 +59,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "1A00000000000000000000A1"
+            BlueprintIdentifier = "1A0000000000000000000500"
             BuildableName = "NovaDraw.app"
             BlueprintName = "NovaDraw"
             ReferencedContainer = "container:NovaDraw.xcodeproj">

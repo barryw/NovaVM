@@ -294,6 +294,7 @@ __pycache__/
 .DS_Store
 NovaDraw/.build/
 NovaDraw/.swiftpm/
+NovaDraw/NovaDraw.app/
 NovaDraw/**/xcuserdata/
 NovaDraw/**/*.xcuserstate
 NovaDraw/*.app/

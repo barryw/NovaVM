@@ -4,6 +4,27 @@ NovaDraw is a macOS pixel editor for Nova indexed-color assets. Projects are sav
 
 _Part of the WHI Mac-native editor family (NovaDraw · FamiForge · Miggy Draw)._
 
+## Building the app
+
+Open `NovaDraw.xcodeproj` in Xcode and Run the **NovaDraw** scheme — it builds a
+real `NovaDraw.app` bundle, so the editor window shows and is debuggable. The app
+target uses an Xcode 16 filesystem-synchronized group over `Sources/`, so new
+files are picked up automatically (no manual file list to fall out of sync), and
+`PixelCanvasKit` is a resolved Swift Package dependency.
+
+From the command line:
+
+```sh
+make run     # build NovaDraw.app and launch it
+make bundle  # build NovaDraw.app without launching
+make install # copy NovaDraw.app to /Applications
+swift test   # run the test suite (SwiftPM)
+```
+
+> The SwiftPM `NovaDraw` executable target exists only so `swift test` can
+> `@testable import NovaDraw`; a bare SwiftPM executable is not an app bundle and
+> won't present a window. Build the GUI via the Xcode app target or `make`.
+
 ## MCP Server
 
 NovaDraw includes a separate stdio MCP server, `NovaDrawMCP`, for AI agents that need to create, inspect, and touch up project images without driving the UI.

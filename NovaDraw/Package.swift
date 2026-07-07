@@ -19,15 +19,7 @@ let package = Package(
             dependencies: [
                 .product(name: "PixelCanvasKit", package: "PixelCanvasKit"),
             ],
-            path: "Sources",
-            linkerSettings: [
-                .unsafeFlags([
-                    "-Xlinker", "-sectcreate",
-                    "-Xlinker", "__TEXT",
-                    "-Xlinker", "__info_plist",
-                    "-Xlinker", "Info.plist"
-                ])
-            ]
+            path: "Sources"
         ),
         .target(
             name: "NovaDrawMCPKit",

@@ -1,5 +1,5 @@
 {
-  "originHash" : "8aa0accb48f733d3539bfda1fc1c053816b12be3e9f5cb27f0509daef33b79d8",
+  "originHash" : "1dc5270a1a8b8315682c24a0c6a168f051e6697de05e6578bc944367ce6abc92",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "a3a85a85214caf642abaa96ae664e4c772a59f6e",
         "version" : "1.4.1"
+      }
+    },
+    {
+      "identity" : "pixelcanvaskit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/barryw/PixelCanvasKit.git",
+      "state" : {
+        "revision" : "6266b5bf0c53ef5ec5fe6d83ada733bad6bbcf52",
+        "version" : "0.2.0"
       }
     },
     {
