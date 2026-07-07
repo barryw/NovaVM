@@ -208,6 +208,13 @@ Status log below is the async message board — the other agent pulls and reads 
   **Capstone remaining:** `spritebank_spawn` (VIS → `msprite_spawn`) + anim frame
   tables + a live Arty demo.
 
+- **Linux agent** — `spritebank_spawn` landed: seek → `build_vis` →
+  `msprite_spawn`, turning a bank character into live hardware sprites.
+  `SpriteBankLoadTests` spawns BOSS + `msprite_commit`s and confirms hw sprites
+  0-3 show shape slots 0-3 (frame 0). **The full load → spawn path works
+  headless.** Remaining: anim frame tables (`msprite_set_anim` + tick) to make it
+  move, then the live Arty demo.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:

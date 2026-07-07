@@ -35,6 +35,7 @@ sb_parts_off:   .res 1
 sb_frame_off:   .res 1
 sb_dst_off:     .res 1
 sb_has_anim:    .res 1
+spritebank_vis: .res (2 + MSPRITE_MAX_PARTS * 4)   ; header + up to 16 parts * 4
 
       .segment "CODE"
 
@@ -48,6 +49,8 @@ sb_has_anim:    .res 1
       .export spritebank_char_anim_count
       .export spritebank_char_anims_ptr
       .export spritebank_build_vis
+      .export spritebank_spawn
+      .export spritebank_vis
       .export spritebank_result
       .export spritebank_shape_count
       .export spritebank_char_count
@@ -387,5 +390,25 @@ spritebank_build_vis:
       BRA   @loop
 @done:
       RTS
+
+; Seek character A, build its VIS into spritebank_vis, and msprite_spawn it.
+; @label SPRITEBANK.SPAWN
+; @kind routine
+; @symbol spritebank_spawn
+; @summary Spawn a bank character as a metasprite.
+; @in A: character index.
+; @out A: msprite_spawn result / handle.
+spritebank_spawn:
+      JSR   spritebank_char_seek        ; A = index
+      LDA   #<spritebank_vis
+      STA   spritebank_dst
+      LDA   #>spritebank_vis
+      STA   spritebank_dst+1
+      JSR   spritebank_build_vis
+      LDA   #<spritebank_vis
+      STA   MSPRITE_DESC_L
+      LDA   #>spritebank_vis
+      STA   MSPRITE_DESC_H
+      JMP   msprite_spawn               ; tail-call; returns handle/result
 
 .endif

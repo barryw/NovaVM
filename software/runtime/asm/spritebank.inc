@@ -49,4 +49,11 @@ SPRITEBANK_SHAPE_BYTES = 128         ; 16x16 4bpp cell
 .global spritebank_build_vis
 .globalzp spritebank_dst             ; ZP: caller sets -> destination VIS buffer
 
+; spritebank_spawn (A = character index) seeks the character, builds its VIS into
+; spritebank_vis, and msprite_spawns it. Requires spritebank_open +
+; spritebank_load_to_sprites + msprite_init to have run. Returns msprite_spawn's
+; result in A (the object handle path). Call msprite_commit to push it live.
+.global spritebank_spawn
+.global spritebank_vis                ; VIS buffer spritebank_spawn builds into
+
 .endif

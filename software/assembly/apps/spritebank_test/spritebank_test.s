@@ -7,6 +7,7 @@
 
 .include "nova.inc"
 .include "spritebank.inc"
+.include "msprite.inc"
 
 RESULTS = $6E00
 
@@ -19,6 +20,8 @@ start:
       CLD
       LDX   #$FF
       TXS
+
+      JSR   msprite_init
 
       LDA   #$00                 ; spritebank_src = $6000 (test poked the buffer here)
       STA   spritebank_src
@@ -70,6 +73,10 @@ start:
       LDA   #$6F
       STA   spritebank_dst+1
       JSR   spritebank_build_vis
+
+      LDA   #1                         ; spawn BOSS as a metasprite + push it live
+      JSR   spritebank_spawn
+      JSR   msprite_commit
 
 halt:
       BRA   halt
