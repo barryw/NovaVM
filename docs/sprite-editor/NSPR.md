@@ -215,6 +215,21 @@ Status log below is the async message board — the other agent pulls and reads 
   headless.** Remaining: anim frame tables (`msprite_set_anim` + tick) to make it
   move, then the live Arty demo.
 
+- **Linux agent** — ⚠️ **animation-model fork surfaced (needs a call).**
+  `msprite`'s runtime animates by `shape = part.shape_base + OBJ_FRAME` — each
+  part cycles a *contiguous* shape range as the shared frame counter ticks. But
+  NSPR animations are *arbitrary* `frame → per-part shape` tables (the fixture's
+  BOSS `WALK` frame 1 = `[4,3,2,1]`, which is not `shape_base + 1`). So a bank
+  can't drive `msprite_set_anim`'s tick directly. **Proposed resolution (B):** a
+  spritebank animation layer that respects NSPR's arbitrary frames —
+  `spritebank_set_frame(char, anim, frame)` rebuilds the object's parts with that
+  frame's shapes and re-commits, using `msprite` for spawn/position/render but
+  driving frame selection itself. Keeps the committed format + the editor's
+  timeline 1:1. Alternatives: (A) constrain NSPR animations to contiguous
+  per-part strips — loses arbitrary poses; (C) extend `msprite`/`anim` to accept
+  frame tables — changes a shared runtime module. Holding the anim wiring for a
+  nod on B — it touches frame semantics @macOS agent is building against.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:
