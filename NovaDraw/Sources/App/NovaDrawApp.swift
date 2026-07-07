@@ -166,6 +166,11 @@ struct NovaDrawApp: App {
                     .disabled(document?.backdropImage == nil)
             }
         }
+
+        Settings {
+            SettingsView()
+                .preferredColorScheme(.dark)
+        }
     }
 
     // MARK: - Project Documents
