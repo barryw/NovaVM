@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.7.0 - 2026-07-07
+#### Features
+- (**novadraw**) NDI access via nova CLI + Settings UI for the CLI path - (3201d2d) - Barry Walker
+- (**novadraw**) Swift NSPR codec (consume/persist sprite banks) - (02860ad) - Barry Walker
+- (**sprite-editor**) NSPR golden fixture + cross-impl conformance + coordination doc - (255e71c) - Barry Walker
+- (**storage**) NSPR metasprite sprite-bank format + codec - (b155f01) - Barry Walker
+
+- - -
+
 ## v0.6.0 - 2026-07-07
 #### Features
 - (**ndk**) mouse event demo app + headless run-test - (faf2970) - Barry Walker
