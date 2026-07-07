@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.16.0 - 2026-07-07
+#### Features
+- (**demo**) shaded bouncing ball art — a spritebank_demo worth showing - (a65f04d) - Barry Walker
+
+- - -
+
 ## v0.15.0 - 2026-07-07
 #### Features
 - (**demo**) spritebank_demo — load an NSPR bank + animate it on-device - (eecd593) - Barry Walker
