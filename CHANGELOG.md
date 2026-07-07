@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.6.0 - 2026-07-07
+#### Features
+- (**ndk**) mouse event demo app + headless run-test - (faf2970) - Barry Walker
+- (**ndk**) mouse event dispatch — click callbacks + areas-of-interest - (a1bf61c) - Barry Walker
+
+- - -
+
 ## v0.5.1 - 2026-07-07
 #### Bug Fixes
 - (**nmouse**) handle USB mouse hotplug/disconnect (hub swaps) - (df47b4b) - Barry Walker
