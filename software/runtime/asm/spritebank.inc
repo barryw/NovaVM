@@ -20,6 +20,7 @@ SPRITEBANK_SHAPE_BYTES = 128         ; 16x16 4bpp cell
 
 .global spritebank_open
 .global spritebank_load_shapes       ; DMA the shape pool to XRAM at spritebank_xram_base
+.global spritebank_load_to_sprites   ; copy the XRAM pool into sprite RAM slots 0..N-1
 .globalzp spritebank_src             ; ZP: caller sets this -> the NSPR buffer
 .global spritebank_result            ; SPRITEBANK_* after spritebank_open
 .global spritebank_shape_count

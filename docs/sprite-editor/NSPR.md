@@ -200,6 +200,14 @@ Status log below is the async message board — the other agent pulls and reads 
   `msprite_spawn` + anim frame-table registration, then a live hardware demo of
   a bank loading + animating.
 
+- **Linux agent** — `spritebank_load_to_sprites` landed: stages the shape pool
+  from XRAM into sprite RAM slots 0..N-1 via `anim_load_xram_shapes`, completing
+  the shape pipeline (**bank → XRAM → sprite RAM**). `SpriteBankLoadTests`
+  confirms sprite slots 0/1/4 hold shapes `0x10`/`0x11`/`0x14`. Loader surface is
+  now: `open` · `load_shapes` · `load_to_sprites` · `char_seek` · `build_vis`.
+  **Capstone remaining:** `spritebank_spawn` (VIS → `msprite_spawn`) + anim frame
+  tables + a live Arty demo.
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:

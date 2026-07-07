@@ -15,7 +15,7 @@ public class SpriteBankLoadTests
 {
     private const ushort Harness = 0x7200;
     private const ushort Buffer = 0x6000;   // where the harness expects the NSPR buffer
-    private const ushort Results = 0x7F00;
+    private const ushort Results = 0x6E00;
 
     [TestMethod]
     public void SpriteBankOpen_ParsesGoldenFixture()
@@ -61,6 +61,11 @@ public class SpriteBankLoadTests
         Assert.AreEqual(0x11, bus.ReadXram(xramBase + 128), "shape 1");
         Assert.AreEqual(0x14, bus.ReadXram(xramBase + 4 * 128), "shape 4");
 
+        // spritebank_load_to_sprites staged the XRAM pool into sprite RAM slots 0..4.
+        Assert.AreEqual(0x10, bus.Vgc.GetSpriteShapeBySlot(0)[0], "sprite slot 0");
+        Assert.AreEqual(0x11, bus.Vgc.GetSpriteShapeBySlot(1)[0], "sprite slot 1");
+        Assert.AreEqual(0x14, bus.Vgc.GetSpriteShapeBySlot(4)[0], "sprite slot 4");
+
         // Slice 3: spritebank_char_seek(1) walked past HERO's variable-length
         // record to BOSS (4 parts, 1 anim). HERO occupies 27 bytes: name(8) +
         // part_count(1) + 1*3 parts + anim_count(1) + IDLE[name(8)+fc(1)+ticks(1)
@@ -77,7 +82,7 @@ public class SpriteBankLoadTests
         // Slice 4: spritebank_build_vis wrote BOSS's msprite VIS at $6E00 =
         // [part_count][flags] then 4x {dx,dy,shape_base,flags}. shape_base comes
         // from WALK's frame 0 = [0,1,2,3].
-        const int vis = 0x6E00;
+        const int vis = 0x6F00;
         Assert.AreEqual(4, bus.ReadRam(vis), "VIS part count");
         Assert.AreEqual(0, bus.ReadRam(vis + 1), "VIS flags");
         // part 1 (bytes 6..9): dx=16, dy=0, shape_base=1, flags=0

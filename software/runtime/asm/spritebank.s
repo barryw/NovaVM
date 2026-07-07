@@ -2,6 +2,7 @@
 
 .include "spritebank.inc"
 .include "xram.inc"
+.include "anim.inc"
 
 .ifndef SPRITEBANK_IMPL_INCLUDED
 SPRITEBANK_IMPL_INCLUDED = 1
@@ -39,6 +40,7 @@ sb_has_anim:    .res 1
 
       .export spritebank_open
       .export spritebank_load_shapes
+      .export spritebank_load_to_sprites
       .export spritebank_char_seek
       .export spritebank_char_ptr
       .export spritebank_char_part_count
@@ -171,6 +173,26 @@ spritebank_load_shapes:
       LDA   spritebank_shapes_len+1
       STA   XRAM_LENH
       JMP   xram_copy_from_ram         ; tail-call; its RTS returns to our caller
+
+; Copy the shape pool from XRAM (spritebank_xram_base) into sprite RAM slots
+; 0..shape_count-1 via anim_load_xram_shapes, so msprite parts can reference them
+; by slot. Call after spritebank_load_shapes.
+; @label SPRITEBANK.LOAD_TO_SPRITES
+; @kind routine
+; @symbol spritebank_load_to_sprites
+; @summary Stage the shape pool from XRAM into sprite RAM slots.
+spritebank_load_to_sprites:
+      LDA   #0
+      STA   ANIM_SHAPE                 ; first sprite slot
+      LDA   spritebank_shape_count
+      STA   ANIM_COUNT
+      LDA   spritebank_xram_base+0
+      STA   ANIM_XADDRL
+      LDA   spritebank_xram_base+1
+      STA   ANIM_XADDRM
+      LDA   spritebank_xram_base+2
+      STA   ANIM_XADDRH
+      JMP   anim_load_xram_shapes      ; tail-call
 
 ; Walk the character table to character A and fill spritebank_char_*.
 ; @label SPRITEBANK.CHAR_SEEK

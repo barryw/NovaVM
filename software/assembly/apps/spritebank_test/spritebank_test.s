@@ -8,7 +8,7 @@
 .include "nova.inc"
 .include "spritebank.inc"
 
-RESULTS = $7F00
+RESULTS = $6E00
 
       .segment "HEADER"
       .byte $00, $72
@@ -33,6 +33,7 @@ start:
       LDA   #$02
       STA   spritebank_xram_base+2
       JSR   spritebank_load_shapes
+      JSR   spritebank_load_to_sprites
 
       LDA   spritebank_result
       STA   RESULTS + 0
@@ -64,9 +65,9 @@ start:
       LDA   spritebank_char_ptr+1
       STA   RESULTS + $15
 
-      LDA   #$00                        ; build BOSS's VIS descriptor at $6E00
+      LDA   #$00                        ; build BOSS's VIS descriptor at $6F00
       STA   spritebank_dst
-      LDA   #$6E
+      LDA   #$6F
       STA   spritebank_dst+1
       JSR   spritebank_build_vis
 
