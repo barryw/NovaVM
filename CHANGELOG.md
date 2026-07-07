@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.5.0 - 2026-07-07
+#### Features
+- (**novavm**) hw mouse pointer shapes, OSD mouse controls, single-instance guard - (84dbb53) - Barry Walker
+#### Bug Fixes
+- (**vgc**) single-buffer sprite shape RAM — delete the double-buffer - (3f448f2) - Barry Walker
+- (**vgc**) pivot to double-buffer + dirty-RANGE shape copy (drop FIFO) - (3813610) - Barry Walker
+- (**vgc**) stage 1 — single-buffer, vblank-gated sprite shape RAM (tear-free) - (1eaadf8) - Barry Walker
+#### Tests
+- (**vgc**) DUT-level sprite/mouse RENDER coverage + real shape-write path - (192caad) - Barry Walker
+
+- - -
+
 ## v0.4.1 - 2026-07-06
 #### Bug Fixes
 - Zork Zero on Arty — hardware scroll text-wipe + maroon gutter bars - (2b3ffc5) - Barry Walker
