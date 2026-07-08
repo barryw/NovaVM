@@ -19,6 +19,13 @@ FLOOR   = 121                    ; max ypos (ball bottom sits ~29px below -> scr
 XMIN    = 8
 XMAX    = 232
 
+; floor "thock": low triangle whose pitch drops as it decays (basketball-ish)
+SND_FLOOR_START = $0E            ; voice-1 freq hi at impact (~210 Hz)
+SND_FLOOR_STEP  = $01            ; freq hi dropped per frame
+SND_FLOOR_LEN   = 7              ; frames of pitch drop
+; wall "tok": short, higher pulse tick on voice 2
+SND_WALL_FREQ   = $2A            ; voice-2 freq hi (~1 kHz)
+
 .segment "ZEROPAGE"
 zp_last_frame:  .res 1
 zp_frame:       .res 1
@@ -26,6 +33,8 @@ ypos:           .res 2           ; 8.8 fixed point
 yvel:           .res 2           ; 8.8 signed
 xpos:           .res 2
 xvel:           .res 2
+snd1_timer:     .res 1           ; frames left in the floor pitch drop
+snd1_fh:        .res 1           ; current voice-1 freq hi during the drop
 
 .segment "HEADER"
       .byte $00, $72
@@ -74,6 +83,7 @@ start:
 
 loop:
       JSR   wait_vsync
+      JSR   sid_update           ; advance the floor pitch drop
 
       ; --- vertical: gravity, integrate, elastic floor ---
       CLC                        ; yvel += GRAVITY
@@ -103,7 +113,7 @@ loop:
       STZ   yvel                 ; yvel = -4.0 (8.8) upward
       LDA   #$FC
       STA   yvel+1
-      JSR   sid_bounce           ; blip on floor contact
+      JSR   sid_floor            ; thock on floor contact
 @yok:
 
       ; --- horizontal: integrate, bounce off the walls ---
@@ -123,6 +133,7 @@ loop:
       LDA   xvel+1
       BMI   @xok                 ; already moving left -> just clamp
       JSR   neg_xvel
+      JSR   sid_wall
       BRA   @xok
 @chk_left:
       LDA   xpos+1
@@ -134,6 +145,7 @@ loop:
       LDA   xvel+1
       BPL   @xok                 ; already moving right -> just clamp
       JSR   neg_xvel
+      JSR   sid_wall
 @xok:
 
       ; --- squash frame from distance to the floor ---
@@ -180,21 +192,62 @@ neg_xvel:
 
 sid_init:
       LDA   #$0F
-      STA   $D418                ; master volume
+      STA   $D418                ; master volume (max)
+      LDA   #$0A                 ; voice 1 (floor): attack 0, decay 10 (body)
+      STA   $D405
+      STZ   $D406
+      LDA   #$0A                 ; voice 3 (floor, layered for loudness)
+      STA   $D413
+      STZ   $D414
+      LDA   #$04                 ; voice 2 (wall): attack 0, decay 4 (short)
+      STA   $D40C
+      STZ   $D40D
+      STZ   $D409                ; voice 2 pulse width ~50%
       LDA   #$08
-      STA   $D405                ; voice 1: attack 0, decay 8
-      STZ   $D406                ; sustain 0, release 0 (percussive)
-      STZ   $D400
-      LDA   #$10
-      STA   $D401                ; freq ~240 Hz "bonk"
+      STA   $D40A
       RTS
 
-; retrigger the voice-1 envelope -> a short bounce blip
-sid_bounce:
+; floor "thock": low triangle on voices 1+3 (unison = louder), pitch swept down
+sid_floor:
+      LDA   #SND_FLOOR_START
+      STA   snd1_fh
+      STA   $D401                ; voice 1 freq hi
+      STA   $D40F                ; voice 3 freq hi
+      STZ   $D400
+      STZ   $D40E
       LDA   #$10
-      STA   $D404                ; triangle, gate off
+      STA   $D404                ; voice 1 triangle, gate off
+      STA   $D412                ; voice 3 triangle, gate off
       LDA   #$11
-      STA   $D404                ; triangle, gate on
+      STA   $D404                ; voice 1 gate on -> retrigger
+      STA   $D412                ; voice 3 gate on
+      LDA   #SND_FLOOR_LEN
+      STA   snd1_timer
+      RTS
+
+; wall "tok": short higher pulse tick on voice 2
+sid_wall:
+      LDA   #SND_WALL_FREQ
+      STA   $D408                ; voice 2 freq hi
+      STZ   $D407
+      LDA   #$40
+      STA   $D40B                ; pulse, gate off
+      LDA   #$41
+      STA   $D40B                ; pulse, gate on
+      RTS
+
+; per-frame: drop the floor voices' pitch while the timer runs
+sid_update:
+      LDA   snd1_timer
+      BEQ   @done
+      DEC   snd1_timer
+      LDA   snd1_fh
+      SEC
+      SBC   #SND_FLOOR_STEP
+      STA   snd1_fh
+      STA   $D401                ; voice 1 freq hi drops
+      STA   $D40F                ; voice 3 tracks it
+@done:
       RTS
 
 init_display:
