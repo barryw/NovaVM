@@ -56,9 +56,9 @@ start:
       LDA   #0                   ; spawn BALL (character 0)
       JSR   spritebank_spawn
 
-      LDA   #$00                 ; ypos = 31.0, dropping from rest
+      LDA   #$00                 ; ypos = 28.0 (the apex the constant bounce reaches)
       STA   ypos
-      LDA   #31
+      LDA   #28
       STA   ypos+1
       STZ   yvel
       STZ   yvel+1
@@ -97,12 +97,10 @@ loop:
       STZ   ypos
       LDA   yvel+1
       BMI   @yok                 ; already moving up -> just clamp
-      SEC                        ; yvel = -yvel  (bounce)
-      LDA   #0
-      SBC   yvel
-      STA   yvel
-      LDA   #0
-      SBC   yvel+1
+      ; ponytail: relaunch at a constant speed instead of reflecting the impact
+      ; velocity -- perpetual identical bounces, immune to fixed-point clamp loss.
+      STZ   yvel                 ; yvel = -4.0 (8.8) upward
+      LDA   #$FC
       STA   yvel+1
 @yok:
 
