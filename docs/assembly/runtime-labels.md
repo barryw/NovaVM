@@ -5116,6 +5116,55 @@ Wait for the current blitter operation and convert the result to the VTEXT 0/1 s
 Outputs:
 - `A`: 0 on success, 1 on error.
 
+## WTS.INIT
+
+Initialise the wavetable synth: master volume up, every voice idle,
+
+- Kind: `routine`
+- Symbol: `wts_init`
+
+Outputs:
+- `A`: 0
+
+## WTS.NOTE_ASYNC
+
+Fire-and-forget wavetable note: pick a free voice, note it on, and
+
+- Kind: `routine`
+- Symbol: `wts_note_async`
+
+Inputs:
+- `A`: MIDI note
+- `X`: Duration in 60 Hz frames
+- `Y`: Velocity (0-127)
+
+Outputs:
+- `A`: 0
+- `X`: Voice used (0-7)
+
+## WTS.NOTE_OFF
+
+Note-off one wavetable voice immediately and free it.
+
+- Kind: `routine`
+- Symbol: `wts_note_off`
+
+Inputs:
+- `X`: Voice (0-7)
+
+Outputs:
+- `A`: 0
+
+## WTS.TICK
+
+Advance every async wavetable note by one frame and note-off any that
+
+- Kind: `routine`
+- Symbol: `wts_tick`
+
+Outputs:
+- `A`: 0
+
 ## XMC.ALLOC
 
 Allocate an XRAM block using XMC_LENL/H.

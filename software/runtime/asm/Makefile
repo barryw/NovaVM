@@ -17,6 +17,7 @@ NOVA_LIB  := $(BUILD_DIR)/nova.lib
 
 NOVA_LIB_SRCS := \
 	audio.s \
+	wts.s \
 	anim.s \
 	blitter.s \
 	copper.s \

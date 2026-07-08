@@ -7550,6 +7550,92 @@
       "summary": "Wait for the current blitter operation and convert the result to the VTEXT 0/1 status convention."
     },
     {
+      "label": "WTS.INIT",
+      "source": "../../runtime/asm/wts.s",
+      "line": 32,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "wts_init",
+      "summary": "Initialise the wavetable synth: master volume up, every voice idle,"
+    },
+    {
+      "label": "WTS.NOTE_ASYNC",
+      "source": "../../runtime/asm/wts.s",
+      "line": 65,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "MIDI note"
+        },
+        {
+          "name": "X",
+          "description": "Duration in 60 Hz frames"
+        },
+        {
+          "name": "Y",
+          "description": "Velocity (0-127)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0"
+        },
+        {
+          "name": "X",
+          "description": "Voice used (0-7)"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "wts_note_async",
+      "summary": "Fire-and-forget wavetable note: pick a free voice, note it on, and"
+    },
+    {
+      "label": "WTS.NOTE_OFF",
+      "source": "../../runtime/asm/wts.s",
+      "line": 114,
+      "inputs": [
+        {
+          "name": "X",
+          "description": "Voice (0-7)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "wts_note_off",
+      "summary": "Note-off one wavetable voice immediately and free it."
+    },
+    {
+      "label": "WTS.TICK",
+      "source": "../../runtime/asm/wts.s",
+      "line": 129,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "wts_tick",
+      "summary": "Advance every async wavetable note by one frame and note-off any that"
+    },
+    {
       "label": "XMC.ALLOC",
       "source": "../../runtime/asm/xmc.s",
       "line": 295,

@@ -13,6 +13,7 @@ all: basic.bin extension.bin ../../runtime/asm/runtime_labels.inc ../../assembly
 ABI_SOURCES = \
 	$(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio_clear_error.s $(NOVA_ASM)/fio.s \
 	$(NOVA_ASM)/audio.inc $(NOVA_ASM)/audio.s \
+	$(NOVA_ASM)/wts.inc $(NOVA_ASM)/wts.s \
 	$(NOVA_ASM)/nic.inc $(NOVA_ASM)/nic.s \
 	$(NOVA_ASM)/gameserver.inc $(NOVA_ASM)/gameserver.s \
 	$(NOVA_ASM)/mouse.inc $(NOVA_ASM)/mouse.s \
