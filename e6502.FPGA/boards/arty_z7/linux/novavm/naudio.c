@@ -23,6 +23,7 @@
 #include "naudio.h"
 #include "novavm.h"          /* wr/rd/poke + R_AUDIO/R_AUDIO_SPACE/R_AUDIO_EVT/R_SID_VOL */
 #include "nfio.h"            /* nfio_disk_read: a program's MIDI travels in its own NDI */
+#include "nbootcfg.h"        /* audio.defaultSoundfont */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -100,11 +101,27 @@ void audio_set_sid_stereo(int on)    { g_sid_stereo = on ? 1u : 0u; sid_vol_writ
 
 /* =========================================================================== */
 
+/* The music system (MIDI + WTS notes) needs a soundfont. If none is loaded, load
+ * the default named in boot.json (audio.defaultSoundfont, default "generaluser")
+ * from the shared host soundfonts dir. Returns 0 if a soundfont is now loaded. */
+int audio_ensure_soundfont(void) {
+    if (g_tsf) return 0;
+    char name[64], path[192];
+    bootcfg_str_get("audio", "defaultSoundfont", name, sizeof name, "generaluser");
+    if (!name[0]) return -1;
+    if (strchr(name, '.')) snprintf(path, sizeof path, "%s/soundfonts/%s",     NOVA_FS_ROOT, name);
+    else                   snprintf(path, sizeof path, "%s/soundfonts/%s.sf2", NOVA_FS_ROOT, name);
+    if (audio_load_soundfont(path) != 0) { printf("[audio] default soundfont not loaded: %s\n", path); return -1; }
+    printf("[audio] default soundfont loaded: %s\n", path);
+    return 0;
+}
+
 void audio_init(void) {
     sid_reset(&g_sid1);
     sid_reset(&g_sid2);
     for (int i = 0; i < 8; i++) { g_wts_note[i] = 0; g_wts_vel[i] = 100; g_wts_bendlo[i] = 0; }
     sid_vol_write();                       /* publish the default reDIP-SID mix level */
+    audio_ensure_soundfont();              /* music always has a soundfont ready */
     printf("[audio] software SIDs ready ($D400/$D420)\n");
 }
 
@@ -275,6 +292,7 @@ static void midi_find_meta(const unsigned char *buf, unsigned len, unsigned char
 }
 
 int audio_play_midi(const char *path) {
+    if (!g_tsf) audio_ensure_soundfont();  /* auto-load the default if none yet */
     if (!g_tsf) { printf("[audio] no soundfont loaded\n"); return -1; }
     unsigned len = 0;
     void *buf = slurp(path, &len);        /* lock-free file I/O */

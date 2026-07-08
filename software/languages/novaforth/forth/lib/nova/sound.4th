@@ -137,8 +137,9 @@ DECIMAL
   SND-FN-MUSIC-NOTE SOUND-CALL NDK-RESULT8 SWAP ;
 
 \ ---- one-word convenience: the name is parsed from the input, like INCLUDE ----
-\ SFLOAD <name>    load a soundfont  ->  /data/nova/soundfonts/<name>.sf2
-\ MIDPLAY <name>   play a MIDI       ->  /data/nova/soundfonts/<name>.mid
+\ SFLOAD <name>    load a soundfont  ->  /data/nova/soundfonts/<name>.sf2 (host, shared)
+\ MIDPLAY <name>   play a MIDI       ->  <name>.mid inside the mounted disk image,
+\                                        else /data/nova/soundfonts/<name>.mid
 \ MIDSTOP          stop MIDI playback
 \ SIDPLAY <name>   load + play a .sid (song 0)
 \ SIDSTOP          stop SID playback

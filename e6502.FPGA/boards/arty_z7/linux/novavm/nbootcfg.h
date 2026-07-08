@@ -34,6 +34,7 @@ int  bootcfg_mount_set(const char *prefix, const char *sd_path);       /* "" unm
  * the ONE config file holds device tuning too, replacing stray *.cfg files. */
 int  bootcfg_int_get(const char *group, const char *key, int def);
 void bootcfg_int_set(const char *group, const char *key, int value);
+void bootcfg_str_get(const char *group, const char *key, char *out, size_t out_len, const char *def);
 
 /* vm.bootSplash with ULX3S defaults overlaid by boot.json (initBootSplashConfigDefaults). */
 void bootcfg_splash(BootSplashConfig *out);

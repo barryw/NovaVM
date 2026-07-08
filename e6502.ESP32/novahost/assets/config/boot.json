@@ -50,6 +50,9 @@
       }
     }
   },
+  "audio": {
+    "defaultSoundfont": "generaluser"
+  },
   "mounts": {
     "fd0": "",
     "hd0": ""

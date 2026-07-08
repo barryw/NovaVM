@@ -74,6 +74,22 @@ void bootcfg_int_set(const char *group, const char *key, int value) {
     cJSON_Delete(doc);
 }
 
+/* String preference under a group object (e.g. audio.defaultSoundfont). Fills out
+ * with `def` first, then overrides if boot.json has the key. */
+void bootcfg_str_get(const char *group, const char *key, char *out, size_t out_len, const char *def) {
+    if (!out || out_len == 0) return;
+    snprintf(out, out_len, "%s", def ? def : "");
+    char *txt = read_boot_config_text();
+    if (!txt) return;
+    cJSON *doc = cJSON_Parse(txt);
+    free(txt);
+    if (!doc) return;
+    cJSON *g = cJSON_GetObjectItemCaseSensitive(doc, group);
+    cJSON *v = g ? cJSON_GetObjectItemCaseSensitive(g, key) : NULL;
+    if (cJSON_IsString(v) && v->valuestring) snprintf(out, out_len, "%s", v->valuestring);
+    cJSON_Delete(doc);
+}
+
 int bootcfg_mount_get(const char *prefix, char *out, size_t out_len) {
     if (!prefix || !out || out_len == 0) return 0;
     out[0] = 0;
