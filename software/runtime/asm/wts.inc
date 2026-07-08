@@ -10,6 +10,7 @@ WTS_API_INCLUDED = 1
 .include "nova.inc"        ; WTS_* registers + NVR0 scratch pointer
 
 .global wts_init
+.global wts_note_on
 .global wts_note_async
 .global wts_note_off
 .global wts_tick

@@ -5135,7 +5135,7 @@ Fire-and-forget wavetable note: pick a free voice, note it on, and
 
 Inputs:
 - `A`: MIDI note
-- `X`: Duration in 60 Hz frames
+- `X`: Duration in 60 Hz frames (1-254)
 - `Y`: Velocity (0-127)
 
 Outputs:
@@ -5155,9 +5155,24 @@ Inputs:
 Outputs:
 - `A`: 0
 
+## WTS.NOTE_ON
+
+Sustained wavetable note-on: pick a free voice and note it on, HELD
+
+- Kind: `routine`
+- Symbol: `wts_note_on`
+
+Inputs:
+- `A`: MIDI note
+- `Y`: Velocity (0-127)
+
+Outputs:
+- `A`: 0
+- `X`: Voice used (0-7)
+
 ## WTS.TICK
 
-Advance every async wavetable note by one frame and note-off any that
+Advance every timed wavetable note by one frame and note-off any that
 
 - Kind: `routine`
 - Symbol: `wts_tick`

@@ -7552,7 +7552,7 @@
     {
       "label": "WTS.INIT",
       "source": "../../runtime/asm/wts.s",
-      "line": 32,
+      "line": 40,
       "inputs": [],
       "outputs": [
         {
@@ -7568,7 +7568,7 @@
     {
       "label": "WTS.NOTE_ASYNC",
       "source": "../../runtime/asm/wts.s",
-      "line": 65,
+      "line": 94,
       "inputs": [
         {
           "name": "A",
@@ -7576,7 +7576,7 @@
         },
         {
           "name": "X",
-          "description": "Duration in 60 Hz frames"
+          "description": "Duration in 60 Hz frames (1-254)"
         },
         {
           "name": "Y",
@@ -7601,7 +7601,7 @@
     {
       "label": "WTS.NOTE_OFF",
       "source": "../../runtime/asm/wts.s",
-      "line": 114,
+      "line": 117,
       "inputs": [
         {
           "name": "X",
@@ -7620,9 +7620,38 @@
       "summary": "Note-off one wavetable voice immediately and free it."
     },
     {
+      "label": "WTS.NOTE_ON",
+      "source": "../../runtime/asm/wts.s",
+      "line": 73,
+      "inputs": [
+        {
+          "name": "A",
+          "description": "MIDI note"
+        },
+        {
+          "name": "Y",
+          "description": "Velocity (0-127)"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0"
+        },
+        {
+          "name": "X",
+          "description": "Voice used (0-7)"
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "wts_note_on",
+      "summary": "Sustained wavetable note-on: pick a free voice and note it on, HELD"
+    },
+    {
       "label": "WTS.TICK",
       "source": "../../runtime/asm/wts.s",
-      "line": 129,
+      "line": 132,
       "inputs": [],
       "outputs": [
         {
@@ -7632,8 +7661,8 @@
       ],
       "requires": [],
       "kind": "routine",
-      "symbol": "wts_tick",
-      "summary": "Advance every async wavetable note by one frame and note-off any that"
+      "summary": "Advance every timed wavetable note by one frame and note-off any that",
+      "symbol": "wts_tick"
     },
     {
       "label": "XMC.ALLOC",

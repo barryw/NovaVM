@@ -190,6 +190,13 @@ neg_xvel:
       STA   xvel+1
       RTS
 
+; --- SID bounce sound ------------------------------------------------------
+; INTENTIONAL custom effect, NOT the standard NDK path: a hand-crafted multi-voice
+; pitch sweep (floor = voices 1+3 in unison swept downward, wall = a voice-2 tick)
+; poked straight to the SID for a specific "basketball" character. For an ordinary
+; fire-and-forget sound or note, use the NDK instead -- audio_play_sound_async (SID)
+; or wts_note_async (WTS); see `nova new --template sprite`. This demo keeps the
+; bespoke effect on purpose.
 sid_init:
       LDA   #$0F
       STA   $D418                ; master volume (max)
