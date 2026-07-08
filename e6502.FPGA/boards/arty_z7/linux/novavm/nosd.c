@@ -304,8 +304,9 @@ static int g_mgain  = 96;
 static int g_maccel = 0;
 static const int MGAIN_PRESETS[]  = {48, 64, 96, 128, 192, 256};
 static const int MACCEL_PRESETS[] = {0, 1, 2, 4, 6, 8};
-static int g_master_vol = 130;   /* % at the SID+WTS mix point */
-static const int VOL_PRESETS[] = {50, 75, 100, 130, 160, 200};
+static int g_master_vol = 70;    /* 0..100 slider; 100 = max output (audio 200%) */
+static int g_vol_adjust = 0;     /* 1 while up/down is live-adjusting the volume */
+#define VOL_STEP 5
 #define MNPRE(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static int mnext(const int *a, int n, int cur) {
@@ -329,10 +330,11 @@ static void vol_prefs_load(void) {
     FILE *f = fopen("/data/nova/volume.cfg", "r");
     if (!f) return;
     int v;
-    if (fscanf(f, "%d", &v) == 1) g_master_vol = v;
+    if (fscanf(f, "%d", &v) == 1 && v >= 0 && v <= 100) g_master_vol = v;
     fclose(f);
 }
-static void vol_prefs_apply(void) { audio_set_master(g_master_vol); }
+/* 0..100 slider -> audio_set_master 0..200% (100 = the loudest, silent at 0). */
+static void vol_prefs_apply(void) { audio_set_master(g_master_vol * 2); }
 static void vol_prefs_save(void) {
     FILE *f;
     if ((f = fopen("/data/nova/volume.cfg", "w"))) { fprintf(f, "%d\n", g_master_vol); fclose(f); }
@@ -358,7 +360,10 @@ static void build_config(void)
     char vb[48];
     add_item("Mounts", IT_GOTO_SLOTS, 0);
     add_item("Mouse",  IT_GOTO_MOUSE, 0);
-    snprintf(vb, sizeof vb, "Volume:  %d%%", g_master_vol);
+    int filled = g_master_vol / 10;   /* 0..10 bar segments */
+    snprintf(vb, sizeof vb, "Volume [%.*s%.*s] %d%s",
+             filled, "##########", 10 - filled, "          ", g_master_vol,
+             g_vol_adjust ? " <>" : "");
     add_item(vb, IT_VOLUME, 0);
     add_item("Close",  IT_CLOSE,      0);
 }
@@ -533,8 +538,7 @@ static void select_item(void)
                                mouse_prefs_save(); rebuild();  break;
         case IT_MOUSE_ACCEL:   g_maccel = mnext(MACCEL_PRESETS, MNPRE(MACCEL_PRESETS), g_maccel);
                                mouse_prefs_save(); rebuild();  break;
-        case IT_VOLUME:        g_master_vol = mnext(VOL_PRESETS, MNPRE(VOL_PRESETS), g_master_vol);
-                               vol_prefs_save(); rebuild();    break;
+        case IT_VOLUME:        g_vol_adjust = 1; rebuild();     break;  /* enter live adjust */
     }
 }
 
@@ -544,6 +548,15 @@ void osd_button(int b)
 {
     if (g_sc == SC_NONE) {            /* closed: only the toggle does anything */
         if (b == 1) open_osd();
+        return;
+    }
+    if (g_vol_adjust) {               /* live volume slider: up/down adjust, hear it change */
+        switch (b) {
+            case 2: if (g_master_vol < 100) g_master_vol += VOL_STEP; vol_prefs_apply(); rebuild(); break;
+            case 3: if (g_master_vol > 0)   g_master_vol -= VOL_STEP; vol_prefs_apply(); rebuild(); break;
+            case 4: g_vol_adjust = 0; vol_prefs_save(); rebuild();   break;   /* enter = set */
+            case 1: g_vol_adjust = 0; vol_prefs_save(); close_osd(); break;   /* close = set + exit */
+        }
         return;
     }
     switch (b) {
