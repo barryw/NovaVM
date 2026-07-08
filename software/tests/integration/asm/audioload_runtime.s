@@ -1,6 +1,6 @@
 ; AUDIO loading-poll integration fixture.
 ;
-; Drives audio_sidplay against a bus double whose FIO accepts the play command
+; Drives audio_sidplay_async against a bus double whose FIO accepts the play command
 ; and then reports MUSIC_STATUS_LOADING for a few reads before clearing. A
 ; file-backed play must wait for the host load to finish (poll the LOADING bit)
 ; before returning, instead of returning the instant the command is dispatched.
@@ -18,7 +18,7 @@ start:
         jmp run
 
 run:
-        jsr audio_sidplay
+        jsr audio_sidplay_async
         sta RESULT + 0          ; A = return code (0 = success)
         lda #$AA
         sta RESULT + 1

@@ -43,10 +43,10 @@ banner:
 ;   sprite_priority / sprite_enable / sprite_pos — place and show it
 ;   vgc_vsync                  — pace the loop to the 60 Hz video frame
 ;   audio_init                 — SID + default instruments, once at startup
-;   audio_play_sound           — fire a one-shot note and RETURN IMMEDIATELY
+;   audio_play_sound_async           — fire a one-shot note and RETURN IMMEDIATELY
 ;   audio_tick                 — advance those notes one frame (gates them off)
 ;
-; ASYNC RULE: audio is fire-and-forget. `audio_play_sound` steals a SID voice,
+; ASYNC RULE: audio is fire-and-forget. `audio_play_sound_async` steals a SID voice,
 ; records a frame countdown, and returns at once — it never waits for the note to
 ; finish. `audio_tick`, called once per frame, counts the note down and releases
 ; it. The bounce never stalls the ball. (Contrast the blocking `audio_tone`, which
@@ -202,12 +202,12 @@ loop:
         JMP     loop
 
 ; --- helpers ----------------------------------------------------------------
-; A = MIDI note -> play a short async bounce blip. Tail-calls audio_play_sound,
+; A = MIDI note -> play a short async bounce blip. Tail-calls audio_play_sound_async,
 ; which returns immediately (X = length in frames, Y = instrument slot 0).
 bounce:
         LDX     #BLIPLEN
         LDY     #0
-        JMP     audio_play_sound
+        JMP     audio_play_sound_async
 
 neg_xvel:
         LDA     #0

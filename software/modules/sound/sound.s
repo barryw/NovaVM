@@ -53,7 +53,7 @@
 ;  master-only — narrower than the NDK audio_volume "master or per-voice" summary.)
 ;
 ;@fn SND_PLAY_SOUND
-;@ndk audio_play_sound
+;@ndk audio_play_sound_async
 ;@arg note u8 MIDI note (ARG0)
 ;@arg dur u8 duration in 60 Hz frames (ARG1)
 ;@arg instr u8 instrument slot (ARG2)
@@ -61,7 +61,7 @@
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_SOUND
-;@ndk audio_sound
+;@ndk audio_sound_async
 ;@arg note u8 MIDI note -> AUDIO.NOTE (ARG0)
 ;@arg dur u8 duration in 60 Hz frames -> AUDIO.DURATION (ARG1)
 ;@arg instr u8 instrument slot -> AUDIO.INSTRUMENT (ARG2)
@@ -97,7 +97,7 @@
 ;@status LERR_OK
 ;
 ;@fn SND_SIDPLAY
-;@ndk audio_sidplay
+;@ndk audio_sidplay_async
 ;@arg song u8 1-based subtune number -> AUDIO.NOTE (ARG0). Filename preset in FIO.NAME/FIO.NAMELEN.
 ;@ret void
 ;@status LERR_OK, LERR_AUDIO_FAIL
@@ -108,7 +108,7 @@
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_MIDPLAY
-;@ndk audio_midplay
+;@ndk audio_midplay_async
 ;@arg - - filename preset in FIO.NAME/FIO.NAMELEN
 ;@ret void
 ;@status LERR_OK, LERR_AUDIO_FAIL
@@ -119,13 +119,13 @@
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_SFLOAD
-;@ndk audio_sfload
+;@ndk audio_sfload_async
 ;@arg - - soundfont filename preset in FIO.NAME/FIO.NAMELEN
 ;@ret void
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_SIDPLAY_FILE
-;@ndk audio_sidplay_file
+;@ndk audio_sidplay_file_async
 ;@arg nameptr u16 pointer to filename bytes (ARG0)
 ;@arg namelen u8 filename length 1..63 (ARG1)
 ;@arg song u8 1-based subtune number -> AUDIO.NOTE (ARG2)
@@ -133,14 +133,14 @@
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_MIDPLAY_FILE
-;@ndk audio_midplay_file
+;@ndk audio_midplay_file_async
 ;@arg nameptr u16 pointer to filename bytes (ARG0)
 ;@arg namelen u8 filename length 1..63 (ARG1)
 ;@ret void
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_SFLOAD_FILE
-;@ndk audio_sfload_file
+;@ndk audio_sfload_file_async
 ;@arg nameptr u16 pointer to filename bytes (ARG0)
 ;@arg namelen u8 filename length 1..63 (ARG1)
 ;@ret void
@@ -155,7 +155,7 @@
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
 ;@fn SND_MUSIC_PLAY
-;@ndk audio_music_play
+;@ndk audio_music_play_async
 ;@ret void
 ;@status LERR_OK, LERR_AUDIO_FAIL
 ;
@@ -318,15 +318,15 @@ snd_volume:
 ; Fire-and-forget SID sound effects + scheduler.
 ; ===========================================================================
 
-; --- $03 SND_PLAY_SOUND: ARG0=note, ARG1=dur, ARG2=instr -> A/X/Y -> audio_play_sound ---
+; --- $03 SND_PLAY_SOUND: ARG0=note, ARG1=dur, ARG2=instr -> A/X/Y -> audio_play_sound_async ---
 snd_play_sound:
       LDA   LIB_ARG0+0                 ; note  -> A
       LDX   LIB_ARG1+0                 ; dur   -> X
       LDY   LIB_ARG2+0                 ; instr -> Y
-      JSR   audio_play_sound
+      JSR   audio_play_sound_async
       JMP   snd_finish_status
 
-; --- $04 SND_SOUND: ARG0=note, ARG1=dur, ARG2=instr -> pseudo-regs -> audio_sound ---
+; --- $04 SND_SOUND: ARG0=note, ARG1=dur, ARG2=instr -> pseudo-regs -> audio_sound_async ---
 snd_sound:
       LDA   LIB_ARG0+0
       STA   AUDIO_NOTE                 ; = FIO_SRCL
@@ -334,7 +334,7 @@ snd_sound:
       STA   AUDIO_DURATION             ; = FIO_SRCH
       LDA   LIB_ARG2+0
       STA   AUDIO_INSTRUMENT           ; = FIO_ENDL
-      JSR   audio_sound
+      JSR   audio_sound_async
       JMP   snd_finish_status
 
 ; --- $05 SND_SET_VOLUME: ARG0=vol, ARG1=voice -> A/X -> audio_set_volume ---
@@ -373,14 +373,14 @@ snd_tick:
 
 ; ===========================================================================
 ; File-backed playback. The caller preloads FIO.NAME/FIO.NAMELEN (or uses the
-; *_FILE pointer variants below). audio_sidplay reuses AUDIO.NOTE as the song #.
+; *_FILE pointer variants below). audio_sidplay_async reuses AUDIO.NOTE as the song #.
 ; ===========================================================================
 
-; --- $09 SND_SIDPLAY: ARG0 = song (1-based) -> AUDIO.NOTE -> audio_sidplay ---
+; --- $09 SND_SIDPLAY: ARG0 = song (1-based) -> AUDIO.NOTE -> audio_sidplay_async ---
 snd_sidplay:
       LDA   LIB_ARG0+0
       STA   AUDIO_NOTE                 ; = FIO_SRCL; 1-based song number
-      JSR   audio_sidplay
+      JSR   audio_sidplay_async
       JMP   snd_finish_status
 
 ; --- $0A SND_SIDSTOP: () -> audio_sidstop ---
@@ -388,9 +388,9 @@ snd_sidstop:
       JSR   audio_sidstop
       JMP   snd_finish_status
 
-; --- $0B SND_MIDPLAY: () name in FIO.NAME -> audio_midplay ---
+; --- $0B SND_MIDPLAY: () name in FIO.NAME -> audio_midplay_async ---
 snd_midplay:
-      JSR   audio_midplay
+      JSR   audio_midplay_async
       JMP   snd_finish_status
 
 ; --- $0C SND_MIDSTOP: () -> audio_midstop ---
@@ -398,29 +398,29 @@ snd_midstop:
       JSR   audio_midstop
       JMP   snd_finish_status
 
-; --- $0D SND_SFLOAD: () soundfont in FIO.NAME -> audio_sfload ---
+; --- $0D SND_SFLOAD: () soundfont in FIO.NAME -> audio_sfload_async ---
 snd_sfload:
-      JSR   audio_sfload
+      JSR   audio_sfload_async
       JMP   snd_finish_status
 
-; --- $0E SND_SIDPLAY_FILE: ARG0=nameptr, ARG1=namelen, ARG2=song -> audio_sidplay_file ---
+; --- $0E SND_SIDPLAY_FILE: ARG0=nameptr, ARG1=namelen, ARG2=song -> audio_sidplay_file_async ---
 snd_sidplay_file:
       JSR   snd_load_name_args         ; ARG0 ptr + ARG1 len -> FIO_ARG_NAME*
       LDA   LIB_ARG2+0
       STA   AUDIO_NOTE                 ; 1-based song number for the copied file
-      JSR   audio_sidplay_file
+      JSR   audio_sidplay_file_async
       JMP   snd_finish_status
 
-; --- $0F SND_MIDPLAY_FILE: ARG0=nameptr, ARG1=namelen -> audio_midplay_file ---
+; --- $0F SND_MIDPLAY_FILE: ARG0=nameptr, ARG1=namelen -> audio_midplay_file_async ---
 snd_midplay_file:
       JSR   snd_load_name_args
-      JSR   audio_midplay_file
+      JSR   audio_midplay_file_async
       JMP   snd_finish_status
 
-; --- $10 SND_SFLOAD_FILE: ARG0=nameptr, ARG1=namelen -> audio_sfload_file ---
+; --- $10 SND_SFLOAD_FILE: ARG0=nameptr, ARG1=namelen -> audio_sfload_file_async ---
 snd_sfload_file:
       JSR   snd_load_name_args
-      JSR   audio_sfload_file
+      JSR   audio_sfload_file_async
       JMP   snd_finish_status
 
 ; snd_load_name_args — marshal the pointer-filename ABI shared by the *_FILE fns:
@@ -452,9 +452,9 @@ snd_music_sequence:
       JSR   audio_music_sequence
       JMP   snd_finish_status
 
-; --- $12 SND_MUSIC_PLAY: () -> audio_music_play ---
+; --- $12 SND_MUSIC_PLAY: () -> audio_music_play_async ---
 snd_music_play:
-      JSR   audio_music_play
+      JSR   audio_music_play_async
       JMP   snd_finish_status
 
 ; --- $13 SND_MUSIC_STOP: () -> audio_music_stop ---

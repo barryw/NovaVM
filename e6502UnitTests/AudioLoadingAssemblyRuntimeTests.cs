@@ -89,7 +89,7 @@ public class AudioLoadingAssemblyRuntimeTests
 
         Assert.AreEqual(0xAA, bus.Read(Result + 1), "audioload fixture ran to completion");
         Assert.AreEqual(0x00, bus.Read(Result + 0), "play reports success");
-        // The bug: audio_sidplay returns the instant the command dispatches,
+        // The bug: audio_sidplay_async returns the instant the command dispatches,
         // never reading MUSIC_STATUS, so the caller proceeds while the asset is
         // still loading. The fix polls the LOADING bit until it clears.
         Assert.IsTrue(bus.MusicStatusReads >= 3,

@@ -40,7 +40,7 @@
     {
       "label": "AUDIO.INIT",
       "source": "../../runtime/asm/audio.s",
-      "line": 421,
+      "line": 433,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -64,7 +64,7 @@
     {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../../runtime/asm/audio.s",
-      "line": 375,
+      "line": 387,
       "inputs": [],
       "outputs": [
         {
@@ -304,7 +304,7 @@
     {
       "label": "AUDIO.MIDPLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 595,
+      "line": 607,
       "inputs": [],
       "outputs": [
         {
@@ -317,14 +317,14 @@
         "FIO.NAMELEN"
       ],
       "kind": "routine",
-      "symbol": "audio_midplay",
+      "symbol": "audio_midplay_async",
       "abi": "pseudo-register",
       "summary": "Play the MIDI file named by FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "AUDIO.MIDPLAY_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 685,
+      "line": 697,
       "inputs": [],
       "outputs": [
         {
@@ -338,14 +338,14 @@
         "FIO_ARG_NAMEPTR_H"
       ],
       "kind": "routine",
-      "symbol": "audio_midplay_file",
+      "symbol": "audio_midplay_file_async",
       "abi": "pseudo-register",
       "summary": "Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback."
     },
     {
       "label": "AUDIO.MIDSTOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 612,
+      "line": 624,
       "inputs": [],
       "outputs": [
         {
@@ -362,7 +362,7 @@
     {
       "label": "AUDIO.MUSIC_LOOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 773,
+      "line": 785,
       "inputs": [],
       "outputs": [
         {
@@ -381,7 +381,7 @@
     {
       "label": "AUDIO.MUSIC_NOTE",
       "source": "../../runtime/asm/audio.s",
-      "line": 840,
+      "line": 852,
       "inputs": [
         {
           "name": "X",
@@ -403,7 +403,7 @@
     {
       "label": "AUDIO.MUSIC_PLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 732,
+      "line": 744,
       "inputs": [],
       "outputs": [
         {
@@ -413,14 +413,14 @@
       ],
       "requires": [],
       "kind": "routine",
-      "symbol": "audio_music_play",
+      "symbol": "audio_music_play_async",
       "abi": "none",
       "summary": "Start queued music playback."
     },
     {
       "label": "AUDIO.MUSIC_PLAYING",
       "source": "../../runtime/asm/audio.s",
-      "line": 824,
+      "line": 836,
       "inputs": [],
       "outputs": [
         {
@@ -437,7 +437,7 @@
     {
       "label": "AUDIO.MUSIC_PRIORITY",
       "source": "../../runtime/asm/audio.s",
-      "line": 786,
+      "line": 798,
       "inputs": [],
       "outputs": [
         {
@@ -456,7 +456,7 @@
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
       "source": "../../runtime/asm/audio.s",
-      "line": 719,
+      "line": 731,
       "inputs": [],
       "outputs": [
         {
@@ -478,7 +478,7 @@
     {
       "label": "AUDIO.MUSIC_STOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 748,
+      "line": 760,
       "inputs": [],
       "outputs": [
         {
@@ -495,7 +495,7 @@
     {
       "label": "AUDIO.MUSIC_TEMPO",
       "source": "../../runtime/asm/audio.s",
-      "line": 760,
+      "line": 772,
       "inputs": [],
       "outputs": [
         {
@@ -515,7 +515,7 @@
     {
       "label": "AUDIO.NOISE",
       "source": "../../runtime/asm/audio.s",
-      "line": 347,
+      "line": 359,
       "inputs": [
         {
           "name": "A",
@@ -567,7 +567,7 @@
       ],
       "requires": [],
       "kind": "routine",
-      "symbol": "audio_play_sound",
+      "symbol": "audio_play_sound_async",
       "abi": "register",
       "summary": "Play a one-shot note using A/X/Y register arguments."
     },
@@ -612,7 +612,7 @@
     {
       "label": "AUDIO.SFLOAD",
       "source": "../../runtime/asm/audio.s",
-      "line": 624,
+      "line": 636,
       "inputs": [],
       "outputs": [
         {
@@ -625,14 +625,14 @@
         "FIO.NAMELEN"
       ],
       "kind": "routine",
-      "symbol": "audio_sfload",
+      "symbol": "audio_sfload_async",
       "abi": "pseudo-register",
       "summary": "Load the soundfont named by FIO.NAME/FIO.NAMELEN."
     },
     {
       "label": "AUDIO.SFLOAD_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 701,
+      "line": 713,
       "inputs": [],
       "outputs": [
         {
@@ -646,14 +646,14 @@
         "FIO_ARG_NAMEPTR_H"
       ],
       "kind": "routine",
-      "symbol": "audio_sfload_file",
+      "symbol": "audio_sfload_file_async",
       "abi": "pseudo-register",
       "summary": "Copy a pointer-based soundfont filename into FIO.NAME and load it."
     },
     {
       "label": "AUDIO.SFX_PLAYING",
       "source": "../../runtime/asm/audio.s",
-      "line": 811,
+      "line": 823,
       "inputs": [],
       "outputs": [
         {
@@ -670,7 +670,7 @@
     {
       "label": "AUDIO.SIDPLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 565,
+      "line": 577,
       "inputs": [],
       "outputs": [
         {
@@ -684,14 +684,14 @@
         "AUDIO.NOTE"
       ],
       "kind": "routine",
-      "symbol": "audio_sidplay",
+      "symbol": "audio_sidplay_async",
       "abi": "pseudo-register",
       "summary": "Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number."
     },
     {
       "label": "AUDIO.SIDPLAY_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 669,
+      "line": 681,
       "inputs": [],
       "outputs": [
         {
@@ -706,14 +706,14 @@
         "AUDIO_NOTE"
       ],
       "kind": "routine",
-      "symbol": "audio_sidplay_file",
+      "symbol": "audio_sidplay_file_async",
       "abi": "pseudo-register",
       "summary": "Copy a pointer-based SID filename into FIO.NAME and start SID playback."
     },
     {
       "label": "AUDIO.SIDSTOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 583,
+      "line": 595,
       "inputs": [],
       "outputs": [
         {
@@ -744,14 +744,14 @@
         "AUDIO.INSTRUMENT"
       ],
       "kind": "routine",
-      "symbol": "audio_sound",
+      "symbol": "audio_sound_async",
       "abi": "pseudo-register",
       "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT."
     },
     {
       "label": "AUDIO.STATUS",
       "source": "../../runtime/asm/audio.s",
-      "line": 799,
+      "line": 811,
       "inputs": [],
       "outputs": [
         {
@@ -876,7 +876,7 @@
     {
       "label": "AUDIO.TICK",
       "source": "../../runtime/asm/audio.s",
-      "line": 458,
+      "line": 470,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -888,7 +888,7 @@
     {
       "label": "AUDIO.TONE",
       "source": "../../runtime/asm/audio.s",
-      "line": 319,
+      "line": 331,
       "inputs": [
         {
           "name": "NVR0L/NVR0H",
@@ -917,7 +917,7 @@
     {
       "label": "AUDIO.VOLUME",
       "source": "../../runtime/asm/audio.s",
-      "line": 280,
+      "line": 292,
       "inputs": [],
       "outputs": [
         {
@@ -949,7 +949,7 @@
     {
       "label": "AUDIO.WAIT_LOADING",
       "source": "../../runtime/asm/audio.s",
-      "line": 641,
+      "line": 653,
       "inputs": [],
       "outputs": [
         {

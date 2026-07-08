@@ -261,25 +261,25 @@ AUDIO_STRH       = FIO_ENDH
 ; @summary MML string length for AUDIO.MUSIC_SEQUENCE.
 AUDIO_STRLEN     = FIO_NAMELEN
 
-.global audio_play_sound
+.global audio_play_sound_async
 .global audio_set_volume
-.global audio_sound
+.global audio_sound_async
 .global audio_volume
 .global audio_tone
 .global audio_noise
 .global audio_instrument
 .global audio_init
 .global audio_tick
-.global audio_sidplay
+.global audio_sidplay_async
 .global audio_sidstop
-.global audio_midplay
+.global audio_midplay_async
 .global audio_midstop
-.global audio_sfload
-.global audio_sidplay_file
-.global audio_midplay_file
-.global audio_sfload_file
+.global audio_sfload_async
+.global audio_sidplay_file_async
+.global audio_midplay_file_async
+.global audio_sfload_file_async
 .global audio_music_sequence
-.global audio_music_play
+.global audio_music_play_async
 .global audio_music_stop
 .global audio_music_tempo
 .global audio_music_loop

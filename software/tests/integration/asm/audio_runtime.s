@@ -61,7 +61,7 @@ asm_audio_test:
         lda #60
         ldx #8
         ldy #0
-        jsr audio_play_sound
+        jsr audio_play_sound_async
         sta RESULT_BASE + 3
 
         lda #1
@@ -101,7 +101,7 @@ asm_audio_test:
         jsr audio_music_priority
         sta RESULT_BASE + 7
 
-        jsr audio_music_play
+        jsr audio_music_play_async
         sta RESULT_BASE + 8
         jsr audio_music_playing
         sta RESULT_BASE + 9

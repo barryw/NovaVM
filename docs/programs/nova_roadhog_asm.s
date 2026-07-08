@@ -1020,13 +1020,13 @@ play_pickup_sound:
       LDA   #$4F
       LDX   #$05
       LDY   #$00
-      JMP   audio_play_sound
+      JMP   audio_play_sound_async
 
 play_crash_sound:
       LDA   #$24
       LDX   #$18
       LDY   #$00
-      JMP   audio_play_sound
+      JMP   audio_play_sound_async
 
 define_shapes:
       STZ   shape_slot

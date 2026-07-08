@@ -210,7 +210,7 @@ Active music metadata file type: 1=SID, 3=MIDI/WTS.
 Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
-- Symbol: `audio_midplay`
+- Symbol: `audio_midplay_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -225,7 +225,7 @@ Requires:
 Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback.
 
 - Kind: `routine`
-- Symbol: `audio_midplay_file`
+- Symbol: `audio_midplay_file_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -280,7 +280,7 @@ Outputs:
 Start queued music playback.
 
 - Kind: `routine`
-- Symbol: `audio_music_play`
+- Symbol: `audio_music_play_async`
 - ABI: `none`
 
 Outputs:
@@ -378,7 +378,7 @@ MIDI note for AUDIO.SOUND.
 Play a one-shot note using A/X/Y register arguments.
 
 - Kind: `routine`
-- Symbol: `audio_play_sound`
+- Symbol: `audio_play_sound_async`
 - ABI: `register`
 
 Inputs:
@@ -417,7 +417,7 @@ Outputs:
 Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 
 - Kind: `routine`
-- Symbol: `audio_sfload`
+- Symbol: `audio_sfload_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -432,7 +432,7 @@ Requires:
 Copy a pointer-based soundfont filename into FIO.NAME and load it.
 
 - Kind: `routine`
-- Symbol: `audio_sfload_file`
+- Symbol: `audio_sfload_file_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -459,7 +459,7 @@ Outputs:
 Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.
 
 - Kind: `routine`
-- Symbol: `audio_sidplay`
+- Symbol: `audio_sidplay_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -475,7 +475,7 @@ Requires:
 Copy a pointer-based SID filename into FIO.NAME and start SID playback.
 
 - Kind: `routine`
-- Symbol: `audio_sidplay_file`
+- Symbol: `audio_sidplay_file_async`
 - ABI: `pseudo-register`
 
 Outputs:
@@ -503,7 +503,7 @@ Outputs:
 Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 
 - Kind: `routine`
-- Symbol: `audio_sound`
+- Symbol: `audio_sound_async`
 - ABI: `pseudo-register`
 
 Outputs:

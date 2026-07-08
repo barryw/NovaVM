@@ -146,7 +146,7 @@ ExtTable:
 ; Returns: A=0 success, A=errcode on error.
 ; =====================================================================
 EXT_SFLOAD:
-      JSR   audio_sfload      ; trigger soundfont load
+      JSR   audio_sfload_async      ; trigger soundfont load
       BEQ   @ok
       LDA   FIO_ERRCODE       ; nonzero error code
       RTS

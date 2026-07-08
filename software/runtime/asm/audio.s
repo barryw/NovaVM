@@ -35,13 +35,13 @@ AUDIO_EMIT_ALL = 0
 .endif
 
 .if AUDIO_EMIT_ALL = 0
-.if .referenced(audio_play_sound)
-      .refto audio_sound
+.if .referenced(audio_play_sound_async)
+      .refto audio_sound_async
 .endif
 .if .referenced(audio_set_volume)
       .refto audio_volume
 .endif
-.if .referenced(audio_sound)
+.if .referenced(audio_sound_async)
       .refto audio_init
       .refto audio_load_instrument
       .refto audio_note_to_sid
@@ -53,33 +53,33 @@ AUDIO_EMIT_ALL = 0
 .if .referenced(audio_tick)
       .refto audio_voice_ptr
 .endif
-.if .referenced(audio_sidplay_file)
-      .refto audio_sidplay
+.if .referenced(audio_sidplay_file_async)
+      .refto audio_sidplay_async
       .refto fio_copy_name
 .endif
-.if .referenced(audio_midplay_file)
-      .refto audio_midplay
+.if .referenced(audio_midplay_file_async)
+      .refto audio_midplay_async
       .refto fio_copy_name
 .endif
-.if .referenced(audio_sfload_file)
-      .refto audio_sfload
+.if .referenced(audio_sfload_file_async)
+      .refto audio_sfload_async
       .refto fio_copy_name
 .endif
-.if .referenced(audio_sidplay) .OR .referenced(audio_sidstop) .OR .referenced(audio_midplay) .OR .referenced(audio_midstop) .OR .referenced(audio_sfload) .OR .referenced(audio_music_sequence) .OR .referenced(audio_music_play) .OR .referenced(audio_music_stop) .OR .referenced(audio_music_tempo) .OR .referenced(audio_music_loop) .OR .referenced(audio_music_priority)
+.if .referenced(audio_sidplay_async) .OR .referenced(audio_sidstop) .OR .referenced(audio_midplay_async) .OR .referenced(audio_midstop) .OR .referenced(audio_sfload_async) .OR .referenced(audio_music_sequence) .OR .referenced(audio_music_play_async) .OR .referenced(audio_music_stop) .OR .referenced(audio_music_tempo) .OR .referenced(audio_music_loop) .OR .referenced(audio_music_priority)
       .refto fio_exec
 .endif
 .endif
 
       .segment "CODE"
 
-.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound)
-      .export audio_play_sound
+.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound_async)
+      .export audio_play_sound_async
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_set_volume)
       .export audio_set_volume
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sound)
-      .export audio_sound
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sound_async)
+      .export audio_sound_async
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
       .export audio_volume
@@ -103,38 +103,38 @@ AUDIO_EMIT_ALL = 0
       .export audio_tick
 .endif
 .if AUDIO_FILE_COMMANDS
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay)
-      .export audio_sidplay
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_async)
+      .export audio_sidplay_async
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_sidstop)
       .export audio_sidstop
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay)
-      .export audio_midplay
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_async)
+      .export audio_midplay_async
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_midstop)
       .export audio_midstop
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload)
-      .export audio_sfload
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_async)
+      .export audio_sfload_async
 .endif
 .if AUDIO_POINTER_FILE_HELPERS
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file)
-      .export audio_sidplay_file
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file_async)
+      .export audio_sidplay_file_async
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file)
-      .export audio_midplay_file
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file_async)
+      .export audio_midplay_file_async
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file)
-      .export audio_sfload_file
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file_async)
+      .export audio_sfload_file_async
 .endif
 .endif
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_music_sequence)
       .export audio_music_sequence
 .endif
-.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play)
-      .export audio_music_play
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play_async)
+      .export audio_music_play_async
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_music_stop)
       .export audio_music_stop
@@ -184,19 +184,19 @@ SID_DEFAULT_PW_HI   = $08
 
 ; @label AUDIO.PLAY_SOUND
 ; @kind routine
-; @symbol audio_play_sound
+; @symbol audio_play_sound_async
 ; @abi register
 ; @summary Play a one-shot note using A/X/Y register arguments.
 ; @in A: MIDI note
 ; @in X: Duration in 60 Hz frames
 ; @in Y: Instrument slot
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound)
-audio_play_sound:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_play_sound_async)
+audio_play_sound_async:
       STA   AUDIO_NOTE
       STX   AUDIO_DURATION
       STY   AUDIO_INSTRUMENT
-      BRA   audio_sound
+      BRA   audio_sound_async
 .endif
 
 ; @label AUDIO.SET_VOLUME
@@ -216,22 +216,33 @@ audio_set_volume:
 
 ; @label AUDIO.SOUND
 ; @kind routine
-; @symbol audio_sound
+; @symbol audio_sound_async
 ; @abi pseudo-register
 ; @summary Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
 ; @requires AUDIO.NOTE AUDIO.DURATION AUDIO.INSTRUMENT
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sound)
-audio_sound:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sound_async)
+audio_sound_async:
       JSR   audio_init
       LDA   AUDIO_DURATION
       BEQ   @done
 
-      LDX   AUDIO_NEXT_VOICE
-      CPX   #$06
-      BCC   @voice_ok
+      ; Voice allocation: prefer an IDLE voice (AUDIO_VOICE_DUR == 0) so we never
+      ; cut off a note that is still sounding. Only when all six SID voices are
+      ; busy do we steal one, round-robin via AUDIO_NEXT_VOICE (oldest-ish).
       LDX   #$00
-@voice_ok:
+@find_free:
+      LDA   AUDIO_VOICE_DUR,X
+      BEQ   @voice_ok               ; voice X idle -> take it
+      INX
+      CPX   #$06
+      BNE   @find_free
+
+      LDX   AUDIO_NEXT_VOICE        ; all busy: steal the round-robin voice
+      CPX   #$06
+      BCC   @steal_ok
+      LDX   #$00
+@steal_ok:
       TXA
       INC   A
       CMP   #$06
@@ -240,6 +251,7 @@ audio_sound:
 @store_next:
       STA   AUDIO_NEXT_VOICE
 
+@voice_ok:
       PHX
       JSR   audio_load_instrument
       JSR   audio_note_to_sid
@@ -564,13 +576,13 @@ audio_voice_lo:
 .if AUDIO_FILE_COMMANDS
 ; @label AUDIO.SIDPLAY
 ; @kind routine
-; @symbol audio_sidplay
+; @symbol audio_sidplay_async
 ; @abi pseudo-register
 ; @summary Play the SID file named by FIO.NAME/FIO.NAMELEN. AUDIO.NOTE is reused as the 1-based song number.
 ; @requires FIO.NAME FIO.NAMELEN AUDIO.NOTE
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay)
-audio_sidplay:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_async)
+audio_sidplay_async:
       LDA   #FIO_CMD_SIDPLAY
       JSR   fio_exec
       BNE   @done
@@ -594,13 +606,13 @@ audio_sidstop:
 
 ; @label AUDIO.MIDPLAY
 ; @kind routine
-; @symbol audio_midplay
+; @symbol audio_midplay_async
 ; @abi pseudo-register
 ; @summary Play the MIDI file named by FIO.NAME/FIO.NAMELEN.
 ; @requires FIO.NAME FIO.NAMELEN
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay)
-audio_midplay:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_async)
+audio_midplay_async:
       LDA   #FIO_CMD_MIDPLAY
       JSR   fio_exec
       BNE   @done
@@ -623,13 +635,13 @@ audio_midstop:
 
 ; @label AUDIO.SFLOAD
 ; @kind routine
-; @symbol audio_sfload
+; @symbol audio_sfload_async
 ; @abi pseudo-register
 ; @summary Load the soundfont named by FIO.NAME/FIO.NAMELEN.
 ; @requires FIO.NAME FIO.NAMELEN
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload)
-audio_sfload:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_async)
+audio_sfload_async:
       LDA   #FIO_CMD_SFLOAD
       JSR   fio_exec
       BNE   @done
@@ -668,48 +680,48 @@ audio_wait_loading:
 .if AUDIO_POINTER_FILE_HELPERS
 ; @label AUDIO.SIDPLAY_FILE
 ; @kind routine
-; @symbol audio_sidplay_file
+; @symbol audio_sidplay_file_async
 ; @abi pseudo-register
 ; @summary Copy a pointer-based SID filename into FIO.NAME and start SID playback.
 ; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H AUDIO_NOTE
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file)
-audio_sidplay_file:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sidplay_file_async)
+audio_sidplay_file_async:
       JSR   fio_copy_name
       BNE   @done
-      JMP   audio_sidplay
+      JMP   audio_sidplay_async
 @done:
       RTS
 .endif
 
 ; @label AUDIO.MIDPLAY_FILE
 ; @kind routine
-; @symbol audio_midplay_file
+; @symbol audio_midplay_file_async
 ; @abi pseudo-register
 ; @summary Copy a pointer-based MIDI filename into FIO.NAME and start MIDI playback.
 ; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file)
-audio_midplay_file:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_midplay_file_async)
+audio_midplay_file_async:
       JSR   fio_copy_name
       BNE   @done
-      JMP   audio_midplay
+      JMP   audio_midplay_async
 @done:
       RTS
 .endif
 
 ; @label AUDIO.SFLOAD_FILE
 ; @kind routine
-; @symbol audio_sfload_file
+; @symbol audio_sfload_file_async
 ; @abi pseudo-register
 ; @summary Copy a pointer-based soundfont filename into FIO.NAME and load it.
 ; @requires FIO_ARG_NAMELEN FIO_ARG_NAMEPTR_L FIO_ARG_NAMEPTR_H
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file)
-audio_sfload_file:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_sfload_file_async)
+audio_sfload_file_async:
       JSR   fio_copy_name
       BNE   @done
-      JMP   audio_sfload
+      JMP   audio_sfload_async
 @done:
       RTS
 .endif
@@ -731,12 +743,12 @@ audio_music_sequence:
 
 ; @label AUDIO.MUSIC_PLAY
 ; @kind routine
-; @symbol audio_music_play
+; @symbol audio_music_play_async
 ; @abi none
 ; @summary Start queued music playback.
 ; @out A: 0 on success, nonzero on error
-.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play)
-audio_music_play:
+.if AUDIO_EMIT_ALL .OR .referenced(audio_music_play_async)
+audio_music_play_async:
       LDA   #FIO_CMD_MPLAY
       JSR   fio_exec
       BNE   @done
