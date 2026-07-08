@@ -1,10 +1,11 @@
 ; spritebank_demo.s -- load an NSPR bank, spawn a character, animate it.
 ;
 ; Proves the on-device NSPR loader end to end on real hardware: parse an embedded
-; .nsp bank (a shaded ball drawn as a 32x32 metasprite with an 8-frame squash
-; cycle), stage its shapes to sprite RAM, spawn it, and bounce it around the
-; screen -- Y follows a bounce arc synced to the squash frames, X bounces off
-; the walls.
+; .nsp bank (a shaded ball drawn as a 32x32 metasprite with round + squash
+; frames), stage its shapes to sprite RAM, spawn it, and bounce it around the
+; screen with real physics -- 8.8 fixed-point position + velocity, constant
+; gravity, elastic floor + wall bounces. The squash frame is chosen by how close
+; the ball is to the floor, so it flattens on impact.
 ;
 ; Load address: $7200   Invoke: SYS $7200
 
@@ -13,14 +14,18 @@
 .include "msprite.inc"
 
 MODE_TEXT_GFX = 2
-FRAME_TICKS   = 4                ; vblanks between animation-frame advances
+GRAVITY = $0016                  ; 8.8 accel added to yvel each frame (~0.09 px/f^2)
+FLOOR   = 121                    ; max ypos (ball bottom sits ~29px below -> screen ~150)
+XMIN    = 8
+XMAX    = 232
 
 .segment "ZEROPAGE"
 zp_last_frame:  .res 1
-zp_frame:       .res 1           ; current bounce frame 0..7
-zp_delay:       .res 1
-zp_x:           .res 1           ; metasprite X
-zp_xdir:        .res 1           ; +2 / -2 (as $FE)
+zp_frame:       .res 1
+ypos:           .res 2           ; 8.8 fixed point
+yvel:           .res 2           ; 8.8 signed
+xpos:           .res 2
+xvel:           .res 2
 
 .segment "HEADER"
       .byte $00, $72
@@ -51,55 +56,127 @@ start:
       LDA   #0                   ; spawn BALL (character 0)
       JSR   spritebank_spawn
 
-      LDA   #120
-      STA   zp_x
-      LDA   #2
-      STA   zp_xdir
+      LDA   #$00                 ; ypos = 31.0, dropping from rest
+      STA   ypos
+      LDA   #31
+      STA   ypos+1
+      STZ   yvel
+      STZ   yvel+1
+      LDA   #$00                 ; xpos = 20.0, drifting right at 1.0 px/frame
+      STA   xpos
+      LDA   #20
+      STA   xpos+1
+      STZ   xvel
+      LDA   #$01
+      STA   xvel+1
       STZ   zp_frame
-      LDA   #FRAME_TICKS
-      STA   zp_delay
 
 loop:
       JSR   wait_vsync
 
-      LDA   zp_x                 ; horizontal: bounce off the walls
-      CLC
-      ADC   zp_xdir
-      STA   zp_x
-      CMP   #232
-      BCC   @chk_left
-      LDA   #$FE                 ; hit right wall -> move left
-      STA   zp_xdir
-      BRA   @anim
-@chk_left:
-      LDA   zp_x
-      CMP   #8
-      BCS   @anim
-      LDA   #2                   ; hit left wall -> move right
-      STA   zp_xdir
+      ; --- vertical: gravity, integrate, elastic floor ---
+      CLC                        ; yvel += GRAVITY
+      LDA   yvel
+      ADC   #<GRAVITY
+      STA   yvel
+      LDA   yvel+1
+      ADC   #>GRAVITY
+      STA   yvel+1
+      CLC                        ; ypos += yvel
+      LDA   ypos
+      ADC   yvel
+      STA   ypos
+      LDA   ypos+1
+      ADC   yvel+1
+      STA   ypos+1
+      LDA   ypos+1
+      CMP   #FLOOR
+      BCC   @yok
+      LDA   #FLOOR               ; clamp to floor
+      STA   ypos+1
+      STZ   ypos
+      LDA   yvel+1
+      BMI   @yok                 ; already moving up -> just clamp
+      SEC                        ; yvel = -yvel  (bounce)
+      LDA   #0
+      SBC   yvel
+      STA   yvel
+      LDA   #0
+      SBC   yvel+1
+      STA   yvel+1
+@yok:
 
-@anim:
-      DEC   zp_delay             ; advance the bounce frame every FRAME_TICKS
-      BNE   @place
-      LDA   #FRAME_TICKS
-      STA   zp_delay
-      INC   zp_frame
-      LDA   zp_frame
-      AND   #$07
+      ; --- horizontal: integrate, bounce off the walls ---
+      CLC
+      LDA   xpos
+      ADC   xvel
+      STA   xpos
+      LDA   xpos+1
+      ADC   xvel+1
+      STA   xpos+1
+      LDA   xpos+1
+      CMP   #XMAX
+      BCC   @chk_left
+      LDA   #XMAX
+      STA   xpos+1
+      STZ   xpos
+      LDA   xvel+1
+      BMI   @xok                 ; already moving left -> just clamp
+      JSR   neg_xvel
+      BRA   @xok
+@chk_left:
+      LDA   xpos+1
+      CMP   #XMIN
+      BCS   @xok
+      LDA   #XMIN
+      STA   xpos+1
+      STZ   xpos
+      LDA   xvel+1
+      BPL   @xok                 ; already moving right -> just clamp
+      JSR   neg_xvel
+@xok:
+
+      ; --- squash frame from distance to the floor ---
+      LDA   #FLOOR
+      SEC
+      SBC   ypos+1               ; A = floor - ypos = distance
+      CMP   #2
+      BCC   @full
+      CMP   #7
+      BCC   @light
+      LDA   #0                   ; round
+      BRA   @have
+@full:
+      LDA   #2                   ; full squash
+      BRA   @have
+@light:
+      LDA   #1                   ; light squash
+@have:
+      CMP   zp_frame
+      BEQ   @place
       STA   zp_frame
       JSR   spritebank_set_frame
 
 @place:
-      LDX   zp_frame             ; Y follows the bounce arc for this frame
-      LDA   bounce_y,X
-      TAY
-      LDA   zp_x
+      LDA   xpos+1
       STA   NVR0L
       STZ   NVR0H
+      LDY   ypos+1
       LDA   spritebank_handle
       JSR   msprite_set_pos
       JSR   msprite_commit
-      BRA   loop
+      JMP   loop
+
+; xvel = -xvel (16-bit negate)
+neg_xvel:
+      SEC
+      LDA   #0
+      SBC   xvel
+      STA   xvel
+      LDA   #0
+      SBC   xvel+1
+      STA   xvel+1
+      RTS
 
 init_display:
       STZ   VGC_BGCOL
@@ -120,7 +197,5 @@ wait_vsync:
       RTS
 
 .segment "RODATA"
-bounce_y:                        ; metasprite Y per frame: high at apex, low (floor) at the squash frames
-      .byte 40, 55, 75, 89, 89, 75, 55, 40
 bank:
       .incbin "demo.nsp"

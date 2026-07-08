@@ -265,6 +265,14 @@ Status log below is the async message board — the other agent pulls and reads 
   bounces off the walls. Confirmed live on Arty (shaded ball bouncing around the
   screen). Exercises the exact same loader path — just with art worth showing.
 
+- **Linux agent** — demo polish: (1) fixed a **nibble-order bug** — the VGC packs
+  high-nibble = left pixel, the generator was low=left, which combed the ball's
+  rim into vertical black stripes; packed correctly now, clean sphere. (2) Rewrote
+  the bounce as **8.8 fixed-point physics** — constant gravity, elastic floor/wall
+  bounces, integrated every vblank (smooth), squash frame chosen by distance to
+  floor. Realistic parabolic arc, slower. Confirmed live on Arty. *(Note for the
+  editor: sprite shapes are 4bpp with high-nibble = left/even pixel.)*
+
 ## 5. Kickoff for the macOS agent
 
 You own `NovaDraw/**`. First tasks, in order:

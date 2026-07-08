@@ -37,7 +37,8 @@ public class DemoBankGenerator
                 int px = qx * Cell + colByte * 2, py = qy * Cell + row;
                 int left = BallColor(px, py, cx, cy, rx, ry);
                 int right = BallColor(px + 1, py, cx, cy, rx, ry);
-                shape[row * (Cell / 2) + colByte] = (byte)((left & 0x0F) | ((right & 0x0F) << 4));
+                // VGC sprite format: high nibble = left (even) pixel, low = right.
+                shape[row * (Cell / 2) + colByte] = (byte)(((left & 0x0F) << 4) | (right & 0x0F));
             }
         return shape;
     }
@@ -48,9 +49,9 @@ public class DemoBankGenerator
         if (Environment.GetEnvironmentVariable("NSPR_DEMO_GEN") != "1")
         { Assert.Inconclusive("set NSPR_DEMO_GEN=1 to regenerate demo.nsp"); return; }
 
-        // (rx, ry) per frame: round in the air, squashed wide+short at the floor (3,4).
-        var frames = new (double rx, double ry)[]
-        { (13,13),(13,13),(13,13),(15,10),(15,10),(13,13),(13,13),(13,13) };
+        // (rx, ry) per frame, bottom-anchored: 0 round (air), 1 light squash,
+        // 2 full squash (impact). The demo picks by distance to the floor.
+        var frames = new (double rx, double ry)[] { (13, 13), (14, 12), (15, 10) };
 
         var bank = new NsprBank { Kind = NsprKind.HwMetasprite };
         var anim = new NsprAnimation { Name = "BOUNCE", Ticks = 3, Flags = NsprAnimFlags.Loop };
