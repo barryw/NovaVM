@@ -86,6 +86,7 @@ void nfio_devstatus(void);      /* FIO_CMD_DEVSTATUS: mounted slot probe        
  * reads the FIO mailbox + owns fio_ok()/fio_fail(). They require a mounted
  * .ndi disk and report FIO_ERR_NOTMOUNTED when no current disk is active. */
 void nfio_mkdir(void);          /* FIO_CMD_MKDIR 0x21: create a directory        */
+int  nfio_disk_read(const char *name, unsigned char *buf, int maxlen); /* named file from the mounted NDI -> bytes, or -1 */
 void nfio_rmdir(void);          /* FIO_CMD_RMDIR 0x22: remove an empty directory */
 void nfio_gsave(void);          /* FIO_CMD_GSAVE 0x06: VGC plane region -> .gfx   */
 void nfio_gload(void);          /* FIO_CMD_GLOAD 0x07: .gfx -> VGC plane region   */

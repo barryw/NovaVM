@@ -22,6 +22,7 @@
  */
 #include "naudio.h"
 #include "novavm.h"          /* wr/rd/poke + R_AUDIO/R_AUDIO_SPACE/R_AUDIO_EVT/R_SID_VOL */
+#include "nfio.h"            /* nfio_disk_read: a program's MIDI travels in its own NDI */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -509,6 +510,26 @@ void fio_volume(void) {
 void fio_midplay(void) {
     char name[80], path[160];
     if (audio_fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+
+    /* A program's MIDI travels inside its own NDI: read it from the mounted image
+     * first (the name resolves in the disk), staging it into /run so the existing
+     * path-based player can slurp it. Fall back to the host soundfonts dir for
+     * uploaded/standalone MIDIs. */
+    char fname[96];
+    if (strchr(name, '.')) snprintf(fname, sizeof fname, "%s", name);
+    else                   snprintf(fname, sizeof fname, "%s.mid", name);
+    static unsigned char midbuf[192 * 1024];
+    int n = nfio_disk_read(fname, midbuf, (int)sizeof midbuf);
+    if (n > 0) {
+        const char *base = fname;
+        for (const char *p = fname; *p; p++) if (*p == '/') base = p + 1;
+        char tmp[128];
+        snprintf(tmp, sizeof tmp, "/run/%s", base);
+        FILE *t = fopen(tmp, "wb");
+        if (t) { fwrite(midbuf, 1, (size_t)n, t); fclose(t); }
+        if (audio_play_midi(tmp) == 0) { fio_ok(); return; }
+    }
+
     audio_path(name, "mid", path, sizeof path);
     if (audio_play_midi(path) == 0) fio_ok(); else fio_fail(FIO_ERR_NOTFOUND);
 }

@@ -656,6 +656,20 @@ static int img_find(ndi_t *img, const char *name) {
     return idx;
 }
 
+/* Read a named file from the currently-mounted (boot-drive) NDI into buf. Returns
+ * the byte count, or -1 (no image / not found / too big). Lets a program's own
+ * disk image carry its assets (e.g. a MIDI) instead of a shared host directory. */
+int nfio_disk_read(const char *name, uint8_t *buf, int maxlen) {
+    ndi_t *img = boot_image();
+    if (!img) return -1;
+    int idx = img_find(img, name);
+    if (idx < 0) return -1;
+    ndi_entry_t e;
+    if (ndi_get(img, idx, &e) != 0) return -1;
+    if (e.size_bytes > (uint32_t)maxlen) return -1;
+    return ndi_read(img, idx, 0, buf, e.size_bytes);
+}
+
 /* ===========================================================================
  *  STAGING BUFFERS + FILE-HANDLE TABLE — port of main.c g_fbuf/g_fh[]/g_wbuf.
  * =========================================================================== */

@@ -31,7 +31,10 @@ NDI_LABEL   := NFORTH
 # + forth/autoexec.4th (and their includes) at boot, so the libs must travel with
 # the disk. The packer turns each path into a real .ndi subdirectory (forth/lib/...).
 # demos.4th is a top-level show-off file: INCLUDE "demos.4th" then TUNNEL / etc.
-NDI_FORTH_FILES := forth/autoexec.4th demos.4th $(shell find forth/lib -name '*.4th' 2>/dev/null)
-NDI_ASSETS      := $(foreach f,$(NDI_FORTH_FILES),--asset $(f):$(f))
-NDI_ASSET_DEPS  := $(NDI_FORTH_FILES)
+NDI_FORTH_FILES := forth/autoexec.4th demos.4th musicviz.4th $(shell find forth/lib -name '*.4th' 2>/dev/null)
+# Data a packed program needs travels in the same NDI (musicviz.4th plays this MIDI
+# via SND-MIDPLAY-FILE, which now reads it from the mounted image, not a host dir).
+NDI_DATA_FILES  := mountainking.mid
+NDI_ASSETS      := $(foreach f,$(NDI_FORTH_FILES),--asset $(f):$(f)) $(foreach f,$(NDI_DATA_FILES),--asset $(f):$(f))
+NDI_ASSET_DEPS  := $(NDI_FORTH_FILES) $(NDI_DATA_FILES)
 include ../../runtime/ndi/ndi.mk
