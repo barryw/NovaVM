@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.28.0 - 2026-07-08
+#### Features
+- (**ndk-audio**) WTS note API — async, voice-tracked wavetable notes - (da6628f) - Barry Walker
+
+- - -
+
 ## v0.27.0 - 2026-07-08
 #### Features
 - (**ndk-audio**) async voice safety + `_async` naming convention - (c7abd80) - Barry Walker
