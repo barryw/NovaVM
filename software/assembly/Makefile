@@ -117,6 +117,20 @@ spritebank-demo: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin
 $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(NOVA_LIB) $(SPRITEBANK_DEMO_DIR)/spritebank_demo.cfg
 	ld65 -C $(SPRITEBANK_DEMO_DIR)/spritebank_demo.cfg -o $@ $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(NOVA_LIB)
 
+# Bootable ball-bounce disk: the demo .bin becomes AUTOBOOT.BIN, which the
+# novavm boot-time probe LOADs + runs at cold start. Mount on fd0 + cold-start
+# (or boot with it) and the ball bounces with sound, no SYS needed.
+NOVA_BIN  := ../../e6502.Nova/bin/Release/net10.0/linux-x64/nova
+BALL_NDI  := ../../docs/programs/ball-bounce.ndi
+
+ball-bounce-ndi: spritebank-demo
+	cp $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin $(SPRITEBANK_DEMO_DIR)/AUTOBOOT.bin
+	rm -f $(BALL_NDI)
+	$(NOVA_BIN) create $(BALL_NDI) --size 800 --label BALLBNC
+	$(NOVA_BIN) import $(BALL_NDI) $(SPRITEBANK_DEMO_DIR)/AUTOBOOT.bin /
+	rm -f $(SPRITEBANK_DEMO_DIR)/AUTOBOOT.bin
+	@echo "built $(BALL_NDI) -- scp to /data/nova/disks/floppy, mount fd0, cold-start to autoboot"
+
 $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o: $(SPRITEBANK_DEMO_DIR)/spritebank_demo.s $(SPRITEBANK_DEMO_DIR)/demo.nsp $(NOVA_ASM)/nova.inc $(NOVA_ASM)/spritebank.inc $(NOVA_ASM)/msprite.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) --bin-include-dir $(SPRITEBANK_DEMO_DIR) $< -o $@
 
@@ -174,4 +188,4 @@ clean:
 	$(RM) $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editbuf_test.bin
 	$(RM) $(EDITBUF_DEMO_DIR)/editbuf_demo.o $(EDITBUF_DEMO_DIR)/editbuf_demo.bin
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo clean
+.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo spritebank-demo ball-bounce-ndi clean
