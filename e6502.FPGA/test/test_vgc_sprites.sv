@@ -541,6 +541,30 @@ module test_vgc_sprites;
         check_eq("sprite 5 active enabled after commit", int'(dut.spr_enable[5]), 1);
     endtask
 
+    // Enable via a DIRECT write to the sprite FLAGS register ($A040+idx*8+5),
+    // bit 7 = ENABLE. This is the path msprite uses and the emulator honors
+    // (VirtualGraphicsController.cs:916). It MUST match CMD_SPRENA or the same
+    // 6502 program renders on the emulator but not on hardware — the exact
+    // divergence that made sprites look "flaky." $A05D = sprite 3 flags.
+    task automatic test_sprena_via_flags_register();
+        $display("");
+        $display("Test: SPRENA via direct FLAGS register write (bit7) — msprite path");
+        spr_dis(3);
+        check_eq("sprite 3 pending enable clear before flags write", int'(dut.spr_next_enable[3]), 0);
+        bus_write(16'hA05D, 8'h80);                       // ENABLE bit only
+        check_eq("flags bit7=1 enables sprite 3 (parity with CMD_SPRENA + emulator)",
+                 int'(dut.spr_next_enable[3]), 1);
+        bus_write(16'hA05D, 8'h00);
+        check_eq("flags bit7=0 disables sprite 3", int'(dut.spr_next_enable[3]), 0);
+        bus_write(16'hA05D, 8'h83);                       // ENABLE + flip_h + flip_v
+        check_eq("flags 0x83 enables sprite 3",   int'(dut.spr_next_enable[3]), 1);
+        check_eq("flags bit0 sets flip_h",        int'(dut.spr_next_flip_h[3]), 1);
+        check_eq("flags bit1 sets flip_v",        int'(dut.spr_next_flip_v[3]), 1);
+        check_eq("neighbor sprite 2 enable untouched", int'(dut.spr_next_enable[2]), 0);
+        check_eq("neighbor sprite 4 enable untouched", int'(dut.spr_next_enable[4]), 0);
+        bus_write(16'hA05D, 8'h00);                       // leave clean
+    endtask
+
     task automatic test_sprflip();
         $display("");
         $display("Test: SPRFLIP sets h / v independently");
@@ -979,6 +1003,46 @@ module test_vgc_sprites;
         end
     endtask
 
+    // DUT-level end-to-end render via the EXACT msprite path: position, shape,
+    // priority AND enable all written as DIRECT sprite-register writes (not
+    // commands). This is what spritebank_demo/msprite emits. If this renders but
+    // test_dut_renders_enabled_sprite (command path) also does, the two enable
+    // paths are proven equivalent on hardware — no emulator/HW divergence.
+    task automatic test_dut_renders_sprite_via_flags();
+        int hits_off, hits_on;
+        logic [3:0] pix[16];
+
+        $display("");
+        $display("Test: DUT rasterizes a sprite enabled via DIRECT flags write (msprite path)");
+
+        for (int i = 0; i < 16; i++) spr_dis(i);
+        wait_sprite_frame_commit();
+
+        spr_clr(0);
+        for (int i = 0; i < 16; i++) pix[i] = 4'hF;   // solid color 15
+        for (int r = 0; r < 16; r++) spr_row(0, r, pix);
+        bus_write(16'hA040, 8'd100);    // sprite 0 X low   (field 0)
+        bus_write(16'hA041, 8'd0);      //          X high  (field 1)
+        bus_write(16'hA042, 8'd80);     //          Y       (field 2)
+        bus_write(16'hA044, 8'd0);      //          shape   (field 4)
+        bus_write(16'hA046, 8'd2);      //          pri=2   (field 6)
+        wait_sprite_frame_commit();
+        wait_shape_sync_done();
+
+        dut_count_spr_hits_one_frame(hits_off);          // FLAGS not yet written
+        check_eq("no flags-enable => no rasterized pixels", hits_off, 0);
+
+        bus_write(16'hA045, 8'h80);     // ENABLE via direct FLAGS write, bit 7
+        wait_sprite_frame_commit();
+        dut_count_spr_hits_one_frame(hits_on);
+        check("sprite enabled via direct FLAGS bit7 IS rasterized", hits_on > 0);
+
+        bus_write(16'hA045, 8'h00);     // disable via direct FLAGS write
+        wait_sprite_frame_commit();
+        dut_count_spr_hits_one_frame(hits_off);
+        check_eq("clearing FLAGS bit7 stops rasterization", hits_off, 0);
+    endtask
+
     // DUT-level end-to-end mouse RENDER: load slot 255, enable+position the mouse
     // via its registers, confirm the overlay produces mouse_cursor_hit.
     task automatic test_dut_renders_mouse_cursor();
@@ -1042,6 +1106,7 @@ module test_vgc_sprites;
         test_shape_write_immediately_visible();
         test_sprpos();
         test_sprena_dis();
+        test_sprena_via_flags_register();
         test_sprflip();
         test_sprpri();
         test_sprcopy();
@@ -1057,6 +1122,7 @@ module test_vgc_sprites;
         test_mouse_shape_write_port_interleaved();
         test_dut_publishes_mouse_slot_255();
         test_dut_renders_enabled_sprite();
+        test_dut_renders_sprite_via_flags();
         test_dut_renders_mouse_cursor();
         test_top_sprite_read_uses_canvas_x();
 

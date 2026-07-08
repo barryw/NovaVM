@@ -13,6 +13,32 @@ public class AvaloniaVgcTests
     [TestInitialize]
     public void Setup() => _vgc = new VirtualGraphicsController();
 
+    // -- Sprite enable: direct flags register must match the command ----------
+    // Hardware (vgc.sv:3033, test_sprena_via_flags_register) and this emulator
+    // must agree: writing the sprite FLAGS register with bit7 enables the
+    // sprite. That is the path msprite/spritebank emit. If the two diverge, the
+    // same 6502 program renders in the emulator but not on the board — which is
+    // exactly what made sprites look "flaky."
+    [TestMethod]
+    public void SpriteEnable_ViaDirectFlagsRegister_MatchesCommand()
+    {
+        const int spr = 3;
+        ushort flagsReg = (ushort)(VgcConstants.SpriteRegBase + spr * 8 + VgcConstants.SprRegFlags);
+
+        Assert.IsFalse(_vgc.GetSpriteState(spr).enabled, "sprite starts disabled");
+
+        _vgc.Write(flagsReg, VgcConstants.SprFlagEnable);              // bit7 = enable
+        Assert.IsTrue(_vgc.GetSpriteState(spr).enabled, "direct flags bit7 enables the sprite");
+
+        _vgc.Write(flagsReg, 0x00);
+        Assert.IsFalse(_vgc.GetSpriteState(spr).enabled, "clearing flags bit7 disables");
+
+        // Parity: the CMD_SPRENA command reaches the identical state.
+        _vgc.Write((ushort)VgcConstants.RegP0, spr);
+        _vgc.Write((ushort)VgcConstants.RegCmd, VgcConstants.CmdSprEna);
+        Assert.IsTrue(_vgc.GetSpriteState(spr).enabled, "CMD_SPRENA enables (parity with flags write)");
+    }
+
     // -- Initial state --------------------------------------------------------
 
     [TestMethod]

@@ -84,15 +84,6 @@ start:
 loop:
       JSR   wait_vsync
       JSR   msprite_commit       ; push the pose during vblank
-
-      LDX   #3                   ; re-assert hw-sprite ENABLE every frame -- on this
-@ena:                            ; board the enable is a command (CMD_SPRENA), and
-      STX   VGC_P0               ; msprite's per-frame direct register writes clear
-      LDA   #VCMD_SPRENA         ; it, so a one-time enable gets wiped on first commit
-      STA   VGC_CMD
-      DEX
-      BPL   @ena
-
       JSR   sid_update           ; advance the floor pitch drop
 
       ; --- vertical: gravity, integrate, elastic floor ---
