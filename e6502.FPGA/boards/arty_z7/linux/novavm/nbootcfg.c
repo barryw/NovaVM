@@ -43,6 +43,37 @@ static int write_boot_config(cJSON *doc) {
     return 1;
 }
 
+/* Integer preference under a named group object in boot.json (e.g.
+ * group="input" key="mouseGain", group="audio" key="masterVolume"). This is how
+ * the OSD/mouse persist tuning — one config file, not stray *.cfg siblings. */
+int bootcfg_int_get(const char *group, const char *key, int def) {
+    char *txt = read_boot_config_text();
+    if (!txt) return def;
+    cJSON *doc = cJSON_Parse(txt);
+    free(txt);
+    if (!doc) return def;
+    int val = def;
+    cJSON *g = cJSON_GetObjectItemCaseSensitive(doc, group);
+    cJSON *v = g ? cJSON_GetObjectItemCaseSensitive(g, key) : NULL;
+    if (cJSON_IsNumber(v)) val = (int)v->valuedouble;
+    cJSON_Delete(doc);
+    return val;
+}
+
+void bootcfg_int_set(const char *group, const char *key, int value) {
+    char *txt = read_boot_config_text();
+    cJSON *doc = txt ? cJSON_Parse(txt) : NULL;
+    free(txt);
+    if (!doc) doc = cJSON_CreateObject();
+    cJSON *g = cJSON_GetObjectItemCaseSensitive(doc, group);
+    if (!g) { g = cJSON_CreateObject(); cJSON_AddItemToObject(doc, group, g); }
+    cJSON *v = cJSON_GetObjectItemCaseSensitive(g, key);
+    if (v) cJSON_SetNumberValue(v, value);
+    else cJSON_AddNumberToObject(g, key, value);
+    write_boot_config(doc);
+    cJSON_Delete(doc);
+}
+
 int bootcfg_mount_get(const char *prefix, char *out, size_t out_len) {
     if (!prefix || !out || out_len == 0) return 0;
     out[0] = 0;

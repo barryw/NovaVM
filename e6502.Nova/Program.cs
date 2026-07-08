@@ -431,6 +431,11 @@ static int DoArtyDeployBootImage(string repo, List<string> args, string? host)
         rc = WriteAndVerifyRemoteRootfs(host, rootfsExt4, "/data/nova/rootfs.ext4.new", "/dev/mmcblk0p2", "/data/nova/busybox.deploy");
         if (rc != 0) return rc;
 
+        // Free the 226MB staging image before the force-reboot: /data persists across
+        // the reboot, and if WaitForRemoteBoot below times out the post-reboot rm
+        // never runs — which is how rootfs.ext4.new/busybox.deploy get orphaned.
+        _ = RunSsh(host, "/data/nova/busybox.deploy rm -f /data/nova/rootfs.ext4.new");
+
         _ = RunSsh(host, "/data/nova/busybox.deploy reboot -f");
     }
 

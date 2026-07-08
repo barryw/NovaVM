@@ -13,6 +13,7 @@
 #include <sys/ioctl.h>
 #include <linux/input.h>
 #include "novavm.h"
+#include "nbootcfg.h"
 
 #define VGC_MOUSE_XL     0xA0D0u
 #define VGC_MOUSE_XH     0xA0D1u
@@ -102,7 +103,7 @@ static int mouse_gain  = 96;      /* base sensitivity: 1/256 px per count (256 =
 static int mouse_accel = 0;       /* acceleration strength 0..8 (0 = off). Fast flicks
                                      travel farther, gently and capped. */
 
-#define MOUSE_PREFS_FILE "/data/nova/mouse.cfg"   /* persisted "gain accel" */
+/* Persisted mouse tuning lives in the one config file (boot.json input.*). */
 
 /* Live channel: the OSD writes /run/mouse_{gain,accel}; nmouse re-reads each poll. */
 static int read_int_file(const char *path, int lo, int hi, int cur) {
@@ -120,15 +121,10 @@ static void refresh_prefs(void) {
 
 /* At boot, load the persisted prefs and seed the live /run files. */
 static void load_mouse_prefs(void) {
-    FILE *f = fopen(MOUSE_PREFS_FILE, "r");
-    if (f) {
-        int g, a;
-        if (fscanf(f, "%d %d", &g, &a) == 2) {
-            if (g >= 8 && g <= 1024) mouse_gain = g;
-            if (a >= 0 && a <= 8)    mouse_accel = a;
-        }
-        fclose(f);
-    }
+    mouse_gain  = bootcfg_int_get("input", "mouseGain",  mouse_gain);
+    mouse_accel = bootcfg_int_get("input", "mouseAccel", mouse_accel);
+    if (mouse_gain  < 8 || mouse_gain  > 1024) mouse_gain  = 96;
+    if (mouse_accel < 0 || mouse_accel > 8)    mouse_accel = 0;
     FILE *rg = fopen("/run/mouse_gain",  "w"); if (rg) { fprintf(rg, "%d\n", mouse_gain);  fclose(rg); }
     FILE *ra = fopen("/run/mouse_accel", "w"); if (ra) { fprintf(ra, "%d\n", mouse_accel); fclose(ra); }
 }

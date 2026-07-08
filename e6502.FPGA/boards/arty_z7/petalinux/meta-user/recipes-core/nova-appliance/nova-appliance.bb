@@ -30,13 +30,15 @@ do_install() {
     # --- nova-fs essentials, staged as a READ-ONLY TEMPLATE on the rootfs
     # (${datadir}/nova-fs). nova-firstboot copies it onto the writable /data
     # partition on first boot (the rootfs is read-only, so it can't be /data). ---
+    # Only NDI images live under disks/ (organized into subdirs); config is the
+    # single boot.json; no stray programs/ dir (guest SAVE auto-creates paths).
     NFS=${D}${datadir}/nova-fs
-    install -d ${NFS}/roms ${NFS}/config ${NFS}/assets/boot ${NFS}/disks ${NFS}/programs ${NFS}/soundfonts
+    install -d ${NFS}/roms ${NFS}/config ${NFS}/assets/boot ${NFS}/disks/languages ${NFS}/soundfonts
     install -m 0644 ${NOVAVM_REPO}/e6502.FPGA/boards/arty_z7/rom/ehbasic.bin        ${NFS}/roms/ehbasic.bin
     install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/config/boot.json     ${NFS}/config/boot.json
     install -m 0644 ${NOVAVM_REPO}/e6502.ESP32/novahost/assets/boot/novavm_logo.nvg ${NFS}/assets/boot/novavm_logo.nvg
-    install -m 0644 ${NOVAVM_REPO}/software/languages/novaforth/novaforth.ndi        ${NFS}/disks/novaforth.ndi
-    install -m 0644 ${NOVAVM_REPO}/software/languages/novalogo/novalogo.ndi          ${NFS}/disks/novalogo.ndi
+    install -m 0644 ${NOVAVM_REPO}/software/languages/novaforth/novaforth.ndi        ${NFS}/disks/languages/novaforth.ndi
+    install -m 0644 ${NOVAVM_REPO}/software/languages/novalogo/novalogo.ndi          ${NFS}/disks/languages/novalogo.ndi
 
     # /data is just a mountpoint for the separate writable ext4 partition
     # (nova-sd.wks). Its fstab entry is added by the base-files bbappend, so it

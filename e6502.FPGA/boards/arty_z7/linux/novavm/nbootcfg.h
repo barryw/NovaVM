@@ -30,6 +30,11 @@ typedef struct {
 int  bootcfg_mount_get(const char *prefix, char *out, size_t out_len); /* 1 if a non-empty path */
 int  bootcfg_mount_set(const char *prefix, const char *sd_path);       /* "" unmounts; 1 on success */
 
+/* Integer prefs under a group object (input.mouseGain, audio.masterVolume, ...):
+ * the ONE config file holds device tuning too, replacing stray *.cfg files. */
+int  bootcfg_int_get(const char *group, const char *key, int def);
+void bootcfg_int_set(const char *group, const char *key, int value);
+
 /* vm.bootSplash with ULX3S defaults overlaid by boot.json (initBootSplashConfigDefaults). */
 void bootcfg_splash(BootSplashConfig *out);
 

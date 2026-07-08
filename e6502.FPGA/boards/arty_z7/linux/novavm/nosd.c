@@ -313,31 +313,26 @@ static int mnext(const int *a, int n, int cur) {
     for (int i = 0; i < n; i++) if (a[i] == cur) return a[(i + 1) % n];
     return a[0];
 }
+/* All persisted OSD tuning lives in the one config file (boot.json). */
 static void mouse_prefs_load(void) {
-    FILE *f = fopen("/data/nova/mouse.cfg", "r");
-    if (!f) return;
-    int g, a;
-    if (fscanf(f, "%d %d", &g, &a) == 2) { g_mgain = g; g_maccel = a; }
-    fclose(f);
+    g_mgain  = bootcfg_int_get("input", "mouseGain",  g_mgain);
+    g_maccel = bootcfg_int_get("input", "mouseAccel", g_maccel);
 }
 static void mouse_prefs_save(void) {
-    FILE *f;
+    FILE *f;   /* /run/* is the live channel nmouse re-reads each poll */
     if ((f = fopen("/run/mouse_gain",  "w"))) { fprintf(f, "%d\n", g_mgain);  fclose(f); }
     if ((f = fopen("/run/mouse_accel", "w"))) { fprintf(f, "%d\n", g_maccel); fclose(f); }
-    if ((f = fopen("/data/nova/mouse.cfg", "w"))) { fprintf(f, "%d %d\n", g_mgain, g_maccel); fclose(f); }
+    bootcfg_int_set("input", "mouseGain",  g_mgain);
+    bootcfg_int_set("input", "mouseAccel", g_maccel);
 }
 static void vol_prefs_load(void) {
-    FILE *f = fopen("/data/nova/volume.cfg", "r");
-    if (!f) return;
-    int v;
-    if (fscanf(f, "%d", &v) == 1 && v >= 0 && v <= 100) g_master_vol = v;
-    fclose(f);
+    int v = bootcfg_int_get("audio", "masterVolume", g_master_vol);
+    if (v >= 0 && v <= 100) g_master_vol = v;
 }
 /* 0..100 slider -> audio_set_master 0..200% (100 = the loudest, silent at 0). */
 static void vol_prefs_apply(void) { audio_set_master(g_master_vol * 2); }
 static void vol_prefs_save(void) {
-    FILE *f;
-    if ((f = fopen("/data/nova/volume.cfg", "w"))) { fprintf(f, "%d\n", g_master_vol); fclose(f); }
+    bootcfg_int_set("audio", "masterVolume", g_master_vol);
     vol_prefs_apply();
 }
 static void build_mouse(void)
