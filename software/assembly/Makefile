@@ -70,6 +70,15 @@ $(DEMO_DIR)/demo.bin: $(DEMO_DIR)/demo.o $(DEMO_DIR)/demo.cfg
 $(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
 
+MUSIC_DIR := apps/music
+music: $(MUSIC_DIR)/music.bin
+
+$(MUSIC_DIR)/music.bin: $(MUSIC_DIR)/music.o $(MUSIC_DIR)/music.cfg $(NOVA_LIB)
+	ld65 -C $(MUSIC_DIR)/music.cfg -o $@ $(MUSIC_DIR)/music.o $(NOVA_LIB)
+
+$(MUSIC_DIR)/music.o: $(MUSIC_DIR)/music.s $(MUSIC_DIR)/music_notes.inc $(NOVA_ASM)/novavm.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
+
 install-demo: demo
 	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2
 	@false
