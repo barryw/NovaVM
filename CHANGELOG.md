@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.25.0 - 2026-07-08
+#### Features
+- (**cli**) `nova new` — scaffold a native 6502 project (build .bin + bootable NDI) - (c5bffcb) - Barry Walker
+#### Miscellaneous
+- gitignore screenshots/ (debug capture artifacts) - (2be1e8f) - Barry Walker
+
+- - -
+
 ## v0.24.0 - 2026-07-08
 #### Features
 - (**audio**) auto-load a default soundfont; configurable in boot.json - (253a460) - Barry Walker
