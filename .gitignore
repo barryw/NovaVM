@@ -402,3 +402,6 @@ novaforth/*.o
 novaforth/AUTOBOOT.bin
 novalogo/*.o
 novalogo/AUTOBOOT.bin
+
+# Hardware/debug screenshots — throwaway capture artifacts
+screenshots/
