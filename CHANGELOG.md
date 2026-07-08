@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.16.1 - 2026-07-08
+#### Bug Fixes
+- (**demo**) correct sprite nibble order + fixed-point bounce physics - (e190a52) - Barry Walker
+
+- - -
+
 ## v0.16.0 - 2026-07-07
 #### Features
 - (**demo**) shaded bouncing ball art — a spritebank_demo worth showing - (a65f04d) - Barry Walker
