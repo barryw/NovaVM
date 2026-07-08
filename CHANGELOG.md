@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.19.2 - 2026-07-08
+#### Tests
+- (**vgc**) lock sprite direct-flags-enable parity (HW + emulator); drop demo hack - (2f0bb64) - Barry Walker
+
+- - -
+
 ## v0.19.1 - 2026-07-08
 #### Bug Fixes
 - (**demo**) enable hw sprites via CMD_SPRENA (board needs the command) + vblank commit - (663f671) - Barry Walker
