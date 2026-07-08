@@ -697,7 +697,7 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
         if (rc != 0) return rc;
     }
 
-    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy /data/nova/disks/languages /data/nova/disks/infocom && rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi");
+    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy /data/nova/disks/languages /data/nova/disks/demos /data/nova/disks/games/infocom && rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi");
     if (rc != 0) return rc;
 
     rc = RunScp(host, Path.Combine(hostDir, "novavm"), "/run/novavm.new");
@@ -715,10 +715,13 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/languages/novaforth.ndi");
     if (rc != 0) return rc;
 
-    // Bootable ball-bounce demo floppy at the disks root so it shows directly in
-    // the OSD "Select Floppy" list (no subdir to browse); selecting it mount-boots
-    // the disk, whose AUTOBOOT.BIN runs the demo.
-    rc = RunScp(host, Path.Combine(repo, "docs", "programs", "ball-bounce.ndi"), "/data/nova/disks/ball-bounce.ndi");
+    // Ball-bounce demo in demos/, chess in games/ — both appear in the OSD disk
+    // browser. Selecting ball-bounce mount-boots the disk, whose AUTOBOOT.BIN runs
+    // the demo.
+    rc = RunScp(host, Path.Combine(repo, "docs", "programs", "ball-bounce.ndi"), "/data/nova/disks/demos/ball-bounce.ndi");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(repo, "e6502.Browser", "wwwroot", "showcase", "novachess.ndi"), "/data/nova/disks/games/novachess.ndi");
     if (rc != 0) return rc;
 
     if (editorDemo)
@@ -870,6 +873,7 @@ static int DoArtyUploadInfocom(string repo, List<string> args, string? host)
         return 1;
     }
 
+    RunSsh(host, "mkdir -p /data/nova/disks/games/infocom");
     string novazDir = Path.Combine(repo, "software", "examples", "novaz");
     foreach ((string project, string storyVar, string? picturesVar) in InfocomProjects())
     {
@@ -887,7 +891,7 @@ static int DoArtyUploadInfocom(string repo, List<string> args, string? host)
         if (rc != 0) return rc;
 
         string image = Path.Combine(novazDir, "dist", project, "fd0.ndi");
-        string remote = $"disks/infocom/{project}.ndi";
+        string remote = $"disks/games/infocom/{project}.ndi";
         rc = PutFile(image, remote, host);
         if (rc != 0) return rc;
     }
