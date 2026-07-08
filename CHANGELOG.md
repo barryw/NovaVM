@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.20.0 - 2026-07-08
+#### Features
+- (**demo**) bootable ball-bounce NDI (autoboot) + reproducible make target - (3f22570) - Barry Walker
+
+- - -
+
 ## v0.19.2 - 2026-07-08
 #### Tests
 - (**vgc**) lock sprite direct-flags-enable parity (HW + emulator); drop demo hack - (2f0bb64) - Barry Walker
