@@ -30,6 +30,7 @@ if (verb is "help" or "--help" or "-h")
 
 return verb switch
 {
+    "new"        => DoNew(args[1..]),
     "create"     => DoCreate(args[1..]),
     "dir"        => DoDir(args[1..]),
     "info"       => DoInfo(args[1..]),
@@ -133,6 +134,78 @@ static int UnknownArtyCommand(string command)
     PrintArtyUsage();
     return 1;
 }
+
+// ===========================================================================
+// nova new <name> — scaffold a self-contained native 6502 project. Vendors the
+// Nova SDK (all runtime includes + the prebuilt nova.lib) and writes a Makefile
+// whose targets build a .bin (cc65) and pack a bootable .ndi (nova create/import).
+// ===========================================================================
+
+static int DoNew(string[] args)
+{
+    var rest = args.ToList();
+    string repo = ResolveRepoRoot(rest);
+    string? parentOpt = TakeOptionValue(rest, "--dir");
+    string? name = rest.FirstOrDefault(a => !a.StartsWith("-", StringComparison.Ordinal));
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        Console.Error.WriteLine("Usage: nova new <project-name> [--dir <parent>] [--repo <nova-repo>]");
+        return 1;
+    }
+    if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9_-]*$"))
+    {
+        Console.Error.WriteLine($"invalid project name '{name}' — use a letter followed by letters, digits, - or _");
+        return 1;
+    }
+
+    string projDir = Path.GetFullPath(Path.Combine(parentOpt ?? Directory.GetCurrentDirectory(), name));
+    if (Directory.Exists(projDir))
+    {
+        Console.Error.WriteLine($"'{projDir}' already exists");
+        return 1;
+    }
+    string asmDir = Path.Combine(repo, "software", "runtime", "asm");
+    if (!Directory.Exists(asmDir))
+    {
+        Console.Error.WriteLine($"cannot find the Nova SDK at {asmDir} — run from the NovaVM repo or pass --repo <path>");
+        return 1;
+    }
+
+    string sdkDir = Path.Combine(projDir, "sdk");
+    string srcDir = Path.Combine(projDir, "src");
+    Directory.CreateDirectory(sdkDir);
+    Directory.CreateDirectory(srcDir);
+
+    int incs = 0;
+    foreach (string f in Directory.EnumerateFiles(asmDir, "*.inc"))
+    {
+        File.Copy(f, Path.Combine(sdkDir, Path.GetFileName(f)), overwrite: true);
+        incs++;
+    }
+    string libSrc = Path.Combine(asmDir, "build", "nova.lib");
+    bool haveLib = File.Exists(libSrc);
+    if (haveLib) File.Copy(libSrc, Path.Combine(sdkDir, "nova.lib"), overwrite: true);
+
+    string label = new string(name.ToUpperInvariant().Where(char.IsLetterOrDigit).ToArray());
+    if (label.Length == 0) label = "NOVA";
+    if (label.Length > 8) label = label[..8];
+
+    string Sub(string t) => t.Replace("@@NAME@@", name).Replace("@@LABEL@@", label).Replace("@TAB@", "\t");
+
+    File.WriteAllText(Path.Combine(srcDir, "main.s"), Sub(Scaffold.MainS));
+    File.WriteAllText(Path.Combine(projDir, "link.cfg"), Sub(Scaffold.LinkCfg));
+    File.WriteAllText(Path.Combine(projDir, "Makefile"), Sub(Scaffold.Makefile));
+    File.WriteAllText(Path.Combine(projDir, "README.md"), Sub(Scaffold.Readme));
+    File.WriteAllText(Path.Combine(projDir, ".gitignore"), "build/\n*.ndi\n");
+
+    Console.WriteLine($"Created {name}/  ({incs} SDK includes" + (haveLib ? " + nova.lib)" : ", nova.lib NOT built — run 'make -C software/runtime/asm' first)"));
+    Console.WriteLine("Next steps (needs cc65 + the `nova` CLI on PATH):");
+    Console.WriteLine($"  cd {name}");
+    Console.WriteLine( "  make ndi                       # build + pack a bootable disk image");
+    Console.WriteLine( "  make deploy REMOTE=<device-ip> # copy to a Nova, mount, and boot it");
+    return 0;
+}
+
 
 static string ResolveRepoRoot(List<string> args)
 {
@@ -7012,6 +7085,10 @@ static int UnknownVerb(string verb)
 static void PrintUsage()
 {
     Console.Error.WriteLine("Nova CLI / NDI image and device management tool");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("Native development:");
+    Console.Error.WriteLine("  new        <name> [--dir <parent>] [--repo <nova-repo>]   scaffold a 6502 project");
+    Console.Error.WriteLine("             (self-contained: SDK includes + nova.lib + Makefile -> bootable .ndi)");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Local NDI image commands:");
     Console.Error.WriteLine("  create     <file.ndi> [--size <KB>|--hd] [--label <name>]");
