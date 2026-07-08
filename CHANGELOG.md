@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.18.0 - 2026-07-08
+#### Features
+- (**arty/audio**) OSD master volume at the SID+WTS mix point - (37fe619) - Barry Walker
+- (**demo**) louder layered SID bounce — floor thock + wall tick - (1eb5b79) - Barry Walker
+
+- - -
+
 ## v0.17.0 - 2026-07-08
 #### Features
 - (**demo**) SID bounce blip on floor contact - (c9688d1) - Barry Walker
