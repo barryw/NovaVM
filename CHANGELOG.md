@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.22.0 - 2026-07-08
+#### Features
+- (**deploy**) organize host disks — demos/ and games/ (infocom + chess) - (ea7535a) - Barry Walker
+
+- - -
+
 ## v0.21.0 - 2026-07-08
 #### Features
 - (**deploy**) ship ball-bounce.ndi at the disks root for OSD Select Floppy - (37cb5b7) - Barry Walker
