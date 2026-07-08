@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.23.0 - 2026-07-08
+#### Features
+- (**fio**) MIDPLAY reads the MIDI from the mounted NDI, not a host dir - (5576193) - Barry Walker
+
+- - -
+
 ## v0.22.0 - 2026-07-08
 #### Features
 - (**deploy**) organize host disks — demos/ and games/ (infocom + chess) - (ea7535a) - Barry Walker
