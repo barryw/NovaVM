@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.17.0 - 2026-07-08
+#### Features
+- (**demo**) SID bounce blip on floor contact - (c9688d1) - Barry Walker
+#### Bug Fixes
+- (**demo**) perpetual bounce — constant relaunch velocity - (fe1a51f) - Barry Walker
+
+- - -
+
 ## v0.16.1 - 2026-07-08
 #### Bug Fixes
 - (**demo**) correct sprite nibble order + fixed-point bounce physics - (e190a52) - Barry Walker
