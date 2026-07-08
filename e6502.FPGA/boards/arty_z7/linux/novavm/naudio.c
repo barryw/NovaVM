@@ -184,6 +184,19 @@ void audio_set_gain(float g) {
     printf("[audio] gain = %d%%\n", (int)(g * 100.0f));
 }
 
+/* Master output level at the SID+WTS -> HDMI mix point: scales the PL SID mix
+ * (R_SID_VOL) and the WTS software gain together. pct 0..200, 100% = shipping
+ * defaults (SID x4, WTS gain 2.5). Independent of the 6502's $D418/CC7. */
+void audio_set_master(int pct) {
+    if (pct < 0)   pct = 0;
+    if (pct > 200) pct = 200;
+    unsigned sid = (unsigned)pct * 128u / 100u;     /* 100% -> 128 (x4) */
+    if (sid > 255u) sid = 255u;
+    audio_set_sid_vol(sid);
+    audio_set_gain((float)pct * 2.5f / 100.0f);     /* 100% -> 2.5 */
+    printf("[audio] master = %d%%\n", pct);
+}
+
 /* Master gain + soft peak limiter (fast attack / slow release) on the float mix,
  * then convert to int16. */
 static void render_limit(const float *in, short *out, int frames) {

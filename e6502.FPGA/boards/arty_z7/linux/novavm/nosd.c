@@ -50,7 +50,9 @@ static int slot_is_floppy(int s) { return s < 2; }      /* fd0,fd1 floppy; hd0,h
 typedef enum { SC_NONE, SC_CONFIG, SC_SLOTS, SC_SLOTMENU, SC_DISKLIST, SC_AFTER_UNMOUNT, SC_MOUSE } osd_screen;
 
 enum { IT_GOTO_SLOTS, IT_GOTO_SLOTMENU, IT_GOTO_DISKLIST, IT_GOTO_DISKDIR, IT_UNMOUNT, IT_MOUNT, IT_CANCEL, IT_CLOSE, IT_REBOOT_BASIC,
-       IT_GOTO_MOUSE, IT_MOUSE_SPEED, IT_MOUSE_ACCEL };
+       IT_GOTO_MOUSE, IT_MOUSE_SPEED, IT_MOUSE_ACCEL, IT_VOLUME };
+
+extern void audio_set_master(int pct);   /* naudio.c: SID+WTS mix-point level */
 
 typedef struct { char label[48]; int kind; int arg; } osd_item;
 
@@ -302,6 +304,8 @@ static int g_mgain  = 96;
 static int g_maccel = 0;
 static const int MGAIN_PRESETS[]  = {48, 64, 96, 128, 192, 256};
 static const int MACCEL_PRESETS[] = {0, 1, 2, 4, 6, 8};
+static int g_master_vol = 130;   /* % at the SID+WTS mix point */
+static const int VOL_PRESETS[] = {50, 75, 100, 130, 160, 200};
 #define MNPRE(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 static int mnext(const int *a, int n, int cur) {
@@ -321,6 +325,19 @@ static void mouse_prefs_save(void) {
     if ((f = fopen("/run/mouse_accel", "w"))) { fprintf(f, "%d\n", g_maccel); fclose(f); }
     if ((f = fopen("/data/nova/mouse.cfg", "w"))) { fprintf(f, "%d %d\n", g_mgain, g_maccel); fclose(f); }
 }
+static void vol_prefs_load(void) {
+    FILE *f = fopen("/data/nova/volume.cfg", "r");
+    if (!f) return;
+    int v;
+    if (fscanf(f, "%d", &v) == 1) g_master_vol = v;
+    fclose(f);
+}
+static void vol_prefs_apply(void) { audio_set_master(g_master_vol); }
+static void vol_prefs_save(void) {
+    FILE *f;
+    if ((f = fopen("/data/nova/volume.cfg", "w"))) { fprintf(f, "%d\n", g_master_vol); fclose(f); }
+    vol_prefs_apply();
+}
 static void build_mouse(void)
 {
     g_nitem = 0;
@@ -338,8 +355,11 @@ static void build_mouse(void)
 static void build_config(void)
 {
     g_nitem = 0;
+    char vb[48];
     add_item("Mounts", IT_GOTO_SLOTS, 0);
     add_item("Mouse",  IT_GOTO_MOUSE, 0);
+    snprintf(vb, sizeof vb, "Volume:  %d%%", g_master_vol);
+    add_item(vb, IT_VOLUME, 0);
     add_item("Close",  IT_CLOSE,      0);
 }
 
@@ -513,6 +533,8 @@ static void select_item(void)
                                mouse_prefs_save(); rebuild();  break;
         case IT_MOUSE_ACCEL:   g_maccel = mnext(MACCEL_PRESETS, MNPRE(MACCEL_PRESETS), g_maccel);
                                mouse_prefs_save(); rebuild();  break;
+        case IT_VOLUME:        g_master_vol = mnext(VOL_PRESETS, MNPRE(VOL_PRESETS), g_master_vol);
+                               vol_prefs_save(); rebuild();    break;
     }
 }
 
@@ -559,6 +581,8 @@ void osd_init(void)
     }
     g_osd_hw = 1;
     mouse_prefs_load();   /* reflect persisted Speed/Accel in the menu labels */
+    vol_prefs_load();     /* reflect + apply persisted master volume */
+    vol_prefs_apply();
     pthread_t t;
     if (pthread_create(&t, NULL, osd_btn_thread, NULL) == 0) pthread_detach(t);
     printf("[osd] config menu ready (4 buttons live)\n");

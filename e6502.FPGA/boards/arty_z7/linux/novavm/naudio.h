@@ -34,6 +34,7 @@ void fio_sfload(void);    /* FIO_CMD_SFLOAD  (0x15): load /data/nova/soundfonts/
 void audio_stop(void);
 int  audio_is_playing(void);
 void audio_set_gain(float g);                          /* linear master gain, 1.0 = unity */
+void audio_set_master(int pct);                        /* master mix level 0..200% (SID+WTS) */
 void audio_set_mix(float sid1, float sid2, float wts); /* per-source linear volumes        */
 void audio_test_tone(int on);                          /* 440 Hz sine into the FIFO         */
 int  audio_load_soundfont(const char *path);           /* load .sf2.  0 ok, <0 err          */
