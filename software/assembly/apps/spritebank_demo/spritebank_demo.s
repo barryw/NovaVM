@@ -39,6 +39,7 @@ start:
 
       JSR   init_display
       JSR   msprite_init
+      JSR   sid_init
 
       LDA   #<bank               ; parse the embedded bank
       STA   spritebank_src
@@ -102,6 +103,7 @@ loop:
       STZ   yvel                 ; yvel = -4.0 (8.8) upward
       LDA   #$FC
       STA   yvel+1
+      JSR   sid_bounce           ; blip on floor contact
 @yok:
 
       ; --- horizontal: integrate, bounce off the walls ---
@@ -174,6 +176,25 @@ neg_xvel:
       LDA   #0
       SBC   xvel+1
       STA   xvel+1
+      RTS
+
+sid_init:
+      LDA   #$0F
+      STA   $D418                ; master volume
+      LDA   #$08
+      STA   $D405                ; voice 1: attack 0, decay 8
+      STZ   $D406                ; sustain 0, release 0 (percussive)
+      STZ   $D400
+      LDA   #$10
+      STA   $D401                ; freq ~240 Hz "bonk"
+      RTS
+
+; retrigger the voice-1 envelope -> a short bounce blip
+sid_bounce:
+      LDA   #$10
+      STA   $D404                ; triangle, gate off
+      LDA   #$11
+      STA   $D404                ; triangle, gate on
       RTS
 
 init_display:
