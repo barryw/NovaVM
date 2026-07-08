@@ -146,10 +146,22 @@ static int DoNew(string[] args)
     var rest = args.ToList();
     string repo = ResolveRepoRoot(rest);
     string? parentOpt = TakeOptionValue(rest, "--dir");
+    string template = (TakeOptionValue(rest, "--template") ?? "basic").ToLowerInvariant();
+    string mainTemplate = template switch
+    {
+        "basic"  => Scaffold.MainS,
+        "sprite" => Scaffold.SpriteMainS,
+        _ => "",
+    };
+    if (mainTemplate.Length == 0)
+    {
+        Console.Error.WriteLine($"unknown --template '{template}' — choose: basic, sprite");
+        return 1;
+    }
     string? name = rest.FirstOrDefault(a => !a.StartsWith("-", StringComparison.Ordinal));
     if (string.IsNullOrWhiteSpace(name))
     {
-        Console.Error.WriteLine("Usage: nova new <project-name> [--dir <parent>] [--repo <nova-repo>]");
+        Console.Error.WriteLine("Usage: nova new <project-name> [--template basic|sprite] [--dir <parent>] [--repo <nova-repo>]");
         return 1;
     }
     if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9_-]*$"))
@@ -192,7 +204,7 @@ static int DoNew(string[] args)
 
     string Sub(string t) => t.Replace("@@NAME@@", name).Replace("@@LABEL@@", label).Replace("@TAB@", "\t");
 
-    File.WriteAllText(Path.Combine(srcDir, "main.s"), Sub(Scaffold.MainS));
+    File.WriteAllText(Path.Combine(srcDir, "main.s"), Sub(mainTemplate));
     File.WriteAllText(Path.Combine(projDir, "link.cfg"), Sub(Scaffold.LinkCfg));
     File.WriteAllText(Path.Combine(projDir, "Makefile"), Sub(Scaffold.Makefile));
     File.WriteAllText(Path.Combine(projDir, "README.md"), Sub(Scaffold.Readme));
@@ -7087,8 +7099,9 @@ static void PrintUsage()
     Console.Error.WriteLine("Nova CLI / NDI image and device management tool");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Native development:");
-    Console.Error.WriteLine("  new        <name> [--dir <parent>] [--repo <nova-repo>]   scaffold a 6502 project");
-    Console.Error.WriteLine("             (self-contained: SDK includes + nova.lib + Makefile -> bootable .ndi)");
+    Console.Error.WriteLine("  new        <name> [--template basic|sprite] [--dir <parent>]   scaffold a 6502 project");
+    Console.Error.WriteLine("             (self-contained: SDK includes + nova.lib + Makefile -> bootable .ndi;");
+    Console.Error.WriteLine("              --template sprite = a bouncing ball with async bounce sounds)");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Local NDI image commands:");
     Console.Error.WriteLine("  create     <file.ndi> [--size <KB>|--hd] [--label <name>]");
