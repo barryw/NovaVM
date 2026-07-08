@@ -715,6 +715,12 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/languages/novaforth.ndi");
     if (rc != 0) return rc;
 
+    // Bootable ball-bounce demo floppy at the disks root so it shows directly in
+    // the OSD "Select Floppy" list (no subdir to browse); selecting it mount-boots
+    // the disk, whose AUTOBOOT.BIN runs the demo.
+    rc = RunScp(host, Path.Combine(repo, "docs", "programs", "ball-bounce.ndi"), "/data/nova/disks/ball-bounce.ndi");
+    if (rc != 0) return rc;
+
     if (editorDemo)
     {
         rc = RunScp(host, editorDemoImage!.Path, "/data/nova/disks/floppy/editor-demo.ndi");
