@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.27.0 - 2026-07-08
+#### Features
+- (**ndk-audio**) async voice safety + `_async` naming convention - (c7abd80) - Barry Walker
+
+- - -
+
 ## v0.26.0 - 2026-07-08
 #### Features
 - (**cli**) `nova new --template sprite` — bouncing-ball starter (async NDK audio) - (2622269) - Barry Walker
