@@ -73,11 +73,15 @@ $(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
 MUSIC_DIR := apps/music
 music: $(MUSIC_DIR)/music.bin
 
-$(MUSIC_DIR)/music.bin: $(MUSIC_DIR)/music.o $(MUSIC_DIR)/music.cfg $(NOVA_LIB)
-	ld65 -C $(MUSIC_DIR)/music.cfg -o $@ $(MUSIC_DIR)/music.o $(NOVA_LIB)
+$(MUSIC_DIR)/music.bin: $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(VGC_KEYBOARD_OBJS) $(MUSIC_DIR)/music.cfg $(NOVA_LIB)
+	ld65 -C $(MUSIC_DIR)/music.cfg -o $@ $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(VGC_KEYBOARD_OBJS) $(NOVA_LIB)
 
-$(MUSIC_DIR)/music.o: $(MUSIC_DIR)/music.s $(MUSIC_DIR)/music_notes.inc $(NOVA_ASM)/novavm.inc
+$(MUSIC_DIR)/music.o: $(MUSIC_DIR)/music.s $(MUSIC_DIR)/music_notes.inc $(MUSIC_DIR)/music_tracks.inc $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
+
+# keyboard visualizer as a linkable library (no HEADER/main; kbdviz_run only)
+$(MUSIC_DIR)/keyboard_lib.o: $(KEYBOARD_DIR)/keyboard.s $(NOVA_ASM)/novavm.inc $(NOVA_ASM)/audio.inc
+	ca65 --cpu w65c02 -DKBD_LIB -I $(NOVA_ASM) $(KEYBOARD_DIR)/keyboard.s -o $@
 
 install-demo: demo
 	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2

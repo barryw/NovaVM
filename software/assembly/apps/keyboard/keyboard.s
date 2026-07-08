@@ -150,20 +150,27 @@ test_color_index:  .res 1
 .endif
 
 ; ---------------------------------------------------------------------------
-; Header -- 2-byte load address
-; ---------------------------------------------------------------------------
-.segment "HEADER"
-    .byte $00, $90
-
-; ---------------------------------------------------------------------------
 ; CODE
 ; ---------------------------------------------------------------------------
 .segment "CODE"
 
-; =====================================================================
-; Entry point
-; =====================================================================
+; Standalone $9000 app entry (omitted when linked as a library via -DKBD_LIB).
+.ifndef KBD_LIB
+.segment "HEADER"
+    .byte $00, $90
+.segment "CODE"
 main:
+    jmp kbdviz_run
+.endif
+
+; =====================================================================
+; kbdviz_run -- reusable keyboard visualizer. Saves VGC + caller ZP, draws the
+; 8-octave piano, visualizes the currently-playing SID/MIDI voices until an exit
+; key (or music stops after having played), restores state, and returns. Link
+; this object and JSR here; a thin HEADER stub provides the standalone $9000 app.
+; =====================================================================
+.export kbdviz_run
+kbdviz_run:
     php
     cld
     jsr save_app_zp

@@ -7,6 +7,7 @@
 ; sprite op. Autoboots from an NDI at $7200.
 
 .include "novavm.inc"
+.import kbdviz_run              ; linked keyboard visualizer library
 
 NUM_CAT       = 5
 VISIBLE_ROWS  = 11
@@ -150,8 +151,23 @@ key_right:
     jmp main_loop
 
 key_play:
-    jsr start_play
+    jsr start_play              ; start the selected track
+    jsr kbdviz_run              ; Perform: hand off to the piano visualizer
+    jsr redraw_all              ; back to Browse when it returns
     jmp main_loop
+
+; redraw_all -- rebuild the whole browser screen (after returning from Perform)
+redraw_all:
+    lda #$0C
+    sta RegCharOut
+    lda #CmdGcls
+    sta RegCmd
+    jsr mus_cmdwait
+    jsr draw_header
+    jsr draw_tabs
+    jsr draw_nav
+    jsr draw_list
+    rts
 
 new_category:
     stz zp_sel
