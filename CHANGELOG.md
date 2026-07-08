@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.19.1 - 2026-07-08
+#### Bug Fixes
+- (**demo**) enable hw sprites via CMD_SPRENA (board needs the command) + vblank commit - (663f671) - Barry Walker
+
+- - -
+
 ## v0.19.0 - 2026-07-08
 #### Features
 - (**arty/audio**) OSD volume as a 0-100 live slider (adjust mode) - (3aca555) - Barry Walker
