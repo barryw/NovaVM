@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.19.0 - 2026-07-08
+#### Features
+- (**arty/audio**) OSD volume as a 0-100 live slider (adjust mode) - (3aca555) - Barry Walker
+
+- - -
+
 ## v0.18.0 - 2026-07-08
 #### Features
 - (**arty/audio**) OSD master volume at the SID+WTS mix point - (37fe619) - Barry Walker
