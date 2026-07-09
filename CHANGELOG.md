@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.30.1 - 2026-07-09
+#### Documentation
+- add MIT LICENSE + standard SPDX file headers across all projects - (374e4ed) - Barry Walker
+
+- - -
+
 ## v0.30.0 - 2026-07-09
 #### Features
 - (**music**) notes fall from the top, all colors, varied speeds - (6f2071e) - Barry Walker
