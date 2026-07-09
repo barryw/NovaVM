@@ -1,7 +1,13 @@
-; Shared Nova NVG image loader declarations.
+; =====================================================================
+;  Nova NDK — nvg.inc
 ;
-; NVG2 files are native Nova images: a small header plus row-packed 4bpp pixels
-; that the blitter expands into the graphics bitmap plane.
+;  Shared NVG image-loader declarations. NVG2 files are native Nova images
+;  (a small header plus row-packed 4bpp pixels) that the blitter expands
+;  into the graphics bitmap plane.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NVG_INC_INCLUDED
 NVG_INC_INCLUDED = 1

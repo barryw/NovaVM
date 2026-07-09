@@ -1,8 +1,13 @@
-; Shared NovaVM XRAM runtime.
+; =====================================================================
+;  Nova NDK — xram.s
 ;
-; This file is intentionally BASIC-agnostic. BASIC enters through the XMC
-; register contract, while assembly code can set XRAM_ADDRL/M/H directly to
-; use XRAM as a flat 24-bit address space.
+;  Shared, BASIC-agnostic XRAM runtime. Byte and DMA-bulk access to the
+;  512KB XRAM device via the flat 24-bit XRAM pseudo-register ABI or the
+;  XMC register contract, plus direct file streaming (xload/xsave).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "xram.inc"
 .include "dma.inc"

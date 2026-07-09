@@ -1,10 +1,14 @@
-; nui shared state.
+; =====================================================================
+;  Nova NDK — nui_state.s
 ;
-; Allocates the NUI_* state bytes once. The nui feature-group objects
-; (nui_dialog/nui_input/nui_list/nui_uisave) import these via the .global
-; declarations in nui.inc. This object holds no code, so linking it costs only
-; the BSS/zero-page bytes, never ROM. It is pulled whenever any nui object is
-; used and dropped when none are.
+;  Allocates the shared NUI_* state bytes once. The nui feature-group
+;  objects import these via the .global declarations in nui.inc. Holds
+;  no code, so linking it costs only the BSS/zero-page bytes, never
+;  ROM. Pulled whenever any nui object is used, dropped when none are.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 

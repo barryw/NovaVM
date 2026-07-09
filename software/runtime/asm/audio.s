@@ -1,8 +1,14 @@
-; Shared Nova audio/music helper routines.
+; =====================================================================
+;  Nova NDK — audio.s
 ;
-; Simple SID commands are handled here with direct memory-mapped SID writes.
-; File-backed playback and MML sequencing continue to use FIO because those
-; paths are hosted by the ESP/wavetable synth side of the system.
+;  Shared audio/music helpers. Simple SID sound effects and volume are done
+;  here with direct memory-mapped SID writes; file-backed playback and MML
+;  sequencing use FIO because those paths are hosted by the ESP/wavetable
+;  synth side of the system.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "audio.inc"
 

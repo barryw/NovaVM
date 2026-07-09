@@ -1,4 +1,13 @@
-; Shared Nova NIC helper routines.
+; =====================================================================
+;  Nova NDK — nic.s
+;
+;  Shared Nova NIC helper routines: raw command issue with posted-write
+;  settle, connect/disconnect/listen/accept, send/recv, slot status and
+;  readiness, and host-name copy.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nic.inc"
 

@@ -1,8 +1,13 @@
-; Shared Nova sprite animation declarations.
+; =====================================================================
+;  Nova NDK — anim.inc
 ;
-; The animation runtime owns timing/state for hardware-sprite and meta-sprite
-; animation tracks. Shape bytes are loaded in bulk; per-frame animation changes
-; only shape/frame indexes.
+;  Sprite animation runtime ABI: owns timing/state for hardware-sprite and
+;  meta-sprite animation tracks. Shape bytes load in bulk; per-frame changes
+;  only touch shape/frame indexes.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef ANIM_INC_INCLUDED
 ANIM_INC_INCLUDED = 1

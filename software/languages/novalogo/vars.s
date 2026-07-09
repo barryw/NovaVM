@@ -1,5 +1,13 @@
-; vars.s — variable storage for NovaLogo (MAKE / :reference)
+; =====================================================================
+;  NovaLogo — vars.s
 ;
+;  Variable storage (MAKE / :reference), held as a linked list of heap
+;  entries.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Variables are stored as a linked list of heap entries.
 ; Entry layout:
 ;   +0: next_lo  (2 bytes — pointer to next entry, or $0000)

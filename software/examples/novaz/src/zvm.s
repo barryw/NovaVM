@@ -1,8 +1,16 @@
-; NovaZ minimal Z3 interpreter.
+; =====================================================================
+;  NovaZ — zvm.s
 ;
-; Executes real Z-code until the first read/sread opcode. Input parsing is not
-; implemented yet; this milestone is enough to let the story print its banner,
-; initial room text, prompt, and status line.
+;  Z-machine interpreter core: the fetch/decode/execute step loop and the
+;  standard opcode set — arithmetic, branches, routine calls, object and
+;  property ops, text output, keyboard input and dictionary parsing, timed
+;  input, sound effects, and save/restore. Runs until each read/sread,
+;  where the runtime gathers a line of input; V6-specific display and
+;  graphics ops route out to the NOVAZ6 segment.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "zstory.inc"
 .include "ztext.inc"

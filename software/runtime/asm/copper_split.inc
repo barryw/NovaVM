@@ -1,4 +1,12 @@
-; Shared Nova copper split helper declarations.
+; =====================================================================
+;  Nova NDK — copper_split.inc
+;
+;  Copper split helper ABI: configure one copper list to switch VGC mode at
+;  a given scanline.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef COPPER_SPLIT_INC_INCLUDED
 COPPER_SPLIT_INC_INCLUDED = 1

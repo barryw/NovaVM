@@ -1,8 +1,13 @@
-; nui scrollable list picker.
+; =====================================================================
+;  Nova NDK — nui_list.s
 ;
-; Feature-group object: draws an interactive fixed-width list inside a dialog and
-; returns the chosen row. Pulled only when a caller uses nui_pick_list; dropped
-; otherwise.
+;  nui scrollable list picker: draws an interactive fixed-width list
+;  inside a dialog and returns the chosen row. Pulled only when a
+;  caller uses nui_pick_list; dropped otherwise.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 

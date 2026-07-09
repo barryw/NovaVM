@@ -1,9 +1,14 @@
-; textsvc.s — shared XRAM-backed text editing services.
+; =====================================================================
+;  Nova NDK — textsvc.s
 ;
-; This intentionally does not link the general XMC allocator. The editor module
-; is a 16K paged library, so text services use fixed NDK-owned XRAM reservations
-; documented in textsvc.inc. The API is language-neutral; all editors get the
-; same clipboard and undo/redo behavior.
+;  Shared XRAM-backed text-editing services: a language-neutral clipboard and
+;  undo/redo stack, so every editor gets the same behaviour. Intentionally
+;  does not link the general XMC allocator — the editor is a 16K paged library,
+;  so it uses fixed NDK-owned XRAM reservations documented in textsvc.inc.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "textsvc.inc"
 

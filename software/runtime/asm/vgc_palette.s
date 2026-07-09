@@ -1,4 +1,12 @@
-; Shared Nova VGC palette helper routines.
+; =====================================================================
+;  Nova NDK — vgc_palette.s
+;
+;  VGC palette helpers: load the built-in C64 or EGA palette, or upload a
+;  16-entry RGB888 palette from XRAM into the active VGC palette.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vgc_palette.inc"
 

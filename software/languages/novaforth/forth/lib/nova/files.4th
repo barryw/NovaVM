@@ -1,6 +1,13 @@
-\ NovaForth wrappers for the NDK FILES module.
-\ Standard ANS file words live in forth/lib/file.4th. These FILES-* words expose
-\ Nova's file-domain NDK calls without shadowing the standard word set.
+\ =====================================================================
+\  NovaForth — files.4th
+\
+\  Wrappers for the NDK FILES module. Standard ANS file words live in
+\  forth/lib/file.4th; these FILES-* words expose Nova's file-domain NDK
+\  calls without shadowing the standard word set.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

@@ -1,4 +1,13 @@
-; Nova Chess network-mode overlay.
+; =====================================================================
+;  NovaChess — network_overlay.s
+;
+;  Network-mode overlay: drives an online game. Sets up the table, runs
+;  the play loop syncing engine game state through the network kernel,
+;  and exchanges local/opponent moves via the gameserver adapter.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

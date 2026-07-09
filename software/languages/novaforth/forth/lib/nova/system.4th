@@ -1,4 +1,11 @@
-\ NovaForth wrappers for the NDK SYSTEM module.
+\ =====================================================================
+\  NovaForth — system.4th
+\
+\  Wrappers for the NDK SYSTEM module.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

@@ -1,7 +1,13 @@
-; nui keyboard input — blocking read with ANSI arrow-key decoding.
+; =====================================================================
+;  Nova NDK — nui_input.s
 ;
-; Feature-group object: pulled when a caller (dialog wait_key, list picker) uses
-; nui_read_key; dropped otherwise.
+;  nui keyboard input: blocking key read with ANSI arrow-key decoding,
+;  plus a key-drain helper. Pulled when a caller (dialog wait_key, list
+;  picker) uses nui_read_key; dropped otherwise.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 

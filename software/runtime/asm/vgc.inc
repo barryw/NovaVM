@@ -1,9 +1,14 @@
-; Shared Nova VGC helper declarations.
+; =====================================================================
+;  Nova NDK — vgc.inc
 ;
-; The command helpers use the VGC hardware parameter registers directly:
-; callers load VGC_P0..VGC_P14 as needed, then call a vgc_* routine.
-; Routines return through the hardware status model; command completion can be
-; checked with vgc_wait_cmd when the caller needs a synchronous operation.
+;  Shared Nova VGC helper declarations. Command helpers use the VGC
+;  hardware parameter registers directly: callers load VGC_P0..VGC_P14 as
+;  needed, then call a vgc_* routine. Completion is checked with
+;  vgc_wait_cmd when a synchronous operation is required.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef VGC_INC_INCLUDED
 VGC_INC_INCLUDED = 1

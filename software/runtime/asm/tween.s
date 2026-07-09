@@ -1,8 +1,14 @@
-; Shared Nova tween/easing routines.
+; =====================================================================
+;  Nova NDK — tween.s
 ;
-; Callers set TWEEN.START*, TWEEN.END*, TWEEN.DURATION, and TWEEN.FRAME, then
-; call one of the eval routines. Step routines increment TWEEN.FRAME first and
-; then evaluate the selected curve.
+;  Fixed-point tween/easing: linear and quadratic ease-in/out/in-out curves
+;  over a 16-bit start/end value across TWEEN.DURATION frames. Callers set
+;  TWEEN.START*, TWEEN.END*, TWEEN.DURATION, and TWEEN.FRAME, then call an
+;  eval routine; the step routines increment TWEEN.FRAME first, then evaluate.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "tween.inc"
 

@@ -1,7 +1,13 @@
-; Shared Nova REPL line reader declarations.
+; =====================================================================
+;  Nova NDK — replline.inc
 ;
-; A runtime supplies repl_line_complete, which returns Z=1 when the current
-; input_buf contents are complete and repl_read_line should return.
+;  Shared Nova REPL line reader declarations. A runtime supplies
+;  repl_line_complete, which returns Z=1 when the current input_buf contents
+;  are complete and repl_read_line should return.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef REPLLINE_INC_INCLUDED
 REPLLINE_INC_INCLUDED = 1

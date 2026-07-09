@@ -1,7 +1,13 @@
-; nui blocking wait/error helpers.
+; =====================================================================
+;  Nova NDK — nui_wait.s
 ;
-; Kept out of nui_dialog.o so callers that only draw nonblocking dialogs do not
-; pull cursor wait/error code into tight modules.
+;  nui blocking wait/error helpers: show-dialog-and-wait, show-error,
+;  and wait-key. Kept out of nui_dialog.o so callers that only draw
+;  nonblocking dialogs do not pull cursor wait/error code in.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 

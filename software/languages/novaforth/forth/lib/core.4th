@@ -1,6 +1,12 @@
-\ NovaForth core library.
-\ Definitions that are part of the always-available NovaForth environment
-\ should live here when they do not need to be ROM primitives.
+\ =====================================================================
+\  NovaForth — core.4th
+\
+\  Core library: always-available NovaForth definitions that do not need
+\  to be ROM primitives.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 : CONSTANT CREATE , DOES> @ ;
 : VARIABLE CREATE 0 , ;

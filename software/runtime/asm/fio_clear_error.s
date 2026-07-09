@@ -1,7 +1,13 @@
-; Small standalone FIO status-clear helper.
+; =====================================================================
+;  Nova NDK — fio_clear_error.s
 ;
-; Kept in its own object so ROMs that only need FIOCLR do not pull the full
-; file-I/O helper body from fio.s.
+;  Standalone FIO status/error-latch clear helper. Kept in its own object
+;  so ROMs that only need FIOCLR do not pull the full file-I/O helper body
+;  from fio.s.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "fio.inc"
 

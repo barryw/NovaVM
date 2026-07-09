@@ -1,8 +1,14 @@
-; Shared Nova hardware meta-sprite routines.
+; =====================================================================
+;  Nova NDK — msprite.s
 ;
-; The library allocates ranges of hardware sprites, treats each range as one
-; object, and updates only sprite registers during animation. Shape frames must
-; already be loaded into VGC sprite shape RAM.
+;  Shared Nova hardware meta-sprite routines: allocate ranges of hardware
+;  sprites, treat each range as one animated object, and update only
+;  sprite registers during animation. Shape frames must already be loaded
+;  into VGC sprite shape RAM.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "msprite.inc"
 

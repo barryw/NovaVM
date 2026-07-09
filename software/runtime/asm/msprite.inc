@@ -1,9 +1,14 @@
-; Shared Nova hardware meta-sprite declarations.
+; =====================================================================
+;  Nova NDK — msprite.inc
 ;
-; A meta-sprite object owns one or more hardware sprites and updates them as a
-; single visual object. Shape data is not rewritten for animation; descriptors
-; point parts at preloaded shape-slot ranges and animation frames change the
-; shape index assigned to each hardware sprite.
+;  Hardware meta-sprite declarations. A meta-sprite owns one or more hardware
+;  sprites and moves them as a single visual object; animation reassigns each
+;  part's shape index from preloaded shape-slot ranges rather than rewriting
+;  shape data.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef MSPRITE_INC_INCLUDED
 MSPRITE_INC_INCLUDED = 1

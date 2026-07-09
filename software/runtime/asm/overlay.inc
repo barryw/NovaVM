@@ -1,9 +1,14 @@
-; Nova fixed-address overlay manager interface.
+; =====================================================================
+;  Nova NDK — overlay.inc
 ;
-; Fixed-address overlays are files with a 32-byte NOVO header followed by a
-; payload linked for the exact CPU RAM slot where it will execute. The manager
-; validates the header, streams the payload into RAM through PAGER.XPAGE, and
-; calls optional entry vectors through a stable ABI.
+;  Nova fixed-address overlay manager interface. Overlays are files with a
+;  32-byte NOVO header plus a payload linked for an exact CPU RAM slot; the
+;  manager validates the header, streams the payload in through PAGER.XPAGE,
+;  and calls optional entry vectors through a stable ABI.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef OVERLAY_INC_INCLUDED
 OVERLAY_INC_INCLUDED = 1

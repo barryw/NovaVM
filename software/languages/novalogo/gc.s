@@ -1,5 +1,12 @@
-; gc.s — mark-sweep garbage collector for NovaLogo
+; =====================================================================
+;  NovaLogo — gc.s
 ;
+;  Mark-sweep garbage collector for the Logo heap.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Allocation header (prepended by heap_alloc):
 ;   +0: alloc_tag  (bit 7 = mark, bits 6-0 = type)
 ;   +1: alloc_size (total size including header; 0 = use 16-bit size at +2/+3)

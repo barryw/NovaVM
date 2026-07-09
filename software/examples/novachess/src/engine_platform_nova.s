@@ -1,9 +1,13 @@
-; Nova platform hooks for chess6502-engine.
+; =====================================================================
+;  NovaChess — engine_platform_nova.s
 ;
-; Nova's NVR pseudo-registers ($20-$2F) remain reserved for shared Nova APIs.
-; The Nova engine build remaps the engine's old low-ZP scratch away from that
-; range. These first-cut hooks still avoid NVR entirely because callback-local
-; state should live in BSS or engine-owned scratch, not persistent pseudo regs.
+;  Nova platform hooks for chess6502-engine: search-timer, time-check,
+;  and opening-book callbacks. Keeps callback-local state out of Nova's
+;  reserved NVR pseudo-registers ($20-$2F), using engine-owned scratch.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .segment "CODE"
 

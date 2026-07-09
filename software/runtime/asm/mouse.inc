@@ -1,4 +1,12 @@
-; Shared Nova mouse pointer helper declarations.
+; =====================================================================
+;  Nova NDK — mouse.inc
+;
+;  Declarations for the raw VGC mouse-pointer helper routines (show/hide,
+;  control flags, shape, hotspot, color, and button/X/Y readback).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef MOUSE_INC_INCLUDED
 MOUSE_INC_INCLUDED = 1

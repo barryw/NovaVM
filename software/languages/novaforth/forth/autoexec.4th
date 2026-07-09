@@ -1,5 +1,12 @@
-\ NovaForth boot policy.
-\ Edit this file on a NovaForth disk to choose which libraries load at boot.
+\ =====================================================================
+\  NovaForth — autoexec.4th
+\
+\  Boot policy: edit this file on a NovaForth disk to choose which
+\  libraries load at boot.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/core-ext.4th
 

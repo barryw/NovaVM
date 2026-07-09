@@ -1,8 +1,14 @@
-; Shared NovaVM text-region runtime.
+; =====================================================================
+;  Nova NDK — vtext.s
 ;
-; Provides small rectangular text regions over the VGC char/color/attribute
-; planes. Domain runtimes such as NovaZ decide what a region means; this code
-; only clips, clears, writes, and scrolls rectangular text areas.
+;  Shared text-region runtime: small rectangular text regions over the
+;  VGC char/color/attribute planes. Clips, clears, writes, scrolls, and
+;  manages per-region cursors. Domain runtimes such as NovaZ decide what
+;  a region means; this code only manipulates rectangular text areas.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vtext.inc"
 .include "blitter.inc"

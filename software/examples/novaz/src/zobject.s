@@ -1,4 +1,13 @@
-; NovaZ object-table helpers.
+; =====================================================================
+;  NovaZ — zobject.s
+;
+;  Object-table helpers — implementation of the Z-machine object tree:
+;  parent/sibling/child links, attribute test/set/clear, insert/remove,
+;  property access, and short-name printing.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "zstory.inc"
 .include "ztext.inc"

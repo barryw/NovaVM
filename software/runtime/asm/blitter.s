@@ -1,8 +1,13 @@
-; Shared Nova blitter helper routines.
+; =====================================================================
+;  Nova NDK — blitter.s
 ;
-; Callers load the BLT hardware registers, then call blitter_start_copy or
-; blitter_start_fill. Routines return A=0 on success and A=1 on error; detailed
-; errors remain in BLT_ERRCODE_REG.
+;  Shared blitter helpers (copy, fill, packed-4bpp unpack). Callers load the
+;  BLT hardware registers, then call a start routine; routines return A=0 on
+;  success and A=1 on error, with detail left in BLT_ERRCODE_REG.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "blitter.inc"
 

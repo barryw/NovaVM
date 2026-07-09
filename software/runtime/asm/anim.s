@@ -1,4 +1,13 @@
-; Shared Nova sprite animation routines.
+; =====================================================================
+;  Nova NDK — anim.s
+;
+;  Shared sprite animation engine: a fixed table of animation tracks that
+;  bind an animation descriptor to a sprite or multi-sprite target, advance
+;  them per frame, and load shape frames from XRAM or disk.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "anim.inc"
 

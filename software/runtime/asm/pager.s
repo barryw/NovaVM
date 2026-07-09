@@ -1,4 +1,13 @@
-; Shared Nova file pager routines.
+; =====================================================================
+;  Nova NDK — pager.s
+;
+;  File pager: streams a byte slice of a Nova file directly into a target
+;  memory space (CPU RAM, VGC, or XRAM) via the FileIoController XPAGE
+;  command — either by file name or using the current FIO.NAME.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "pager.inc"
 

@@ -1,9 +1,14 @@
-; Nova runtime size-stripping switches for custom builds.
+; =====================================================================
+;  Nova NDK — strip.inc
 ;
-; Runtime files that support stripping do it by default. Include this before
-; implementation files only when a custom build has enabled full runtime
-; emission and wants to force stripping back on. Stripping uses ca65 .ifref, so
-; implementation files must still appear after code that references them.
+;  Nova runtime size-stripping switches for custom builds. Include before
+;  implementation files only when a custom build has enabled full runtime
+;  emission and wants to force stripping back on. Stripping uses ca65 .ifref,
+;  so implementation files must still appear after their references.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NOVA_STRIP_INC_INCLUDED
 NOVA_STRIP_INC_INCLUDED = 1

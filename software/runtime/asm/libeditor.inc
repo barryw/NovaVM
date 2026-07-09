@@ -1,9 +1,14 @@
-; libeditor.inc — EDITOR module (MODULE_ID_EDITOR = $08) fn-id contract.
+; =====================================================================
+;  Nova NDK — libeditor.inc
 ;
-; The shared full-screen source editor. Built once (modules/editor/editor.s),
-; staged to the XRAM module store, and paged into bank 1 on lib_call. The editor
-; runs entirely within one call: keyboard and VGC are MMIO, and the caller builds
-; or compiles any language-specific document after the editor returns.
+;  EDITOR module (MODULE_ID_EDITOR = $08) fn-id contract. The shared
+;  full-screen source editor: built once, staged to the XRAM module store,
+;  paged into bank 1 on lib_call. Runs entirely within one call (keyboard
+;  and VGC are MMIO); the caller builds/compiles the document afterwards.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef LIBEDITOR_INC
 LIBEDITOR_INC = 1

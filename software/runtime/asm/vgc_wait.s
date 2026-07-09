@@ -1,8 +1,13 @@
-; Minimal VGC command synchronization helper.
+; =====================================================================
+;  Nova NDK — vgc_wait.s
 ;
-; Full-featured callers can link vgc.s. Small standalone apps and overlays can
-; link this file when they only need the graphics command wait primitive without
-; pulling in the complete VGC helper implementation.
+;  Minimal VGC command-completion wait primitive. Standalone apps and
+;  overlays link this instead of the full vgc.s helper when they only
+;  need to wait for a graphics command to finish.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vgc.inc"
 

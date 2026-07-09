@@ -1,3 +1,15 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Smoke)
+//
+//  Headless smoke-test harness. Boots a NovaZ .ndi image under the
+//  emulator, feeds it commands (inline, from a script, or a generic-boot
+//  sequence), and asserts on the resulting screen text, colours, attributes,
+//  graphics pixels, and interpreter stop reason for CI.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;

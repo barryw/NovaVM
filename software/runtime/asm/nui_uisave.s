@@ -1,9 +1,14 @@
-; nui dialog save/restore-under.
+; =====================================================================
+;  Nova NDK — nui_uisave.s
 ;
-; Feature-group object: preserves the screen contents a dialog will cover (three
-; text planes, optionally the graphics plane) in caller-owned XRAM and restores
-; them when the dialog closes. Pulled only when a caller uses the save-under
-; routines; dropped otherwise (e.g. an app that only shows transient dialogs).
+;  nui dialog save/restore-under: preserves the screen contents a
+;  dialog will cover (three text planes, optionally the graphics plane)
+;  in caller-owned XRAM and restores them when the dialog closes.
+;  Pulled only when a caller uses the save-under routines.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 .include "vsprite.inc"

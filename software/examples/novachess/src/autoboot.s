@@ -1,8 +1,13 @@
-; Nova Chess runtime launcher.
+; =====================================================================
+;  NovaChess — autoboot.s
 ;
-; BASIC loads this as AUTOBOOT.bin into RAM. It asks NovaHost to stream the
-; Nova Chess runtime ROM into the primary $C000 bank, then jumps through that
-; runtime's reset vector.
+;  Runtime launcher. BASIC loads this as AUTOBOOT.bin into RAM; it asks
+;  NovaHost to stream the Nova Chess runtime ROM into the primary $C000
+;  bank, then jumps through that runtime's reset vector.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

@@ -1,8 +1,13 @@
-; Shared Nova file pager declarations.
+; =====================================================================
+;  Nova NDK — pager.inc
 ;
-; The pager layer is intentionally above the backing memory target: callers
-; choose a file offset, destination target/address, and byte count. The host
-; streams that slice through the existing FIO transport.
+;  Shared Nova file pager declarations. Callers choose a file offset,
+;  destination target/address, and byte count; the host streams that slice
+;  through the existing FIO transport.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef PAGER_INC_INCLUDED
 PAGER_INC_INCLUDED = 1

@@ -1,12 +1,16 @@
-; libfiles.inc — FILES module (MODULE_ID_FILES = $04) fn-id contract.
+; =====================================================================
+;  Nova NDK — libfiles.inc
 ;
-; The shared file-domain module. It is the home of the file-I/O NDK
-; (runtime/asm/fio.s) and the file pager (runtime/asm/pager.s): save/load,
-; directory listing, delete, graphics save/load, directory navigation
-; (cd/mkdir/rmdir/pwd), runtime-ROM load, host RNG, and the file-slice pager.
-; Every fn here is a THIN lib_call wrapper that marshals the mailbox into an
-; NDK routine's inputs (FIO/PAGER pseudo-registers) and JSRs it.
+;  FILES module (MODULE_ID_FILES = $04) fn-id contract. Home of the
+;  file-I/O NDK (fio.s) and the file pager (pager.s): save/load, directory
+;  listing/delete, graphics save/load, directory navigation, runtime-ROM
+;  load, host RNG, byte-stream handles, and the file-slice pager. Every fn
+;  is a THIN lib_call wrapper that marshals the mailbox and JSRs an NDK routine.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Note the prefix: ids use FILE_* (the file-domain library). FIO_* is reserved
 ; for the MMIO register block in nova.inc — these are different namespaces.
 ;

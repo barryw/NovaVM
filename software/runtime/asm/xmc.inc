@@ -1,4 +1,11 @@
-; NovaVM XMC named-block allocator and command processor declarations.
+; =====================================================================
+;  Nova NDK — xmc.inc
+;
+;  NovaVM XMC named-block allocator and command-processor declarations.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef XMC_INC_INCLUDED
 XMC_INC_INCLUDED = 1

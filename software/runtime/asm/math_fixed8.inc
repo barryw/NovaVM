@@ -1,12 +1,14 @@
-; Shared Nova fixed-point math helpers.
+; =====================================================================
+;  Nova NDK — math_fixed8.inc
 ;
-; Values named FIX8 are signed 8.8 fixed point: high byte = signed integer,
-; low byte = fraction. Positions named FIX16_8 are unsigned 16.8 fixed point:
-; high/low integer bytes plus a fraction byte.
+;  Fixed-point math helper macros. FIX8 = signed 8.8 (high byte = integer,
+;  low byte = fraction); FIX16_8 = unsigned 16.8 (16-bit integer + fraction
+;  byte). Kept as macros so indexed game-object math stays cheap; a future
+;  math coprocessor can replace the bodies without changing game logic.
 ;
-; These helpers are macros today so indexed game-object arrays stay cheap.
-; Keep call sites at this operation level so a future math coprocessor can
-; replace the macro bodies without changing game logic.
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef MATH_FIXED8_INC_INCLUDED
 MATH_FIXED8_INC_INCLUDED = 1

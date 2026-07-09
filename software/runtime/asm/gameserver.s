@@ -1,4 +1,13 @@
-; Shared Nova Game Server client protocol runtime.
+; =====================================================================
+;  Nova NDK — gameserver.s
+;
+;  Shared Nova Game Server client protocol runtime: connection management,
+;  keepalive, framed message build/parse, and request builders layered
+;  over the NIC helper routines.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "gameserver.inc"
 

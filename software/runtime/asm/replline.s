@@ -1,10 +1,14 @@
 ; =====================================================================
-; replline.s — shared REPL line reader with shell-style up/down history
+;  Nova NDK — replline.s
 ;
-; Provides a generic prompt-line reader: key poll, backspace, printable echo, a
-; 6-deep history ring with Up/Down recall, and single-row line repaint.
-; Forth, Pascal, and the assembler dev env all inherit this reader. BASIC is
-; excluded — it uses EhBASIC's own ROM input routine.
+;  Shared REPL line reader with shell-style Up/Down history: key poll,
+;  backspace, printable echo, a 5-deep history ring with Up/Down recall, and
+;  single-row line repaint. Forth, Pascal, and the assembler dev env inherit
+;  this reader; BASIC is excluded (it uses EhBASIC's own ROM input routine).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 ;
 ; The ONE runtime-specific decision — "is the typed line complete, or keep reading
 ; for multi-line entry?" — is delegated to a hook the host runtime MUST define:

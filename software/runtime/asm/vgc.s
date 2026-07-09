@@ -1,7 +1,15 @@
-; Shared Nova VGC helper routines.
+; =====================================================================
+;  Nova NDK — vgc.s
 ;
-; BASIC should parse language syntax and load VGC registers; assembly callers
-; can use the same routines directly after setting VGC_P* arguments.
+;  VGC helper routines: command issue/wait, vsync, text colour/mode/font/
+;  cursor control, reverse/flash attributes, per-character opaque background,
+;  dimmer, IRQ install/enable/ack, VGC memory read/write, and graphics
+;  primitives (plot, line, circle, rect, fill, paint, gtext). Assembly callers
+;  set VGC_P* arguments and call these directly.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vgc.inc"
 

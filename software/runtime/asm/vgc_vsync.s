@@ -1,7 +1,13 @@
-; Minimal VGC frame synchronization helper.
+; =====================================================================
+;  Nova NDK — vgc_vsync.s
 ;
-; Link this file when a small app only needs a frame tick wait. Full-featured
-; callers can link vgc.s instead.
+;  Minimal VGC frame-sync helper (vgc_vsync only): waits for the frame
+;  counter to advance. Link this when a small app just needs a frame-tick
+;  wait; full-featured callers link vgc.s instead.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vgc.inc"
 

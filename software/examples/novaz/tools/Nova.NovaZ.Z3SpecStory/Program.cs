@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Z3SpecStory)
+//
+//  Generates a synthetic Version 3 compliance story for NovaZ, exercising
+//  V3 opcode and behaviour corners that real game transcripts do not
+//  reliably cover.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 
 const int StorySize = 0x1000;

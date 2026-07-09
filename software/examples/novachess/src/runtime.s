@@ -1,8 +1,13 @@
-; Nova Chess runtime scaffold.
+; =====================================================================
+;  NovaChess — runtime.s
 ;
-; This first checkpoint owns the machine, draws a Nova-native board, and proves
-; blitter-backed virtual sprites for chess pieces. The engine will be linked
-; behind this runtime boundary once the shared chess engine API stabilizes.
+;  The $C000 UI runtime ROM. Owns the machine, draws the Nova-native board
+;  with blitter-backed virtual sprites for the pieces, handles input and
+;  menus, and drives play through the linked chess engine ABI.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

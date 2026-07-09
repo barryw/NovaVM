@@ -1,4 +1,14 @@
-; NovaZ object-table helpers.
+; =====================================================================
+;  NovaZ — zobject.inc
+;
+;  Object-table helpers — public interface: error codes and the exported
+;  entry points for the Z-machine object tree (parent/sibling/child links,
+;  attribute test/set/clear, insert/remove, property access, short-name
+;  printing).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NOVA_NOVAZ_ZOBJECT_INC_INCLUDED
 NOVA_NOVAZ_ZOBJECT_INC_INCLUDED = 1

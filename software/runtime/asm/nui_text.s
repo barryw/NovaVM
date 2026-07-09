@@ -1,6 +1,12 @@
-; nui text input dialog.
+; =====================================================================
+;  Nova NDK — nui_text.s
 ;
-; Shared Borland-style modal text field with OK/Cancel focus traversal.
+;  nui text input dialog: a Borland-style modal text field with
+;  OK/Cancel buttons and Tab focus traversal.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 

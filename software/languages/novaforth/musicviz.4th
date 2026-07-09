@@ -1,7 +1,14 @@
-\ Nova music visualizer — flowing copper bars + radiating rings, synced to the
-\ LIVE MIDI notes the host publishes into $BA50. Lean: drives the copper through
-\ the VGC command interface (like the artist), so it skips the 16KB graphics.4th
-\ and fits the dictionary with room to spare.
+\ =====================================================================
+\  NovaForth — musicviz.4th
+\
+\  Music visualizer: flowing copper bars + radiating rings synced to the
+\  live MIDI notes the host publishes into $BA50. Drives the copper via
+\  the VGC command interface, so it skips the 16KB graphics.4th.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
+
 INCLUDE forth/lib/nova/vgc.4th
 INCLUDE forth/lib/nova/sound.4th
 

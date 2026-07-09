@@ -1,8 +1,14 @@
-; Shared Nova audio/music runtime interface.
+; =====================================================================
+;  Nova NDK — audio.inc
 ;
-; BASIC parses language syntax and loads the argument registers; assembly
-; callers can use the same register layout directly.
+;  Audio/music runtime ABI: sound effects, volume, SID instruments, MML
+;  sequencing, hosted SID/MIDI playback, and the unified music metadata block.
+;  BASIC and assembly callers share the same argument-register layout.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Sound effect:
 ;   AUDIO_NOTE       MIDI note
 ;   AUDIO_DURATION   duration in 60 Hz frames

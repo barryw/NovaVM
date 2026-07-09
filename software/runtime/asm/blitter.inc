@@ -1,4 +1,12 @@
-; Shared Nova blitter helper declarations.
+; =====================================================================
+;  Nova NDK — blitter.inc
+;
+;  Blitter helper ABI: block copy, fill, and gfx4 unpack (blocking and
+;  async start/wait variants).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef BLITTER_INC_INCLUDED
 BLITTER_INC_INCLUDED = 1

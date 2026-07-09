@@ -1,4 +1,13 @@
-; NovaZ Z-machine interpreter interface.
+; =====================================================================
+;  NovaZ — zvm.inc
+;
+;  Z-machine interpreter — public interface: stack/frame/local limits,
+;  stop-reason and stream-flag constants, and the exported interpreter
+;  entry points and state symbols.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NOVA_NOVAZ_ZVM_INC_INCLUDED
 NOVA_NOVAZ_ZVM_INC_INCLUDED = 1

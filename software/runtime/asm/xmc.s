@@ -1,8 +1,14 @@
-; Shared NovaVM XMC metadata and command processor.
+; =====================================================================
+;  Nova NDK — xmc.s
 ;
-; This layer implements the XMC register command contract used by BASIC and
-; available to other runtimes that want the named-block allocator on top of
-; the core flat XRAM routines.
+;  XMC named-block metadata layer and register command processor.
+;  Implements the XMC command contract (get/put/stash/fetch/fill/alloc
+;  and the named-block directory) on top of the core flat XRAM routines,
+;  for BASIC and other runtimes that want the named-block allocator.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "xmc.inc"
 

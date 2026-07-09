@@ -1,7 +1,13 @@
-; editui shutdown helper.
+; =====================================================================
+;  Nova NDK — editui_shutdown.s
 ;
-; Split from editui.o so the editor module does not link shutdown code it never
-; calls while standalone EDITUI demos can still use the public routine.
+;  Editor UI shutdown helper: resets the text scroll region to defaults,
+;  clears the screen, and re-homes the cursor. Split from editui.o so the
+;  editor module does not link shutdown code it never calls.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "editui.inc"
 

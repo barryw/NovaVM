@@ -1,4 +1,11 @@
-\ Shared Nova NDK libcall ABI constants for NovaForth libraries.
+\ =====================================================================
+\  NovaForth — ndk.4th
+\
+\  Shared Nova NDK libcall ABI constants for the NovaForth libraries.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 BASE @
 DECIMAL

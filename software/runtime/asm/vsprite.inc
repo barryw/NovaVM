@@ -1,9 +1,15 @@
-; Shared Nova virtual-sprite helper declarations.
+; =====================================================================
+;  Nova NDK — vsprite.inc
 ;
-; A virtual sprite is a caller-owned rectangular pixel stamp copied by the
-; blitter into a VGC memory space. Unlike hardware sprites, the count is limited
-; by memory and redraw cost rather than VGC sprite registers.
+;  Shared Nova virtual-sprite helper declarations. A virtual sprite is a
+;  caller-owned rectangular pixel stamp copied by the blitter into a VGC
+;  memory space; unlike hardware sprites the count is limited by memory
+;  and redraw cost rather than VGC sprite registers.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Transparency is split into two explicit layers:
 ; - VSPRITE_COLORKEY controls which source byte VSPRITE.BLIT skips.
 ; - VGC_GFXTRANS controls which color in the VGC graphics plane is transparent

@@ -1,5 +1,12 @@
-; lists.s — list data type, cons pairs, and list operations for NovaLogo
+; =====================================================================
+;  NovaLogo — lists.s
 ;
+;  List data type: cons pairs and the list operations built on them.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Cons pair format on heap (7 bytes):
 ;   +0: tag byte ($10 = CONS_PAIR)
 ;   +1: car_type ($00=number, $01=word, $02=list)

@@ -1,4 +1,12 @@
-; builtins.s — built-in command table and handlers
+; =====================================================================
+;  NovaLogo — builtins.s
+;
+;  Built-in command table and handlers: the primitive Logo words and the
+;  lookup that dispatches TOK_WORD tokens to them.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 ; =====================================================================
 ; CODE segment — builtin lookup and handlers

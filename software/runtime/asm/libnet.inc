@@ -1,13 +1,17 @@
-; libnet.inc — NET module (MODULE_ID_NET = $06) fn-id contract.
+; =====================================================================
+;  Nova NDK — libnet.inc
 ;
-; The shared networking module. It is the home of the NIC helper runtime
-; (runtime/asm/nic.s) and the Nova Game Server client protocol runtime
-; (runtime/asm/gameserver.s): raw NIC slot connect/listen/accept/send/recv +
-; status reporters, plus the higher-level game-server session, messaging, and
-; the 16 request builders. Every fn here is a THIN lib_call wrapper that marshals
-; the mailbox into an NDK routine's inputs (the NIC_* MMIO registers / NGS_* BSS
-; client-state fields) and JSRs it.
+;  NET module (MODULE_ID_NET = $06) fn-id contract. Home of the NIC helper
+;  runtime (nic.s) and the Nova Game Server client protocol runtime
+;  (gameserver.s): raw NIC slot connect/listen/accept/send/recv + status
+;  reporters, plus the game-server session, messaging, and the 16 request
+;  builders. Every fn is a THIN lib_call wrapper that marshals the mailbox
+;  and JSRs an NDK routine.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Note the prefix: ids use NET_* (the networking-domain library). NIC_*/NGS_* are
 ; reserved for the MMIO register / game-server BSS-state blocks (nic.inc, nova.inc,
 ; gameserver.inc) — those are different namespaces.

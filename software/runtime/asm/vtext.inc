@@ -1,9 +1,14 @@
-; NovaVM shared text-region runtime interface.
+; =====================================================================
+;  Nova NDK — vtext.inc
 ;
-; This layer is intentionally language-neutral. It knows about rectangular
-; regions over the VGC text planes, but not about BASIC, NovaZ, or Z-machine
-; window semantics.
+;  NovaVM shared text-region runtime interface. Intentionally
+;  language-neutral: it knows about rectangular regions over the VGC text
+;  planes, but not about BASIC, NovaZ, or Z-machine window semantics.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Calling convention:
 ;   Region:      VTEXT_LEFT/TOP/WIDTH/HEIGHT state bytes
 ;   Cursor:      VTEXT_CURX/CURY state bytes, relative to the current region.

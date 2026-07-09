@@ -1,11 +1,16 @@
-; libsound.inc — SOUND module (MODULE_ID_SOUND = $02) fn-id contract.
+; =====================================================================
+;  Nova NDK — libsound.inc
 ;
-; The shared audio-services module. It is the home of the full audio NDK
-; (runtime/asm/audio.s): simple SID tone/noise/volume, fire-and-forget SID
-; sound effects, instrument definition, file-backed playback (SID/MIDI/sound-
-; fonts), and the hosted MML music engine. Every fn here is a THIN lib_call
-; wrapper that marshals the mailbox into an NDK routine's inputs and JSRs it.
+;  SOUND module (MODULE_ID_SOUND = $02) fn-id contract. Home of the full
+;  audio NDK (audio.s): simple SID tone/noise/volume, fire-and-forget SID
+;  sound effects, instrument definition, file-backed playback
+;  (SID/MIDI/soundfonts), and the hosted MML music engine. Every fn is a
+;  THIN lib_call wrapper that marshals the mailbox and JSRs an NDK routine.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; CALLING CONVENTION (caller side, see libabi.inc):
 ;   LIB_MOD_ID ($0300) = MODULE_ID_SOUND
 ;   LIB_FN_ID  ($0301) = one of the SND_* ids below
@@ -24,7 +29,7 @@ LIBSOUND_INC = 1
 .include "libabi.inc"            ; MODULE_ID_SOUND, LIB_* mailbox cells, LERR_*
 
 ; --- Status code returned when a wrapped NDK audio routine reports failure ---
-LERR_AUDIO_FAIL = $89   ; audio_* NDK routine returned A!=0 (FIO error / bad arg)
+LERR_AUDIO_FAIL = $89   ; audio_* NDK routine returned A!=0 (audio error / bad arg)
 
 ; =====================================================================
 ; Simple SID effects (Phase B: moved out of the NovaLogo extension ROM)

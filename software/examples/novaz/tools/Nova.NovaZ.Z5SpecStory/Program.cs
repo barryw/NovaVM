@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Z5SpecStory)
+//
+//  Generates a synthetic Version 5 compliance story for NovaZ, and
+//  optionally a tiny synthetic SOUND.PAK exercising the FIO_CMD_ZSOUND
+//  sampled-sound data path and the V5 sound-finish routine.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 
 const int StorySize = 0x2000;

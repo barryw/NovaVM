@@ -1,4 +1,11 @@
-; tokenizer.s — scan input_buf into a linked list of token nodes
+; =====================================================================
+;  NovaLogo — tokenizer.s
+;
+;  Scan input_buf into a linked list of token nodes.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 ; =====================================================================
 ; ZEROPAGE segment — tokenizer variables

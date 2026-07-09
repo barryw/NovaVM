@@ -1,4 +1,12 @@
-; NovaZ packed Z-string decoder.
+; =====================================================================
+;  NovaZ — ztext.s
+;
+;  Packed Z-string decoder — implementation. Unpacks the 5-bit Z-character
+;  stream (alphabet shifts, abbreviations, ZSCII) into output text.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "zstory.inc"
 .include "ztext.inc"

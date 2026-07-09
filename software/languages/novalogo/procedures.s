@@ -1,5 +1,12 @@
-; procedures.s — user-defined procedure storage and invocation
+; =====================================================================
+;  NovaLogo — procedures.s
 ;
+;  User-defined procedure storage (TO ... END) and invocation.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Procedure record layout (heap-allocated linked list):
 ;   +0: next_lo
 ;   +1: next_hi    (pointer to next procedure, or $0000)

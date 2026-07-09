@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — BlorbSounds.cs
+//
+//  Decodes the sound resources of a Blorb file into raw signed 8-bit mono
+//  PCM and packs them into the NovaZ SOUND.PAK format (the Blorb RIdx
+//  resource number is the Z-machine sound_effect number).
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Buffers.Binary;
 
 /// <summary>

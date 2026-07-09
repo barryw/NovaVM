@@ -1,19 +1,15 @@
-; Shared Nova wavetable-synth (WTS) note helpers — async + voice-tracked.
+; =====================================================================
+;  Nova NDK — wts.s
 ;
-; Two note models over the 8 WTS voices ($A140-$A17F), both allocating a FREE
-; voice (one whose countdown is 0) and only stealing when all eight are busy:
+;  Shared wavetable-synth (WTS) note helpers over the 8 WTS voices:
+;  fire-and-forget timed notes (wts_note_async), sustained held notes
+;  (wts_note_on), and immediate note-off. Allocates a free voice, only
+;  stealing round-robin when all eight are busy; a per-voice countdown
+;  byte encodes idle (0), timed (1..254), or held ($FF) state.
 ;
-;   wts_note_async  fire-and-forget: note-on + auto-release after N frames. Call
-;                   wts_tick once per frame to count it down. Never blocks.
-;   wts_note_on     sustained: note-on that HOLDS until wts_note_off (a held key).
-;                   wts_tick leaves it alone.
-;   wts_note_off    immediate note-off + free the voice.
-;
-; A voice's countdown byte encodes its state: 0 = idle, 1..254 = timed (counting
-; down), $FF = held (sustained; wts_tick skips it).
-;
-; State lives in free scratch RAM above the SID ($BB8D) and music-meta ($BBCD)
-; regions. WTS registers + NVR0 come from nova.inc (via wts.inc).
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "wts.inc"
 

@@ -1,8 +1,14 @@
-; Shared Nova File I/O helper routines.
+; =====================================================================
+;  Nova NDK — fio.s
 ;
-; This file is BASIC-agnostic. BASIC is still responsible for parsing language
-; expressions; assembly callers can load the FIO_ARG_* pseudo-registers and use
-; these helpers directly.
+;  Shared Nova File I/O helper routines: thin wrappers over the FIO
+;  hardware command interface (save/load, directory ops, file streaming,
+;  RNG). BASIC-agnostic; assembly callers load the FIO_ARG_* pseudo-
+;  registers and call these helpers directly.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "fio.inc"
 

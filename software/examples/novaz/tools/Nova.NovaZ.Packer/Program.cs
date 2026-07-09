@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Packer)
+//
+//  Command-line entry point for the NovaZ packer: assembles the AUTOBOOT
+//  binary, runtime ROM, story file, and packed picture/sound resources
+//  into a mountable Nova disk (.ndi) image.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 using System.Text.Json;
 using e6502.Storage;
