@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.29.0 - 2026-07-08
+#### Features
+- (**ndk-audio**) sustained wts_note_on; consistency pass on sound/note playing - (b0072ee) - Barry Walker
+
+- - -
+
 ## v0.28.0 - 2026-07-08
 #### Features
 - (**ndk-audio**) WTS note API — async, voice-tracked wavetable notes - (da6628f) - Barry Walker
