@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.30.0 - 2026-07-09
+#### Features
+- (**music**) notes fall from the top, all colors, varied speeds - (6f2071e) - Barry Walker
+- (**music**) clean-rebuilt Nova Music browser with floating note sprites - (03083fb) - Barry Walker
+#### Bug Fixes
+- (**arty**) complete deferred audit items #3 (AXI reset unification) + #5 (clk_audio CDC) - (fff420a) - Barry Walker
+- (**arty**) cycle-level bus arbitration for debug-bridge writes + host thread-safety - (024d4cd) - Barry Walker
+#### Refactoring
+- (**keyboard**) make the visualizer a linkable library; music Perform inline - (e7e5357) - Barry Walker
+
+- - -
+
 ## v0.29.0 - 2026-07-08
 #### Features
 - (**ndk-audio**) sustained wts_note_on; consistency pass on sound/note playing - (b0072ee) - Barry Walker
