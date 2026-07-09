@@ -147,6 +147,42 @@ public class MusicKeyboardCycleTests
         }
     }
 
+    private static int Elapsed(Harness h) => h.Bus.Read(0xBA5F) | (h.Bus.Read(0xBA60) << 8);
+
+    [TestMethod]
+    public void Music_MidActuallyPlaysAndTimeAdvances()
+    {
+        // Regression: a double file extension (app sent name+".mid", host appends
+        // ".mid" again) meant FIO never found the file, so nothing played, the
+        // $BA50 status stayed 0, and elapsed/total/metadata never populated — the
+        // "shows a keyboard but does not play, time does not increase" defect.
+        var h = Boot(mountDisk: true);
+        Press(h, KeyEnter);                       // row 0 (FEATURED) = champagne-supernova.mid
+        byte status = h.Bus.Read(MusicStatus);
+        int total = h.Bus.Read(0xBA61) | (h.Bus.Read(0xBA62) << 8);
+        int el0 = Elapsed(h);
+        Assert.AreNotEqual(0, status, "MID play did not start (status still 0).");
+        Assert.IsTrue(total > 0, $"MID total duration not published (total={total}).");
+        RunFrames(h, 120);
+        Assert.IsTrue(Elapsed(h) > el0, $"Elapsed time did not advance ({el0} -> {Elapsed(h)}).");
+
+        // Title must be the song, not an instrument track name ("Drums").
+        string screen = Screen(h);
+        Assert.IsFalse(screen.Contains("DRUM", StringComparison.OrdinalIgnoreCase),
+            $"Title shows an instrument track name, not the song.\n{screen}");
+        Assert.IsTrue(screen.Contains("Champagne Supernova", StringComparison.OrdinalIgnoreCase),
+            $"Title should be the prettified song name.\n{screen}");
+    }
+
+    [TestMethod]
+    public void Music_SidActuallyPlays()
+    {
+        var h = Boot(mountDisk: true);
+        for (int i = 0; i < 3; i++) Press(h, KeyDown);   // row 3 (FEATURED) = commando.sid
+        Press(h, KeyEnter);
+        Assert.AreNotEqual(0, h.Bus.Read(MusicStatus), "SID play did not start (status still 0).");
+    }
+
     [TestMethod]
     public void Music_BootsToBrowser()
     {

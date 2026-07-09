@@ -750,6 +750,9 @@ start_play:
 @nm:
     lda (zp_src),y
     beq @nmdone
+    cmp #'.'                    ; stop at the extension dot: the host appends the
+    beq @nmdone                 ; correct ext (.sid/.mid) from FioCmd, so sending it
+                                ; here yields a double extension -> file not found
     sty zp_i                    ; save src index
     ldy zp_tmp
     sta FioName,y

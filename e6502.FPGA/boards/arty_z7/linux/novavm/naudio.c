@@ -342,6 +342,34 @@ static void midi_find_meta(const unsigned char *buf, unsigned len, unsigned char
     }
 }
 
+/* Byte offset of the end of the first MTrk chunk (track 0). The song title lives
+ * in track 0's name event; per-instrument tracks (1+) are named "Drums", "Bass",
+ * etc., so bounding the title search to track 0 keeps an instrument name from
+ * masquerading as the song. Returns 0 (=> caller scans the whole file) if no MTrk
+ * is found. Mirrors the Avalonia host's track-0-only title rule. */
+static unsigned midi_track0_end(const unsigned char *buf, unsigned len) {
+    for (unsigned i = 0; i + 8 <= len; i++) {
+        if (buf[i]=='M' && buf[i+1]=='T' && buf[i+2]=='r' && buf[i+3]=='k') {
+            unsigned tl = ((unsigned)buf[i+4]<<24)|((unsigned)buf[i+5]<<16)
+                        | ((unsigned)buf[i+6]<<8) | (unsigned)buf[i+7];
+            unsigned end = i + 8 + tl;
+            return end > len ? len : end;
+        }
+    }
+    return 0;
+}
+
+/* Turn a bare filename into a display title: swap '-'/'_' for spaces and
+ * upper-case the first letter of each word ("champagne-supernova" ->
+ * "Champagne Supernova"). Matches the Avalonia host's PrettyTitleFromFilename. */
+static void pretty_title(char *s) {
+    int start = 1;
+    for (int i = 0; s[i]; i++) {
+        if (s[i] == '-' || s[i] == '_' || s[i] == ' ') { s[i] = ' '; start = 1; }
+        else { if (start && s[i] >= 'a' && s[i] <= 'z') s[i] -= 32; start = 0; }
+    }
+}
+
 int audio_play_midi(const char *path) {
     if (!g_tsf) audio_ensure_soundfont();  /* auto-load the default if none yet */
     if (!g_tsf) { printf("[audio] no soundfont loaded\n"); return -1; }
@@ -351,14 +379,17 @@ int audio_play_midi(const char *path) {
     tml_message *nh = tml_load_memory(buf, (int)len);
     if (!nh) { free(buf); printf("[audio] tml_load_memory failed\n"); return -3; }
     char title[33] = {0}, author[33] = {0}, copyr[33] = {0};
-    midi_find_meta((const unsigned char *)buf, len, 0x03, title,  sizeof title);
+    unsigned t0 = midi_track0_end((const unsigned char *)buf, len);
+    midi_find_meta((const unsigned char *)buf, t0 ? t0 : len, 0x03, title, sizeof title);
     midi_find_meta((const unsigned char *)buf, len, 0x01, author, sizeof author);
     midi_find_meta((const unsigned char *)buf, len, 0x02, copyr,  sizeof copyr);
     free(buf);
     if (!title[0]) {                       /* no embedded name -> use the filename */
         const char *base = path;
         for (const char *p = path; *p; p++) if (*p == '/' || *p == ':') base = p + 1;
-        int k = 0; while (base[k] && k < 32) { title[k] = base[k]; k++; }
+        int k = 0; while (base[k] && base[k] != '.' && k < 32) { title[k] = base[k]; k++; }
+        title[k] = 0;
+        pretty_title(title);
     }
     unsigned int len_ms = 0;
     tml_get_info(nh, 0, 0, 0, 0, &len_ms);

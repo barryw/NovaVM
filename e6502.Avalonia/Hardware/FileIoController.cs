@@ -2154,7 +2154,7 @@ public sealed partial class FileIoController
             int song = _regs[VgcConstants.FioSrcL - VgcConstants.FioBase];
             if (song < 1) song = info.StartSong;
 
-            PublishSidPlaybackMetadata(data, filename);
+            PublishSidPlaybackMetadata(data, PrettyTitleFromFilename(filename));
             _sidPlayer.Play(info, song);
             SetOk();
         }
@@ -2398,7 +2398,7 @@ public sealed partial class FileIoController
 
             _musicEngine.SetVolume(15);
             PublishMidiPlaybackMetadata(midi, new FileInfo(path).Length,
-                Path.GetFileNameWithoutExtension(filename),
+                PrettyTitleFromFilename(filename),
                 sidOnly ? null : _wtsBankName);
             _midiPlayback.Play(midi, routing.VoiceToChannel, routing.InstrumentSlots);
             SetOk();
@@ -2844,6 +2844,20 @@ public sealed partial class FileIoController
         _busWrite((ushort)VgcConstants.MusicMetaFlags, metaFlags);
     }
 
+    // Turn a bare filename into a display title: drop the path and extension,
+    // swap '-'/'_' for spaces, and Title-Case each word ("champagne-supernova"
+    // -> "Champagne Supernova"). Used only as the title when a SID/MIDI carries
+    // no real title of its own.
+    private static string PrettyTitleFromFilename(string filenameOrPath)
+    {
+        string baseName = Path.GetFileNameWithoutExtension(filenameOrPath);
+        var words = baseName.Replace('-', ' ').Replace('_', ' ')
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+            words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..];
+        return string.Join(' ', words);
+    }
+
     private void ExtractMidiMetadata(byte[] data)
     {
         try
@@ -2860,22 +2874,27 @@ public sealed partial class FileIoController
         int trackCount = midi.GetTrackChunks().Count();
         _busWrite((ushort)VgcConstants.MetaSongs, (byte)Math.Min(trackCount, 255));
 
+        var chunks = midi.GetTrackChunks().ToList();
+
+        // Title comes only from track 0 — the Format-1 conductor track, the one
+        // place a song title belongs. Instrument tracks (1+) are named "Drums",
+        // "Bass", etc.; scanning all tracks for the first name grabs an instrument
+        // name instead of the song. When track 0 has no name (common for ripped
+        // MIDIs), leave the title unset so the caller falls back to the filename.
         string? title = null;
+        if (chunks.Count > 0)
+            foreach (var ev in chunks[0].Events)
+                if (ev is SequenceTrackNameEvent tn) { title = tn.Text; break; }
+
         string? copyright = null;
-        foreach (var track in midi.GetTrackChunks())
+        foreach (var track in chunks)
         {
             foreach (var ev in track.Events)
-            {
-                if (title is null && ev is SequenceTrackNameEvent tn)
-                    title = tn.Text;
-                if (copyright is null && ev is CopyrightNoticeEvent cr)
-                    copyright = cr.Text;
-                if (title is not null && copyright is not null) break;
-            }
-            if (title is not null && copyright is not null) break;
+                if (ev is CopyrightNoticeEvent cr) { copyright = cr.Text; break; }
+            if (copyright is not null) break;
         }
 
-        if (title is not null)
+        if (!string.IsNullOrWhiteSpace(title))
             WriteMetaStringFromManaged(VgcConstants.MetaTitle, title, VgcConstants.MetaTitleLen);
         if (copyright is not null)
         {
