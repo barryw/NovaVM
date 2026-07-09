@@ -1,10 +1,15 @@
-; libgraphics.inc — GRAPHICS module (MODULE_ID_GRAPHICS = $01) fn-id contract.
+; =====================================================================
+;  Nova NDK — libgraphics.inc
 ;
-; The canonical paged graphics library: the superset of every NDK graphics
-; driver, callable identically by every runtime through the Phase-3 lib_call ABI.
-; Built once (modules/graphics/graphics.s), staged to XRAM $060000, paged into
-; bank 1 on first lib_call.
+;  GRAPHICS module (MODULE_ID_GRAPHICS = $01) fn-id contract. The canonical
+;  paged graphics library: the superset of every NDK graphics driver,
+;  callable identically by every runtime through the Phase-3 lib_call ABI.
+;  Built once, staged to XRAM $060000, paged into bank 1 on first lib_call.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; CALLING CONVENTION (caller side, see libabi.inc):
 ;   LIB_MOD_ID ($0300) = MODULE_ID_GRAPHICS
 ;   LIB_FN_ID  ($0301) = one of the GFN_* ids below

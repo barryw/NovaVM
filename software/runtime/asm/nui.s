@@ -1,4 +1,13 @@
-; Shared Nova application UI helpers.
+; =====================================================================
+;  Nova NDK — nui.s
+;
+;  Shared Nova application UI helpers: modal dialogs, error boxes, an
+;  interactive fixed-width list picker, save/restore-under for text and
+;  graphics planes, and ANSI-aware key input.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 .include "vtext.s"

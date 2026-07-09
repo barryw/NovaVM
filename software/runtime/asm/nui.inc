@@ -1,18 +1,13 @@
-; Shared Nova application UI helpers.
+; =====================================================================
+;  Nova NDK — nui.inc
 ;
-; First-pass scope: modal/dialog chrome drawn with graphics-plane fills, plus
-; text rendered through vtext. Applications provide
-; zero-terminated title/message strings and can either use the default geometry
-; or set NUI_DIALOG_* before drawing.
+;  Shared Nova application UI helpers: modal/dialog chrome drawn with
+;  graphics-plane fills and text via vtext, plus save-under/restore of the
+;  text and graphics planes covered by a dialog (including its shadow).
 ;
-; Text-only applications can save the three text planes under a dialog. Mixed
-; text/graphics applications should use the full save-under routines, which
-; also preserve the graphics-plane pixels covered by the dialog. NUI chrome
-; includes its shadow: callers that intend to restore the covered area should
-; save one extra text cell to the right and bottom when the dialog is not flush
-; with the screen edge. The caller provides XRAM buffers; text buffers are
-; NUI_SAVE_WIDTH*NUI_SAVE_HEIGHT bytes each, and the graphics buffer is
-; (NUI_SAVE_WIDTH*4)*(NUI_SAVE_HEIGHT*4) bytes.
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NUI_INC_INCLUDED
 NUI_INC_INCLUDED = 1

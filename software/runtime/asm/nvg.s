@@ -1,4 +1,14 @@
-; Shared Nova NVG image loader routines.
+; =====================================================================
+;  Nova NDK — nvg.s
+;
+;  Shared NVG image loader: load/draw NVG2 native images into the VGC
+;  graphics bitmap, with variants for fixed vs pointer-based filenames,
+;  target offset, and optional pre-clear. Handles palette, transparency
+;  color-key, and 4-bit-per-pixel unpack blits.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nvg.inc"
 .include "blitter.inc"

@@ -1,8 +1,14 @@
-; NovaZ runtime launcher.
+; =====================================================================
+;  NovaZ — autoboot.s
 ;
-; BASIC loads this as AUTOBOOT.bin into RAM. It asks NovaHost to stream the
-; NovaZ runtime ROM into the primary $C000 bank, then jumps through that
-; runtime's reset vector. BASIC-only autoboot images do not use this path.
+;  Runtime launcher. BASIC loads this as AUTOBOOT.bin into RAM, where it
+;  asks NovaHost to stream the NovaZ runtime ROM into the primary $C000
+;  bank and then jumps through that runtime's reset vector. BASIC-only
+;  autoboot images do not use this path.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

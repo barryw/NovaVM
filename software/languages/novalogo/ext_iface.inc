@@ -1,5 +1,12 @@
-; ext_iface.inc — shared interface between NovaLogo base ROM and extension ROM
+; =====================================================================
+;  NovaLogo — ext_iface.inc
 ;
+;  Shared interface between the NovaLogo base ROM and extension ROM.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; These equates define the ZP mailbox used to pass arguments and results
 ; between the base ROM and the extension ROM via the RAM trampoline.
 ; Both ROMs include this file so addresses are always consistent.

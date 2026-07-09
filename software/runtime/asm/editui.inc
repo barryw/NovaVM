@@ -1,8 +1,13 @@
-; Shared Nova editor-shell UI declarations.
+; =====================================================================
+;  Nova NDK — editui.inc
 ;
-; EDITUI is a small text-mode shell for native tools: menu bar, title/help
-; rows, framed panels, and status lines. Applications own input dispatch,
-; document state, and editor-specific drawing.
+;  Editor-shell UI ABI: a text-mode chrome shell for native tools — menu bar,
+;  title/help rows, framed panels, and status lines. Apps own input dispatch,
+;  document state, and editor-specific drawing.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef EDITUI_INC_INCLUDED
 EDITUI_INC_INCLUDED = 1

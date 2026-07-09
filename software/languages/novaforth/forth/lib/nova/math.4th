@@ -1,6 +1,12 @@
-\ NovaForth math coprocessor library.
-\ Load explicitly with: INCLUDE forth/lib/nova/math.4th
-\ Wraps the hardware math coprocessor register bank at $BB20-$BB4F.
+\ =====================================================================
+\  NovaForth — math.4th
+\
+\  Math coprocessor library: wraps the hardware register bank at
+\  $BB20-$BB4F. Load explicitly with INCLUDE forth/lib/nova/math.4th.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 HEX
 BB4A CONSTANT MATH-SQRT-LO     \ integer sqrt input, low byte

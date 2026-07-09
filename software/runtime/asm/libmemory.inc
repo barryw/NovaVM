@@ -1,13 +1,17 @@
-; libmemory.inc — MEMORY module (MODULE_ID_MEMORY = $05) fn-id contract.
+; =====================================================================
+;  Nova NDK — libmemory.inc
 ;
-; The shared expansion-memory module. It is the home of the XRAM core runtime
-; (runtime/asm/xram.s) and the XMC named-block allocator + window controller
-; (runtime/asm/xmc.s): flat 24-bit XRAM byte/DMA access, direct file streaming,
-; the page allocator, named-block stash/fetch/delete + directory, bank select,
-; and the four hardware mapping windows. Every fn here is a THIN lib_call wrapper
-; that marshals the mailbox into an NDK routine's inputs (the XRAM_* ZP pseudo-
-; registers or the XMC_* MMIO registers) and JSRs it.
+;  MEMORY module (MODULE_ID_MEMORY = $05) fn-id contract. Home of the XRAM
+;  core runtime (xram.s) and the XMC named-block allocator + window
+;  controller (xmc.s): flat 24-bit XRAM byte/DMA access, direct file
+;  streaming, the page allocator, named-block stash/fetch/delete + directory,
+;  bank select, and the four hardware mapping windows. Every fn is a THIN
+;  lib_call wrapper that marshals the mailbox and JSRs an NDK routine.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Note the prefix: ids use MEM_* (the memory-domain library). XRAM_*/XMC_* are
 ; reserved for the ZP pseudo-register / MMIO register blocks (xram.inc, nova.inc)
 ; — those are different namespaces.

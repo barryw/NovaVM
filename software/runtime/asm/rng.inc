@@ -1,8 +1,13 @@
-; Shared Nova random-number service declarations.
+; =====================================================================
+;  Nova NDK — rng.inc
 ;
-; The host backs this through hardware entropy on real hardware and the
-; emulator's cryptographic RNG in Avalonia. Routines return A=0 on
-; success and A=1 on error. Returned bytes remain in RNG_VALUE0..3.
+;  Shared Nova random-number service declarations. Backed by hardware entropy
+;  on real hardware and the emulator's cryptographic RNG in Avalonia; routines
+;  return A=0 on success and A=1 on error, with bytes in RNG_VALUE0..3.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef RNG_INC_INCLUDED
 RNG_INC_INCLUDED = 1

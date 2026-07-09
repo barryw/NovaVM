@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Z4StyleStory)
+//
+//  Generates a Version 4 story that exercises Z-machine text styles (bold,
+//  reverse, and their cumulative combination) and holds the styled screen
+//  for the headless smoke test and HDMI demo.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 
 const int StorySize = 0x1000;

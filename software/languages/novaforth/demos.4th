@@ -1,8 +1,13 @@
-\ Nova hardware show-off demos for NovaForth.
-\ Run from the disk you booted:   INCLUDE "demos.4th"
-\ then type a demo name:          TUNNEL   STARBURST   MOIRE   ALL
-\ Each ends back at the text prompt. The VGC's artist (line/circle) draws in
-\ hardware, so these vector effects run fast; VSYNC keeps them tear-free.
+\ =====================================================================
+\  NovaForth — demos.4th
+\
+\  Hardware show-off vector demos (TUNNEL / STARBURST / MOIRE / ALL).
+\  The VGC artist draws in hardware so they run fast; VSYNC keeps them
+\  tear-free. Load with INCLUDE "demos.4th", then type a demo name.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/vgc.4th
 

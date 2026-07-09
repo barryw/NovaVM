@@ -1,5 +1,12 @@
-; NovaLogo v1.0 — Logo interpreter for the Nova 6502 platform
-; Task 1.4: line input buffer with backspace handling
+; =====================================================================
+;  NovaLogo — novalogo.s
+;
+;  Logo interpreter for the Nova 6502 platform: top-level entry, module
+;  includes, and the REPL that reads a line, tokenizes it, and evaluates.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
       .include "nova.inc"
       .include "libabi.inc"

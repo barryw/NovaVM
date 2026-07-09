@@ -1,4 +1,12 @@
-; Nova Forth v0.1 - Nova-native threaded Forth runtime.
+; =====================================================================
+;  NovaForth — novaforth.s
+;
+;  Nova-native threaded Forth runtime (v0.1): inner/outer interpreter,
+;  compiler, dictionary, and the built-in primitive words.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
       .setcpu "w65c02"
 

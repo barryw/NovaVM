@@ -1,7 +1,14 @@
-; Shared Nova hardware constants for BASIC, assembly, and runtime libraries.
+; =====================================================================
+;  Nova NDK — nova.inc
 ;
-; This include is deliberately guarded per symbol so it can coexist with older
-; source files that still define a subset of these names locally.
+;  Shared Nova hardware constants (MMIO register addresses, command ids, and
+;  status/error codes) for BASIC, assembly, and runtime libraries. Guarded
+;  per-symbol so it can coexist with older sources that still define a subset
+;  of these names locally.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NOVA_INC_INCLUDED
 NOVA_INC_INCLUDED = 1

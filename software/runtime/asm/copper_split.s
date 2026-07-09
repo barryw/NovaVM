@@ -1,4 +1,12 @@
-; Shared Nova copper split helper routines.
+; =====================================================================
+;  Nova NDK — copper_split.s
+;
+;  Configure a copper list with a two-way VGC_MODE split: one mode from line 0
+;  and a second mode from the raster line in VGC_P1.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "copper_split.inc"
 

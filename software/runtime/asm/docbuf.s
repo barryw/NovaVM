@@ -1,9 +1,14 @@
-; docbuf.s — shared XRAM-backed open-document buffers for native editors.
+; =====================================================================
+;  Nova NDK — docbuf.s
 ;
-; First backend: fixed-size full-buffer snapshots. The active editor document
-; stays in the caller's RAM edit buffer; inactive documents live in fixed XRAM
-; slots. This gives every language shell the same multi-buffer contract now,
-; while leaving room for a larger direct-XRAM text backend later.
+;  Shared XRAM-backed open-document buffers for native editors. The active
+;  document stays in the caller's RAM edit buffer; inactive documents are
+;  fixed-size full-buffer snapshots kept in fixed XRAM slots, giving every
+;  language shell the same multi-buffer contract.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "docbuf.inc"
 

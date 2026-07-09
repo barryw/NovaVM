@@ -1,7 +1,15 @@
-; libmod.inc — emit the standard module preamble at $C000.
-; Invoke `lib_module_header <id>,<ver>,<fncount>` as the FIRST thing in the CODE
-; segment of a module (cfg ORGs CODE at $C000). `dispatch` must be a label that
-; follows (the module's fn-id dispatcher).
+; =====================================================================
+;  Nova NDK — libmod.inc
+;
+;  Emit the standard module preamble at $C000. Invoke
+;  `lib_module_header <id>,<ver>,<fncount>` as the FIRST thing in a module's
+;  CODE segment (cfg ORGs CODE at $C000); a `dispatch` label must follow
+;  (the module's fn-id dispatcher).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
       .include "libabi.inc"
 
 .macro lib_module_header mod_id, ver, fncount

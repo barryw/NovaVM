@@ -1,8 +1,15 @@
-; Nova wavetable-synth (WTS) note API — public declarations.
+; =====================================================================
+;  Nova NDK — wts.inc
 ;
-; Async, voice-tracked one-shot notes on the 8 WTS voices ($A140-$A17F), mirroring
-; the SID audio_*_async model: wts_note_async allocates a FREE voice, notes it on,
-; and returns immediately; wts_tick releases it after its frame count elapses.
+;  Nova wavetable-synth (WTS) note API — public declarations. Async,
+;  voice-tracked one-shot notes on the 8 WTS voices ($A140-$A17F),
+;  mirroring the SID audio_*_async model: wts_note_async allocates a FREE
+;  voice and returns immediately; wts_tick releases it after its frame
+;  count elapses.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef WTS_API_INCLUDED
 WTS_API_INCLUDED = 1

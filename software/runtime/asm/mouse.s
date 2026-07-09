@@ -1,4 +1,13 @@
-; Shared Nova mouse pointer helper routines.
+; =====================================================================
+;  Nova NDK — mouse.s
+;
+;  Shared Nova mouse pointer helper routines: thin wrappers over the VGC
+;  hardware mouse registers (show/hide, shape, hotspot, colour, and
+;  button/position readback).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "mouse.inc"
 

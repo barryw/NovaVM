@@ -1,6 +1,14 @@
-; editbuf.s — shared text-editing engine for Nova native tools.
-; See editbuf.inc for the public ABI and hook contracts. This module is
-; language-neutral; all host behavior arrives through the hook vectors.
+; =====================================================================
+;  Nova NDK — editbuf.s
+;
+;  Shared modal text-editing engine for Nova native tools: cursor movement,
+;  editing, selection/clipboard, find/replace, undo/redo, and rendering. The
+;  module is language-neutral; all host behavior arrives through hook vectors.
+;  See editbuf.inc for the public ABI and hook contracts.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "editbuf.inc"
 .include "editui.inc"

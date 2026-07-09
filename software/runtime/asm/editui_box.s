@@ -1,7 +1,13 @@
-; generic EDITUI box helpers.
+; =====================================================================
+;  Nova NDK — editui_box.s
 ;
-; Split from editui.o so the editor menu path can use its small single-style
-; frame without linking the public generic box/title/body helpers.
+;  Generic EDITUI box helpers: draw a single/double-line framed box with an
+;  optional title, and select its interior body region for text. Split from
+;  editui.s so the menu path can use its small frame without linking these.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "editui.inc"
 

@@ -1,4 +1,12 @@
-; Shared Nova copper helper declarations.
+; =====================================================================
+;  Nova NDK — copper.inc
+;
+;  Copper helper ABI: build/enable/disable per-scanline copper lists that
+;  rewrite VGC registers (mode, background color, scroll) mid-frame.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef COPPER_INC_INCLUDED
 COPPER_INC_INCLUDED = 1

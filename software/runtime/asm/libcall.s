@@ -1,7 +1,14 @@
-; libcall.s — resident paged-library loader. ORG via cfg (RAM blob for tests).
-; Caller fills LIB_MOD_ID/LIB_FN_ID/args, then JSR lib_call.
-; LIB_HOME_BANK must hold the caller's REG_ROMSWAP value (set at boot).
-; On return: LIB_STATUS (0=ok), LIB_RESULT set by module. A/X/Y clobbered.
+; =====================================================================
+;  Nova NDK — libcall.s
+;
+;  Resident paged-library loader. Caller fills LIB_MOD_ID/LIB_FN_ID/args
+;  then JSRs lib_call (LIB_HOME_BANK = caller's REG_ROMSWAP). On return
+;  LIB_STATUS=0 on success, LIB_RESULT set by module; A/X/Y clobbered.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
       .include "libabi.inc"
       .include "nova.inc"                 ; REG_ROMSWAP, ROMSWAP_EXTENSION
 
@@ -83,7 +90,7 @@ lcv_ver:   lda #LERR_BAD_VER
 ; modtab_lookup — A = module id. Scan shelf_tag[] for a resident slot.
 ; HIT : program PGD_SRC = SHELF_BASE + slot*$4000, PGD_WORDS = SHELF_SLOT_WORDS,
 ;       bump the slot to MRU in shelf_lru[], return C=0.
-; MISS (Phase B): demand-load from SD via the FIO controller into a victim slot
+; MISS: demand-load from SD via the FIO controller into a victim slot
 ;       (empty-first, else LRU back), record the tag, then page in (C=0). On host
 ;       load error the victim tag is cleared and we return C=1 (-> LERR_BAD_MODULE).
 ; The compile-time map is gone: slot is assigned by the host (firmware/test harness),

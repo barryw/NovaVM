@@ -1,6 +1,12 @@
-\ NovaForth core extensions library.
-\ Keep ENVIRONMENT? CORE-EXT false until this file provides the complete
-\ Forth-2012 Core Extensions word set.
+\ =====================================================================
+\  NovaForth — core-ext.4th
+\
+\  Forth-2012 Core Extensions word set. Keep ENVIRONMENT? CORE-EXT false
+\  until this file provides the complete word set.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 0 CONSTANT FALSE
 0 INVERT CONSTANT TRUE

@@ -1,4 +1,11 @@
-\ NovaForth wrappers for the NDK SOUND module.
+\ =====================================================================
+\  NovaForth — sound.4th
+\
+\  Wrappers for the NDK SOUND module.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

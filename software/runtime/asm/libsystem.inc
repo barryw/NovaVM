@@ -1,13 +1,15 @@
-; libsystem.inc — SYSTEM module (MODULE_ID_SYSTEM = $03) fn-id contract.
+; =====================================================================
+;  Nova NDK — libsystem.inc
 ;
-; The shared system-services module: host-neutral facilities that no single
-; runtime should carry in its own 16K ROM. Built once (modules/system/system.s),
-; staged to the XRAM shelf, paged into bank 1 on first lib_call.
+;  SYSTEM module (MODULE_ID_SYSTEM = $03) fn-id contract. The shared
+;  system-services module — host-neutral facilities (timing, host RNG, modal
+;  NUI, fixed-overlay manager, label lookup, screen readline) that no single
+;  runtime should carry in its own 16K ROM. Paged into bank 1 on first lib_call.
 ;
-; The full-screen source editor lives in MODULE_ID_EDITOR (libeditor.inc). The
-; original SYS_FN_EDIT slot is intentionally left unimplemented so the remaining
-; SYSTEM fn ids stay stable.
-;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; CALLING CONVENTION (caller side, see libabi.inc):
 ;   LIB_MOD_ID ($0300) = MODULE_ID_SYSTEM
 ;   LIB_FN_ID  ($0301) = one of the SYS_FN_* ids below

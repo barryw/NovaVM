@@ -1,7 +1,14 @@
-; Shared Nova sprite helper routines.
+; =====================================================================
+;  Nova NDK — sprite.s
 ;
-; Assembly callers can load VGC_P* and call the command helpers, or use the
-; direct register helpers for the VGC sprite attribute block.
+;  Sprite helpers: VGC command wrappers (position, enable, flip, priority,
+;  row) plus direct access to the VGC sprite attribute block, and sprite/
+;  background collision status, clear, and IRQ control. Callers load VGC_P*
+;  for the command helpers, or use the direct register helpers.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "sprite.inc"
 

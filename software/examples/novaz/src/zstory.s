@@ -1,4 +1,13 @@
-; NovaZ Z-story/XRAM interface.
+; =====================================================================
+;  NovaZ — zstory.s
+;
+;  Z-story / XRAM interface — implementation. Backs Z-machine story memory
+;  with XRAM: header load, dynamic memory, and demand-paged static/high
+;  story bytes from story.bin.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "xram.inc"
 .include "libmemory.inc"

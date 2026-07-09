@@ -1,4 +1,12 @@
-; Shared Nova random-number service routines.
+; =====================================================================
+;  Nova NDK — rng.s
+;
+;  Random-number service: fetches host-backed random bits (8/16/32) into
+;  RNG.VALUE0..3 via the FileIoController RNG command.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "rng.inc"
 

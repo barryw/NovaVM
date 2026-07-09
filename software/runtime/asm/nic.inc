@@ -1,8 +1,14 @@
-; Shared Nova NIC runtime interface.
+; =====================================================================
+;  Nova NDK — nic.inc
 ;
-; BASIC handles string allocation/parsing.  Assembly callers can use these
-; routines by loading the NIC MMIO registers directly.
+;  NIC (network interface controller) runtime interface. BASIC handles string
+;  allocation/parsing; assembly callers drive the NIC MMIO registers directly
+;  per the connect/listen/send/receive register map below.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Connect:
 ;   NIC_SLOT      slot number
 ;   NIC_NAMEBUF   zero-terminated host name

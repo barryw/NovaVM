@@ -1,10 +1,14 @@
-; editbuf.inc — shared text-editing engine for Nova native tools.
+; =====================================================================
+;  Nova NDK — editbuf.inc
 ;
-; editbuf layers a real editable text buffer (cursor movement, insert/delete,
-; line navigation, selection, cut/copy/paste, scrolling) and modal NUI prompts
-; on top of the EDITUI chrome shell. It is intentionally LANGUAGE-NEUTRAL: it
-; knows nothing about Logo, BASIC, Pascal, files, or any document model.
+;  Language-neutral text-editing engine layered on the EDITUI chrome shell:
+;  cursor movement, insert/delete, selection, cut/copy/paste, scrolling, and
+;  modal prompts. Host-specific behavior comes in through hook vectors.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Anything language-specific is supplied by the host through HOOK VECTORS:
 ;   - SAVE hook   : invoked on Ctrl-S (and the dialog "Save First" choice).
 ;                   The host validates/saves/installs and returns a status.

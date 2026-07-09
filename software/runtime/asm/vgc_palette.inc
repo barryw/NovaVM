@@ -1,4 +1,12 @@
-; Shared Nova VGC palette helper declarations.
+; =====================================================================
+;  Nova NDK — vgc_palette.inc
+;
+;  Shared Nova VGC palette helper declarations: C64/EGA presets and
+;  custom RGB palette upload from XRAM.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef VGC_PALETTE_INC_INCLUDED
 VGC_PALETTE_INC_INCLUDED = 1

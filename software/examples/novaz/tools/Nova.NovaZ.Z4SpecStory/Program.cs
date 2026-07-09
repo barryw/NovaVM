@@ -1,11 +1,17 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Z4SpecStory)
+//
+//  Generates a Version 4 compliance story for NovaZ, exercising V4-specific
+//  behaviour that game transcripts do not reliably cover: the Flags1
+//  interpreter-capability bits (bold/italic/fixed/timed-input) and timed
+//  keyboard input (read_char with a time + interrupt routine).
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 
-// Generated Version 4 compliance story for NovaZ.
-//
-// Exercises V4-specific behaviour that game transcripts do not reliably cover:
-//   - Flags1 interpreter capability bits (bold/italic/fixed/timed-input).
-//   - Timed keyboard input (read_char with a time + interrupt routine).
-//
 // Keep this story V4-only. The interpreter writes the Flags1 bits at boot, so
 // the story reads its own header byte $01 and asserts the advertised bits.
 

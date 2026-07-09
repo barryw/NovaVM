@@ -1,8 +1,13 @@
-; Shared Nova DMA helper routines.
+; =====================================================================
+;  Nova NDK — dma.s
 ;
-; Callers load the DMA hardware registers, then call dma_start_copy or
-; dma_start_fill. Routines return A=0 on success and A=1 on error; detailed
-; errors remain in DMA_ERRCODE_REG.
+;  Shared DMA helpers (copy, fill). Callers load the DMA hardware registers,
+;  then call a start routine; routines return A=0 on success and A=1 on error,
+;  with detail left in DMA_ERRCODE_REG.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "dma.inc"
 

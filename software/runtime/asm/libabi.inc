@@ -1,6 +1,13 @@
-; libabi.inc — paged shared-library ABI (mailbox, module header, page-in MMIO).
-; Included by every runtime foundation, every module, and the loader.
-; Design: docs/plans/2026-06-03-paged-library-loader-3b-design.md
+; =====================================================================
+;  Nova NDK — libabi.inc
+;
+;  Paged shared-library ABI: mailbox, module header, page-in MMIO.
+;  Included by every runtime foundation, every module, and the loader.
+;  Design: docs/plans/2026-06-03-paged-library-loader-3b-design.md
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef LIBABI_INC_INCLUDED
 LIBABI_INC_INCLUDED = 1

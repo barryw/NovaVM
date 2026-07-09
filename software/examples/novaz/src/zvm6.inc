@@ -1,8 +1,14 @@
-; NOVAZ6.BIN segment interface.
+; =====================================================================
+;  NovaZ — zvm6.inc
 ;
-; Shared between the runtime ROM (loader + dispatch trampolines) and the
-; RAM-resident V6 segment (src/zvm6.s, linked by src/novaz6.cfg).
+;  NOVAZ6.BIN segment interface — dispatch ids and memory layout shared
+;  between the runtime ROM (loader + dispatch trampolines) and the
+;  RAM-resident V6 segment (src/zvm6.s, linked by src/novaz6.cfg).
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Layout contract (the ROM checks this at boot):
 ;   $2000  .byte 'N','6'      magic word
 ;   $2002  nz6_entry          JMP/JSR target, A = dispatch id

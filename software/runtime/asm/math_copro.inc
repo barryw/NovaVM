@@ -1,7 +1,14 @@
-; Shared Nova math coprocessor helpers.
+; =====================================================================
+;  Nova NDK — math_copro.inc
 ;
-; Keep application code at this operation level so the register protocol can
-; change later without forcing every caller to know the hardware layout.
+;  Math coprocessor macros: signed 16x16 and Q8.8 multiply, 32/16 divide,
+;  sin/cos, atan2, distance approximations, and 2D vector ops. Keep call
+;  sites at this operation level so the register protocol can change later
+;  without forcing every caller to know the hardware layout.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef MATH_COPRO_INC_INCLUDED
 MATH_COPRO_INC_INCLUDED = 1

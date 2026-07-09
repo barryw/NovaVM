@@ -1,4 +1,11 @@
-\ NovaForth wrappers for the NDK GRAPHICS module.
+\ =====================================================================
+\  NovaForth — graphics.4th
+\
+\  Wrappers for the NDK GRAPHICS module.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

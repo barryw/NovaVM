@@ -1,9 +1,15 @@
-; NovaZ runtime ROM.
+; =====================================================================
+;  NovaZ — runtime.s
 ;
-; This is a runtime placeholder, not the interpreter yet. It proves the boot
-; boundary we need for NovaZ/Forth-style runtimes: BASIC autoboot loads this
-; ROM into the primary $C000 bank, this reset entry owns the machine, and story
-; data is loaded from the mounted image into XRAM.
+;  Runtime ROM. The BASIC autoboot loads this into the primary $C000 bank
+;  and it owns the machine from its reset entry: it loads the story image
+;  from the mounted disk into XRAM, hosts the Z-machine interpreter step
+;  loop, and bridges the interpreter's input/output to the Nova text and
+;  file services.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

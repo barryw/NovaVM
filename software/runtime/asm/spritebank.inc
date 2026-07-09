@@ -1,10 +1,14 @@
-; Nova sprite-bank (NSPR) loader declarations.
+; =====================================================================
+;  Nova NDK — spritebank.inc
 ;
-; Parses an in-memory .nsp metasprite bank (docs/sprite-editor/NSPR.md) and
-; indexes it so the shape pool can be streamed to XRAM and each character spawned
-; as a metasprite (msprite.s) + animated (anim.s). This first stage validates the
-; header and computes the shape-pool and character-table pointers; later stages
-; walk the character/animation records off spritebank_chars_ptr.
+;  Nova sprite-bank (NSPR) loader declarations. Parses an in-memory .nsp
+;  metasprite bank (docs/sprite-editor/NSPR.md) and indexes it so the shape
+;  pool can be streamed to XRAM and each character spawned as an animated
+;  metasprite (msprite.s + anim.s).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef SPRITEBANK_INC_INCLUDED
 SPRITEBANK_INC_INCLUDED = 1

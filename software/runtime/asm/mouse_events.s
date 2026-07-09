@@ -1,4 +1,13 @@
-; Nova mouse event dispatch implementation. See mouse_events.inc.
+; =====================================================================
+;  Nova NDK — mouse_events.s
+;
+;  Nova mouse event dispatch: per-frame polling with button edge
+;  detection, a registered click handler, and areas-of-interest hit
+;  testing. See mouse_events.inc.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "mouse_events.inc"
 

@@ -1,8 +1,14 @@
-; Nova Chess game-server adapter.
+; =====================================================================
+;  NovaChess — nchess_net.inc
 ;
-; This is the chess-specific layer above runtime/asm/gameserver.s. It keeps
-; the generic lobby/table protocol out of the game code and maps engine 0x88
-; chess moves onto PLAYER_ACTION payloads.
+;  Game-server adapter interface: the chess-specific layer above
+;  runtime/asm/gameserver.s. Defines the shared constants/labels that map
+;  engine 0x88 chess moves onto the generic lobby/table PLAYER_ACTION
+;  protocol, keeping that protocol out of the game code.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NCHESS_NET_INC_INCLUDED
 NCHESS_NET_INC_INCLUDED = 1

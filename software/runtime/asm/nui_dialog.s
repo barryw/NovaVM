@@ -1,9 +1,14 @@
-; nui modal dialog core.
+; =====================================================================
+;  Nova NDK — nui_dialog.s
 ;
-; Feature-group object: status/result helpers, dialog geometry and style,
-; graphics-plane chrome, text clears, centered text rendering, and the
-; show_dialog/show_error/wait_key entry points. This is the always-used core of
-; nui; the list picker, save/restore-under, and key-input objects layer on top.
+;  Always-used nui core: status/result helpers, dialog geometry and
+;  style, graphics-plane chrome, text clears, centered text rendering,
+;  and the nui_show_dialog entry point. The list picker, save/
+;  restore-under, and key-input objects layer on top of this.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 .include "blitter.inc"

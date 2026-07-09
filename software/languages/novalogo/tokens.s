@@ -1,4 +1,11 @@
-; tokens.s — token node format and constants for NovaLogo
+; =====================================================================
+;  NovaLogo — tokens.s
+;
+;  Token node format and type constants shared by the tokenizer and eval.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 ; Token type constants
 TOK_WORD     = $01            ; payload: length byte + chars

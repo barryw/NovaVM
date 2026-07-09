@@ -1,7 +1,13 @@
-; Nova wrapper for the vendored chess6502-engine.
+; =====================================================================
+;  NovaChess — engine_nova.s
 ;
-; The UI runtime lives in the $C000 runtime ROM. This image is loaded from disk
-; into CPU RAM at $4000 and exposes the engine's Chess* public API labels there.
+;  Nova wrapper for the vendored chess6502-engine (full AI build). Loaded
+;  from disk into CPU RAM at $4000 and exposes the engine's Chess* public
+;  API under the nova_chess_* ABI for the $C000 UI runtime to call.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

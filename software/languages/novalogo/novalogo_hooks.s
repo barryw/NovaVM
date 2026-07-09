@@ -1,8 +1,14 @@
-; NovaLogo editor hooks.
+; =====================================================================
+;  NovaLogo — novalogo_hooks.s
 ;
-; Loaded by the Logo runtime into EDITOR_HOOK_WORK ($0800) before it calls the
-; shared editor. The editor module is paged in while hooks run, so the hook table
-; and nonzero hook bodies must live in low RAM rather than Logo ROM.
+;  Editor hooks loaded into EDITOR_HOOK_WORK ($0800) before the Logo
+;  runtime calls the shared editor. The editor module is paged in while
+;  hooks run, so the hook table and nonzero hook bodies must live in low
+;  RAM rather than Logo ROM.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
       .include "nova.inc"
       .include "libeditor.inc"

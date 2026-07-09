@@ -1,4 +1,13 @@
-; Nova fixed-address overlay manager implementation.
+; =====================================================================
+;  Nova NDK — overlay.s
+;
+;  Fixed-address overlay manager: loads, validates, and activates NOVO
+;  overlays into CPU RAM (magic/version/ABI/load-address/size checks,
+;  BSS clear) and dispatches their init/main/tick/unload entry points.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "overlay.inc"
 

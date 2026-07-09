@@ -1,9 +1,14 @@
-; NovaZ Z-story/XRAM interface.
+; =====================================================================
+;  NovaZ — zstory.inc
 ;
-; This is the Nova-specific story memory layer the interpreter builds on.
-; Dynamic memory and static/high story cache pages live in XRAM blocks
-; requested from the shared MEMORY/XMC service. Static/high story bytes are
-; demand-paged from story.bin.
+;  Z-story / XRAM interface — the Nova-specific story-memory layer the
+;  interpreter builds on. Dynamic memory and static/high story cache pages
+;  live in XRAM blocks requested from the shared MEMORY/XMC service;
+;  static/high bytes are demand-paged from story.bin.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef NOVA_NOVAZ_ZSTORY_INC_INCLUDED
 NOVA_NOVAZ_ZSTORY_INC_INCLUDED = 1

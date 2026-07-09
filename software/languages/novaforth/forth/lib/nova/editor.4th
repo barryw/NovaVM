@@ -1,4 +1,11 @@
-\ NovaForth wrappers for the NDK EDITOR module.
+\ =====================================================================
+\  NovaForth — editor.4th
+\
+\  Wrappers for the NDK EDITOR module.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

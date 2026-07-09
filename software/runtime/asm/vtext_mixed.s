@@ -1,8 +1,14 @@
-; Shared mixed text/graphics VTEXT helpers.
+; =====================================================================
+;  Nova NDK — vtext_mixed.s
 ;
-; This file is intentionally separate from vtext.s so plain text users do not
-; pay for gfx-plane scrolling. Runtimes that render text over the 320x200 gfx
-; plane can link or include this unit and call vtext_scroll_mixed_up.
+;  Mixed text/graphics VTEXT helpers, kept separate from vtext.s so
+;  plain-text users do not pay for gfx-plane scrolling. Scrolls and fills
+;  a VTEXT cell rectangle and its matching 320x200 gfx rectangle as one
+;  transaction, for runtimes that render text over the graphics plane.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vtext.inc"
 .include "blitter.inc"

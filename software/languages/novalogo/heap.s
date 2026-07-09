@@ -1,5 +1,12 @@
-; heap.s — bump allocator with GC headers for NovaLogo
-; Heap range: $09E0 to HEAP_END-1.
+; =====================================================================
+;  NovaLogo — heap.s
+;
+;  Bump allocator with GC headers. Heap range $09E0 to HEAP_END-1.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; $0300-$031F = cross-runtime library mailbox (libabi.inc LIB_MBOX);
 ; $0320-$041F = resident library loader band (libcall.s);
 ; $0420-$08FF = cross-runtime module-BSS band (libabi.inc MODULE_BSS_BAND).

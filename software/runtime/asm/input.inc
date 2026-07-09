@@ -1,10 +1,15 @@
-; Shared Nova board-input (joystick / buttons / DIP switches) declarations.
+; =====================================================================
+;  Nova NDK — input.inc
 ;
-; Single source of the $BA9C-$BAA1 board-input controller register map and bit
-; masks, for any runtime (BASIC, NovaLogo, NDK apps). The controller exists in
-; both the emulator (e6502.Avalonia/Hardware/CompositeBusDevice.cs) and the
-; FPGA (e6502.FPGA/rtl/top.sv); these values mirror VgcConstants.cs.
+;  Single source of the $BA9C-$BAA1 board-input controller register map
+;  and bit masks (joystick / buttons / DIP switches) for any runtime
+;  (BASIC, NovaLogo, NDK apps). Exists in both the emulator
+;  (CompositeBusDevice.cs) and the FPGA (top.sv); mirrors VgcConstants.cs.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; HOT PATH: read these MMIO registers DIRECTLY (LDA BOARD_BUTTONS). Do NOT wrap
 ; in a paged lib_call — input is read per-frame and a page-in per read would
 ; thrash the resident module bank every frame.

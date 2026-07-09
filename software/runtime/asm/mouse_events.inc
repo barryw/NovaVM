@@ -1,14 +1,15 @@
-; Nova mouse event dispatch: click callbacks + areas-of-interest.
+; =====================================================================
+;  Nova NDK — mouse_events.inc
 ;
-; A polled layer over the raw VGC mouse registers (there is no mouse IRQ). Call
-; mouse_poll() once per frame; it edge-detects button presses, records the event
-; context (button + x/y + which registered area was hit), and invokes the
-; client's click handler. Areas-of-interest let the handler switch on a region
-; tag instead of hit-testing coordinates itself.
+;  Polled mouse event dispatch: click callbacks + areas-of-interest over the
+;  raw VGC mouse registers (there is no mouse IRQ). Call mouse_poll() once per
+;  frame to edge-detect presses and invoke the client's click handler. State
+;  lives in BSS, so this links into NDK apps, not the ZP-only resident mouse.s.
 ;
-; State lives in BSS, so this module links into NDK apps (which have RAM), NOT
-; the resident EhBASIC mouse.s (ZP-only). Include mouse.inc for the raw helpers.
-;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Usage:
 ;     JSR mouse_events_init
 ;     LDA #<on_click : LDX #>on_click : JSR mouse_set_click_handler

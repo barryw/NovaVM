@@ -1,7 +1,16 @@
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Z6SpecStory)
+//
+//  Synthetic Version 6 story for NovaZ (text-only V6 boot). Verifies V6
+//  packed addressing with deliberately nonzero, mismatched routine/string
+//  offsets so an interpreter that ignores or confuses them cannot pass.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Text;
 
-// Synthetic Version 6 story for the NovaZ M1 milestone (text-only V6 boot).
-//
 // V6 packed addressing (Z-Machine Standard 1.1):
 //   routine byte address = 4P + 8 * R_O   (R_O = word at header $28)
 //   string  byte address = 4P + 8 * S_O   (S_O = word at header $2A)

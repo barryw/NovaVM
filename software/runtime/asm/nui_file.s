@@ -1,7 +1,13 @@
-; nui file picker.
+; =====================================================================
+;  Nova NDK — nui_file.s
 ;
-; Modal Turbo Vision-style file selector over FIO directory primitives. It owns
-; navigation/selection; callers still perform load/save.
+;  Modal Turbo Vision-style file selector built over FIO directory
+;  primitives. Owns navigation and selection; callers still perform
+;  the actual load/save.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nui.inc"
 .include "fio.inc"

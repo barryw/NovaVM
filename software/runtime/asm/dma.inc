@@ -1,4 +1,12 @@
-; Shared Nova DMA helper declarations.
+; =====================================================================
+;  Nova NDK — dma.inc
+;
+;  DMA helper ABI: memory copy and fill (blocking and async start/wait
+;  variants).
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef DMA_INC_INCLUDED
 DMA_INC_INCLUDED = 1

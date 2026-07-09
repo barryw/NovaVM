@@ -1,7 +1,13 @@
-; NovaZ save/load UI and file-stream overlay.
+; =====================================================================
+;  NovaZ — save_load_overlay.s
 ;
-; The base runtime owns Z-machine opcode return semantics. This overlay owns the
-; user-facing slot picker plus the native .NZS file serialization.
+;  Save/load UI and file-stream overlay. Owns the user-facing save-slot
+;  picker and the native .NZS save-file serialization; the base runtime
+;  keeps the Z-machine opcode return semantics.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 

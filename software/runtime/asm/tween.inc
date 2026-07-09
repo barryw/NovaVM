@@ -1,13 +1,14 @@
-; Shared Nova tween/easing declarations.
+; =====================================================================
+;  Nova NDK — tween.inc
 ;
-; The tween state is ordinary BSS so callers can use Nova pseudo registers as
-; scratch without this library owning them. Values are 16-bit, frame counts are
-; 8-bit, and duration 0 means "snap to end".
+;  Shared tween/easing ABI. State is ordinary BSS so callers can use Nova
+;  pseudo-registers as scratch; values are 16-bit, frame counts 8-bit, and
+;  duration 0 snaps to the end. Deliberately register-shaped so a future
+;  math coprocessor can implement the same contract behind TWEEN.EVAL.
 ;
-; This ABI is deliberately register-shaped: software writes start/end/duration/
-; frame/mode, evaluates, then reads value/done/progress/ease. A future math
-; coprocessor can implement the same contract behind TWEEN.EVAL without forcing
-; games or runtimes to change their animation code.
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef TWEEN_INC_INCLUDED
 TWEEN_INC_INCLUDED = 1

@@ -1,8 +1,14 @@
-; Nova Game Server shared client protocol interface.
+; =====================================================================
+;  Nova NDK — gameserver.inc
 ;
-; This layer sits above runtime/asm/nic.s. It builds and parses the compact binary
-; game-server frames carried by one Nova NIC message.
+;  Shared game-server client protocol interface. Sits above nic.s and
+;  builds/parses the compact binary game-server frames carried by one
+;  Nova NIC message.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Calling convention:
 ;   Buffer:      Set NGS_BUFL/H to a 256-byte CPU RAM frame buffer.
 ;   Host/text:   Set NGS_STRPTRL/H and NGS_STRLEN before routines that need

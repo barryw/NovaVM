@@ -1,9 +1,18 @@
+// =====================================================================
+//  NovaZ — Nz6Trace.cs
+//
+//  Env-gated NZ6 dispatch tracer for V6 window-model research. When
+//  NOVAZ_SMOKE_TRACE_NZ6=<path> is set, the Smoke harness appends a trace
+//  line each time execution reaches the NOVAZ6 segment dispatch entry (or
+//  the ROM-side layout VAR handlers), logging the dispatch id and operands.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Globalization;
 using KDS.e6502;
 
-// Env-gated NZ6 dispatch trace (M2 window-model research; see
-// docs/plans/2026-06-10-zork-zero-window-ops.md).
-//
 // When NOVAZ_SMOKE_TRACE_NZ6=<path> is set, every instruction step is sampled
 // and a line is appended to <path> whenever the CPU lands on:
 //   - nz6_entry ($2002, resolved from build/novaz6.sym): the NOVAZ6 segment

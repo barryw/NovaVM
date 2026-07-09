@@ -1,8 +1,14 @@
-; Shared Nova copper helper routines.
+; =====================================================================
+;  Nova NDK — copper.s
 ;
-; Assembly ABI:
-;   copper_add expects VGC_P0/P1=x, VGC_P2=y, VGC_P3/P4=register/index,
-;   VGC_P5=value. COPPER_REG_* constants cover common VGC register indices.
+;  Shared copper helpers: build and control VGC copper lists (clear, enable,
+;  select, add ops, set register/sprite targets).
+;  ABI: copper_add expects VGC_P0/P1=x, VGC_P2=y, VGC_P3/P4=register index,
+;  VGC_P5=value. COPPER_REG_* constants cover common VGC register indices.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "copper.inc"
 

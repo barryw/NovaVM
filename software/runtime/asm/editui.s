@@ -1,4 +1,13 @@
-; Shared Nova editor-shell UI helpers.
+; =====================================================================
+;  Nova NDK — editui.s
+;
+;  Shared editor-shell UI: draws the menu bar, status line, dropdown menus
+;  (with save-under/restore staged in XRAM), and text-printing helpers used by
+;  the native editor chrome.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "editui.inc"
 .include "vtext.inc"

@@ -1,3 +1,14 @@
+// =====================================================================
+//  NovaZ — BlorbPictures.cs
+//
+//  Decodes the Pict resources (PNG art + Rect placeholders) of a Blorb
+//  file and packs them into the NovaZ PICS.PAK format, pre-quantized to a
+//  16-colour palette so the 6502 never decodes or color-matches anything.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
+
 using System.Buffers.Binary;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;

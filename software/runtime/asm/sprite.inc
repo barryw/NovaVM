@@ -1,7 +1,13 @@
-; Shared Nova sprite helper declarations.
+; =====================================================================
+;  Nova NDK — sprite.inc
 ;
-; Command helpers use VGC_P* registers directly. Direct sprite-register helpers
-; use the public sprite attribute register block at VGC_SPR_BASE.
+;  Shared Nova sprite helper declarations. Command helpers use the VGC_P*
+;  registers directly; direct sprite-register helpers use the public sprite
+;  attribute register block at VGC_SPR_BASE.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef SPRITE_INC_INCLUDED
 SPRITE_INC_INCLUDED = 1

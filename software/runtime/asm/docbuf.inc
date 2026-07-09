@@ -1,10 +1,13 @@
-; docbuf.inc — shared XRAM-backed open-document buffers for native editors.
+; =====================================================================
+;  Nova NDK — docbuf.inc
 ;
-; DOCBUF stores inactive editor documents in platform-managed XRAM while the
-; active document remains in the existing RAM edit buffer. Hosts copy editbuf
-; state into DOCBUF_* before storing and copy DOCBUF_* back into editbuf after
-; loading. This keeps the text editor language-neutral while giving Pascal,
-; Logo, Forth, and future tools the same open-buffer behavior.
+;  XRAM-backed open-document buffers for native editors. Inactive documents
+;  live in platform-managed XRAM; the active one stays in the RAM edit buffer.
+;  Hosts swap editbuf state through DOCBUF_* to keep editors language-neutral.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef DOCBUF_INC_INCLUDED
 DOCBUF_INC_INCLUDED = 1

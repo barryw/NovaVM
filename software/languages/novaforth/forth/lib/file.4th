@@ -1,5 +1,12 @@
-\ NovaForth File Access word set.
-\ Standard names live here; NovaHost/NDK own the byte-stream implementation.
+\ =====================================================================
+\  NovaForth — file.4th
+\
+\  Forth-2012 File Access word set. Standard names live here; NovaHost/NDK
+\  own the byte-stream implementation.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

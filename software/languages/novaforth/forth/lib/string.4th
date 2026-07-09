@@ -1,4 +1,11 @@
-\ NovaForth Forth-2012 String and String Extensions library.
+\ =====================================================================
+\  NovaForth — string.4th
+\
+\  Forth-2012 String and String Extensions word set.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 BASE @
 DECIMAL

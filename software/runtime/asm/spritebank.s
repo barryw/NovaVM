@@ -1,4 +1,14 @@
-; Nova sprite-bank (NSPR) loader. See spritebank.inc + docs/sprite-editor/NSPR.md.
+; =====================================================================
+;  Nova NDK — spritebank.s
+;
+;  Sprite-bank (NSPR) loader: parses and indexes an in-memory NSPR bank,
+;  streams its shape pool into XRAM and sprite RAM, walks the character
+;  table, and spawns/animates bank characters as metasprites.
+;  See spritebank.inc + docs/sprite-editor/NSPR.md.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "spritebank.inc"
 .include "xram.inc"

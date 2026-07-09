@@ -1,5 +1,14 @@
-; Shared Nova File I/O helper declarations.
+; =====================================================================
+;  Nova NDK — fio.inc
 ;
+;  File I/O helper ABI: save/load, directory ops, file handles (open/read/
+;  write/seek), and XRAM streaming setup. Detailed status stays in the
+;  FIO_STATUS/FIO_ERRCODE hardware registers.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Calling convention for pointer-based filename helpers:
 ;   FIO_ARG_NAMELEN      filename length, 1..63
 ;   FIO_ARG_NAMEPTR_L/H  CPU pointer to filename bytes

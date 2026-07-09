@@ -1,4 +1,12 @@
-; eval.s — evaluator: walk token list and dispatch commands
+; =====================================================================
+;  NovaLogo — eval.s
+;
+;  Evaluator: walks the parsed token list and dispatches Logo commands,
+;  resolving numbers, words, and procedure calls.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 ; =====================================================================
 ; ZEROPAGE segment — evaluator variables

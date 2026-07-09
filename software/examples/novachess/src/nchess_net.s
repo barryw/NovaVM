@@ -1,4 +1,13 @@
-; Nova Chess game-server adapter implementation.
+; =====================================================================
+;  NovaChess — nchess_net.s
+;
+;  Game-server adapter implementation. Initializes the generic gameserver
+;  with the Nova Chess game id/protocol, and encodes/decodes chess moves
+;  as PLAYER_ACTION events plus the mirrored table event/state fields.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "nchess_net.inc"
 .include "gameserver.inc"

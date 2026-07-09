@@ -1,8 +1,14 @@
-; textsvc.inc — shared NDK text editing services.
+; =====================================================================
+;  Nova NDK — textsvc.inc
 ;
-; TEXTSVC owns editor-wide clipboard and undo/redo payload storage. The first
-; backend is XRAM-backed snapshots for the existing RAM edit buffer; callers use
-; this API instead of owning editor-local clipboard/undo memory.
+;  Shared NDK text-editing services. TEXTSVC owns editor-wide clipboard
+;  and undo/redo payload storage; the first backend is XRAM-backed
+;  snapshots for the RAM edit buffer, so callers use this API instead of
+;  owning editor-local clipboard/undo memory.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .ifndef TEXTSVC_INC_INCLUDED
 TEXTSVC_INC_INCLUDED = 1

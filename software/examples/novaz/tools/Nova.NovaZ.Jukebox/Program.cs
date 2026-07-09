@@ -1,10 +1,17 @@
-using System.Text;
+// =====================================================================
+//  NovaZ — Program.cs (Nova.NovaZ.Jukebox)
+//
+//  Generates a tiny V3 Z-story that auditions a game's sampled sounds: on
+//  boot it plays the first sound and prints its number, and each RETURN
+//  advances through the supplied list, wrapping around. Packaged with a
+//  game's real SOUND.PAK as a mount-and-run "sound museum" .ndi so every
+//  sound can be heard without a walkthrough.
+//
+//  Copyright (C) 2026 Barry Walker
+//  SPDX-License-Identifier: MIT
+// =====================================================================
 
-// Nova.NovaZ.Jukebox — generates a tiny V3 Z-story that auditions a game's
-// sampled sounds. On boot it plays the first sound and prints its number; each
-// RETURN advances to the next number in the supplied list, wrapping around. It
-// is packaged with a game's real SOUND.PAK to make a mount-and-run "Infocom
-// sound museum" .ndi, so every sound can be heard without a walkthrough.
+using System.Text;
 
 const int StorySize = 0x1000;
 const int InitialPc = 0x0040;

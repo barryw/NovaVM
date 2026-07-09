@@ -1,5 +1,12 @@
-\ NovaForth wrappers for the NDK MEMORY module.
-\ XRAM addresses are passed as xlo xhi: low 16 bits, then high byte.
+\ =====================================================================
+\  NovaForth — memory.4th
+\
+\  Wrappers for the NDK MEMORY module. XRAM addresses are passed as
+\  xlo xhi: low 16 bits, then high byte.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 INCLUDE forth/lib/nova/ndk.4th
 

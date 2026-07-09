@@ -1,12 +1,15 @@
-; libturtle.inc — TURTLE module (MODULE_ID_TURTLE = $07) fn-id contract.
+; =====================================================================
+;  Nova NDK — libturtle.inc
 ;
-; The turtle is a reusable cross-language graphics service: FD/RT/pen/heading
-; move-math + Amiga-BOB rotate-blit render. It was lifted whole out of the
-; GRAPHICS module (it does not fit the Logo base ROM, and it is not Logo-specific
-; — any runtime can drive it via lib_call). Semantics + render moved together; no
-; splitting. Turtle state stays at $9F00 (shared RAM, visible while the module is
-; paged), so callers and tests read X/Y/HEADING there unchanged.
+;  TURTLE module (MODULE_ID_TURTLE = $07) fn-id contract. A reusable
+;  cross-language graphics service: FD/RT/pen/heading move-math plus an
+;  Amiga-BOB rotate-blit render. Turtle state stays at $9F00 (shared RAM,
+;  visible while the module is paged) so callers and tests read X/Y/HEADING.
 ;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; CALLING CONVENTION (caller side, see libabi.inc):
 ;   LIB_MOD_ID ($0300) = MODULE_ID_TURTLE
 ;   LIB_FN_ID  ($0301) = one of the TUR_* ids below

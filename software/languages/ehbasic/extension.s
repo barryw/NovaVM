@@ -1,8 +1,14 @@
-; Extension ROM for NovaVM (bank 4)
-; Contains overflow command handlers called from BASIC ROM via RAM trampoline.
+; =====================================================================
+;  EhBASIC — extension.s
 ;
-; Entry point at $C000: reads ExtCmdId from zero page and dispatches.
-; Handlers access hardware directly and use RAM bridges for BASIC parser helpers.
+;  Extension ROM for NovaVM (bank 4): overflow command handlers called from
+;  the BASIC ROM via a RAM trampoline. Entry at $C000 reads ExtCmdId from
+;  zero page and dispatches; handlers access hardware directly and use RAM
+;  bridges for BASIC parser helpers.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 ; --- Zero page communication ---
 ExtCmdId        = $E4           ; command ID (set by RAM trampoline)

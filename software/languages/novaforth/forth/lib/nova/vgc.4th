@@ -1,5 +1,12 @@
-\ NovaForth VGC graphics library.
-\ Load explicitly with: INCLUDE forth/lib/nova/vgc.4th
+\ =====================================================================
+\  NovaForth — vgc.4th
+\
+\  VGC graphics library (direct register/command interface). Load
+\  explicitly with INCLUDE forth/lib/nova/vgc.4th.
+\
+\  Copyright (C) 2026 Barry Walker
+\  SPDX-License-Identifier: MIT
+\ =====================================================================
 
 HEX
 A000 CONSTANT VGC-MODE

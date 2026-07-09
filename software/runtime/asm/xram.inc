@@ -1,5 +1,14 @@
-; NovaVM XRAM runtime interface.
+; =====================================================================
+;  Nova NDK — xram.inc
 ;
+;  NovaVM XRAM runtime interface: read/write/copy/fill and file streaming
+;  over the flat 24-bit XRAM address space, with XMC-compatible status
+;  registers for a shared BASIC/assembly error path.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Calling convention:
 ;   XRAM address: XRAM_ADDRL/M/H (NVR0L/NVR0H/NVR1L, flat 24-bit)
 ;   CPU address:  XRAM_RAML/H (NVR2)

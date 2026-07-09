@@ -1,13 +1,15 @@
-; Shared Nova virtual-sprite helper routines.
+; =====================================================================
+;  Nova NDK — vsprite.s
 ;
-; The helpers intentionally expose a small blitter-shaped ABI. Runtimes can use
-; them for games, cursors, software sprites, board pieces, and any other
-; rectangular graphic that should not consume scarce hardware sprite slots.
+;  Shared virtual-sprite (software blitter-sprite) helpers: blit, fill,
+;  rotate, save/restore background, and multi-sprite scene composition.
+;  For rectangular graphics that should not consume scarce hardware
+;  sprite slots. Moving sprites use the saved-background helpers rather
+;  than redrawing the whole scene each frame.
 ;
-; Moving virtual sprites should use the saved-background helpers instead of
-; redrawing their whole scene every frame. Save the graphics-plane rectangle
-; under the object, draw the object, restore the saved rectangle before moving,
-; then repeat at the new position.
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .include "vsprite.inc"
 .include "blitter.inc"

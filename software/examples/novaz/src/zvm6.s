@@ -1,5 +1,14 @@
-; NOVAZ6.BIN — RAM-resident V6 segment (M1: minimal 8-window model).
+; =====================================================================
+;  NovaZ — zvm6.s
 ;
+;  NOVAZ6.BIN — RAM-resident V6 segment. Implements the Z-Machine V6
+;  8-window display model and the V6-specific EXT opcodes (graphics, mouse,
+;  menus), dispatched from the runtime ROM at NZ6_ENTRY.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
+
 ; Linked at $2000 by src/novaz6.cfg, packed onto every NovaZ image as
 ; NOVAZ6.BIN, and loaded by the runtime ROM at boot when the story is
 ; version 6 (see nz6_load_segment in src/runtime.s).

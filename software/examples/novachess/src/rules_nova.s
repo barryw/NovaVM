@@ -1,9 +1,15 @@
-; Nova wrapper for the rules-only chess6502-engine build.
+; =====================================================================
+;  NovaChess — rules_nova.s
 ;
-; This image is loaded into the same $4000 engine slot as the full AI build.
-; Keep the nova_chess_* ABI stubs the same size/order as engine_nova.s so
-; the runtime can call the shared rules surface without caring which image is
-; resident.
+;  Nova wrapper for the rules-only chess6502-engine build. Loaded into the
+;  same $4000 engine slot as the full AI build; the nova_chess_* ABI stubs
+;  match engine_nova.s in size/order (AI-only entries are RTS stubs) so the
+;  runtime can call the shared rules surface regardless of which image is
+;  resident.
+;
+;  Copyright (C) 2026 Barry Walker
+;  SPDX-License-Identifier: MIT
+; =====================================================================
 
 .setcpu "w65c02"
 
