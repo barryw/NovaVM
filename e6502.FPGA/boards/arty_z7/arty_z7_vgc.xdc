@@ -5,12 +5,17 @@
 set_property -dict { PACKAGE_PIN H16  IOSTANDARD LVCMOS33 } [get_ports { clk }]
 create_clock -add -name sys_clk -period 8.00 -waveform {0 4} [get_ports { clk }]
 
-## TODO(audit finding #5): clk_audio is a ~48 kHz fabric-divided clock (from
-## clk_pixel) that clocks the HDMI audio-regen sampling of a clk_pixel-domain word.
-## It's currently unconstrained. Adding create_clock + set_clock_groups -asynchronous
-## needs the post-synth net/clock names verified against the timing report (the
-## get_nets/get_pins filters are netlist-name sensitive). Low severity (audio only,
-## works in practice — the edges are a phase-aligned subset of clk_pixel). Deferred.
+## clk_audio (audit finding #5): a ~48 kHz clock generated in fabric by dividing
+## the pixel clock (clk_pix_raw) with clk_audio_reg. It clocks the HDMI audio-regen
+## block, which samples a clk_pixel-domain audio word. Define it as a generated
+## clock so its logic is timed, and declare the clk_pix_raw<->clk_audio crossing
+## asynchronous (the audio word changes far slower than either clock, so the
+## crossing is safe). Verified on the routed netlist: clk_audio period ~20.8 us,
+## 0 negative-slack paths (see test tcl in build history). divide_by 560 = the
+## divider's ~280-cycle half period; exact edges don't matter for a slow sample clk.
+create_generated_clock -name clk_audio -source [get_pins clk_audio_reg/C] \
+    -divide_by 560 [get_pins clk_audio_reg/Q]
+set_clock_groups -asynchronous -group [get_clocks clk_pix_raw] -group [get_clocks clk_audio]
 
 ## Push buttons (btn[0] = reset)
 set_property -dict { PACKAGE_PIN D19  IOSTANDARD LVCMOS33 } [get_ports { btn[0] }]

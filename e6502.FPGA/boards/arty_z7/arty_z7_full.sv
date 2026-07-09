@@ -73,19 +73,17 @@ module arty_z7_full (
     BUFG bufg_x5 (.I(clk_x5_raw), .O(clk_pixel_x5));
     BUFG bufg_px (.I(clk_pix_raw), .O(clk_pixel));
 
-    (* ASYNC_REG="TRUE" *) logic ls1, ls2;
-    always_ff @(posedge clk_pixel) begin ls1 <= mmcm_locked; ls2 <= ls1; end
-    // TODO(reset-domain unification, audit finding #3): fold the PS FCLK_RESET0_N
-    // into this PL reset so the PL AXI slaves reset in lockstep with the PS-side
-    // conv/smc (which reset from FCLK_RESET0_N via the BD rstgen). Requires
-    // regenerating the ps_full BD (build_full_bd.tcl) to expose the fclk_resetn
-    // external pin first. Narrow hazard (PS-only warm reboot); deferred.
-    logic [11:0] rst_cnt = 0; logic reset = 1'b1;
-    always_ff @(posedge clk_pixel) begin
-        if (!ls2) begin rst_cnt <= 0; reset <= 1'b1; end
-        else if (rst_cnt != 12'hFFF) begin rst_cnt <= rst_cnt + 1; reset <= 1'b1; end
-        else reset <= 1'b0;
-    end
+    // PL reset: held until the MMCM is locked AND the PS is out of reset
+    // (fclk_resetn high), then released after a settle window. Folding the PS
+    // FCLK_RESET0_N in makes the PL AXI slaves (fio_bridge/axi_xram/capture) reset
+    // in lockstep with the PS-side AXI conv/smc, which reset from FCLK_RESET0_N via
+    // the BD rstgen (audit finding #3). See boards/arty_z7/pl_reset_gen.sv +
+    // test/test_pl_reset_gen.sv.
+    wire fclk_resetn;   // PS FCLK_RESET0_N, driven by ps_full_wrapper
+    wire reset;
+    pl_reset_gen #(.HOLD_CYCLES(4095)) u_pl_reset (
+        .clk(clk_pixel), .mmcm_locked(mmcm_locked), .fclk_resetn(fclk_resetn), .reset(reset)
+    );
 
     // ---- front-panel buttons (OSD) -----------------------------------------
     // btn[3:0] active-high (board pull-downs). Debounce to a clean level; the
@@ -275,6 +273,7 @@ module arty_z7_full (
     wire        r_arvalid, r_arready, r_rvalid, r_rready;
 
     ps_full_wrapper ps (
+        .fclk_resetn(fclk_resetn),   // PS FCLK_RESET0_N -> pl_reset_gen (audit #3)
         .DDR_addr(DDR_addr), .DDR_ba(DDR_ba), .DDR_cas_n(DDR_cas_n),
         .DDR_ck_n(DDR_ck_n), .DDR_ck_p(DDR_ck_p), .DDR_cke(DDR_cke),
         .DDR_cs_n(DDR_cs_n), .DDR_dm(DDR_dm), .DDR_dq(DDR_dq),

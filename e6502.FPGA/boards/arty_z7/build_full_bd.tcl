@@ -72,7 +72,11 @@ make_bd_intf_pins_external -name S_AXI_XRAM [get_bd_intf_pins smc/S00_AXI]
 make_bd_intf_pins_external -name S_AXI_CAPTURE [get_bd_intf_pins smc/S01_AXI]
 # Expose PS fabric clock + reset for the PL.
 make_bd_pins_external -name fclk_clk0    [get_bd_pins ps7/FCLK_CLK0]
-make_bd_pins_external -name fclk_resetn  [get_bd_pins ps7/FCLK_RESET0_N]
+# FCLK_RESET0_N is already wired to rstgen/ext_reset_in, so make_bd_pins_external
+# no-ops on it. Explicitly create the external output port and add it as a second
+# load on the net (a PS output can fan out) so ps_full_wrapper exposes fclk_resetn.
+create_bd_port -dir O fclk_resetn
+connect_bd_net [get_bd_ports fclk_resetn] [get_bd_pins ps7/FCLK_RESET0_N]
 
 # Map the external XRAM master's address space onto the HP0 DDR segment (full
 # 1 GB DDR range so XRAM_BASE=0x10000000 is reachable). The master is external,
