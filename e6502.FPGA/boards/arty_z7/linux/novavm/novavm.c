@@ -79,6 +79,8 @@
 #define SHELF_BASE 0x00060000u
 #define SHELF_SLOT 0x00004000u
 #define SHELF_N 4
+#define FIO_CMD_SIDPLAY 0x08   /* -> naudio fio_sidplay */
+#define FIO_CMD_SIDSTOP 0x09   /* -> naudio fio_sidstop */
 #define FIO_CMD_VOLUME  0x0C   /* -> naudio fio_volume  */
 #define FIO_CMD_MIDPLAY 0x13   /* -> naudio fio_midplay */
 #define FIO_CMD_MIDSTOP 0x14   /* -> naudio fio_midstop */
@@ -104,7 +106,9 @@ void kbd_init(void);        /* nkbd.c: physical USB keyboard reader thread */
 void mouse_init(void);      /* nmouse.c: physical USB mouse -> VGC mouse pointer regs */
 void audio_init(void); void audio_start(void);              /* naudio.c */
 void fio_volume(void); void fio_midplay(void); void fio_midstop(void); void fio_sfload(void);
+void fio_sidplay(void); void fio_sidstop(void);             /* naudio.c: .sid playback */
 void servers_init(void);    /* nservers.c: mgmt 6504 / debug 6503 / upload 6502 */
+void vgc_bridge_lock(void); void vgc_bridge_unlock(void); /* nservers.c: recursive R_PEEK/R_VMEM latch lock */
 void boot_splash(void);     /* nsplash.c: render boot.json logo + fade (6502 held) */
 
 /* NOTE: there used to be a set_fclk0_125mhz() here that poked the PS SLCR to
@@ -117,7 +121,8 @@ void boot_splash(void);     /* nsplash.c: render boot.json logo + fade (6502 hel
 static inline void wr(unsigned o, uint32_t v) { g_reg[o >> 2] = v; }
 static inline uint32_t rd(unsigned o) { return g_reg[o >> 2]; }
 static inline void poke(unsigned a, unsigned char d) { wr(R_POKE, ((a & 0xFFFFu) << 8) | d); }
-static inline unsigned char peek(unsigned a) { wr(R_PEEK_ADDR, a & 0xFFFFu); return (unsigned char)rd(R_PEEK_DATA); }
+/* Locks the bridge around the held R_PEEK_ADDR latch — see novavm.h. */
+static inline unsigned char peek(unsigned a) { unsigned char v; vgc_bridge_lock(); wr(R_PEEK_ADDR, a & 0xFFFFu); v = (unsigned char)rd(R_PEEK_DATA); vgc_bridge_unlock(); return v; }
 static inline void cpu_hold(int h) { wr(R_CTRL, h ? CTRL_CPU_RESET : 0u); }
 static inline int fio_pending(void) { return rd(R_STATUS) & 1u; }
 static inline void fio_clear(void) { wr(R_STATUS, 1u); }
@@ -294,9 +299,16 @@ static void boot_wait_msg(void) {
  * loader, run the boot splash, then release. Once released, the 6502 owns VGC
  * state; host-side post-release pokes can clobber language display modes. */
 static int vm_cold_boot(void) {
+    /* Serialize the entire reboot (16K R_ROMW stream + resets + loader pokes +
+     * splash) under the bridge lock. Two reboot sources (OSD button thread and
+     * debug 6503 cold_start) or a reboot landing mid-command on the main FIO
+     * loop's peeks would otherwise interleave -> corrupt ROM image / garbage
+     * read / reset mid-command. Recursive lock: the debug path already holds it. */
+    vgc_bridge_lock();
+    int rc = 0;
     wr(R_CTRL, CTRL_CPU_RESET | CTRL_SYS_RESET);
     usleep(150000);
-    if (load_rom("/data/nova/roms/ehbasic.bin") != 0) return 1;
+    if (load_rom("/data/nova/roms/ehbasic.bin") != 0) { rc = 1; goto done; }
     clear_cold_xram();
     clear_runtime_low_ram();
     for (unsigned i = 0; i < sizeof(LOADER_BIN); i++) poke(0x0320 + i, LOADER_BIN[i]);
@@ -305,7 +317,9 @@ static int vm_cold_boot(void) {
     poke(AUTOBOOT_SKIP_ADDR, 0);
     cpu_hold(0);                    /* release -> cold start */
     usleep(600000);
-    return 0;
+done:
+    vgc_bridge_unlock();
+    return rc;
 }
 
 /* OSD mount-and-boot: re-run the cold boot so the 6502 re-reads boot.json mounts
@@ -381,6 +395,10 @@ int main(int argc, char **argv) {
     for (;;) {
         if (!fio_pending()) { usleep(300); continue; }
         fio_clear();
+        /* NOTE: the poke-vs-CPU bus contention that used to require pausing the
+         * 6502 across FIO handling is now fixed in the PL (top.sv poke_active
+         * stalls cpu_ce for the duration of every debug-bridge write), so no
+         * host-side system_pause is needed. */
         unsigned char cmd = peek(FIO_CMD);
         if (cmd && cmd != FIO_CMD_DIRREAD) poke(FIO_STATUS, 0);
         switch (cmd) {
@@ -403,6 +421,8 @@ int main(int argc, char **argv) {
                 } else fio_fail(FIO_ERR_NOTFOUND);
                 break;
             }
+            case FIO_CMD_SIDPLAY: fio_sidplay(); break;
+            case FIO_CMD_SIDSTOP: fio_sidstop(); break;
             case FIO_CMD_VOLUME:  fio_volume();  break;
             case FIO_CMD_MIDPLAY: fio_midplay(); break;
             case FIO_CMD_MIDSTOP: fio_midstop(); break;

@@ -53,10 +53,10 @@ module arty_z7_full (
     wire clk_pixel, clk_pixel_x5, mmcm_locked;
     MMCME2_BASE #(
         // LOW bandwidth = max input-jitter attenuation. The MMCM is fed from the
-        // PS FCLK_CLK0 (a relatively jittery clock); AMD's guidance is to use the
-        // MMCM's low-bandwidth jitter-filter mode when sourcing a PL clock from an
-        // FCLK. OPTIMIZED let jitter through and at the tight 26.95 MHz pixel-clock
-        // margin it was corrupting the 6502 (intermittent jump-to-garbage).
+        // board's 125 MHz H16 oscillator (top-level `clk`, XDC create_clock sys_clk),
+        // NOT the PS FCLK. At the tight 26.95 MHz pixel-clock margin, OPTIMIZED let
+        // input jitter through and intermittently corrupted the 6502 (jump-to-
+        // garbage); LOW's jitter-filter mode fixed it.
         .BANDWIDTH("LOW"), .CLKIN1_PERIOD(8.000), .DIVCLK_DIVIDE(1),
         .CLKFBOUT_MULT_F(8.625), .CLKOUT0_DIVIDE_F(8.000), .CLKOUT1_DIVIDE(40),
         .CLKOUT0_DUTY_CYCLE(0.5), .CLKOUT1_DUTY_CYCLE(0.5),
@@ -75,6 +75,11 @@ module arty_z7_full (
 
     (* ASYNC_REG="TRUE" *) logic ls1, ls2;
     always_ff @(posedge clk_pixel) begin ls1 <= mmcm_locked; ls2 <= ls1; end
+    // TODO(reset-domain unification, audit finding #3): fold the PS FCLK_RESET0_N
+    // into this PL reset so the PL AXI slaves reset in lockstep with the PS-side
+    // conv/smc (which reset from FCLK_RESET0_N via the BD rstgen). Requires
+    // regenerating the ps_full BD (build_full_bd.tcl) to expose the fclk_resetn
+    // external pin first. Narrow hazard (PS-only warm reboot); deferred.
     logic [11:0] rst_cnt = 0; logic reset = 1'b1;
     always_ff @(posedge clk_pixel) begin
         if (!ls2) begin rst_cnt <= 0; reset <= 1'b1; end

@@ -73,8 +73,10 @@ $(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
 MUSIC_DIR := apps/music
 music: $(MUSIC_DIR)/music.bin
 
-$(MUSIC_DIR)/music.bin: $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(VGC_KEYBOARD_OBJS) $(MUSIC_DIR)/music.cfg $(NOVA_LIB)
-	ld65 -C $(MUSIC_DIR)/music.cfg -o $@ $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(VGC_KEYBOARD_OBJS) $(NOVA_LIB)
+# nova.lib (vgc.s) already provides vgc_wait_cmd + vgc_vsync, so don't also link
+# the standalone vgc_*.o here (that's only for the nova.lib-less keyboard.bin).
+$(MUSIC_DIR)/music.bin: $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(MUSIC_DIR)/music.cfg $(NOVA_LIB)
+	ld65 -C $(MUSIC_DIR)/music.cfg -o $@ $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(NOVA_LIB)
 
 $(MUSIC_DIR)/music.o: $(MUSIC_DIR)/music.s $(MUSIC_DIR)/music_notes.inc $(MUSIC_DIR)/music_tracks.inc $(NOVA_ASM)/novavm.inc
 	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@

@@ -24,12 +24,14 @@
 #include "novavm.h"          /* wr/rd/poke + R_AUDIO/R_AUDIO_SPACE/R_AUDIO_EVT/R_SID_VOL */
 #include "nfio.h"            /* nfio_disk_read: a program's MIDI travels in its own NDI */
 #include "nbootcfg.h"        /* audio.defaultSoundfont */
+#include "nsidvm.h"          /* C port of the ESP SID VM (.sid -> $D400 write capture) */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
 #include <time.h>
 
 /* Software MOS 6581 (sid.c is plain C, no Xilinx deps). Compile it straight into
@@ -67,6 +69,7 @@ static unsigned     g_total_frames = 0;  /* song length in 60 Hz frames         
 /* ---- 6502 register-driven sources: 2 software SIDs + the wavetable (via TSF) --- */
 static sidchip      g_sid1, g_sid2;        /* $D400 / $D420 (mirror; PL renders SID) */
 static int          g_regs_active = 0;     /* set once the 6502 touches any SID/WTS reg */
+static int          g_sid_active  = 0;     /* set once the 6502 writes a SID chip register */
 static float        g_vol_sid1 = 0.4f, g_vol_sid2 = 0.4f, g_vol_wts = 1.0f;
 /* WTS voice state (8 voices -> TSF channels 0-7): current note + latched vel/bend. */
 static unsigned char g_wts_note[8];
@@ -171,7 +174,9 @@ static void audio_drain_events(void) {
         if (!(e & 0x10000)) break;         /* bit16 = valid; empty -> done */
         int idx = (e >> 8) & 0xFF;
         unsigned char data = e & 0xFF;
-        if (idx >= 64) { wts_apply(idx - 64, data); g_regs_active = 1; }
+        if (idx < 32)      { sid_write(&g_sid1, idx,      data); g_sid_active = 1; g_regs_active = 1; }
+        else if (idx < 64) { sid_write(&g_sid2, idx - 32, data); g_sid_active = 1; g_regs_active = 1; }
+        else               { wts_apply(idx - 64, data);          g_regs_active = 1; }
     }
 }
 
@@ -195,6 +200,52 @@ static void audio_publish_status(void) {
     audio_mmio_poke(MUSIC_ELAPSEDL + 1, (el >> 8) & 0xFF);
     audio_mmio_poke(MUSIC_TOTALL,       g_total_frames & 0xFF);
     audio_mmio_poke(MUSIC_TOTALL + 1,   (g_total_frames >> 8) & 0xFF);
+}
+
+/* Convert a written SID voice frequency to a MIDI note (port of MusicEngine.
+ * SidFreqToMidi). The reDIP-SID freq registers are write-only, so we derive the
+ * note from our register mirror, which is fed by the PL capture FIFO. */
+static int sid_freq_to_midi(int f) {
+    if (f <= 0) return -1;
+    double hz = f * 985248.0 / 16777216.0;
+    if (hz < 8.0) return -1;
+    int m = (int)lround(12.0 * log2(hz / 440.0) + 69.0);
+    if (m < 0) m = 0; else if (m > 127) m = 127;
+    return m;
+}
+
+/* SID elapsed tracking (declared here so sid_publish_notes below can read them;
+ * the tick thread further down advances g_sid_ticks and sets g_sid_period_us). */
+static volatile unsigned g_sid_ticks        = 0;      /* play frames elapsed (at g_sid_period_us) */
+static unsigned          g_sid_period_us     = 20000; /* PAL default; NTSC=16667 */
+static unsigned          g_sid_total_frames  = 0;     /* HVSC length in 60Hz frames (0=unknown) */
+
+/* SID-only playback: publish the 6 SID voices' current notes (gated-on voices)
+ * into the $BA50 block so the keyboard visualizer lights up, just like MIDI.
+ * Elapsed is a free-running count-up (SIDs have no intrinsic duration). */
+static void sid_publish_notes(void) {
+    audio_mmio_poke(MUSIC_STATUS, 0x02 | 0x04);   /* MUSIC | SID */
+    sidchip *chips[2] = { &g_sid1, &g_sid2 };
+    int slot = 0;
+    for (int c = 0; c < 2; c++)
+        for (int v = 0; v < 3; v++, slot++) {
+            unsigned char note = 0;
+            if (chips[c]->regs[v * 7 + 4] & 0x01) {          /* gate bit -> voice on */
+                int freq = chips[c]->regs[v * 7] | (chips[c]->regs[v * 7 + 1] << 8);
+                int m = sid_freq_to_midi(freq);
+                if (m >= 0) note = (unsigned char)m;
+            }
+            audio_mmio_poke(MUSIC_NOTE1 + slot, note);
+        }
+    while (slot < 14) audio_mmio_poke(MUSIC_NOTE1 + slot++, 0);
+    /* elapsed: convert play-frame ticks (at g_sid_period_us) to 60Hz frames so
+     * the keyboard's frames/60 -> seconds math shows real wall-clock time. */
+    uint64_t ef = (uint64_t)g_sid_ticks * g_sid_period_us / 16667ULL;
+    if (ef > 65535ULL) ef = 65535ULL;
+    audio_mmio_poke(MUSIC_ELAPSEDL,     (unsigned)ef & 0xFF);
+    audio_mmio_poke(MUSIC_ELAPSEDL + 1, ((unsigned)ef >> 8) & 0xFF);
+    audio_mmio_poke(MUSIC_TOTALL,       g_sid_total_frames & 0xFF);        /* 0 until HVSC lookup */
+    audio_mmio_poke(MUSIC_TOTALL + 1,   (g_sid_total_frames >> 8) & 0xFF);
 }
 
 void audio_set_gain(float g) {
@@ -315,7 +366,7 @@ int audio_play_midi(const char *path) {
     for (tml_message *m = nh; m; m = m->next) if (m->time > end_ms) end_ms = m->time;
     LOCK();
     tml_message *old = g_head;
-    g_head = nh; g_cur = nh; g_msec = 0.0;
+    g_head = nh; g_cur = nh; g_msec = 0.0; g_sid_active = 0;   /* MIDI, not SID */
     g_total_frames = (unsigned)(end_ms / 16.6667);
     for (int i = 0; i < 128; i++) g_note_active[i] = 0;
     tsf_reset(g_tsf);
@@ -463,7 +514,8 @@ static void audio_service_locked(void) {
             printf("[audio] MIDI playback complete\n");
         }
     }
-    if (g_playing) audio_publish_status();   /* live notes + elapsed for the visualizer */
+    if (g_playing) audio_publish_status();         /* MIDI: live notes + elapsed */
+    else if (g_sid_active) sid_publish_notes();    /* SID: derive notes from the reg mirror */
 }
 
 /* Poll entry point: the novavm service loop may call this each iteration instead
@@ -562,4 +614,243 @@ void fio_sfload(void) {
     if (audio_fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
     audio_path(name, "sf2", path, sizeof path);
     if (audio_load_soundfont(path) == 0) fio_ok(); else fio_fail(FIO_ERR_IO);
+}
+
+/* =========================================================================== */
+/* SIDPLAY / SIDSTOP — run a .sid tune's 6502 init/play in nsidvm and stream its
+ * $D400/$D420 writes to the PL reDIP-SID, mirroring the ESP fio_dispatcher path.
+ *
+ * Integration point: on the Arty, poke($D400+reg, val) drives dbg_poke_sid1 in
+ * top.sv (sid1_cs = dbg_poke_sid1 || cpu_we&...), so a PS poke reaches the
+ * reDIP-SID exactly like a 6502 bus write — the same route audio_mmio_poke uses.
+ * That is the ESP's flush_sid_writes(pokeMulti) equivalent. We ALSO feed sid.c's
+ * g_sid1/g_sid2 mirror + set g_sid_active so sid_publish_notes() lights the
+ * on-screen keyboard (the reDIP-SID freq regs are write-only). */
+
+/* Per-frame captured writes are batched (like the ESP _sid_write_* arrays) and
+ * applied after the play frame, so the g_sid1/g_sid2 mirror is only touched under
+ * g_lock (shared with the audio feeder's sid_publish_notes). The FPGA pokes and
+ * the mirror update happen together in sid_flush_batch(). */
+#define SID_BATCH_MAX 128
+static unsigned      g_sid_batch_addr[SID_BATCH_MAX];
+static unsigned char g_sid_batch_val[SID_BATCH_MAX];
+static int           g_sid_batch_n = 0;
+static int           g_sid_batch_overflow = 0;
+
+static pthread_t     g_sid_thread;
+static int           g_sid_thread_valid = 0;
+static volatile int  g_sidvm_playing = 0;
+
+/* nsidvm write-capture callback: record the (already-normalised) SID write. */
+static int sid_vm_on_write(void *user, uint16_t addr, uint8_t value) {
+    (void)user;
+    if (g_sid_batch_n >= SID_BATCH_MAX) { g_sid_batch_overflow = 1; return 0; }
+    g_sid_batch_addr[g_sid_batch_n] = addr;
+    g_sid_batch_val[g_sid_batch_n]  = value;
+    g_sid_batch_n++;
+    return 1;
+}
+
+/* Apply the frame's captured writes: poke each to the PL SID + update the sid.c
+ * mirror. Skips if playback was stopped meanwhile (so we never re-poke after a
+ * silence). Runs under g_lock. */
+static void sid_flush_batch(void) {
+    LOCK();
+    if (g_sidvm_playing) {
+        for (int i = 0; i < g_sid_batch_n; i++) {
+            unsigned a = g_sid_batch_addr[i];
+            unsigned char v = g_sid_batch_val[i];
+            audio_mmio_poke(a, v);                                  /* -> reDIP-SID in PL */
+            if (a <= 0xD41F) sid_write(&g_sid1, (int)(a - 0xD400), v);
+            else             sid_write(&g_sid2, (int)(a - 0xD420), v);
+        }
+        if (g_sid_batch_n) { g_sid_active = 1; g_regs_active = 1; }
+    }
+    UNLOCK();
+    g_sid_batch_n = 0;
+}
+
+/* Silence both PL SIDs + clear mirror/visualizer state. Under g_lock so it can't
+ * race a concurrent sid_flush_batch(). */
+static void sid_silence(void) {
+    LOCK();
+    for (unsigned r = 0; r <= 0x18; r++) { audio_mmio_poke(0xD400 + r, 0); audio_mmio_poke(0xD420 + r, 0); }
+    for (unsigned r = 0x1D; r <= 0x1F; r++) { audio_mmio_poke(0xD400 + r, 0x0F); audio_mmio_poke(0xD420 + r, 0x0F); }
+    audio_mmio_poke(0xD440, 0);                                    /* reset SID_CFG (model/clock) */
+    sid_reset(&g_sid1); sid_reset(&g_sid2);
+    g_sid_active = 0; g_regs_active = 0;
+    audio_mmio_poke(MUSIC_STATUS, 0);
+    for (int i = 0; i < 14; i++) audio_mmio_poke(MUSIC_NOTE1 + i, 0);
+    UNLOCK();
+}
+
+/* Realtime tick: run one nsidvm play frame per SID frame period, on an absolute
+ * CLOCK_MONOTONIC cadence (SCHED_FIFO). Faithful to the ESP tick_sid_playback. */
+static void *sid_tick(void *arg) {
+    (void)arg;
+    struct timespec next;
+    clock_gettime(CLOCK_MONOTONIC, &next);
+    while (g_sidvm_playing) {
+        g_sid_batch_n = 0;
+        g_sid_batch_overflow = 0;
+        nsid_status st = nsid_run_play_frame();
+        if (st != NSID_OK || g_sid_batch_overflow) {
+            printf("[sid] frame failed: %s pc=$%04X op=$%02X%s\n",
+                   nsid_status_name(st), nsid_last_pc(), nsid_last_opcode(),
+                   g_sid_batch_overflow ? " (write overflow)" : "");
+            g_sidvm_playing = 0;
+            sid_silence();
+            break;
+        }
+        sid_flush_batch();
+        g_sid_ticks++;                       /* advance the elapsed count-up */
+
+        uint64_t ns = (uint64_t)next.tv_nsec + (uint64_t)g_sid_period_us * 1000ULL;
+        next.tv_sec += (time_t)(ns / 1000000000ULL);
+        next.tv_nsec = (long)(ns % 1000000000ULL);
+        clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &next, NULL);
+    }
+    return NULL;
+}
+
+/* Stop + join any running tick thread (idempotent). */
+static void sid_stop_thread(void) {
+    if (g_sid_thread_valid) {
+        g_sidvm_playing = 0;
+        pthread_join(g_sid_thread, NULL);
+        g_sid_thread_valid = 0;
+    }
+}
+
+static void sid_start_thread(void) {
+    g_sidvm_playing = 1;
+    pthread_attr_t attr;
+    struct sched_param sp;
+    sp.sched_priority = 80;
+    if (pthread_attr_init(&attr) == 0 &&
+        pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED) == 0 &&
+        pthread_attr_setschedpolicy(&attr, SCHED_FIFO) == 0 &&
+        pthread_attr_setschedparam(&attr, &sp) == 0 &&
+        pthread_create(&g_sid_thread, &attr, sid_tick, NULL) == 0) {
+        g_sid_thread_valid = 1;
+    } else if (pthread_create(&g_sid_thread, NULL, sid_tick, NULL) == 0) {
+        /* No RT scheduling (unprivileged?): fall back to default sched. */
+        printf("[sid] SCHED_FIFO unavailable; tick on default scheduler\n");
+        g_sid_thread_valid = 1;
+    } else {
+        g_sidvm_playing = 0;
+        printf("[sid] tick thread create failed\n");
+    }
+    pthread_attr_destroy(&attr);
+}
+
+/* Publish the PSID title/author/copyright into the $BAB0 now-playing block, the
+ * same layout audio_play_midi uses (type 0x01 = SID). */
+static void sid_publish_meta(const unsigned char *header) {
+    audio_mmio_poke(0xBAB0, 0x01);   /* AUDIO_META_TYPE = SID */
+    for (int i = 0; i < 32; i++) {
+        audio_mmio_poke(0xBAB3 + i, header[0x16 + i]);   /* title     (PSID off 22) */
+        audio_mmio_poke(0xBAD3 + i, header[0x36 + i]);   /* author    (PSID off 54) */
+        audio_mmio_poke(0xBAF3 + i, header[0x56 + i]);   /* copyright (PSID off 86) */
+    }
+    audio_mmio_poke(0xBB1C, 0);
+}
+
+void fio_sidplay(void) {
+    char name[80];
+    if (audio_fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+
+    /* Read the .sid from the mounted NDI (same API fio_midplay uses). */
+    char fname[96];
+    if (strchr(name, '.')) snprintf(fname, sizeof fname, "%s", name);
+    else                   snprintf(fname, sizeof fname, "%s.sid", name);
+    static unsigned char sidbuf[128 * 1024];
+    int n = nfio_disk_read(fname, sidbuf, (int)sizeof sidbuf);
+    if (n < 124) { fio_fail(FIO_ERR_NOTFOUND); return; }
+
+    nsid_info_t info;
+    if (!nsid_parse_header(sidbuf, (unsigned)n, &info)) {
+        printf("[sid] %s: invalid SID header\n", fname);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+    if (info.load_in_payload) {
+        /* real load address is the little-endian word at data_offset */
+        info.load_addr = (unsigned)sidbuf[info.data_offset] |
+                         ((unsigned)sidbuf[info.data_offset + 1] << 8);
+    }
+
+    unsigned song = peek(FIO_SRC_LO);
+    if (song < 1) song = info.start_song == 0 ? 1 : info.start_song;
+    if (info.songs != 0 && song > info.songs) {
+        printf("[sid] %s: song %u outside 1..%u\n", fname, song, info.songs);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+
+    unsigned load_end = info.load_addr + info.payload_bytes;
+    if (info.payload_bytes == 0 || info.payload_bytes > 65536UL ||
+        load_end > 0x10000UL || info.init_addr == 0 ||
+        info.payload_offset + info.payload_bytes > (unsigned)n) {
+        printf("[sid] %s: unsupported layout load=$%04X size=%u init=$%04X play=$%04X\n",
+               fname, info.load_addr, info.payload_bytes, info.init_addr, info.play_addr);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+
+    /* Stop any MIDI + any prior SID, then arm the VM. */
+    audio_stop();
+    sid_stop_thread();
+    sid_silence();
+
+    audio_mmio_poke(0xD440, nsid_fpga_config(&info));   /* SID_CFG: model/clock */
+    nsid_reset();
+    nsid_set_write_handler(sid_vm_on_write, NULL);
+    if (!nsid_load_payload((uint16_t)info.load_addr,
+                           sidbuf + info.payload_offset, info.payload_bytes)) {
+        printf("[sid] %s: VM out of memory loading payload\n", fname);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+    nsid_set_entry((uint16_t)info.init_addr, (uint16_t)info.play_addr);
+
+    /* Run init with the batch capturing (but not applying — playing is 0). */
+    g_sid_batch_n = 0; g_sid_batch_overflow = 0;
+    nsid_status init = nsid_run_init((uint8_t)(song - 1));
+    if (init != NSID_OK) {
+        printf("[sid] %s: init failed: %s pc=$%04X op=$%02X\n",
+               fname, nsid_status_name(init), nsid_last_pc(), nsid_last_opcode());
+        sid_silence();
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+
+    /* Apply the init frame's writes now (LOCK + set actives), before the thread. */
+    g_sidvm_playing = 1;                 /* let sid_flush_batch apply the init writes */
+    sid_flush_batch();
+    g_sidvm_playing = 0;                 /* sid_start_thread re-arms it */
+
+    sid_publish_meta(sidbuf);
+    g_sid_period_us = nsid_frame_period_us(&info, (uint8_t)song);
+    g_sid_ticks = 0;                 /* restart the elapsed count-up */
+    g_sid_total_frames = 0;          /* HVSC duration lookup: TODO (count-up only for now) */
+
+    if (info.play_addr != 0) {
+        sid_start_thread();
+    } else {
+        /* No play routine: init already produced the whole tune's register set. */
+        g_sid_active = 1; g_regs_active = 1;
+    }
+
+    printf("[sid] %s load=$%04X init=$%04X play=$%04X song=%u period=%uus cfg=$%02X pages=%u OK\n",
+           fname, info.load_addr, info.init_addr, info.play_addr, song,
+           g_sid_period_us, nsid_fpga_config(&info), nsid_pages_allocated());
+    fio_ok();
+}
+
+void fio_sidstop(void) {
+    sid_stop_thread();
+    sid_silence();
+    printf("[sid] SIDSTOP OK\n");
+    fio_ok();
 }

@@ -431,10 +431,29 @@ module top (
     // or in flight in the xram_sdram wrapper, so the CPU doesn't advance
     // past the access before its data is ready.
     wire xram_stall;
+    // Debug-bridge write arbitration. Both a poke (dbg_poke_en, a 1-cycle
+    // 6502-bus write) and a host VGC-memory write (dbg_vmem_we) drive a shared
+    // write mux with priority over the CPU; if either lands on a CPU bus/write
+    // cycle it silently drops the CPU's write. For a poke that corrupts CPU state
+    // and crashes the 6502 to BASIC (observed on the Arty: rapid host pokes during
+    // FIO handling); for dbg_vmem it drops a coincident CPU display write (glitch).
+    // Freeze the CPU across the host write (plus settle margin) so host and CPU
+    // never drive the mux in the same cycle. Both are infrequent (~1k/s) versus
+    // the 12.5 MHz CPU, so the stall is negligible. Replaces the host-side
+    // system_pause-around-FIO workaround with proper cycle-level arbitration.
+    logic [2:0] bridge_stall;
+    wire        bridge_wr = dbg_poke_en | dbg_vmem_we;
+    always_ff @(posedge clk) begin
+        if (cpu_reset)              bridge_stall <= 3'd0;
+        else if (bridge_wr)         bridge_stall <= 3'd3;   // (re)arm on every host write
+        else if (bridge_stall != 0) bridge_stall <= bridge_stall - 3'd1;
+    end
+    wire poke_active = bridge_wr | (bridge_stall != 3'd0);
     always_ff @(posedge clk) begin
         if (cpu_reset)      cpu_ce <= 0;
         else if (xram_stall) cpu_ce <= 0;
         else if (system_pause) cpu_ce <= 0;   // OSD pause: freeze 6502 (+ WTS via wts_cpu_ce)
+        else if (poke_active) cpu_ce <= 0;    // debug-bridge poke in flight: don't race the bus
         else                cpu_ce <= ~cpu_ce;
     end
 

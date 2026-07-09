@@ -15,9 +15,9 @@
 
 MODE_TEXT_GFX = 2
 GRAVITY = $0016                  ; 8.8 accel added to yvel each frame (~0.09 px/f^2)
-FLOOR   = 121                    ; max ypos (ball bottom sits ~29px below -> screen ~150)
-XMIN    = 8
-XMAX    = 232
+FLOOR   = 141                    ; +20 border-inclusive inset (visual floor unchanged)
+XMIN    = 28
+XMAX    = 252
 
 ; floor "thock": low triangle whose pitch drops as it decays (basketball-ish)
 SND_FLOOR_START = $0E            ; voice-1 freq hi at impact (~210 Hz)
@@ -66,15 +66,15 @@ start:
       LDA   #0                   ; spawn BALL (character 0)
       JSR   spritebank_spawn
 
-      LDA   #$00                 ; ypos = 28.0 (the apex the constant bounce reaches)
+      LDA   #$00                 ; ypos = 48.0 apex (28 + 20 border inset)
       STA   ypos
-      LDA   #28
+      LDA   #48
       STA   ypos+1
       STZ   yvel
       STZ   yvel+1
-      LDA   #$00                 ; xpos = 20.0, drifting right at 1.0 px/frame
+      LDA   #$00                 ; xpos = 40.0 (20 + 20 border inset), drifting right 1.0 px/f
       STA   xpos
-      LDA   #20
+      LDA   #40
       STA   xpos+1
       STZ   xvel
       LDA   #$01

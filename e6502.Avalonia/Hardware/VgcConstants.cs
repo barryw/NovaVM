@@ -751,8 +751,8 @@ public static class VgcConstants
     public const int GfxHeight         = 200;
     public const int SpritePlaneWidth  = VideoWidth / 2;       // scanline buffer width; visible canvas uses 0..319
     public const int SpritePlaneHeight = VideoHeight / 2;      // active-video line buffer; visible canvas uses 0..199
-    public const int SpriteCanvasX     = 0;                    // sprite coords match gfx coords
-    public const int SpriteCanvasY     = 0;                    // sprite coords match gfx coords
+    public const int SpriteCanvasX     = 20;                   // border-inclusive: canvas (0,0) = sprite (20,20)
+    public const int SpriteCanvasY     = 20;                   // border-inclusive: canvas (0,0) = sprite (20,20)
 
     public const int MaxSprites        = 16;
     public const int SpritePixelSize   = 16;       // 16x16 pixels

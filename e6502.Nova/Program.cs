@@ -352,7 +352,7 @@ static int DoArtyBuildLinuxHost(string repo, List<string> args)
     string cc = Environment.GetEnvironmentVariable("CC") ?? "arm-linux-gnueabihf-gcc";
     string[] sources =
     [
-        "novavm.c", "naudio.c", "nservers.c", "nkbd.c", "nmouse.c", "nfio.c",
+        "novavm.c", "naudio.c", "nsidvm.c", "nservers.c", "nkbd.c", "nmouse.c", "nfio.c",
         "nsplash.c", "nbootcfg.c", "nosd.c", "cJSON.c"
     ];
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using e6502.Storage;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -24,12 +25,37 @@ public sealed class AssemblySetup
     [AssemblyCleanup]
     public static void Cleanup()
     {
+        // Guard against test env leaks. Every test must leave the process-global
+        // config env vars exactly as AssemblyInitialize set them; a test that
+        // changes one without restoring it silently corrupts every later test in
+        // the process (this once broke the whole Forth/NDK suite when a test leaked
+        // NOVA_NO_AUTOMOUNT=1 and later tests could no longer automount their disk).
+        // Use `using new EnvScope(name, value)` for any env change in a test.
+        var leaks = new List<string>();
+        CheckBaseline(leaks, "NOVA_NO_AUTOMOUNT", null);
+        CheckBaseline(leaks, "NOAUTO", "1");
+        CheckBaseline(leaks, "NOVA_STORAGE_ROOT", StorageRoot);
+
         Environment.SetEnvironmentVariable("NOAUTO", null);
         Environment.SetEnvironmentVariable("NOVA_NO_AUTOMOUNT", null);
         Environment.SetEnvironmentVariable("NOVA_STORAGE_ROOT", null);
 
         if (Directory.Exists(StorageRoot))
             Directory.Delete(StorageRoot, recursive: true);
+
+        if (leaks.Count > 0)
+            throw new InvalidOperationException(
+                "Test environment leak detected — a test changed a process-global config " +
+                "env var without restoring it, which silently corrupts later tests. Wrap env " +
+                "changes in `using new EnvScope(name, value)`. Leaked var(s):\n  " +
+                string.Join("\n  ", leaks));
+    }
+
+    private static void CheckBaseline(List<string> leaks, string name, string? expected)
+    {
+        string? actual = Environment.GetEnvironmentVariable(name);
+        if (actual != expected)
+            leaks.Add($"{name} = \"{actual ?? "(unset)"}\" (expected \"{expected ?? "(unset)"}\")");
     }
 
     private static void SeedLanguageDisk()

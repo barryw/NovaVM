@@ -8,11 +8,11 @@
 ; is AND'd with C*$11 to stamp the note in colour C into shape slot per note.
 ; Fall speed is 8.8 fixed point so speeds can be fractional and smooth.
 
-.import sprite_row, sprite_pos, sprite_enable, sprite_priority, sprite_set_shape
+.import sprite_row, sprite_pos, sprite_enable, sprite_disable, sprite_priority, sprite_set_shape
 
 NUM_NOTES = 8
 NOTE_TOP  = 0
-NOTE_BOT  = 200
+NOTE_BOT  = 240                 ; border-inclusive: spawn at y=0 (behind top border), fall off bottom
 
 .segment "CODE"
 
@@ -50,12 +50,42 @@ init_notes:
     sta note_rng
     rts
 
+; notes_off / notes_on -- disable/re-enable the 8 note sprites around the piano
+; visualizer handoff (fall state persists in BSS, so they resume on return).
+notes_off:
+    ldx #NUM_NOTES-1
+@o:
+    stx note_row
+    stx RegP0
+    jsr sprite_disable
+    jsr mus_cmdwait
+    ldx note_row
+    dex
+    bpl @o
+    rts
+
+notes_on:
+    ldx #NUM_NOTES-1
+@n:
+    stx note_row
+    stx RegP0
+    jsr sprite_enable
+    jsr mus_cmdwait
+    ldx note_row
+    dex
+    bpl @n
+    rts
+
 ; load_note_shapes -- stamp the note MASK in each note's colour into shape slots
 ; 0..NUM_NOTES-1, one paced row at a time.
 load_note_shapes:
     ldx #0
 @slot:
     stx note_slot
+    lda note_mask_lo,x          ; point zp_ptr at this note's glyph
+    sta zp_ptr
+    lda note_mask_hi,x
+    sta zp_ptr+1
     lda note_col,x
     sta note_cc
     asl
@@ -76,7 +106,7 @@ load_note_shapes:
     tay                         ; Y = row*8 into the mask
     ldx #0
 @byte:
-    lda note_mask,y
+    lda (zp_ptr),y
     and note_cc                 ; mask -> colour
     sta RegP0+2,x               ; P2..P9
     iny
@@ -122,15 +152,23 @@ update_notes:
     lsr
     and #31
     tay
-    lda sine_tab,y
+    ; 16-bit sprite X = note_x + sine + 10  (canvas column, +20 border inset, -10 sway centre)
+    lda note_x,x
     clc
-    adc note_x,x
-    sec
-    sbc #10                     ; centre the sway on the base column
+    adc sine_tab,y
+    sta RegP1
+    lda #0
+    adc #0                      ; carry -> x high
+    sta RegP2
+    lda RegP1
+    clc
+    adc #10
+    sta RegP1
+    lda RegP2
+    adc #0
+    sta RegP2                   ; propagate carry (canvas can reach x > 255 now)
     ldx note_row
     stx RegP0
-    sta RegP1                   ; x low
-    stz RegP2                   ; x high (columns stay < 256)
     lda note_yh,x
     sta RegP3                   ; y = integer part
     jsr sprite_pos
@@ -155,31 +193,154 @@ note_rand:
 
 .segment "RODATA"
 ; note MASK: on-pixels = $F nibbles (AND with colour to stamp)
-note_mask:
+; 8 music glyphs (mask: on-pixels=$F nibbles): eighth, beamed, quarter, half, whole, sharp, flat, rest
+note_mask_0:
     .byte $00,$00,$00,$00,$00,$00,$00,$00
     .byte $00,$00,$00,$00,$00,$00,$00,$00
-    .byte $00,$00,$00,$0F,$FF,$FF,$FF,$00
-    .byte $00,$00,$00,$0F,$FF,$FF,$F0,$00
-    .byte $00,$00,$00,$0F,$FF,$FF,$00,$00
     .byte $00,$00,$00,$0F,$FF,$F0,$00,$00
-    .byte $00,$00,$00,$0F,$FF,$00,$00,$00
+    .byte $00,$00,$00,$0F,$FF,$F0,$00,$00
+    .byte $00,$00,$00,$0F,$FF,$F0,$00,$00
+    .byte $00,$00,$00,$0F,$FF,$F0,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
     .byte $00,$00,$00,$0F,$F0,$00,$00,$00
     .byte $00,$00,$00,$0F,$F0,$00,$00,$00
     .byte $00,$00,$00,$0F,$F0,$00,$00,$00
     .byte $00,$0F,$FF,$FF,$F0,$00,$00,$00
     .byte $00,$FF,$FF,$FF,$F0,$00,$00,$00
-    .byte $00,$FF,$FF,$FF,$F0,$00,$00,$00
+    .byte $00,$FF,$FF,$FF,$00,$00,$00,$00
     .byte $00,$FF,$FF,$FF,$00,$00,$00,$00
     .byte $00,$0F,$FF,$F0,$00,$00,$00,$00
     .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_1:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$0F,$FF,$FF,$FF,$FF,$F0
+    .byte $00,$00,$0F,$FF,$FF,$FF,$FF,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$00,$0F,$F0,$00,$00,$0F,$F0
+    .byte $00,$FF,$FF,$F0,$00,$FF,$FF,$F0
+    .byte $0F,$FF,$FF,$00,$0F,$FF,$FF,$00
+    .byte $00,$FF,$F0,$00,$00,$FF,$F0,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_2:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$0F,$FF,$FF,$F0,$00,$00,$00
+    .byte $00,$FF,$FF,$FF,$F0,$00,$00,$00
+    .byte $00,$FF,$FF,$FF,$00,$00,$00,$00
+    .byte $00,$FF,$FF,$FF,$00,$00,$00,$00
+    .byte $00,$0F,$FF,$F0,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_3:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$0F,$FF,$FF,$F0,$00,$00,$00
+    .byte $00,$F0,$00,$0F,$F0,$00,$00,$00
+    .byte $00,$F0,$00,$0F,$00,$00,$00,$00
+    .byte $00,$F0,$00,$0F,$00,$00,$00,$00
+    .byte $00,$0F,$FF,$F0,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_4:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$FF,$FF,$00,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$0F,$F0,$00,$00,$0F,$F0,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$FF,$00,$00
+    .byte $00,$00,$00,$FF,$FF,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_5:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$FF,$FF,$FF,$FF,$FF,$FF,$00
+    .byte $00,$FF,$FF,$FF,$FF,$FF,$FF,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$FF,$FF,$FF,$FF,$FF,$FF,$00
+    .byte $00,$FF,$FF,$FF,$FF,$FF,$FF,$00
+    .byte $00,$00,$FF,$00,$00,$FF,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_6:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$00,$00,$00,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$00,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$F0,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$FF,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$F0,$00,$00
+    .byte $00,$00,$FF,$FF,$FF,$00,$00,$00
+    .byte $00,$00,$00,$FF,$F0,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_7:
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$0F,$FF,$00,$00
+    .byte $00,$00,$00,$00,$FF,$FF,$F0,$00
+    .byte $00,$00,$00,$00,$FF,$FF,$F0,$00
+    .byte $00,$00,$00,$00,$FF,$FF,$F0,$00
+    .byte $00,$00,$00,$00,$0F,$FF,$00,$00
+    .byte $00,$00,$00,$00,$0F,$00,$00,$00
+    .byte $00,$00,$00,$00,$0F,$00,$00,$00
+    .byte $00,$00,$00,$00,$F0,$00,$00,$00
+    .byte $00,$00,$00,$0F,$00,$00,$00,$00
+    .byte $00,$00,$00,$F0,$00,$00,$00,$00
+    .byte $00,$00,$FF,$F0,$00,$00,$00,$00
+    .byte $00,$00,$FF,$F0,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+    .byte $00,$00,$00,$00,$00,$00,$00,$00
+note_mask_lo: .byte <note_mask_0, <note_mask_1, <note_mask_2, <note_mask_3, <note_mask_4, <note_mask_5, <note_mask_6, <note_mask_7
+note_mask_hi: .byte >note_mask_0, >note_mask_1, >note_mask_2, >note_mask_3, >note_mask_4, >note_mask_5, >note_mask_6, >note_mask_7
 sine_tab:
     .byte 10,12,14,16,17,18,19,20,20,20,19,18,17,16,14,12
     .byte 10, 8, 6, 4, 3, 2, 1, 0, 0, 0, 1, 2, 3, 4, 6, 8
 ; per-note colour (all non-black): red, cyan, purple, green, yellow, orange, lred, lblue
 note_col:    .byte 2, 3, 4, 5, 7, 8, 10, 14
 ; per-note fall speed, 8.8 px/frame: .75 1.25 .5 1.0 1.375 .625 1.125 .875
-note_spd_lo: .byte $C0,$40,$80,$00,$60,$A0,$20,$E0
-note_spd_hi: .byte $00,$01,$00,$01,$01,$00,$01,$00
+; feather drift: 8.8 fixed, all < 0.35 px/frame so notes fall slowly at varied rates
+note_spd_lo: .byte $1F,$4D,$26,$38,$52,$24,$43,$2E
+note_spd_hi: .byte $00,$00,$00,$00,$00,$00,$00,$00
 note_x0:     .byte 30, 90,150,210, 60,120,180,240
 note_y0h:    .byte  0, 24, 48, 72, 96,120,144,168
 note_ph0:    .byte  0, 20, 40, 60, 80,100,120, 30

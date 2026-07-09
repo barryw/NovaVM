@@ -741,9 +741,9 @@ module vgc (
     // the same cycle. Without this, sprites draw one physical pixel late and
     // leave a 1px blue gap at the inner border edge.
     wire [9:0] sprite_h_read_d2 = h_count_d2 + 10'd1;
-    wire [9:0] sprite_h_canvas_read_d2 =
-        (sprite_h_read_d2 < 10'(H_BORDER)) ? 10'd0 : (sprite_h_read_d2 - 10'(H_BORDER));
-    wire [8:0] sprite_x_read_d2 = sprite_h_canvas_read_d2[9:1];
+    // Border-inclusive sprite plane: sprite x = display h / 2 (0..359), no H_BORDER
+    // subtract -- sprite (0,0) is the border corner, visible canvas inset at x=20.
+    wire [8:0] sprite_x_read_d2 = sprite_h_read_d2[9:1];
 
     vgc_sprites sprite_inst (
         .clk(clk), .rst(vgc_module_rst),
@@ -759,8 +759,8 @@ module vgc (
         .spr_flip_h_flat(spr_flip_h_flat), .spr_flip_v_flat(spr_flip_v_flat),
         .spr_pri_flat(spr_pri_flat), .spr_shape_flat(spr_shape_flat),
         .spr_trans_flat(spr_trans_flat),
-        .mouse_x(mouse_active_x),
-        .mouse_y(mouse_active_y),
+        .mouse_x(mouse_active_x + 9'd20),   // keep mouse in canvas convention under
+        .mouse_y(mouse_active_y + 8'd20),   // the border-inclusive sprite plane
         .mouse_enable(mouse_active_ctrl[0]),
         .mouse_shape(mouse_active_shape),
         .mouse_hot_x(mouse_active_hot_x),
@@ -3690,8 +3690,10 @@ module vgc (
                 endcase
             end
 
-            if (spr_pixel_hit && in_text_area_d2) begin
-                if (mode == 3'd4) begin
+            if (spr_pixel_hit) begin
+                if (!in_text_area_d2) begin
+                    pixel_color_idx = spr_pixel;    // border/overscan: sprite wins over border_color
+                end else if (mode == 3'd4) begin
                     if (spr_pixel_pri == 2'd0) begin
                         if ({4'h0, cur_gfx_d2} == gfx_trans_color) pixel_color_idx = spr_pixel;
                     end else if (spr_pixel_pri == 2'd1) begin
@@ -3709,7 +3711,7 @@ module vgc (
                 end
             end
 
-            if (mouse_cursor_hit && in_text_area_d2) begin
+            if (mouse_cursor_hit) begin
                 if ((mouse_active_ctrl & MOUSE_CTRL_AUTO) != 0)
                     mouse_cursor_color = pixel_color_idx[3] ? 4'h0 : 4'hF;
                 else if ((mouse_active_ctrl & MOUSE_CTRL_COLOR) != 0)

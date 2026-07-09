@@ -255,9 +255,10 @@ module vgc_sprites (
 
     wire        visible_line_start = (h_count == 10'd0) && (v_count < V_ACTIVE);
     wire [9:0]  spr_prep_v = (v_count == V_ACTIVE - 1) ? 10'd0 : (v_count + 10'd1);
-    wire        spr_prep_in_canvas = (spr_prep_v >= NOVA_Y0) && (spr_prep_v < NOVA_Y1);
-    wire [9:0]  spr_prep_canvas_y = spr_prep_v - NOVA_Y0;
-    wire [7:0]  spr_prep_y = spr_prep_canvas_y[8:1];  // 400 canvas lines -> 200 sprite rows
+    // Border-inclusive: every display line is valid; sprite y = display line / 2 (0..239),
+    // so sprite (0,0) is the border corner and the visible canvas is inset at y=20.
+    wire        spr_prep_in_canvas = 1'b1;
+    wire [7:0]  spr_prep_y = spr_prep_v[8:1];  // 480 display lines -> 240 sprite rows
 
     initial begin
         spr_eval_state = SPR_IDLE;

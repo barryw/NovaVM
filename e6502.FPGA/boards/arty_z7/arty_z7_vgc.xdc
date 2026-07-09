@@ -5,6 +5,13 @@
 set_property -dict { PACKAGE_PIN H16  IOSTANDARD LVCMOS33 } [get_ports { clk }]
 create_clock -add -name sys_clk -period 8.00 -waveform {0 4} [get_ports { clk }]
 
+## TODO(audit finding #5): clk_audio is a ~48 kHz fabric-divided clock (from
+## clk_pixel) that clocks the HDMI audio-regen sampling of a clk_pixel-domain word.
+## It's currently unconstrained. Adding create_clock + set_clock_groups -asynchronous
+## needs the post-synth net/clock names verified against the timing report (the
+## get_nets/get_pins filters are netlist-name sensitive). Low severity (audio only,
+## works in practice — the edges are a phase-aligned subset of clk_pixel). Deferred.
+
 ## Push buttons (btn[0] = reset)
 set_property -dict { PACKAGE_PIN D19  IOSTANDARD LVCMOS33 } [get_ports { btn[0] }]
 set_property -dict { PACKAGE_PIN D20  IOSTANDARD LVCMOS33 } [get_ports { btn[1] }]

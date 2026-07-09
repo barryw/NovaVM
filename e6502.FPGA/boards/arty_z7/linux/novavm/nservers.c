@@ -86,7 +86,18 @@
  * access so a screen dump and a peek can't interleave their R_VMEM_ADDR /
  * R_PEEK_ADDR latches. (Coarse but correct; matches single-threaded bare-metal
  * semantics from the machine's point of view.) */
-static pthread_mutex_t g_bridge = PTHREAD_MUTEX_INITIALIZER;
+/* Recursive so peek()/vgc_bridge_lock() can nest inside the debug server's
+ * dispatch-level BRIDGE_LOCK (and inside vm_cold_boot) without self-deadlock.
+ * peek() acquires this per call to serialize the shared R_PEEK/R_VMEM address
+ * latch against the main FIO loop's peeks (see novavm.c). */
+static pthread_mutex_t g_bridge;
+static __attribute__((constructor)) void g_bridge_init(void) {
+    pthread_mutexattr_t a;
+    pthread_mutexattr_init(&a);
+    pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&g_bridge, &a);
+    pthread_mutexattr_destroy(&a);
+}
 #define BRIDGE_LOCK()   pthread_mutex_lock(&g_bridge)
 #define BRIDGE_UNLOCK() pthread_mutex_unlock(&g_bridge)
 

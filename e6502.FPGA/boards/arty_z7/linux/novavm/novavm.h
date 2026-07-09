@@ -80,7 +80,10 @@ void vgc_bridge_unlock(void);
 static inline void     wr(unsigned o, uint32_t v) { g_reg[o >> 2] = v; }
 static inline uint32_t rd(unsigned o)             { return g_reg[o >> 2]; }
 static inline void     poke(unsigned a, unsigned char d) { wr(R_POKE, ((a & 0xFFFFu) << 8) | d); }
-static inline unsigned char peek(unsigned a)      { wr(R_PEEK_ADDR, a & 0xFFFFu); return (unsigned char)rd(R_PEEK_DATA); }
+/* peek() locks the bridge: R_PEEK_ADDR is a held latch, so a concurrent
+ * peek/vmem from another thread landing between the addr write and the data
+ * read returns the WRONG byte. Recursive lock (nservers.c) => safe to nest. */
+static inline unsigned char peek(unsigned a)      { unsigned char v; vgc_bridge_lock(); wr(R_PEEK_ADDR, a & 0xFFFFu); v = (unsigned char)rd(R_PEEK_DATA); vgc_bridge_unlock(); return v; }
 static inline void     cpu_hold(int h)            { wr(R_CTRL, h ? CTRL_CPU_RESET : 0u); }
 static inline void     fio_ok(void)               { poke(FIO_ERRCODE, 0); poke(FIO_STATUS, FIO_OK); poke(FIO_CMD, 0); }
 static inline void     fio_fail(int c)            { poke(FIO_ERRCODE, c); poke(FIO_STATUS, FIO_ERR); poke(FIO_CMD, 0); }

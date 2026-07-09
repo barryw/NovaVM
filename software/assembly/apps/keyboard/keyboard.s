@@ -57,6 +57,7 @@ FPS         = 60                ; frames per second
 INPUT_GRACE_FRAMES = 60        ; ignore launch keystrokes for first second
 INPUT_ARM_QUIET_FRAMES = 30    ; require quiet input before exit keys count
 STOP_EXIT_FRAMES = 120         ; require music stopped for 2 seconds before exit
+PLAY_GRACE       = 150         ; startup grace (~2.5s) before watching for song end
 MODE_NONE   = 0
 MODE_SID    = 1
 MODE_WTS    = 2
@@ -141,6 +142,8 @@ zp_save_buf:    .res KBD_ZP_SAVE_LEN
 input_quiet_frames: .res 1
 input_armed:    .res 1
 music_stop_frames: .res 1
+kbd_play_cmd:   .res 1          ; FIO play command the caller fed us (0 = none)
+grace_frames:   .res 1          ; startup grace counter before song-end watch
 
 .ifdef KEYBOARD_TEST
 test_current_note: .res 1
@@ -160,6 +163,7 @@ test_color_index:  .res 1
     .byte $00, $90
 .segment "CODE"
 main:
+    lda #0                      ; standalone: visualize only, no library-triggered play
     jmp kbdviz_run
 .endif
 
@@ -171,9 +175,15 @@ main:
 ; =====================================================================
 .export kbdviz_run
 kbdviz_run:
+    sta kbd_play_cmd            ; A = FIO play command (0 = just visualize what's playing)
     php
     cld
     jsr save_app_zp
+    ; start the fed song -- FioName/FioNameLen are pre-built by the caller
+    lda kbd_play_cmd
+    beq @no_play
+    sta FioCmd
+@no_play:
 
     ; Save VGC state
     lda RegMode
@@ -204,6 +214,7 @@ kbdviz_run:
     stz input_quiet_frames
     stz input_armed
     stz music_stop_frames
+    stz grace_frames
 
     ; Set mode 1 (gfx over text), default font
     lda #1
@@ -242,6 +253,10 @@ kbdviz_run:
 .endif
 
     ; ---- Main loop ----
+    ; drain any residual key from the latch so ESC/Q arming starts clean
+@kbd_drain:
+    lda RegCharIn
+    bne @kbd_drain
 @main_loop:
     jsr vgc_vsync
 .ifdef KEYBOARD_TEST
@@ -257,24 +272,9 @@ kbdviz_run:
 .ifdef KEYBOARD_TEST
     bra @main_loop
 .else
-    ; Check music playing (bit 1)
-    lda MusicStatus
-    and #AUDIO_STATUS_MUSIC
-    beq @chk_stop
-    ; Music is playing — remember that
-    sta zp_was_playing
-    stz music_stop_frames
-    bra @main_loop
-@chk_stop:
-    ; Music not playing — only exit if it WAS playing before
-    lda zp_was_playing
-    beq @main_loop            ; never started, keep waiting
-    ; Was playing, now stopped. Debounce this so a transient host status gap
-    ; doesn't close the visualizer while music is still audible.
-    lda music_stop_frames
-    cmp #STOP_EXIT_FRAMES
-    bcs @exit
-    inc music_stop_frames
+    ; Exit on ESC/Q only. The board's music status/elapsed readback is unreliable
+    ; for FIO-played songs (SID reads stopped immediately; some MIDs read a garbage
+    ; elapsed>=total), so any auto-exit-on-end misfires -- leave exiting to the user.
     bra @main_loop
 .endif
 
