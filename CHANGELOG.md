@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.31.0 - 2026-07-10
+#### Features
+- checkpoint NovaPascal and SuperNova tooling - (7764416) - Barry Walker
+
+- - -
+
 ## v0.30.2 - 2026-07-10
 #### Bug Fixes
 - (**music**) async-safe metadata, centered timer, MID auto-exit on end - (74833c3) - Barry Walker
