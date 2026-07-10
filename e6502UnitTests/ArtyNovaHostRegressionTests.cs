@@ -486,19 +486,19 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
-    public void NovaCliArtyDeployAndInfocomUpload_UseInfocomDiskFolder()
+    public void NovaCliArtyDeployAndInfocomUpload_UseGamesInfocomDiskFolder()
     {
         string cli = File.ReadAllText(RepoPath("e6502.Nova", "Program.cs"));
 
         StringAssert.Contains(cli, "\"upload-infocom\" => DoArtyUploadInfocom",
             "Nova CLI must expose one Arty command to build and upload the Infocom NDI set.");
-        StringAssert.Contains(cli, "/data/nova/disks/infocom",
+        StringAssert.Contains(cli, "/data/nova/disks/games/infocom",
             "Arty deploy should create the infocom disk folder so the OSD can show it immediately.");
         StringAssert.Contains(cli, "InfocomProjects()",
             "The upload command must use the known NovaZ Infocom project set.");
         StringAssert.Contains(cli, "INFOCOM_ROOT=",
             "The upload command must pass INFOCOM_ROOT through to the existing NovaZ Makefile.");
-        StringAssert.Contains(cli, "disks/infocom",
+        StringAssert.Contains(cli, "disks/games/infocom",
             "The upload command must place game NDIs under the infocom folder, not the flat disk root.");
     }
 

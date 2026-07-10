@@ -106,8 +106,13 @@ foreach (var asset in options.Assets)
     int slash = name.LastIndexOf('/');
     ushort parent = slash < 0 ? (ushort)0xFFFF : EnsureDir(name[..slash]);
     string fname = slash < 0 ? name : name[(slash + 1)..];
-    var type = fname.EndsWith(".4th", StringComparison.OrdinalIgnoreCase)
-        ? NdiFileType.Forth : NdiFileType.Bin;
+    var type = Path.GetExtension(fname).ToLowerInvariant() switch
+    {
+        ".4th" or ".fth" or ".fs" => NdiFileType.Forth,
+        ".pas" => NdiFileType.Pascal,
+        ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
+        _ => NdiFileType.Bin
+    };
     image.WriteFile(fname, type, parent, data);
     Console.WriteLine($"Imported {name} ({data.Length} bytes, {type})");
 }

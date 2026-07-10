@@ -23,7 +23,7 @@ public class MusicKeyboardCycleTests
 {
     private const ushort AppEntry = 0x7200;
     private const ushort AppLo = 0x7200, AppHi = 0x9F00;
-    private const byte KeyEnter = 0x0D, KeyEsc = 0x1B, KeyDown = 0x1F;
+    private const byte KeyEnter = 0x0D, KeyEsc = 0x1B, KeyRight = 0x1D, KeyDown = 0x1F;
     private const ushort MusicStatus = 0xBA50;
 
     private sealed record Harness(CompositeBusDevice Bus, Cpu Cpu, ScreenEditor Editor);
@@ -50,11 +50,11 @@ public class MusicKeyboardCycleTests
             bus = new CompositeBusDevice(enableSound: false, bootRom: CompositeBusDevice.ActiveRom.Logo);
         if (mountDisk)
         {
-            string ndi = Path.Combine(RepoRoot(), "docs", "programs", "music.ndi");
+            string ndi = Path.Combine(RepoRoot(), "docs", "programs", "demo.ndi");
             Assert.IsTrue(File.Exists(ndi), $"Missing test disk: {ndi}");
             // Mount a private copy so parallel/sequential tests don't fight over the
             // shared repo image (the bus holds it open for the test's lifetime).
-            string tmp = Path.Combine(Path.GetTempPath(), $"music-{Guid.NewGuid():N}.ndi");
+            string tmp = Path.Combine(Path.GetTempPath(), $"showcase-{Guid.NewGuid():N}.ndi");
             File.Copy(ndi, tmp, overwrite: true);
             bus.DeviceManager.GetDevice("FD0").Mount(tmp);
             bus.DeviceManager.DefaultDevice = "FD0";
@@ -113,6 +113,13 @@ public class MusicKeyboardCycleTests
             sb.Append('\n');
         }
         return sb.ToString();
+    }
+
+    private static void WriteMetaString(Harness h, int address, int length, string text)
+    {
+        byte[] bytes = Encoding.ASCII.GetBytes(text);
+        for (int i = 0; i < length; i++)
+            h.Bus.WriteRam((ushort)(address + i), i < bytes.Length ? bytes[i] : (byte)0);
     }
 
     private static void CycleAndAssert(Harness h, int nRow, string label)
@@ -184,6 +191,51 @@ public class MusicKeyboardCycleTests
     }
 
     [TestMethod]
+    public void Music_RefreshesEveryAsynchronousMetadataField()
+    {
+        // Hardware publishes fields over several frames. Changing only author or
+        // soundfont must still redraw, and clearing a field must erase stale text.
+        var h = Boot(mountDisk: false);
+        Press(h, KeyEnter, frames: 120);
+        h.Bus.WriteRam((ushort)VgcConstants.MetaType, 3);
+        WriteMetaString(h, VgcConstants.MetaTitle, VgcConstants.MetaTitleLen, "ASYNC TITLE");
+        WriteMetaString(h, VgcConstants.MetaAuthor, VgcConstants.MetaAuthorLen, "FIRST AUTHOR");
+        WriteMetaString(h, VgcConstants.MusicMetaSoundfont,
+            VgcConstants.MusicMetaSoundfontLen, "OLD BANK");
+        RunFrames(h, 4);
+
+        string first = Screen(h);
+        StringAssert.Contains(first, "FIRST AUTHOR");
+        StringAssert.Contains(first, "FONT: OLD BANK");
+
+        WriteMetaString(h, VgcConstants.MetaAuthor, VgcConstants.MetaAuthorLen, "SECOND AUTHOR");
+        WriteMetaString(h, VgcConstants.MusicMetaSoundfont,
+            VgcConstants.MusicMetaSoundfontLen, "");
+        RunFrames(h, 4);
+
+        string second = Screen(h);
+        StringAssert.Contains(second, "SECOND AUTHOR");
+        Assert.IsFalse(second.Contains("FIRST AUTHOR", StringComparison.Ordinal), second);
+        Assert.IsFalse(second.Contains("FONT:", StringComparison.Ordinal), second);
+    }
+
+    [TestMethod]
+    public void Music_UsesSharedArmedVgcCommandWait()
+    {
+        // FPGA busy asserts after the command write; the shared helper deliberately
+        // arms for 32 reads, while the removed one-read loop could return too early.
+        string root = RepoRoot();
+        string music = File.ReadAllText(Path.Combine(root,
+            "software", "assembly", "apps", "music", "music.s"));
+        string notes = File.ReadAllText(Path.Combine(root,
+            "software", "assembly", "apps", "music", "music_notes.inc"));
+        StringAssert.Contains(music, ".import vgc_gtext, vgc_vsync, vgc_wait_cmd");
+        StringAssert.Contains(notes, "jsr vgc_wait_cmd");
+        Assert.IsFalse((music + notes).Contains("mus_cmdwait", StringComparison.Ordinal),
+            "Do not reintroduce the unarmed local VGC wait.");
+    }
+
+    [TestMethod]
     public void Music_BootsToBrowser()
     {
         var h = Boot(mountDisk: false);
@@ -220,32 +272,48 @@ public class MusicKeyboardCycleTests
     }
 
     [TestMethod]
-    public void Music_SurvivesSweep()
+    public void Music_AllCuratedTracksStartAndReturnCleanly()
     {
-        // Mirror the hardware sweep that crashed: navigate DOWN through the whole
-        // FEATURED list, playing each song and ESC-ing back, so list scrolling +
-        // full redraws + play + return all interact across mixed MID/SID entries.
+        // Every embedded table entry must resolve to a packaged file and start.
+        // This also exercises scrolling, category changes, mixed MID/SID handoff,
+        // ESC cleanup, and full redraws across the complete showcase disk.
         var h = Boot(mountDisk: true);
         var log = new StringBuilder("sweep:\n");
-        for (int row = 0; row < 13; row++)
+        int[] categoryCounts = [14, 3, 15, 19, 10];
+        for (int category = 0; category < categoryCounts.Length; category++)
         {
-            Press(h, KeyEnter);                 // play current row
-            var kb = h.Cpu.GetState();
-            byte status = h.Bus.Read(MusicStatus);
-            bool kbdShown = Screen(h).Contains("PRESS ESC") || Screen(h).Contains("ESC/Q");
+            for (int row = 0; row < categoryCounts[category]; row++)
+            {
+                Press(h, KeyEnter, frames: 100); // stay inside the 150-frame auto-exit grace
+                var kb = h.Cpu.GetState();
+                byte status = h.Bus.Read(MusicStatus);
+                bool kbdShown = Screen(h).Contains("PRESS ESC") || Screen(h).Contains("ESC/Q");
 
-            Press(h, KeyEsc);                   // back to browser
-            var af = h.Cpu.GetState();
-            bool browserBack = Screen(h).Contains("FEATURED");
-            log.Append($"  row {row}: play PC=${kb.Pc:X4} SP=${kb.Sp:X2} status=${status:X2} kbd={kbdShown} | back PC=${af.Pc:X4} SP=${af.Sp:X2} browser={browserBack}\n");
+                Press(h, KeyEsc, frames: 140);   // back to browser after input arms
+                var af = h.Cpu.GetState();
+                byte stoppedStatus = (byte)(h.Bus.Read(MusicStatus) & 0x0E);
+                bool browserBack = Screen(h).Contains("FEATURED");
+                log.Append($"  category {category} row {row}: play PC=${kb.Pc:X4} SP=${kb.Sp:X2} status=${status:X2} kbd={kbdShown} | back PC=${af.Pc:X4} SP=${af.Sp:X2} browser={browserBack}\n");
 
-            Assert.IsTrue(af.Pc >= AppLo && af.Pc < AppHi,
-                $"sweep row {row}: PC ${af.Pc:X4} left app code — crashed.\n{log}\nScreen:\n{Screen(h)}");
-            Assert.IsTrue(af.Sp >= 0xC0, $"sweep row {row}: SP ${af.Sp:X2} below $C0 — stack leak.\n{log}");
-            Assert.IsTrue(kbdShown, $"sweep row {row}: keyboard didn't appear.\n{log}");
-            Assert.IsTrue(browserBack, $"sweep row {row}: ESC didn't return to browser.\n{log}");
+                Assert.AreNotEqual(0, status,
+                    $"category {category} row {row}: packaged track did not start.\n{log}");
+                Assert.IsTrue(af.Pc >= AppLo && af.Pc < AppHi,
+                    $"category {category} row {row}: PC ${af.Pc:X4} left app code — crashed.\n{log}\nScreen:\n{Screen(h)}");
+                Assert.IsTrue(af.Sp >= 0xC0,
+                    $"category {category} row {row}: SP ${af.Sp:X2} below $C0 — stack leak.\n{log}");
+                Assert.IsTrue(kbdShown,
+                    $"category {category} row {row}: keyboard didn't appear.\n{log}");
+                Assert.IsTrue(browserBack,
+                    $"category {category} row {row}: ESC didn't return to browser.\n{log}");
+                Assert.AreEqual(0, stoppedStatus,
+                    $"category {category} row {row}: ESC returned but hosted audio kept playing.\n{log}");
 
-            Press(h, KeyDown);                  // advance to next row
+                if (row + 1 < categoryCounts[category])
+                    Press(h, KeyDown);
+            }
+
+            if (category + 1 < categoryCounts.Length)
+                Press(h, KeyRight);
         }
     }
 }

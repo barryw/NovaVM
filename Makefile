@@ -26,7 +26,7 @@ binaries:
 	$(MAKE) -C software/languages/novaforth install
 	$(MAKE) -C software/languages/novalogo install
 	@for m in $(MODULES); do $(MAKE) -C software/modules/$$m install || exit 1; done
-	$(MAKE) -C software/assembly                       # apps (keyboard, demo, turtle, ...)
+	$(MAKE) -C software/assembly                       # apps (keyboard, music, turtle, ...)
 	$(MAKE) stage-resources
 	$(MAKE) stage-web
 	@echo "=== binaries: all deployable artifacts built + staged from source ==="

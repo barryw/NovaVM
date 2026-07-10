@@ -126,6 +126,8 @@ static void PrintArtyUsage()
     Console.Error.WriteLine("  nova arty deploy-editor-demo [--repo <repo>] [--remote <ip>]");
     Console.Error.WriteLine("  nova arty upload-infocom [--repo <repo>] [--remote <ip>] [--infocom-root <path>]");
     Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>] [--vitis <path>]");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("deploy-linux-host rebuilds and installs the SuperNova showcase as /data/nova/disks/demos/supernova.ndi.");
 }
 
 static int UnknownArtyCommand(string command)
@@ -268,6 +270,9 @@ static int DoArtySyncPayloads(string repo, List<string> args)
         if (rc != 0) return rc;
 
         rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "languages", "novaforth"), "ndi"));
+        if (rc != 0) return rc;
+
+        rc = DoDocsShowcaseDemo(repo, []);
         if (rc != 0) return rc;
 
         rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "assembly"), "editbuf-demo"]);
@@ -805,9 +810,14 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/languages/novaforth.ndi");
     if (rc != 0) return rc;
 
-    // Ball-bounce demo in demos/, chess in games/ — both appear in the OSD disk
-    // browser. Selecting ball-bounce mount-boots the disk, whose AUTOBOOT.BIN runs
-    // the demo.
+    // Curated demos in demos/, chess in games/ — all appear in the OSD disk browser.
+    string showcaseImage = Path.Combine(repo, "docs", "programs", "demo.ndi");
+    rc = RunScp(host, showcaseImage, "/data/nova/disks/demos/supernova.ndi");
+    if (rc != 0) return rc;
+
+    rc = VerifyRemoteFileSha256(host, showcaseImage, "/data/nova/disks/demos/supernova.ndi");
+    if (rc != 0) return rc;
+
     rc = RunScp(host, Path.Combine(repo, "docs", "programs", "ball-bounce.ndi"), "/data/nova/disks/demos/ball-bounce.ndi");
     if (rc != 0) return rc;
 
@@ -2121,7 +2131,7 @@ static int DoDocsShowcaseDemo(string repo, List<string> args)
     string sourceDir = Path.Combine(repo, "docs", "programs");
     using TempDir temp = TempDir.Create("nova-showcase-");
 
-    int rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "assembly"), "keyboard", "demo"]);
+    int rc = RunCommand("make", ["-C", Path.Combine(repo, "software", "assembly"), "music"]);
     if (rc != 0) return rc;
 
     rc = DoCreate([image, "--size", "4096", "--label", "SHOWCASE"]);
@@ -2134,12 +2144,8 @@ static int DoDocsShowcaseDemo(string repo, List<string> args)
     }
 
     string autoboot = Path.Combine(temp.Path, "AUTOBOOT.bin");
-    string keyboard = Path.Combine(temp.Path, "KEYBOARD.bin");
-    File.Copy(Path.Combine(repo, "software", "assembly", "apps", "demo", "demo.bin"), autoboot, overwrite: true);
-    File.Copy(Path.Combine(repo, "software", "assembly", "apps", "keyboard", "keyboard.bin"), keyboard, overwrite: true);
+    File.Copy(Path.Combine(repo, "software", "assembly", "apps", "music", "music.bin"), autoboot, overwrite: true);
     rc = DoImport([image, autoboot, "/"]);
-    if (rc != 0) return rc;
-    rc = DoImport([image, keyboard, "/"]);
     if (rc != 0) return rc;
 
     foreach ((string Source, string Dest, string Dir) entry in ShowcaseSidFiles())
@@ -2156,8 +2162,20 @@ static int DoDocsShowcaseDemo(string repo, List<string> args)
         if (rc != 0) return rc;
     }
 
+    rc = DoImport([image, Path.Combine(sourceDir, "midi", "CREDITS.txt"), "/wts"]);
+    if (rc != 0) return rc;
+
     rc = DoValidate([image]);
     if (rc != 0) return rc;
+    foreach (string browserImage in new[]
+    {
+        Path.Combine(repo, "e6502.Browser", "wwwroot", "showcase", "demo.ndi"),
+        Path.Combine(repo, "website", "emulator", "showcase", "demo.ndi"),
+    })
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(browserImage)!);
+        File.Copy(image, browserImage, overwrite: true);
+    }
     rc = DoDir([image]);
     if (rc != 0) return rc;
     return DoDir([image, "/featured"]);
@@ -2185,10 +2203,16 @@ static (string Source, string Dest, string Dir)[] ShowcaseSidFiles() =>
     ("sanxion.sid", "sanxion.sid", "/sid"),
     ("lightforce.sid", "lightforce.sid", "/sid"),
     ("master-of-magic.sid", "master-of-magic.sid", "/sid"),
+    ("intl-karate.sid", "intl-karate.sid", "/sid"),
+    ("cybernoid-2.sid", "cybernoid-2.sid", "/sid"),
+    ("zoids.sid", "zoids.sid", "/sid"),
+    ("thing-on-a-spring.sid", "thing-on-a-spring.sid", "/sid"),
+    ("ocean-loader-2.sid", "ocean-loader-2.sid", "/sid"),
 ];
 
 static (string Name, string Dir)[] ShowcaseMidiFiles() =>
 [
+    ("champagne-supernova.mid", "/featured"),
     ("sousa-stars-stripes.mid", "/featured"),
     ("bach-toccata-dm.mid", "/featured"),
     ("joplin-entertainer.mid", "/featured"),
@@ -2196,7 +2220,10 @@ static (string Name, string Dir)[] ShowcaseMidiFiles() =>
     ("tetris-theme.mid", "/featured"),
     ("castlevania-bloody-tears.mid", "/featured"),
     ("star-wars.mid", "/featured"),
+    ("washington-post-march.mid", "/featured"),
+    ("semper-fidelis.mid", "/featured"),
 
+    ("champagne-supernova.mid", "/wts"),
     ("sousa-stars-stripes.mid", "/wts"),
     ("bach-toccata-dm.mid", "/wts"),
     ("joplin-entertainer.mid", "/wts"),
@@ -2207,6 +2234,15 @@ static (string Name, string Dir)[] ShowcaseMidiFiles() =>
     ("star-wars.mid", "/wts"),
     ("grieg-mountain-king.mid", "/wts"),
     ("pink-panther.mid", "/wts"),
+    ("washington-post-march.mid", "/wts"),
+    ("semper-fidelis.mid", "/wts"),
+    ("vivaldi-spring.mid", "/wts"),
+    ("mozart-eine-kleine.mid", "/wts"),
+    ("beethoven-fur-elise.mid", "/wts"),
+    ("chopin-nocturne-op9n2.mid", "/wts"),
+    ("pachelbel-canon.mid", "/wts"),
+    ("joplin-maple-leaf.mid", "/wts"),
+    ("grieg-morning-mood.mid", "/wts"),
 
     ("sonic-green-hill.mid", "/arcade"),
     ("super-mario-bros.mid", "/arcade"),
@@ -2905,6 +2941,8 @@ static void PrintDocsUsage()
     Console.Error.WriteLine("  nova docs nova-cli-guide [--repo <repo>]");
     Console.Error.WriteLine("  nova docs fun-n-games [--repo <repo>]");
     Console.Error.WriteLine("  nova docs showcase-demo [--repo <repo>]");
+    Console.Error.WriteLine();
+    Console.Error.WriteLine("showcase-demo rebuilds the linked SuperNova music disk and browser copies with its curated MIDI/SID catalog.");
 }
 
 static int DoFpga(string[] args)

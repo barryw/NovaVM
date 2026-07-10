@@ -53,6 +53,39 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void ShowcaseDemoBuildsCanonicalLinkedMusicDisk()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs/books/nova-cli-guide/chapters/nova-cli.md"));
+            int start = program.IndexOf("static int DoDocsShowcaseDemo", StringComparison.Ordinal);
+            int end = program.IndexOf("static (string Source, string Dest, string Dir)[] ShowcaseSidFiles", StringComparison.Ordinal);
+
+            Assert.IsTrue(start >= 0 && end > start);
+            string showcase = program[start..end];
+            StringAssert.Contains(showcase, "\"apps\", \"music\", \"music.bin\"");
+            StringAssert.Contains(showcase, "\"music\"");
+            Assert.IsFalse(showcase.Contains("KEYBOARD.bin", StringComparison.Ordinal),
+                "The visualizer is linked into music.bin; a second keyboard binary is dead payload.");
+            Assert.IsFalse(showcase.Contains("\"apps\", \"demo\"", StringComparison.Ordinal),
+                "The retired demo.s browser must not return as a second showcase implementation.");
+            StringAssert.Contains(program, "(\"champagne-supernova.mid\", \"/featured\")",
+                "The first embedded FEATURED entry must also be packaged on the disk.");
+            StringAssert.Contains(program, "(\"washington-post-march.mid\", \"/featured\")",
+                "The selected Washington Post showcase sequence must be packaged.");
+            StringAssert.Contains(program, "(\"semper-fidelis.mid\", \"/featured\")",
+                "The selected Semper Fidelis showcase sequence must be packaged.");
+            StringAssert.Contains(showcase, "\"CREDITS.txt\"",
+                "The user-supplied showcase sequence must carry its provenance on the disk.");
+            StringAssert.Contains(showcase, "\"e6502.Browser\", \"wwwroot\", \"showcase\", \"demo.ndi\"");
+            StringAssert.Contains(showcase, "\"website\", \"emulator\", \"showcase\", \"demo.ndi\"");
+            StringAssert.Contains(guide, "linked keyboard visualizer");
+            StringAssert.Contains(guide, "obsolete standalone `KEYBOARD.bin`");
+            StringAssert.Contains(guide, "browser copies");
+            StringAssert.Contains(guide, "The Washington Post");
+        }
+
+        [TestMethod]
         public void CaptureHdmiSupportsLinuxV4l2AndMacAvfoundation()
         {
             string repo = FindRepoRoot();
@@ -419,6 +452,24 @@ namespace e6502UnitTests
             StringAssert.Contains(program,
                 "rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi",
                 "deploy-linux-host must clean the old flat floppy language image locations when moving them under languages/.");
+        }
+
+        [TestMethod]
+        public void ArtyDeployRefreshesAndVerifiesSuperNovaDisk()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs/books/nova-cli-guide/chapters/nova-cli.md"));
+
+            StringAssert.Contains(program, "DoDocsShowcaseDemo(repo, [])",
+                "sync-payloads must rebuild the canonical showcase before deployment.");
+            StringAssert.Contains(program,
+                "RunScp(host, showcaseImage, \"/data/nova/disks/demos/supernova.ndi\")",
+                "deploy-linux-host must install SuperNova in the OSD demos folder.");
+            StringAssert.Contains(program,
+                "VerifyRemoteFileSha256(host, showcaseImage, \"/data/nova/disks/demos/supernova.ndi\")",
+                "deploy-linux-host must reject a stale or incomplete remote showcase image.");
+            StringAssert.Contains(guide, "/data/nova/disks/demos/supernova.ndi");
         }
 
         [TestMethod]

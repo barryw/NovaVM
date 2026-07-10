@@ -39,7 +39,7 @@ const SHOWCASE_DISKS = [
     { id: "novaz-z5-spec", label: "NovaZ Z5 spec", path: "./showcase/novaz-z5-spec.ndi", runtime: "basic" },
     { id: "novaz-z4-spec", label: "NovaZ Z4 spec", path: "./showcase/novaz-z4-spec.ndi", runtime: "basic" },
     { id: "novaz-z3-spec", label: "NovaZ Z3 spec", path: "./showcase/novaz-z3-spec.ndi", runtime: "basic" },
-    { id: "demo", label: "Nova demo disk", path: "./showcase/demo.ndi", runtime: "basic" },
+    { id: "demo", label: "SuperNova Music Showcase", path: "./showcase/demo.ndi", runtime: "basic" },
     { id: "fun", label: "Fun N Games", path: "./showcase/fun-n-games.ndi", runtime: "basic" }
 ];
 

@@ -4,7 +4,7 @@
 NOVA_ASM := ../runtime/asm
 
 KEYBOARD_DIR := apps/keyboard
-DEMO_DIR     := apps/demo
+MUSIC_DIR    := apps/music
 ROTATE_DIR   := apps/vsprite_rotate
 TURTLE_DIR   := apps/turtle
 EDITUI_SHELL_DIR := apps/editui_shell
@@ -22,7 +22,7 @@ NOVA_LIB := $(NOVA_ASM)/build/nova.lib
 $(NOVA_LIB):
 	$(MAKE) -C $(NOVA_ASM)
 
-all: keyboard keyboard-test keyboard-harness demo vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo spritebank-demo
+all: keyboard keyboard-test keyboard-harness music vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo spritebank-demo
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -62,15 +62,6 @@ install-keyboard: keyboard
 	@echo "install-keyboard no longer writes to a host fallback; use nova create/import to place keyboard.bin on an NDI image." >&2
 	@false
 
-demo: $(DEMO_DIR)/demo.bin
-
-$(DEMO_DIR)/demo.bin: $(DEMO_DIR)/demo.o $(DEMO_DIR)/demo.cfg
-	ld65 -C $(DEMO_DIR)/demo.cfg -o $@ $(DEMO_DIR)/demo.o
-
-$(DEMO_DIR)/demo.o: $(DEMO_DIR)/demo.s $(NOVA_ASM)/novavm.inc
-	ca65 --cpu w65c02 -I $(NOVA_ASM) $< -o $@
-
-MUSIC_DIR := apps/music
 music: $(MUSIC_DIR)/music.bin
 
 # nova.lib (vgc.s) already provides vgc_wait_cmd + vgc_vsync, so don't also link
@@ -84,10 +75,6 @@ $(MUSIC_DIR)/music.o: $(MUSIC_DIR)/music.s $(MUSIC_DIR)/music_notes.inc $(MUSIC_
 # keyboard visualizer as a linkable library (no HEADER/main; kbdviz_run only)
 $(MUSIC_DIR)/keyboard_lib.o: $(KEYBOARD_DIR)/keyboard.s $(NOVA_ASM)/novavm.inc $(NOVA_ASM)/audio.inc
 	ca65 --cpu w65c02 -DKBD_LIB -I $(NOVA_ASM) $(KEYBOARD_DIR)/keyboard.s -o $@
-
-install-demo: demo
-	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2
-	@false
 
 vsprite-rotate: $(ROTATE_DIR)/vsprite_rotate.bin
 
@@ -193,7 +180,7 @@ clean:
 	$(RM) $(KEYBOARD_DIR)/test_music_status.o $(KEYBOARD_DIR)/test_music_status.bin
 	$(RM) $(VGC_WAIT_OBJ)
 	$(RM) $(VGC_VSYNC_OBJ)
-	$(RM) $(DEMO_DIR)/demo.o $(DEMO_DIR)/demo.bin $(DEMO_DIR)/demo.dbg
+	$(RM) $(MUSIC_DIR)/music.o $(MUSIC_DIR)/keyboard_lib.o $(MUSIC_DIR)/music.bin
 	$(RM) $(ROTATE_DIR)/vsprite_rotate.o $(ROTATE_DIR)/vsprite_rotate.bin
 	$(RM) $(ROTATE_DIR)/vsprite.o
 	$(RM) $(TURTLE_DIR)/turtle.o $(TURTLE_DIR)/turtle.bin
@@ -202,5 +189,7 @@ clean:
 	$(RM) $(EDITUI_SHELL_DIR)/editui.o
 	$(RM) $(EDITBUF_TEST_DIR)/editbuf_test.o $(EDITBUF_TEST_DIR)/editbuf_test.bin
 	$(RM) $(EDITBUF_DEMO_DIR)/editbuf_demo.o $(EDITBUF_DEMO_DIR)/editbuf_demo.bin
+	$(RM) $(MOUSEDEMO_DIR)/mousedemo.o $(MOUSEDEMO_DIR)/mousedemo.bin
+	$(RM) $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin
 
-.PHONY: all keyboard keyboard-test install-keyboard demo install-demo vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo spritebank-demo ball-bounce-ndi clean
+.PHONY: all keyboard keyboard-test keyboard-harness install-keyboard music vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo spritebank-demo ball-bounce-ndi clean

@@ -1,0 +1,17 @@
+THE WASHINGTON POST
+
+Composer: John Philip Sousa (1854-1932)
+MIDI sequence: supplied by the NovaVM project owner
+Original filename: washington_post_1.mid
+
+The MIDI file contains no embedded author or copyright metadata.
+Its filename was normalized for NovaVM.
+
+SEMPER FIDELIS
+
+Composer: John Philip Sousa (1854-1932)
+MIDI sequence: Scott Anderson (per the supplied filename)
+Original filename: semper-fidelis-by-scott-anderson.mid
+
+The MIDI file contains no embedded author or copyright metadata.
+Its filename was normalized for NovaVM.

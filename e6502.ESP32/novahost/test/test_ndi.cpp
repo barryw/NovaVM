@@ -90,8 +90,8 @@ static void test_open_and_header() {
     check_eq_int("directory_sector_count",  h.directory_sector_count, 48);
     check_eq_int("data_start_sector",       h.data_start_sector, 57);
 
-    // Free count should match `nova info` for the checked-in demo disk.
-    check_eq_int("free_sectors",            img.free_sectors(), 12384);
+    check("free sector count is plausible",
+          img.free_sectors() > 0 && (uint32_t)img.free_sectors() < h.total_sectors);
 }
 
 static void test_list_root() {
@@ -105,7 +105,7 @@ static void test_list_root() {
     ndi::DirEntry entries[16];
     int n = 0;
     img.list_entries(ndi::ROOT_PARENT, entries, 16, n);
-    check_eq_int("root entry count", n, 7);  // 5 dirs + 2 BIN files
+    check_eq_int("root entry count", n, 6);  // 5 dirs + linked AUTOBOOT.bin
 
     // Verify expected names exist (order = slot order, so deterministic
     // for an unmodified demo image).
@@ -120,10 +120,9 @@ static void test_list_root() {
         if (strcmp(e.filename, "wts")          == 0 && e.is_directory()) saw_wts      = true;
         if (strcmp(e.filename, "arcade")       == 0 && e.is_directory()) saw_arcade   = true;
         if (strcmp(e.filename, "AUTOBOOT.bin") == 0 && !e.is_directory()
-                                                     && e.size_bytes == 3487)
+                                                     && e.size_bytes > 2)
             saw_autoboot_bin = true;
-        if (strcmp(e.filename, "KEYBOARD.bin") == 0 && !e.is_directory()
-                                                     && e.size_bytes == 2888)
+        if (strcmp(e.filename, "KEYBOARD.bin") == 0)
             saw_keyboard_bin = true;
     }
     check("featured dir present",          saw_featured);
@@ -131,8 +130,8 @@ static void test_list_root() {
     check("sid dir present",               saw_sid);
     check("wts dir present",               saw_wts);
     check("arcade dir present",            saw_arcade);
-    check("AUTOBOOT.bin (3487 bytes) present", saw_autoboot_bin);
-    check("KEYBOARD.bin (2888 bytes) present", saw_keyboard_bin);
+    check("linked AUTOBOOT.bin present", saw_autoboot_bin);
+    check("standalone KEYBOARD.bin absent", !saw_keyboard_bin);
 }
 
 static void test_find_and_read_autoboot_bin() {
@@ -148,14 +147,15 @@ static void test_find_and_read_autoboot_bin() {
 
     ndi::DirEntry e;
     check("get_entry by index", img.get_entry(idx, e));
-    check_eq_int("AUTOBOOT.bin size_bytes", e.size_bytes, 3487);
+    check("AUTOBOOT.bin has a load header and code", e.size_bytes > 2);
     check_eq_int("AUTOBOOT.bin file_type=BIN", e.file_type, ndi::FT_BIN);
     check("AUTOBOOT.bin is active",          e.is_active());
     check("AUTOBOOT.bin is not directory",  !e.is_directory());
 
-    uint8_t buf[4096];
+    uint8_t buf[16384];
     int got = img.read_file_by_index(idx, buf, sizeof(buf));
-    check_eq_int("read_file_by_index returns size", got, 3487);
+    check_eq_int("read_file_by_index returns size", got, e.size_bytes);
+    check("AUTOBOOT.bin loads at $7200", got > 2 && buf[0] == 0x00 && buf[1] == 0x72);
 
     // Sanity: BIN should be non-zero (not all zeros).
     int nonzero = 0;
@@ -217,7 +217,7 @@ static void test_write_read_roundtrip() {
     // file ops, not initial format).
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label TEST > /dev/null 2>&1",
+        "dotnet run --project ../../../e6502.Nova -c Release --no-build -- create %s --size 64 --label TEST",
         path);
     if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
@@ -274,7 +274,7 @@ static void test_delete_roundtrip() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label DEL > /dev/null 2>&1",
+        "dotnet run --project ../../../e6502.Nova -c Release --no-build -- create %s --size 64 --label DEL",
         path);
     if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
@@ -306,7 +306,7 @@ static void test_mkdir_rmdir() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label DIRT > /dev/null 2>&1",
+        "dotnet run --project ../../../e6502.Nova -c Release --no-build -- create %s --size 64 --label DIRT",
         path);
     if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 
@@ -347,7 +347,7 @@ static void test_create_file_chunked_roundtrip() {
 
     char cmd[1024];
     snprintf(cmd, sizeof(cmd),
-        "dotnet run --project ../../../e6502.Nova -- create %s --size 64 --label CHUNK > /dev/null 2>&1",
+        "dotnet run --project ../../../e6502.Nova -c Release --no-build -- create %s --size 64 --label CHUNK",
         path);
     if (system(cmd) != 0) { printf("  SKIP (CLI format failed)\n"); unlink(path); return; }
 

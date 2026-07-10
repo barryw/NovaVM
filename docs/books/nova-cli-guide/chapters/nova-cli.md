@@ -225,7 +225,14 @@ nova docs fun-n-games
 
 `nova build browser-rust-core` builds the browser WASM core and copies the ROM,
 font, and module assets into `e6502.Browser/wwwroot/rust`. `nova docs
-showcase-demo` rebuilds `docs/programs/demo.ndi`.
+showcase-demo` rebuilds `docs/programs/demo.ndi` from the SuperNova music browser,
+its linked keyboard visualizer, and the curated SID/MIDI sources. The disk has one
+`AUTOBOOT.bin`; it does not carry the obsolete standalone `KEYBOARD.bin` payload.
+The command also refreshes the checked-in browser copies under
+`e6502.Browser/wwwroot/showcase/` and `website/emulator/showcase/`. The curated
+catalog includes the fan-ranked SID classics already stored in the project and
+the project-owner-supplied orchestral MIDIs of Sousa's *The Washington Post*
+and *Semper Fidelis*; their provenance note is packaged as `/wts/CREDITS.txt`.
 
 ## CI Maintenance Commands
 
@@ -1203,7 +1210,9 @@ waits for the management port before returning.
 
 `nova arty deploy-linux-host` places bootable language disks under
 `/data/nova/disks/languages`, currently `novalogo.ndi` and `novaforth.ndi`.
-Pascal images should live there too when NovaPascal lands.
+Pascal images should live there too when NovaPascal lands. It also rebuilds the
+SuperNova showcase, uploads it as `/data/nova/disks/demos/supernova.ndi`, and
+verifies that remote image against the local SHA-256 before restarting NovaHost.
 
 `nova arty upload-infocom` builds the known NovaZ Infocom project images with
 the existing `software/examples/novaz` Makefile and uploads them under

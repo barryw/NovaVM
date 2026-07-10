@@ -58,13 +58,12 @@ SOURCE_ROW      = 3
 FPS         = 60                ; frames per second
 INPUT_GRACE_FRAMES = 60        ; ignore launch keystrokes for first second
 INPUT_ARM_QUIET_FRAMES = 30    ; require quiet input before exit keys count
-STOP_EXIT_FRAMES = 120         ; require music stopped for 2 seconds before exit
 PLAY_GRACE       = 150         ; startup grace (~2.5s) before watching for song end
 MODE_NONE   = 0
 MODE_SID    = 1
 MODE_WTS    = 2
 KBD_ZP_BASE = $14
-KBD_ZP_SAVE_LEN = $47
+KBD_ZP_SAVE_LEN = $45
 
 ; Palette color indices
 COL_BLACK   = 0
@@ -99,10 +98,9 @@ zp_key_x_lo:    .res 1          ; key X lo
 zp_key_x_hi:    .res 1          ; key X hi
 zp_key_y:       .res 1          ; key Y
 zp_is_black:    .res 1          ; 1=black key
-zp_paint_col:   .res 1          ; color for flood fill
+zp_meta_sum:    .res 1          ; second byte of the metadata change fingerprint
 zp_str_ptr:     .res 2          ; string pointer
 zp_prev_bar:    .res 2          ; previous bar fill width
-zp_was_playing: .res 1          ; nonzero once music has been detected
 zp_oct_in_row:  .res 1          ; octave within current row
 ; Division
 zp_div_lo:      .res 1
@@ -114,7 +112,6 @@ zp_remain:      .res 1
 ; Multiply
 zp_mul_a_lo:    .res 1
 zp_mul_a_hi:    .res 1
-zp_mul_b:       .res 1          ; 8-bit multiplicand (for simple mul)
 zp_mul_r_lo:    .res 1
 zp_mul_r_hi:    .res 1
 ; 32-bit division for progress bar
@@ -143,10 +140,9 @@ save_font:      .res 1
 zp_save_buf:    .res KBD_ZP_SAVE_LEN
 input_quiet_frames: .res 1
 input_armed:    .res 1
-music_stop_frames: .res 1
 kbd_play_cmd:   .res 1          ; FIO play command the caller fed us (0 = none)
 grace_frames:   .res 1          ; startup grace counter before song-end watch
-meta_hash:      .res 1          ; hash of published metadata; headers redraw when it changes
+meta_hash:      .res 2          ; fingerprint of published metadata; redraw on change
 
 .ifdef KEYBOARD_TEST
 test_current_note: .res 1
@@ -210,13 +206,11 @@ kbdviz_run:
 
     stz zp_prev_bar
     stz zp_prev_bar+1
-    stz zp_was_playing
     stz zp_voice_mode
     stz zp_first_voice
     stz zp_voice_count
     stz input_quiet_frames
     stz input_armed
-    stz music_stop_frames
     stz grace_frames
 
     ; Set mode 1 (gfx over text), default font
@@ -251,6 +245,7 @@ kbdviz_run:
     jsr draw_chrome
     jsr meta_hash_calc          ; baseline; refresh_metadata redraws on any change
     sta meta_hash
+    stx meta_hash+1
 .endif
 
 .ifdef KEYBOARD_TEST
@@ -401,8 +396,12 @@ check_exit_key:
 refresh_metadata:
     jsr meta_hash_calc
     cmp meta_hash
+    bne @changed
+    cpx meta_hash+1
     beq @done
+@changed:
     sta meta_hash
+    stx meta_hash+1
     lda #TITLE_ROW
     jsr clear_text_row
     lda #2
@@ -410,6 +409,8 @@ refresh_metadata:
     lda #SOURCE_ROW
     jsr clear_text_row
     lda #4
+    jsr clear_text_row
+    lda #FONT_ROW
     jsr clear_text_row
     lda #TIME_ROW
     jsr clear_text_row
@@ -420,23 +421,43 @@ refresh_metadata:
 @done:
     rts
 
-; meta_hash_calc -- A = rolling hash of AUDIO_META_TITLE ^ MusicTotalL ^ MusicTotalH.
-; Cheap change detector; a rare collision only skips one cosmetic redraw.
+; meta_hash_calc -- A/X = 16-bit fingerprint of every field drawn by the player.
+; The host publishes these bytes asynchronously, so any partial or later update
+; must redraw the title, author, copyright, source flags, font, and timer.
 meta_hash_calc:
-    lda #0
-    sta zp_tmp2
+    stz zp_tmp2
+    stz zp_meta_sum
     ldx #0
-@h:
+@meta:
+    lda AUDIO_META_TYPE,x
+    jsr meta_hash_mix
+    inx
+    cpx #(AUDIO_META_FLAGS - AUDIO_META_TYPE + 1)
+    bcc @meta
+    ldx #0
+@font:
+    lda AUDIO_META_SOUNDFONT,x
+    jsr meta_hash_mix
+    inx
+    cpx #AUDIO_META_SOUNDFONT_LEN
+    bcc @font
+    lda MusicTotalL
+    jsr meta_hash_mix
+    lda MusicTotalH
+    jsr meta_hash_mix
+    ldx zp_meta_sum
+    lda zp_tmp2
+    rts
+
+meta_hash_mix:
+    sta zp_tmp
+    clc
+    adc zp_meta_sum
+    sta zp_meta_sum
     lda zp_tmp2
     asl
-    adc AUDIO_META_TITLE,x
+    adc zp_tmp
     sta zp_tmp2
-    inx
-    cpx #AUDIO_META_TITLE_LEN
-    bcc @h
-    lda zp_tmp2
-    eor MusicTotalL
-    eor MusicTotalH
     rts
 
 ; check_song_end -- a hosted MID is over when its elapsed reaches the published
@@ -467,19 +488,31 @@ check_song_end:
     rts
 
 stop_hosted_music:
+    ; Source type selects the player to stop. MUSIC_STATUS SID/WTS bits describe
+    ; the voices in use, not the file type: a MIDI routed through SID voices sets
+    ; AUDIO_STATUS_SID and must still receive MIDSTOP.
+    lda AUDIO_META_TYPE
+    cmp #AUDIO_META_TYPE_MIDI
+    beq @mid
+    cmp #AUDIO_META_TYPE_SID
+    beq @sid
+
+    ; Compatibility fallback for older hosts that do not publish metadata.
     lda MusicStatus
     sta zp_tmp
     and #AUDIO_STATUS_WTS
     beq @check_sid
+@mid:
     lda #FioCmdMidStop
-    jsr issue_music_stop_cmd
+    jmp issue_music_stop_cmd
 
 @check_sid:
     lda zp_tmp
     and #AUDIO_STATUS_SID
     beq @done
+@sid:
     lda #FioCmdSidStop
-    jsr issue_music_stop_cmd
+    jmp issue_music_stop_cmd
 
 @done:
     rts
@@ -965,9 +998,37 @@ calc_label_col:
 ; =====================================================================
 ; Draw player chrome (progress bar, time, instructions)
 ; =====================================================================
+clear_progress_bar:
+    stz zp_prev_bar
+    stz zp_prev_bar+1
+    lda #COL_BLACK
+    sta RegP0
+    lda #CmdGcolor
+    sta RegCmd
+    jsr vgc_wait_cmd
+
+    lda #<BAR_X
+    sta RegP0
+    lda #>BAR_X
+    sta RegP1
+    lda #BAR_Y
+    sta RegP2
+    stz RegP3
+    lda #<(BAR_X + BAR_W)
+    sta RegP4
+    lda #>(BAR_X + BAR_W)
+    sta RegP5
+    lda #BAR_Y + BAR_H
+    sta RegP6
+    stz RegP7
+    lda #CmdFill
+    sta RegCmd
+    jmp vgc_wait_cmd
+
 draw_chrome:
     lda #TIME_ROW
     jsr clear_text_row
+    jsr clear_progress_bar
 
     lda MusicTotalL
     ora MusicTotalH
@@ -1711,38 +1772,6 @@ update_progress:
 
     ; SID files do not carry duration, so leave the progress bar empty but
     ; still show the elapsed timer from MusicElapsedL/H.
-    lda zp_prev_bar
-    ora zp_prev_bar+1
-    bne @up_clear_bar
-    jmp @up_time
-@up_clear_bar:
-    stz zp_prev_bar
-    stz zp_prev_bar+1
-
-    lda #COL_BLACK
-    sta RegP0
-    lda #CmdGcolor
-    sta RegCmd
-    jsr vgc_wait_cmd
-
-    lda #<BAR_X
-    sta RegP0
-    lda #>BAR_X
-    sta RegP1
-    lda #BAR_Y
-    sta RegP2
-    stz RegP3
-    lda #<(BAR_X + BAR_W)
-    sta RegP4
-    lda #>(BAR_X + BAR_W)
-    sta RegP5
-    lda #BAR_Y + BAR_H
-    sta RegP6
-    stz RegP7
-    lda #CmdFill
-    sta RegCmd
-    jsr vgc_wait_cmd
-
     jmp @up_time
 @up_has_total:
 
@@ -1753,11 +1782,6 @@ update_progress:
     sta zp_mul_a_lo
     lda MusicElapsedH
     sta zp_mul_a_hi
-    lda #<(BAR_W - 2)
-    sta zp_dvd0                 ; reuse as temp for multiplicand
-    jsr mul16_8                 ; 16x8 -> 24-bit, but BAR_W-2=306 > 255
-    ; Hmm, BAR_W-2 = 306 which doesn't fit in 8 bits.
-    ; Use full 16x16 multiply instead.
     jsr mul16x16
     ; 32-bit result in zp_dvd0..3
 
@@ -2043,11 +2067,6 @@ div32_16:
     sta zp_q_hi
     rts
 
-; =====================================================================
-; Unused stub (referenced in earlier code, kept for safety)
-; =====================================================================
-mul16_8:
-    rts
 .endif
 
 ; =====================================================================

@@ -2,7 +2,7 @@
 ; the NDK sprite API (nova.lib). Eight eighth-note sprites FALL from behind the
 ; top border to the bottom, each a different colour and a different speed, swaying
 ; like leaves; each respawns at the top in a fresh column on reaching the bottom.
-; Priority BEHIND the text. Every VGC command is paced with mus_cmdwait.
+; Priority BEHIND the text. Every VGC command is paced with vgc_wait_cmd.
 ;
 ; Colour without eight separate bitmaps: one shape MASK (on-pixels = $F nibbles)
 ; is AND'd with C*$11 to stamp the note in colour C into shape slot per note.
@@ -33,16 +33,16 @@ init_notes:
     sta note_yh,x
     txa                         ; sprite i uses shape slot i (its colour)
     jsr sprite_set_shape        ; X=sprite, A=shape
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     stx RegP0
     stz RegP1                   ; priority 0 = behind the text
     jsr sprite_priority
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     stx RegP0
     jsr sprite_enable
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     dex
     bpl @seed
@@ -58,7 +58,7 @@ notes_off:
     stx note_row
     stx RegP0
     jsr sprite_disable
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     dex
     bpl @o
@@ -70,7 +70,7 @@ notes_on:
     stx note_row
     stx RegP0
     jsr sprite_enable
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     dex
     bpl @n
@@ -114,7 +114,7 @@ load_note_shapes:
     cpx #8
     bne @byte
     jsr sprite_row
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     inc note_row
     lda note_row
     cmp #16
@@ -172,7 +172,7 @@ update_notes:
     lda note_yh,x
     sta RegP3                   ; y = integer part
     jsr sprite_pos
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx note_row
     dex
     bpl @up
@@ -337,7 +337,6 @@ sine_tab:
     .byte 10, 8, 6, 4, 3, 2, 1, 0, 0, 0, 1, 2, 3, 4, 6, 8
 ; per-note colour (all non-black): red, cyan, purple, green, yellow, orange, lred, lblue
 note_col:    .byte 2, 3, 4, 5, 7, 8, 10, 14
-; per-note fall speed, 8.8 px/frame: .75 1.25 .5 1.0 1.375 .625 1.125 .875
 ; feather drift: 8.8 fixed, all < 0.35 px/frame so notes fall slowly at varied rates
 note_spd_lo: .byte $1F,$4D,$26,$38,$52,$24,$43,$2E
 note_spd_hi: .byte $00,$00,$00,$00,$00,$00,$00,$00

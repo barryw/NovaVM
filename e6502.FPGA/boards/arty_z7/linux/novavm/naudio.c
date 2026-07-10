@@ -65,6 +65,7 @@ static short        g_block[BLOCK_FRAMES * 2];
 static float        g_fblock[BLOCK_FRAMES * 2];
 static unsigned char g_note_active[128]; /* count of sounding voices per MIDI note */
 static unsigned     g_total_frames = 0;  /* song length in 60 Hz frames            */
+static char         g_soundfont_name[64]; /* display stem of the active SF2 bank    */
 
 /* ---- 6502 register-driven sources: 2 software SIDs + the wavetable (via TSF) --- */
 static sidchip      g_sid1, g_sid2;        /* $D400 / $D420 (mirror; PL renders SID) */
@@ -93,6 +94,34 @@ static inline void     audio_fifo_write_bytes(const unsigned char *buf, int n) {
 static inline int      audio_fifo_space(void) { return (int)(rd(R_AUDIO_SPACE) & 0xFFFFu); }
 static inline unsigned audio_evt_read(void)   { return rd(R_AUDIO_EVT); }
 static inline void     audio_mmio_poke(unsigned addr, unsigned char v) { poke(addr, v); }
+
+#define MUSIC_META_BASE           0xBAB0u
+#define MUSIC_META_BYTES          112u
+#define MUSIC_META_SOUNDFONT_BASE 0xBB8Eu
+#define MUSIC_META_SOUNDFONT_BYTES 64u
+
+static void copy_file_stem(const char *path, char *out, size_t out_size) {
+    memset(out, 0, out_size);
+    const char *base = path;
+    for (const char *p = path; *p; p++)
+        if (*p == '/' || *p == '\\' || *p == ':') base = p + 1;
+    const char *dot = strrchr(base, '.');
+    size_t n = dot && dot > base ? (size_t)(dot - base) : strlen(base);
+    if (n >= out_size) n = out_size - 1;
+    memcpy(out, base, n);
+    out[n] = 0;
+}
+
+/* Publish one zero-filled metadata snapshot, matching the ESP NovaHost ABI.
+ * Writing the whole blocks prevents fields from the previous song lingering. */
+static void publish_music_metadata(const unsigned char meta[MUSIC_META_BYTES],
+                                   const char *soundfont) {
+    for (unsigned i = 0; i < MUSIC_META_BYTES; i++)
+        audio_mmio_poke(MUSIC_META_BASE + i, meta[i]);
+    for (unsigned i = 0; i < MUSIC_META_SOUNDFONT_BYTES; i++)
+        audio_mmio_poke(MUSIC_META_SOUNDFONT_BASE + i,
+                        soundfont && soundfont[i] ? (unsigned char)soundfont[i] : 0);
+}
 
 /* reDIP-SID mix control (R_SID_VOL): [7:0] = level (32=x1, 64=x2), [8] = stereo. */
 static unsigned g_sid_lvl = 128, g_sid_stereo = 0;   /* x2 with the DC blocker at PCM_GAIN=1 */
@@ -317,6 +346,7 @@ int audio_load_soundfont(const char *path) {
     tsf *old = g_tsf; g_tsf = nt; g_lim = 1.0f;
     UNLOCK();
     if (old) tsf_close(old);
+    copy_file_stem(path, g_soundfont_name, sizeof g_soundfont_name);
     printf("[audio] SF2 loaded: %d presets (%u bytes)\n", tsf_get_presetcount(nt), len);
     return 0;
 }
@@ -370,6 +400,11 @@ static void pretty_title(char *s) {
     }
 }
 
+static void title_from_path(const char *path, char title[33]) {
+    copy_file_stem(path, title, 33);
+    pretty_title(title);
+}
+
 int audio_play_midi(const char *path) {
     if (!g_tsf) audio_ensure_soundfont();  /* auto-load the default if none yet */
     if (!g_tsf) { printf("[audio] no soundfont loaded\n"); return -1; }
@@ -385,11 +420,7 @@ int audio_play_midi(const char *path) {
     midi_find_meta((const unsigned char *)buf, len, 0x02, copyr,  sizeof copyr);
     free(buf);
     if (!title[0]) {                       /* no embedded name -> use the filename */
-        const char *base = path;
-        for (const char *p = path; *p; p++) if (*p == '/' || *p == ':') base = p + 1;
-        int k = 0; while (base[k] && base[k] != '.' && k < 32) { title[k] = base[k]; k++; }
-        title[k] = 0;
-        pretty_title(title);
+        title_from_path(path, title);
     }
     unsigned int len_ms = 0;
     tml_get_info(nh, 0, 0, 0, 0, &len_ms);
@@ -404,13 +435,20 @@ int audio_play_midi(const char *path) {
     g_testtone = 0; g_playing = 1;
     UNLOCK();
     if (old) tml_free(old);
-    audio_mmio_poke(0xBAB0, 0x03);             /* AUDIO_META_TYPE = MIDI */
-    for (int i = 0; i < 32; i++) {
-        audio_mmio_poke(0xBAB3 + i, (unsigned char)title[i]);   /* AUDIO_META_TITLE     */
-        audio_mmio_poke(0xBAD3 + i, (unsigned char)author[i]);  /* AUDIO_META_AUTHOR    */
-        audio_mmio_poke(0xBAF3 + i, (unsigned char)copyr[i]);   /* AUDIO_META_COPYRIGHT */
-    }
-    audio_mmio_poke(0xBB1C, 0);                /* AUDIO_META_FLAGS (no SID flags) */
+    unsigned char meta[MUSIC_META_BYTES] = {0};
+    unsigned clamped_size = len > 0xFFFFu ? 0xFFFFu : len;
+    unsigned duration_secs = end_ms / 1000u;
+    if (duration_secs > 0xFFFFu) duration_secs = 0xFFFFu;
+    meta[0] = 0x03;                            /* AUDIO_META_TYPE = MIDI */
+    meta[1] = (unsigned char)clamped_size;
+    meta[2] = (unsigned char)(clamped_size >> 8);
+    memcpy(meta + 0x03, title, 32);
+    memcpy(meta + 0x23, author, 32);
+    memcpy(meta + 0x43, copyr, 32);
+    meta[0x69] = 1;
+    meta[0x6A] = (unsigned char)duration_secs;
+    meta[0x6B] = (unsigned char)(duration_secs >> 8);
+    publish_music_metadata(meta, g_soundfont_name);
     printf("[audio] MIDI playing: %s (\"%s\")\n", path, title);
     return 0;
 }
@@ -777,14 +815,37 @@ static void sid_start_thread(void) {
 
 /* Publish the PSID title/author/copyright into the $BAB0 now-playing block, the
  * same layout audio_play_midi uses (type 0x01 = SID). */
-static void sid_publish_meta(const unsigned char *header) {
-    audio_mmio_poke(0xBAB0, 0x01);   /* AUDIO_META_TYPE = SID */
-    for (int i = 0; i < 32; i++) {
-        audio_mmio_poke(0xBAB3 + i, header[0x16 + i]);   /* title     (PSID off 22) */
-        audio_mmio_poke(0xBAD3 + i, header[0x36 + i]);   /* author    (PSID off 54) */
-        audio_mmio_poke(0xBAF3 + i, header[0x56 + i]);   /* copyright (PSID off 86) */
+static void sid_publish_meta(const char *label, const unsigned char *header,
+                             unsigned size, const nsid_info_t *info) {
+    unsigned char meta[MUSIC_META_BYTES] = {0};
+    unsigned clamped_size = size > 0xFFFFu ? 0xFFFFu : size;
+    meta[0] = 0x01;                            /* AUDIO_META_TYPE = SID */
+    meta[1] = (unsigned char)clamped_size;
+    meta[2] = (unsigned char)(clamped_size >> 8);
+    memcpy(meta + 0x03, header + 0x16, 32);
+    memcpy(meta + 0x23, header + 0x36, 32);
+    memcpy(meta + 0x43, header + 0x56, 32);
+    if (!meta[0x03]) {
+        char title[33] = {0};
+        title_from_path(label, title);
+        memcpy(meta + 0x03, title, 32);
     }
-    audio_mmio_poke(0xBB1C, 0);
+    meta[0x63] = (unsigned char)info->load_addr;
+    meta[0x64] = (unsigned char)(info->load_addr >> 8);
+    meta[0x65] = (unsigned char)info->init_addr;
+    meta[0x66] = (unsigned char)(info->init_addr >> 8);
+    meta[0x67] = (unsigned char)info->play_addr;
+    meta[0x68] = (unsigned char)(info->play_addr >> 8);
+    meta[0x69] = info->songs > 0xFFu ? 0xFFu : (unsigned char)info->songs;
+
+    unsigned clock = (info->flags >> 2) & 0x03u;
+    unsigned model = (info->flags >> 4) & 0x03u;
+    unsigned char flags = model == 2 ? 0x02 : 0x01; /* 8580 or default 6581 */
+    if (clock == 2) flags |= 0x08;                 /* NTSC */
+    if (info->data_offset >= 0x7Cu && (header[0x7A] || header[0x7B]))
+        flags |= 0x04;                             /* second/third SID present */
+    meta[0x6C] = flags;
+    publish_music_metadata(meta, NULL);            /* SID never has a soundfont */
 }
 
 void fio_sidplay(void) {
@@ -861,7 +922,7 @@ void fio_sidplay(void) {
     sid_flush_batch();
     g_sidvm_playing = 0;                 /* sid_start_thread re-arms it */
 
-    sid_publish_meta(sidbuf);
+    sid_publish_meta(fname, sidbuf, (unsigned)n, &info);
     g_sid_period_us = nsid_frame_period_us(&info, (uint8_t)song);
     g_sid_ticks = 0;                 /* restart the elapsed count-up */
     g_sid_total_frames = 0;          /* HVSC duration lookup: TODO (count-up only for now) */

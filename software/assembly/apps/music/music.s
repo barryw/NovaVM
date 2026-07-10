@@ -8,18 +8,14 @@
 
 .include "novavm.inc"
 .import kbdviz_run              ; linked keyboard visualizer library
-.import vgc_gtext                             ; gfx text (2x SUPERNOVA wordmark)
+.import vgc_gtext, vgc_vsync, vgc_wait_cmd ; shared FPGA-safe VGC helpers
 .import copper_list, copper_clear, copper_add, copper_on, copper_off
 
 NUM_CAT       = 5
 VISIBLE_ROWS  = 6
-TITLE_ROW     = 2
 TAB_ROW       = 9
 LIST_TOP      = 11
 NAV_ROW       = 21
-PLAY_ROW      = 23
-LIST_COL      = 4
-BADGE_COL     = 40
 ENTRY_SIZE    = 55
 NUM_COL       = 9
 T_COL         = 13
@@ -40,7 +36,6 @@ zp_cat:   .res 1
 zp_sel:   .res 1
 zp_top:   .res 1
 zp_count: .res 1
-zp_last:  .res 1
 zp_rowc:  .res 1
 zp_ptr:   .res 2
 zp_src:   .res 2
@@ -49,9 +44,6 @@ zp_i:     .res 1
 zp_old_sel: .res 1
 
 .segment "BSS"
-cat_ptr_lo: .res NUM_CAT
-cat_ptr_hi: .res NUM_CAT
-cat_cnt:    .res NUM_CAT
 copper_tick: .res 1
 copper_frame: .res 1
 
@@ -76,10 +68,6 @@ start:
     stz RegBorder
     lda #$0C
     sta RegCharOut
-    lda RegStatus
-    sta zp_last
-
-    jsr load_dirs
     stz zp_cat
     stz zp_sel
     stz zp_top
@@ -168,6 +156,7 @@ key_right:
 
 key_play:
     jsr copper_off              ; hide the browse chrome behind the visualizer
+    jsr vgc_wait_cmd
     jsr notes_off
     jsr start_play              ; build dir/name into FioName + start the song playing
     lda #0
@@ -182,7 +171,7 @@ redraw_all:
     sta RegCharOut
     lda #CmdGcls
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     jsr draw_header
     jsr draw_tabs
     jsr draw_nav
@@ -198,30 +187,17 @@ new_category:
     rts
 
 ; ---- data plumbing --------------------------------------------------------
-load_dirs:
-    ldx #NUM_CAT-1
-@l:
-    lda track_ptrs_lo,x
-    sta cat_ptr_lo,x
-    lda track_ptrs_hi,x
-    sta cat_ptr_hi,x
-    lda track_counts,x
-    sta cat_cnt,x
-    dex
-    bpl @l
-    rts
-
 set_count:
     ldx zp_cat
-    lda cat_cnt,x
+    lda track_counts,x
     sta zp_count
     rts
 
 cat_base_ptr:
     ldx zp_cat
-    lda cat_ptr_lo,x
+    lda track_ptrs_lo,x
     sta zp_src
-    lda cat_ptr_hi,x
+    lda track_ptrs_hi,x
     sta zp_src+1
     rts
 
@@ -249,15 +225,16 @@ sel_ptr:
 draw_header:
     lda #CmdGcls                ; clear the gfx layer
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     jsr build_copper_bars       ; RegBgCol gradient behind the wordmark
     jsr copper_on
+    jsr vgc_wait_cmd
     ; wordmark colour, then gfx text at 2x, centered near the top
     lda #COL_WHITE
     sta RegP0
     lda #CmdGcolor
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     ldx #0
 @wn:
     lda word_super,x
@@ -277,17 +254,19 @@ draw_header:
     lda #2
     sta RegP5                   ; scale 2x
     jsr vgc_gtext
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     rts
 
 ; build_copper_bars -- copper list confined just wider than the wordmark: for each
 ; scanline behind it, set RegBgCol to a cycling colour at x=72 and back to black at
-; x=248 (gfx space). 15 scanlines * 2 events = 30 (under the 32-event copper cap).
+; x=248 (gfx space). 24 scanlines * 2 events = 48 (under the 128-event FPGA cap).
 build_copper_bars:
     stz RegP0
     jsr copper_list             ; list 0
+    jsr vgc_wait_cmd
     jsr copper_clear
-    ldx #0                      ; scanline index 0..14
+    jsr vgc_wait_cmd
+    ldx #0                      ; scanline index 0..23
 @b:
     txa                         ; y = 10 + index (extends above + below the wordmark)
     clc
@@ -309,7 +288,7 @@ build_copper_bars:
     lda bar_palette,y
     sta RegP5
     jsr copper_add
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     lda #248                    ; black off at x=248
     sta RegP0
     stz RegP1
@@ -320,7 +299,7 @@ build_copper_bars:
     stz RegP4
     stz RegP5
     jsr copper_add
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     inx
     cpx #24
     bne @b
@@ -544,7 +523,7 @@ clear_track_gfx:
     stz RegP0
     lda #CmdGcolor
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     lda #36
     sta RegP0
     stz RegP1
@@ -566,7 +545,7 @@ clear_track_gfx:
     stz RegP7
     lda #CmdFill
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     rts
 
 ; redraw_sel -- fast 2-row update after an in-window up/down: repaint the previously
@@ -669,30 +648,6 @@ clear_one_row:
     bne @c
     rts
 
-; clear_list_gfx -- black-fill the list gfx area (clears old highlight bars)
-clear_list_gfx:
-    stz RegP0
-    lda #CmdGcolor
-    sta RegCmd
-    jsr mus_cmdwait
-    lda #36
-    sta RegP0
-    stz RegP1
-    lda #(LIST_TOP*4)
-    sta RegP2
-    stz RegP3
-    lda #<284
-    sta RegP4
-    lda #>284
-    sta RegP5
-    lda #(LIST_TOP*4 + VISIBLE_ROWS*3*4)
-    sta RegP6
-    stz RegP7
-    lda #CmdFill
-    sta RegCmd
-    jsr mus_cmdwait
-    rts
-
 ; draw_highlight -- accent gfx bar behind the track whose title row is zp_tmp
 draw_highlight:
     ldx zp_cat
@@ -700,7 +655,7 @@ draw_highlight:
     sta RegP0
     lda #CmdGcolor
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     lda #36
     sta RegP0
     stz RegP1
@@ -722,7 +677,7 @@ draw_highlight:
     stz RegP7
     lda #CmdFill
     sta RegCmd
-    jsr mus_cmdwait
+    jsr vgc_wait_cmd
     rts
 
 start_play:
@@ -799,17 +754,7 @@ print_str:
     rts
 
 mus_vsync:
-@w: lda RegStatus
-    cmp zp_last
-    beq @w
-    sta zp_last
-    rts
-
-mus_cmdwait:
-@c: lda RegCmd
-    and #1
-    bne @c
-    rts
+    jmp vgc_vsync
 
 .segment "RODATA"
 word_super:  .byte "SUPERNOVA", 0

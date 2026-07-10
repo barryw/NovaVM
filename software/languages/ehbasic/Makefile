@@ -8,7 +8,7 @@ NOVA_LIB_FILE := $(NOVA_ASM)/build/nova.lib
 NOVA_CLI := dotnet run --project ../../../e6502.Nova -c Release --
 NOVA_CLI_SOURCES := ../../../e6502.Nova/Program.cs ../../../e6502.Nova/BuildTools.cs
 
-all: basic.bin extension.bin ../../runtime/asm/runtime_labels.inc ../../assembly/apps/keyboard/keyboard.bin ../../assembly/apps/demo/demo.bin tokens.json
+all: basic.bin extension.bin ../../runtime/asm/runtime_labels.inc ../../assembly/apps/keyboard/keyboard.bin ../../assembly/apps/music/music.bin tokens.json
 
 ABI_SOURCES = \
 	$(NOVA_ASM)/nova.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/fio_clear_error.s $(NOVA_ASM)/fio.s \
@@ -80,15 +80,15 @@ install-keyboard: keyboard.bin
 	@echo "install-keyboard no longer writes to a host fallback; use nova create/import to place keyboard.bin on an NDI image." >&2
 	@false
 
-demo: demo.bin
+music: music.bin
 
-demo.bin: ../../assembly/apps/demo/demo.bin
+music.bin: ../../assembly/apps/music/music.bin
 
-../../assembly/apps/demo/demo.bin: $(NOVAVM_INC)
-	$(MAKE) -C ../../assembly demo
+../../assembly/apps/music/music.bin: $(NOVAVM_INC)
+	$(MAKE) -C ../../assembly music
 
-install-demo: demo.bin
-	@echo "install-demo no longer writes to a host fallback; use nova create/import to place demo.bin on an NDI image." >&2
+install-music: music.bin
+	@echo "install-music no longer writes to a host fallback; use nova docs showcase-demo to build the NDI image." >&2
 	@false
 
 clean:
@@ -97,4 +97,4 @@ clean:
 
 FORCE:
 
-.PHONY: all runtime-labels keyboard install-keyboard demo install-demo clean FORCE
+.PHONY: all runtime-labels keyboard install-keyboard music install-music clean FORCE

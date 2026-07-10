@@ -134,6 +134,6 @@ The NDK includes standalone apps under `apps/`:
 | App | Purpose |
 | --- | --- |
 | `apps/keyboard` | Piano keyboard music visualizer. |
-| `apps/demo` | Demo disk music browser/player. |
+| `apps/music` | SuperNova showcase music browser with linked keyboard visualizer. |
 
 These are examples and usable binaries. They are not part of the BASIC ROM.

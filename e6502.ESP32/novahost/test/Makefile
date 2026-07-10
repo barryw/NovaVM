@@ -27,6 +27,7 @@ test_shelf_alloc: test_shelf_alloc.cpp ../shelf_alloc.h
 test:
 	$(MAKE) clean
 	$(MAKE) all
+	dotnet build ../../../e6502.Nova/e6502.Nova.csproj -c Release -m:1
 	./test_ndi
 	./test_midi_engine
 	./test_sid_vm
