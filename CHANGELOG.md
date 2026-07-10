@@ -2,6 +2,13 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.30.2 - 2026-07-10
+#### Bug Fixes
+- (**music**) async-safe metadata, centered timer, MID auto-exit on end - (74833c3) - Barry Walker
+- (**music**) SuperNova plays again — strip file extension + real song title - (041218a) - Barry Walker
+
+- - -
+
 ## v0.30.1 - 2026-07-09
 #### Documentation
 - add MIT LICENSE + standard SPDX file headers across all projects - (374e4ed) - Barry Walker
