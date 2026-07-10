@@ -48,6 +48,8 @@ LEGEND_SID_X    = (TEXT_COLS - (LEGEND_PREFIX_CHARS + SID_VOICE_COUNT * LEGEND_E
 LEGEND_MIDI_X   = (TEXT_COLS - (LEGEND_PREFIX_CHARS + WTS_VOICE_COUNT * LEGEND_ENTRY_CHARS) + 1) / 2
 SID_TIME_CHARS  = 11            ; "TIME: MM:SS"
 SID_TIME_X      = (TEXT_COLS - SID_TIME_CHARS + 1) / 2
+MID_TIME_CHARS  = 19            ; "TIME: MM:SS / MM:SS"
+MID_TIME_X      = (TEXT_COLS - MID_TIME_CHARS + 1) / 2
 EXIT_CHARS      = 19            ; "PRESS ESC/Q TO EXIT"
 EXIT_X          = (TEXT_COLS - EXIT_CHARS + 1) / 2
 TEST_TITLE_X    = 24
@@ -144,6 +146,7 @@ input_armed:    .res 1
 music_stop_frames: .res 1
 kbd_play_cmd:   .res 1          ; FIO play command the caller fed us (0 = none)
 grace_frames:   .res 1          ; startup grace counter before song-end watch
+meta_hash:      .res 1          ; hash of published metadata; headers redraw when it changes
 
 .ifdef KEYBOARD_TEST
 test_current_note: .res 1
@@ -246,6 +249,8 @@ kbdviz_run:
     jsr draw_source_header
     jsr draw_soundfont_header
     jsr draw_chrome
+    jsr meta_hash_calc          ; baseline; refresh_metadata redraws on any change
+    sta meta_hash
 .endif
 
 .ifdef KEYBOARD_TEST
@@ -264,7 +269,10 @@ kbdviz_run:
 .else
     jsr update_voice_mode
     jsr update_voices
+    jsr refresh_metadata        ; redraw title/source/time when the host publishes it
     jsr update_progress
+    jsr check_song_end          ; MID: elapsed reached total -> back to the browser
+    bcs @user_exit
     jsr check_exit_key
     bcs @user_exit
 .endif
@@ -272,9 +280,9 @@ kbdviz_run:
 .ifdef KEYBOARD_TEST
     bra @main_loop
 .else
-    ; Exit on ESC/Q only. The board's music status/elapsed readback is unreliable
-    ; for FIO-played songs (SID reads stopped immediately; some MIDs read a garbage
-    ; elapsed>=total), so any auto-exit-on-end misfires -- leave exiting to the user.
+    ; A MID auto-exits when its elapsed timer reaches the published total (the
+    ; board clamps elapsed to total, so elapsed>=total is a clean end signal after
+    ; a startup grace). SIDs carry no duration, so they exit on ESC/Q only.
     bra @main_loop
 .endif
 
@@ -385,6 +393,79 @@ check_exit_key:
 ; instead of getting trapped forever waiting for FIO_STATUS.
 ; =====================================================================
 .ifndef KEYBOARD_TEST
+; refresh_metadata -- the hosted player publishes MetaTitle/MetaTotal a few frames
+; after playback starts (async on hardware) and can briefly hold the previous
+; song's values. Hash the metadata every frame; when it changes, clear and redraw
+; every metadata-dependent element so the title, source, and centered timer track
+; the song actually playing.
+refresh_metadata:
+    jsr meta_hash_calc
+    cmp meta_hash
+    beq @done
+    sta meta_hash
+    lda #TITLE_ROW
+    jsr clear_text_row
+    lda #2
+    jsr clear_text_row
+    lda #SOURCE_ROW
+    jsr clear_text_row
+    lda #4
+    jsr clear_text_row
+    lda #TIME_ROW
+    jsr clear_text_row
+    jsr draw_song_header
+    jsr draw_source_header
+    jsr draw_soundfont_header
+    jsr draw_chrome
+@done:
+    rts
+
+; meta_hash_calc -- A = rolling hash of AUDIO_META_TITLE ^ MusicTotalL ^ MusicTotalH.
+; Cheap change detector; a rare collision only skips one cosmetic redraw.
+meta_hash_calc:
+    lda #0
+    sta zp_tmp2
+    ldx #0
+@h:
+    lda zp_tmp2
+    asl
+    adc AUDIO_META_TITLE,x
+    sta zp_tmp2
+    inx
+    cpx #AUDIO_META_TITLE_LEN
+    bcc @h
+    lda zp_tmp2
+    eor MusicTotalL
+    eor MusicTotalH
+    rts
+
+; check_song_end -- a hosted MID is over when its elapsed reaches the published
+; total. The board clamps elapsed to total, so elapsed>=total is a clean end
+; signal; a startup grace avoids a first-frame misfire before elapsed advances.
+; Carry set = exit to the browser. SIDs have no total and never auto-exit.
+check_song_end:
+    lda MusicTotalL
+    ora MusicTotalH
+    beq @no
+    lda grace_frames
+    cmp #PLAY_GRACE
+    bcc @grace
+    lda MusicElapsedH
+    cmp MusicTotalH
+    bcc @no
+    bne @end
+    lda MusicElapsedL
+    cmp MusicTotalL
+    bcc @no
+@end:
+    sec
+    rts
+@grace:
+    inc grace_frames
+@no:
+    clc
+    rts
+
 stop_hosted_music:
     lda MusicStatus
     sta zp_tmp
@@ -930,25 +1011,8 @@ draw_chrome:
     lda #>str_exit
     sta zp_str_ptr+1
     jsr print_str
-
-    lda MusicTotalL
-    ora MusicTotalH
-    beq @skip_time_label
-
-    ; Time label above the progress bar
-    lda #COL_WHITE
-    sta RegFgCol
-    lda #TIME_ROW
-    sta RegCursorY
-    lda #2
-    sta RegCursorX
-    lda #<str_time
-    sta zp_str_ptr
-    lda #>str_time
-    sta zp_str_ptr+1
-    jsr print_str
-
-@skip_time_label:
+    ; The elapsed/total timer is drawn centered by update_progress (self-contained
+    ; "TIME: ..."), so draw_chrome no longer prints a left-aligned label here.
     rts
 
 ; =====================================================================
@@ -1825,13 +1889,19 @@ update_progress:
     bra @up_done
 
 @up_time_with_total:
-    ; Display next to the TIME label.
+    ; Centered, self-contained "TIME: MM:SS / MM:SS".
     lda #TIME_ROW
     sta RegCursorY
-    lda #8
+    lda #MID_TIME_X
     sta RegCursorX
     lda #COL_WHITE
     sta RegFgCol
+
+    lda #<str_time
+    sta zp_str_ptr
+    lda #>str_time
+    sta zp_str_ptr+1
+    jsr print_str
 
     lda zp_quot_lo
     jsr print_dec2
