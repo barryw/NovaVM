@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.36.0 - 2026-07-20
+#### Features
+- add NovaPascal FizzBuzz and inline NDK ABI - (3fa9847) - Barry Walker
+
+- - -
+
 ## v0.35.0 - 2026-07-20
 #### Features
 - assemble canonical NDK sources with NAS - (b947a8d) - Barry Walker
