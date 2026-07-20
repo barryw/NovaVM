@@ -31,5 +31,12 @@ nasm_error_name_ptr = $095B          ; u16
 nasm_error_name_len = $095D          ; u8
 NASCORE_INCLUDE_OPEN = $095E          ; u16 callback
 NASCORE_INCLUDE_CLOSE = $0960         ; u16 callback
+nasm_constant_ptr = $0962             ; u24 XRAM scratch for local constants
+nasm_symbol_names_ptr = $0965         ; u16 resident regular-symbol name table
+nasm_reloc_buffer_ptr = $0967         ; u16 resident relocation buffer
+
+NASCORE_CONSTANT_CAP = $8000
+NASCORE_SYMBOL_NAMES_CAP = 64 * 32
+NASCORE_RELOC_CAP = 768
 
 .endif

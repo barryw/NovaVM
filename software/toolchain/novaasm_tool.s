@@ -10,10 +10,14 @@
       .include "nas_backend.inc"
       .include "nas_core.inc"
 
-ASM_CAP      = 3072
+ASM_CAP      = $8000
 ASM_LOAD_CAP = ASM_CAP + 1
+INCLUDE_CAP  = $D000
+INCLUDE_LOAD_CAP = INCLUDE_CAP + 1
+INCLUDE_SMALL_CAP = $1000
+INCLUDE_SMALL_LOAD_CAP = INCLUDE_SMALL_CAP + 1
 OBJECT_CAP   = 1024
-EXPANDED_CAP = 6144
+EXPANDED_CAP = $8000
 PROJECT_CAP  = 2048
 
       .segment "ZEROPAGE"
@@ -28,11 +32,16 @@ expanded_xaddr: .res 3
 expanded_allocated:.res 1
 backend_loaded:  .res 1
 expanded_len:   .res 2
+constant_xaddr: .res 3
+constant_allocated:.res 1
 include_count:   .res 1
 include_slot:    .res 1
 include_xaddr:   .res NASM_INCLUDE_DEPTH * 3
+include_large:   .res NASM_INCLUDE_DEPTH
 include_names:   .res NASM_INCLUDE_DEPTH * NASM_FILENAME_CAP
 object_buf:      .res OBJECT_CAP
+core_symbol_names:.res NASCORE_SYMBOL_NAMES_CAP
+core_reloc_buffer:.res NASCORE_RELOC_CAP
 project_buf:     .res PROJECT_CAP
 project_left:    .res 2
 project_found:   .res 1
@@ -104,6 +113,10 @@ tool_main:
       STA   NPTOOL_STATUS
       JMP   @fail_release
 :
+      JSR   tool_alloc_constants
+      BEQ   :+
+      JMP   @memory_error
+:
       JSR   tool_load_backend
       BEQ   :+
       LDA   LIB_RESULT+1
@@ -147,6 +160,20 @@ tool_main:
       STA   NASCORE_INCLUDE_CLOSE
       LDA   #>nasm_include_close
       STA   NASCORE_INCLUDE_CLOSE+1
+      LDX   #2
+@constant_address:
+      LDA   constant_xaddr,X
+      STA   nasm_constant_ptr,X
+      DEX
+      BPL   @constant_address
+      LDA   #<core_symbol_names
+      STA   nasm_symbol_names_ptr
+      LDA   #>core_symbol_names
+      STA   nasm_symbol_names_ptr+1
+      LDA   #<core_reloc_buffer
+      STA   nasm_reloc_buffer_ptr
+      LDA   #>core_reloc_buffer
+      STA   nasm_reloc_buffer_ptr+1
       JSR   NASCORE_ENTRY
       BNE   @assemble_error
 
@@ -166,12 +193,17 @@ tool_main:
       JSR   nptool_print_z
       JSR   nptool_newline
       JSR   nptool_save_arg1
-      BNE   @fail_release
+      BEQ   :+
+      JMP   @fail_release
+:
       JSR   tool_release_backend
       JSR   tool_release_includes
+      JSR   tool_release_constants
       JSR   tool_release_expanded
       JSR   tool_release_source
-      BNE   @memory_error
+      BEQ   :+
+      JMP   @memory_error
+:
       LDA   #<nas_ok
       LDX   #>nas_ok
       JSR   nptool_print_z
@@ -226,6 +258,7 @@ tool_main:
 @fail_release:
       JSR   tool_release_backend
       JSR   tool_release_includes
+      JSR   tool_release_constants
       JSR   tool_release_expanded
       JSR   tool_release_source
 @fail:
@@ -237,7 +270,7 @@ tool_main:
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_MEMORY
       STA   NPTOOL_STATUS
-      BRA   @fail
+      JMP   @fail_release
 
 tool_bad_args:
       LDA   #NPTOOL_ERR_ARGS
@@ -415,6 +448,47 @@ tool_release_backend:
       LDA   #0
       RTS
 
+tool_alloc_constants:
+      JSR   tool_clear_args
+      LDA   #<NASCORE_CONSTANT_CAP
+      STA   LIB_ARG2
+      LDA   #>NASCORE_CONSTANT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   constant_xaddr,X
+      DEX
+      BPL   @copy
+      INC   constant_allocated
+      LDA   #0
+@done:
+      RTS
+
+tool_release_constants:
+      LDA   constant_allocated
+      BEQ   @done
+      STZ   constant_allocated
+      JSR   tool_clear_args
+      LDX   #2
+@address:
+      LDA   constant_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<NASCORE_CONSTANT_CAP
+      STA   LIB_ARG2
+      LDA   #>NASCORE_CONSTANT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JMP   tool_mem_call
+@done:
+      LDA   #0
+      RTS
+
 tool_alloc_source:
       JSR   tool_clear_args
       LDA   #<ASM_LOAD_CAP
@@ -497,12 +571,14 @@ nasm_include_open:
 @name_done:
       LDA   #0
       STA   (include_name_ptr),Y
+      LDX   include_slot
+      STZ   include_large,X
 
+@allocate:
       JSR   tool_clear_args
-      LDA   #<ASM_LOAD_CAP
+      JSR   tool_include_cap
       STA   LIB_ARG2
-      LDA   #>ASM_LOAD_CAP
-      STA   LIB_ARG2+1
+      STX   LIB_ARG2+1
       LDA   #MEM_ALLOC
       JSR   tool_mem_call
       BEQ   :+
@@ -535,18 +611,32 @@ nasm_include_open:
       INY
       CPY   #3
       BCC   @load_address
-      LDA   #<ASM_LOAD_CAP
+      JSR   tool_include_cap
       STA   LIB_ARG3
-      LDA   #>ASM_LOAD_CAP
-      STA   LIB_ARG3+1
+      STX   LIB_ARG3+1
       LDA   #MEM_XLOAD
       JSR   tool_mem_call
       BNE   @release_bad
+      LDX   include_slot
+      LDA   include_large,X
+      BNE   @check_large
       LDA   XRAM_LENH
-      CMP   #>ASM_LOAD_CAP
+      CMP   #>INCLUDE_SMALL_LOAD_CAP
       BNE   @loaded
       LDA   XRAM_LENL
-      CMP   #<ASM_LOAD_CAP
+      CMP   #<INCLUDE_SMALL_LOAD_CAP
+      BNE   @loaded
+      JSR   tool_release_include_slot
+      BNE   @bad
+      LDX   include_slot
+      INC   include_large,X
+      BRA   @allocate
+@check_large:
+      LDA   XRAM_LENH
+      CMP   #>INCLUDE_LOAD_CAP
+      BNE   @loaded
+      LDA   XRAM_LENL
+      CMP   #<INCLUDE_LOAD_CAP
       BEQ   @release_bad
 @loaded:
       JSR   tool_include_xindex
@@ -613,12 +703,24 @@ tool_release_include_slot:
       INY
       CPY   #3
       BCC   @address
-      LDA   #<ASM_LOAD_CAP
+      JSR   tool_include_cap
       STA   LIB_ARG2
-      LDA   #>ASM_LOAD_CAP
-      STA   LIB_ARG2+1
+      STX   LIB_ARG2+1
       LDA   #MEM_RELEASE
       JMP   tool_mem_call
+
+; Return the allocation size for include_slot in A/X.
+tool_include_cap:
+      LDX   include_slot
+      LDA   include_large,X
+      BEQ   @small
+      LDA   #<INCLUDE_LOAD_CAP
+      LDX   #>INCLUDE_LOAD_CAP
+      RTS
+@small:
+      LDA   #<INCLUDE_SMALL_LOAD_CAP
+      LDX   #>INCLUDE_SMALL_LOAD_CAP
+      RTS
 
 ; include_slot -> X = include_xaddr byte index.
 tool_include_xindex:

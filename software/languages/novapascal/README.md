@@ -106,6 +106,20 @@ need no linker-config rule and do not appear in maps.
 reported against the active source as `file:line:column: error: message`.
 Case-insensitive `.INCBIN "file"` streams arbitrary bytes through the same
 frontend-owned XRAM callback into the current initialized section.
+Primary and preprocessed sources may be 32 KB; include buffers start at 4 KB
+and retry up to 52 KB, large enough for the canonical `nova.inc`. Local
+absolute constants stay in an XRAM hash table and are not serialized into
+NOBJ, so assembly programs can include `nova.inc`, an NDK declaration such as
+`dma.inc`, and its canonical implementation source directly without a flattened
+header or converted library artifact. NAS accepts the ca65 `.SETCPU`, `.GLOBAL`,
+`.GLOBALZP`, `.IF`, `.IFDEF`, `.IFNDEF`, `.IFREF`, `.ELSE`, and `.ENDIF` forms
+used by canonical NDK sources. `.GLOBALZP` selects zero-page instruction forms
+and emits NL's range-checked `ABS8` relocation for unresolved symbols.
+`.referenced(symbol)` and `.REFTO symbol` implement the NDK's selective source
+emission directly: ordinary operand references seed the live set, `.REFTO`
+propagates dependencies, and inactive routines never enter the NOBJ. The
+end-to-end test assembles canonical `rng.s` and `fio.s`, proves an unrelated FIO
+routine is absent, links with NL unchanged, and runs the resulting executable.
 Direct `ASSEMBLE file.s [-Dname=value] [-o file.obj]` seeds one case-insensitive
 preprocessor definition and optionally selects the object filename. Options may
 appear in either order.

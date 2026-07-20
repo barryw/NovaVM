@@ -23,7 +23,7 @@ $(BUILD_DIR)/nptool_io.o: nptool_io.s nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM
 $(BUILD_DIR)/novaasm_tool.o: novaasm_tool.s nas_preprocessor.inc nas_project.inc nas_backend.inc nas_core.inc nptool.inc novaasm.inc nobj.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novaasm_tool.s
 
-$(BUILD_DIR)/novaasm_core.o: novaasm.s novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/nova.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novaasm_core.o: novaasm.s novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -D NASM_CORE_OVERLAY -I . -I $(NOVA_ASM) -o $@ novaasm.s
 
 $(BUILD_DIR)/novalink_tool.o: novalink_tool.s nptool.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/libsystem.inc | $(BUILD_DIR)

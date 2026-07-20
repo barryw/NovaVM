@@ -610,7 +610,7 @@ public class NovaPascalTests
                 disk.Load("CUSTOM", ".OBJ")[32..38],
                 "NAS -o and -D must compose while preserving case-insensitive definitions.");
 
-            disk.Save("TOOBIG", Encoding.ASCII.GetBytes(new string(' ', 3_073)), ".S");
+            disk.Save("TOOBIG", Encoding.ASCII.GetBytes(new string(' ', 32_769)), ".S");
             QueueLine(editor, "ASSEMBLE TOOBIG.S");
             RunUntil(cpu, bus, s => s.Contains("File is too large for this command.", StringComparison.Ordinal),
                 "oversized assembly source rejection");
@@ -782,6 +782,78 @@ public class NovaPascalTests
             }, includeExecutable);
             QueueLine(editor, "RUN INCLUDE.BIN");
             RunUntil(cpu, bus, s => s.Contains('I'), "nested include executable output");
+
+            disk.Save("ZEROPAGE", Encoding.ASCII.GetBytes(
+                ".globalzp Scratch\n.export Start\nStart:\nlda Scratch\nsta Scratch,x\nrts\n"), ".S");
+            QueueLine(editor, "ASSEMBLE ZEROPAGE.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing ZEROPAGE.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "global zero-page assembly");
+            byte[] zeroPageObject = disk.Load("ZEROPAGE", ".OBJ");
+            CollectionAssert.AreEqual(new byte[] { 0xA5, 0x00, 0x95, 0x00, 0x60 },
+                ReadNobjSectionData(zeroPageObject, "CODE"),
+                ".GLOBALZP must select zero-page opcodes for unresolved NDK symbols.");
+            int zeroPageReloc = zeroPageObject[16] | zeroPageObject[17] << 8;
+            Assert.AreEqual(2, zeroPageObject[zeroPageReloc + 1]);
+            Assert.AreEqual(2, zeroPageObject[zeroPageReloc + 9],
+                ".GLOBALZP operands must use NL's range-checked ABS8 relocation.");
+
+            disk.Save("NOVA", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "nova.inc")), ".INC");
+            disk.Save("DMA", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "dma.inc")), ".INC");
+            disk.Save("DMA", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "dma.s")), ".S");
+            disk.Save("NDKDMA", Encoding.ASCII.GetBytes(
+                ".setcpu \"65c02\"\n.include \"dma.inc\"\n.segment \"CODE\"\n.export Start\n" +
+                "Start:\nlda #DMA_SPACE_CPU\nsta DMA_DSTSPACE\nstz DMA_DSTL\n" +
+                "lda #$60\nsta DMA_DSTM\nstz DMA_DSTH\nlda #'N'\nsta DMA_FILLVALUE\n" +
+                "lda #1\nsta DMA_LENL\nstz DMA_LENM\nstz DMA_LENH\njsr dma_fill\n" +
+                "lda $6000\nsta VGC_CHAROUT\nrts\n.include \"dma.s\"\n"), ".S");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "ASSEMBLE NDKDMA.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing NDKDMA.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "canonical NDK source assembly");
+            Assert.IsTrue(disk.FileExists("NDKDMA", ".OBJ"), Snapshot(bus));
+            QueueLine(editor, "LINK NDKDMA.OBJ");
+            RunUntil(cpu, bus, s => s.Contains("Writing NDKDMA.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Linker error", StringComparison.Ordinal),
+                "canonical NDK source link");
+            QueueLine(editor, "RUN NDKDMA.BIN");
+            RunUntil(cpu, bus, s => s.Contains('N'),
+                "executable assembled directly from canonical NDK sources");
+
+            disk.Save("FIO", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "fio.inc")), ".INC");
+            disk.Save("FIO", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "fio.s")), ".S");
+            disk.Save("RNG", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "rng.inc")), ".INC");
+            disk.Save("RNG", File.ReadAllBytes(RepoPath(
+                "software", "runtime", "asm", "rng.s")), ".S");
+            disk.Save("NDKRNG", Encoding.ASCII.GetBytes(
+                ".setcpu \"65c02\"\n.include \"rng.inc\"\n.segment \"CODE\"\n.export Start\n" +
+                "Start:\njsr rng_get8\nlda #'R'\nsta VGC_CHAROUT\nrts\n" +
+                ".include \"rng.s\"\n.include \"fio.s\"\n"), ".S");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "ASSEMBLE NDKRNG.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing NDKRNG.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "selective canonical NDK source assembly");
+            Assert.IsTrue(disk.FileExists("NDKRNG", ".OBJ"), Snapshot(bus));
+            byte[] rngObject = disk.Load("NDKRNG", ".OBJ");
+            Assert.IsTrue(NobjDefines(rngObject, "fio_exec"));
+            Assert.IsTrue(NobjDefines(rngObject, "fio_check"));
+            Assert.IsFalse(NobjDefines(rngObject, "fio_save"),
+                ".REFERENCED/.REFTO must omit unused canonical NDK routines before NOBJ emission.");
+            QueueLine(editor, "LINK NDKRNG.OBJ");
+            RunUntil(cpu, bus, s => s.Contains("Writing NDKRNG.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Linker error", StringComparison.Ordinal),
+                "selective canonical NDK source link");
+            QueueLine(editor, "RUN NDKRNG.BIN");
+            RunUntil(cpu, bus, s => s.Contains('R'),
+                "executable assembled from selectively emitted canonical NDK sources");
 
             disk.Save("BADINC", Encoding.ASCII.GetBytes("NOPE\n"), ".INC");
             disk.Save("BADMAIN", Encoding.ASCII.GetBytes(

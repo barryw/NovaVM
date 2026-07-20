@@ -82,9 +82,11 @@ XRAM_NAMEPTR_L  = NVR4H
 ; @symbol XRAM_NAMEPTR_H
 ; @summary High byte of filename pointer for XRAM file streaming routines.
 XRAM_NAMEPTR_H  = NVR5L
+XRAM_WIN2_BASE  = $BE00
 XRAM_WIN3_BASE  = WIN3_BASE
 
 XRAM_CAPACITY_HIGH = $08        ; 512KB == flat address $080000
+XRAM_WIN2_ENABLE = $04
 XRAM_WIN3_ENABLE = $08
 XRAM_XMC_ERR_RANGE = $01
 XRAM_XMC_ERR_BADARGS = $02

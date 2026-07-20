@@ -16,7 +16,7 @@
       .setcpu "w65c02"
       .include "novaasm.inc"
       .include "nas_core.inc"
-      .include "nova.inc"
+      .include "xram.inc"
       .include "nas_backend.inc"
 
 .macro long_bcs target
@@ -44,14 +44,19 @@
 .endmacro
 
 NASM_SYMBOL_CAP       = 32
-NASM_SYMBOL_TABLE_CAP = 32
-NASM_RELOC_CAP        = 768
+NASM_IDENTIFIER_CAP   = 64
+NASM_SYMBOL_TABLE_CAP = 64
+NASM_COND_CAP         = 8
+NASM_RELOC_CAP        = NASCORE_RELOC_CAP
 NASM_PASS_DEFINE      = 1
 NASM_PASS_EMIT        = 2
 NASM_PASS_RESOLVE     = 3
 NASM_EXPR_DEPTH       = 8
 NASM_DECL_IMPORT      = $01
 NASM_DECL_EXPORT      = $02
+NASM_DECL_GLOBAL      = $04
+NASM_DECL_REFERENCED  = $08
+NASM_DECL_ZP          = $10
 NASM_SECTION_CAP      = 8
 NASM_SECTION_NAME_CAP = 16
 
@@ -74,6 +79,7 @@ EXPR_LT = 16
 EXPR_LE = 17
 EXPR_GT = 18
 EXPR_GE = 19
+EXPR_DOT_OR = 20
 
 .ifdef NASM_CORE_OVERLAY
 a_src             = NASCORE_ZP_BASE+0
@@ -121,15 +127,13 @@ a_tmp1:           .res 1
 .endif
 
       .segment "BSS"
-a_symbol:       .res NASM_SYMBOL_CAP
+a_symbol:       .res NASM_IDENTIFIER_CAP
 a_scope:        .res NASM_SYMBOL_CAP
 a_scope_len:    .res 1
 a_symbol_local: .res 1
 a_local_total:  .res 1
 a_anon_count:   .res 1
 a_anon_target:  .res 1
-a_reloc_buf:    .res NASM_RELOC_CAP
-a_sym_names:    .res NASM_SYMBOL_TABLE_CAP * NASM_SYMBOL_CAP
 a_sym_name_len: .res NASM_SYMBOL_TABLE_CAP
 a_sym_value_l:  .res NASM_SYMBOL_TABLE_CAP
 a_sym_value_h:  .res NASM_SYMBOL_TABLE_CAP
@@ -137,7 +141,7 @@ a_sym_section:  .res NASM_SYMBOL_TABLE_CAP
 a_sym_flags:    .res NASM_SYMBOL_TABLE_CAP
 a_sym_decl:     .res NASM_SYMBOL_TABLE_CAP
 a_sym_forward:  .res NASM_SYMBOL_TABLE_CAP
-a_mnemonic:     .res NASM_SYMBOL_CAP
+a_mnemonic:     .res NASM_IDENTIFIER_CAP
 a_mnemonic_len: .res 1
 a_operand_symbol: .res 1
 a_operand_index:  .res 1
@@ -199,6 +203,26 @@ a_stack_col_h:    .res NASM_INCLUDE_DEPTH
 a_stack_file_l:   .res NASM_INCLUDE_DEPTH
 a_stack_file_h:   .res NASM_INCLUDE_DEPTH
 a_stack_file_len: .res NASM_INCLUDE_DEPTH
+a_stack_cond_depth:.res NASM_INCLUDE_DEPTH
+a_const_used_l:  .res 1
+a_const_used_h:  .res 1
+a_const_scan:    .res 3
+a_const_limit_l: .res 1
+a_const_limit_m: .res 1
+a_const_limit_h: .res 1
+a_const_value_l: .res 1
+a_const_value_h: .res 1
+a_const_name_len:.res 1
+a_const_match:   .res 1
+a_const_slot:    .res 1
+a_const_next_l:  .res 1
+a_const_next_h:  .res 1
+a_const_hash_l:  .res 256
+a_const_hash_h:  .res 256
+a_cond_depth:    .res 1
+a_cond_active:   .res NASM_COND_CAP
+a_cond_else:     .res NASM_COND_CAP
+a_skip_depth:    .res 1
 
 .ifndef NASM_CORE_OVERLAY
       .export nasm_source_ptr
@@ -256,6 +280,8 @@ nasm_assemble:
 @begin_pass:
       STZ   a_include_depth
       STZ   a_include_error
+      STZ   a_cond_depth
+      JSR   a_reset_constants
       STZ   a_scope_len
       STZ   a_anon_count
       LDA   nasm_source_name_ptr
@@ -271,8 +297,9 @@ nasm_assemble:
       LDA   nasm_source_ptr+2
       STA   a_src+2
       LDA   XMC_WINCTL
-      ORA   #$08
+      ORA   #XRAM_WIN2_ENABLE | XRAM_WIN3_ENABLE
       STA   XMC_WINCTL
+      STZ   XMC_W2AL
       LDA   a_src+1
       STA   WIN3_MI
       LDA   a_src+2
@@ -302,6 +329,12 @@ nasm_assemble:
 @statement:
       JSR   a_skip_layout
       long_bcc @pass_done
+      JSR   a_conditions_active
+      BCS   @active_statement
+      JSR   a_skip_inactive_line
+      long_bcs a_fail_syntax
+      JMP   @statement
+@active_statement:
       JSR   a_peek
       CMP   #':'
       long_beq @anonymous_label
@@ -339,10 +372,12 @@ nasm_assemble:
 :
       LDA   a_pass
       CMP   #NASM_PASS_DEFINE
-      BNE   @statement
+      BEQ   :+
+      JMP   @statement
+:
       JSR   a_define_symbol
       long_bcs a_fail_symbol
-      BRA   @statement
+      JMP   @statement
 @assignment:
       JSR   a_save_mnemonic
       JSR   a_next
@@ -387,6 +422,18 @@ nasm_assemble:
       LDX   #>a_kw_export
       JSR   a_symbol_is
       long_bcs @export
+      LDA   #<a_kw_global
+      LDX   #>a_kw_global
+      JSR   a_symbol_is
+      long_bcs @global
+      LDA   #<a_kw_globalzp
+      LDX   #>a_kw_globalzp
+      JSR   a_symbol_is
+      long_bcs @globalzp
+      LDA   #<a_kw_refto
+      LDX   #>a_kw_refto
+      JSR   a_symbol_is
+      long_bcs @refto
       LDA   #<a_kw_res
       LDX   #>a_kw_res
       JSR   a_symbol_is
@@ -411,6 +458,34 @@ nasm_assemble:
       LDX   #>a_kw_assert
       JSR   a_symbol_is
       long_bcs @assert
+      LDA   #<a_kw_ifdef
+      LDX   #>a_kw_ifdef
+      JSR   a_symbol_is
+      long_bcs @ifdef
+      LDA   #<a_kw_if
+      LDX   #>a_kw_if
+      JSR   a_symbol_is
+      long_bcs @if
+      LDA   #<a_kw_ifref
+      LDX   #>a_kw_ifref
+      JSR   a_symbol_is
+      long_bcs @ifref
+      LDA   #<a_kw_ifndef
+      LDX   #>a_kw_ifndef
+      JSR   a_symbol_is
+      long_bcs @ifndef
+      LDA   #<a_kw_else
+      LDX   #>a_kw_else
+      JSR   a_symbol_is
+      long_bcs @else
+      LDA   #<a_kw_endif
+      LDX   #>a_kw_endif
+      JSR   a_symbol_is
+      long_bcs @endif
+      LDA   #<a_kw_setcpu
+      LDX   #>a_kw_setcpu
+      JSR   a_symbol_is
+      long_bcs @setcpu
       JMP   a_fail_syntax
 
 @import:
@@ -421,6 +496,20 @@ nasm_assemble:
 @export:
       LDA   #NASM_DECL_EXPORT
       JSR   a_declare_symbols
+      long_bcs a_fail_symbol
+      JMP   @statement
+@global:
+      LDA   #NASM_DECL_GLOBAL
+      JSR   a_declare_symbols
+      long_bcs a_fail_symbol
+      JMP   @statement
+@globalzp:
+      LDA   #NASM_DECL_GLOBAL | NASM_DECL_ZP
+      JSR   a_declare_symbols
+      long_bcs a_fail_symbol
+      JMP   @statement
+@refto:
+      JSR   a_mark_references
       long_bcs a_fail_symbol
       JMP   @statement
 @reserve:
@@ -467,6 +556,55 @@ nasm_assemble:
       LDA   a_tmp0
       ORA   a_tmp1
       long_beq a_fail_assert
+      JMP   @statement
+@if:
+      JSR   a_parse_expression
+      long_bcs a_fail_syntax
+      LDA   a_operand_symbol
+      long_bne a_fail_syntax
+      LDA   a_tmp0
+      ORA   a_tmp1
+      BEQ   :+
+      LDA   #1
+:
+      JSR   a_push_condition
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@ifref:
+      JSR   a_parse_referenced_condition
+      long_bcs a_fail_syntax
+      JSR   a_push_condition
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@ifdef:
+      JSR   a_parse_defined_condition
+      long_bcs a_fail_syntax
+      JSR   a_push_condition
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@ifndef:
+      JSR   a_parse_defined_condition
+      long_bcs a_fail_syntax
+      EOR   #1
+      JSR   a_push_condition
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@else:
+      JSR   a_switch_else
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@endif:
+      JSR   a_pop_condition
+      long_bcs a_fail_syntax
+      JSR   a_skip_to_eol
+      JMP   @statement
+@setcpu:
+      JSR   a_skip_to_eol
       JMP   @statement
 
 @dispatch:
@@ -572,6 +710,10 @@ nasm_assemble:
 @direct_select:
       LDA   a_operand_symbol
       BEQ   @direct_value
+      LDX   a_symbol_index
+      LDA   a_sym_decl,X
+      AND   #NASM_DECL_ZP
+      BNE   @direct_byte
       LDA   a_operand_reloc
       BEQ   @direct_absolute
       BRA   @direct_byte
@@ -714,9 +856,16 @@ nasm_assemble:
 
 @indirect_select:
       LDA   a_operand_symbol
-      BNE   @indirect_absolute
+      BEQ   :+
+      LDX   a_symbol_index
+      LDA   a_sym_decl,X
+      AND   #NASM_DECL_ZP
+      BEQ   @indirect_absolute
+      BRA   @indirect_byte
+:
       LDA   a_tmp1
       BNE   @indirect_absolute
+@indirect_byte:
       LDA   a_operand_index
       BEQ   @lookup_zpind
       CMP   #1
@@ -917,6 +1066,8 @@ nasm_assemble:
 @pass_done:
       LDA   a_include_error
       long_bne a_fail_include
+      LDA   a_cond_depth
+      long_bne a_fail_syntax
       JSR   a_save_section_position
       LDA   a_pass
       CMP   #NASM_PASS_DEFINE
@@ -1274,6 +1425,8 @@ a_enter_include:
       STA   a_stack_file_h,X
       LDA   a_file_len
       STA   a_stack_file_len,X
+      LDA   a_cond_depth
+      STA   a_stack_cond_depth,X
       INC   a_include_depth
       LDA   nasm_include_ptr
       STA   a_src
@@ -1315,6 +1468,9 @@ a_leave_include:
       BNE   @bad
       DEC   a_include_depth
       LDX   a_include_depth
+      LDA   a_stack_cond_depth,X
+      CMP   a_cond_depth
+      BNE   @bad
       LDA   a_stack_src_l,X
       STA   a_src
       LDA   a_stack_src_m,X
@@ -1782,9 +1938,9 @@ a_begin_output:
       STZ   a_reloc_len+1
       STZ   a_reloc_count
       STZ   a_reloc_count+1
-      LDA   #<a_reloc_buf
+      LDA   nasm_reloc_buffer_ptr
       STA   a_reloc_ptr
-      LDA   #>a_reloc_buf
+      LDA   nasm_reloc_buffer_ptr+1
       STA   a_reloc_ptr+1
       CLC
       RTS
@@ -1904,9 +2060,9 @@ a_finish_object:
       INY
       LDA   a_reloc_count+1
       STA   (a_header),Y
-      LDA   #<a_reloc_buf
+      LDA   nasm_reloc_buffer_ptr
       STA   a_reloc_ptr
-      LDA   #>a_reloc_buf
+      LDA   nasm_reloc_buffer_ptr+1
       STA   a_reloc_ptr+1
 @copy_reloc:
       LDA   a_reloc_len
@@ -2004,7 +2160,7 @@ a_parse_identifier:
       BCC   @bad
 @loop:
       LDA   a_symbol_len
-      CMP   #NASM_SYMBOL_CAP
+      CMP   #NASM_IDENTIFIER_CAP
       BCS   @bad
       JSR   a_read_upper
       LDX   a_symbol_len
@@ -2376,8 +2532,231 @@ a_find_symbol:
       CLC
       RTS
 
+; Local absolute constants live only in XRAM while assembling. Keeping them
+; out of NOBJ is what lets canonical NDK headers define hundreds of hardware
+; names without bloating either the object or the executable.
+a_reset_constants:
+      STZ   a_const_used_l
+      STZ   a_const_used_h
+      LDA   #$FF
+      LDX   #0
+@clear:
+      STA   a_const_hash_h,X
+      INX
+      BNE   @clear
+      RTS
+
+a_find_constant:
+      JSR   a_hash_constant
+      LDX   a_const_slot
+      LDA   a_const_hash_h,X
+      CMP   #$FF
+      BEQ   @missing
+      STA   a_const_next_h
+      LDA   a_const_hash_l,X
+      STA   a_const_next_l
+@entry:
+      JSR   a_const_scan_next
+      JSR   a_const_read_advance
+      STA   a_const_next_l
+      JSR   a_const_read_advance
+      STA   a_const_next_h
+      JSR   a_const_read_advance
+      STA   a_const_name_len
+      JSR   a_const_read_advance
+      STA   a_const_value_l
+      JSR   a_const_read_advance
+      STA   a_const_value_h
+      LDA   #1
+      STA   a_const_match
+      LDA   a_const_name_len
+      CMP   a_symbol_len
+      BEQ   @compare
+      STZ   a_const_match
+@compare:
+      LDY   #0
+@name:
+      CPY   a_const_name_len
+      BCS   @name_done
+      JSR   a_const_read_advance
+      LDX   a_const_match
+      BEQ   @next_char
+      CMP   a_symbol,Y
+      BEQ   @next_char
+      STZ   a_const_match
+@next_char:
+      INY
+      BRA   @name
+@name_done:
+      LDA   a_const_match
+      BNE   @found
+      LDA   a_const_next_h
+      CMP   #$FF
+      BNE   @entry
+@missing:
+      CLC
+      RTS
+@found:
+      SEC
+      RTS
+
+a_hash_constant:
+      STZ   a_const_slot
+      LDY   #0
+@char:
+      CPY   a_symbol_len
+      BCS   @done
+      LDA   a_const_slot
+      STA   a_const_match
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      CLC
+      ADC   a_const_match
+      CLC
+      ADC   a_symbol,Y
+      STA   a_const_slot
+      INY
+      BRA   @char
+@done:
+      RTS
+
+a_const_scan_next:
+      LDX   #2
+@base:
+      LDA   nasm_constant_ptr,X
+      STA   a_const_scan,X
+      DEX
+      BPL   @base
+      CLC
+      LDA   a_const_scan
+      ADC   a_const_next_l
+      STA   a_const_scan
+      LDA   a_const_scan+1
+      ADC   a_const_next_h
+      STA   a_const_scan+1
+      BCC   @done
+      INC   a_const_scan+2
+@done:
+      RTS
+
+a_append_constant:
+      CLC
+      LDA   a_const_used_l
+      ADC   a_symbol_len
+      STA   a_const_limit_l
+      LDA   a_const_used_h
+      ADC   #0
+      STA   a_const_limit_h
+      CLC
+      LDA   a_const_limit_l
+      ADC   #5
+      STA   a_const_limit_l
+      LDA   a_const_limit_h
+      ADC   #0
+      STA   a_const_limit_h
+      CMP   #>NASCORE_CONSTANT_CAP
+      BCC   @room
+      BNE   @full
+      LDA   a_const_limit_l
+      BNE   @full
+@room:
+      LDX   #2
+@base:
+      LDA   nasm_constant_ptr,X
+      STA   a_const_scan,X
+      DEX
+      BPL   @base
+      CLC
+      LDA   a_const_scan
+      ADC   a_const_used_l
+      STA   a_const_scan
+      LDA   a_const_scan+1
+      ADC   a_const_used_h
+      STA   a_const_scan+1
+      BCC   :+
+      INC   a_const_scan+2
+:
+      LDX   a_const_slot
+      LDA   a_const_hash_l,X
+      JSR   a_const_write_advance
+      LDX   a_const_slot
+      LDA   a_const_hash_h,X
+      JSR   a_const_write_advance
+      LDA   a_symbol_len
+      JSR   a_const_write_advance
+      LDA   a_repeat_l
+      JSR   a_const_write_advance
+      LDA   a_repeat_h
+      JSR   a_const_write_advance
+      LDY   #0
+@name:
+      CPY   a_symbol_len
+      BCS   @done
+      LDA   a_symbol,Y
+      JSR   a_const_write_advance
+      INY
+      BRA   @name
+@done:
+      LDX   a_const_slot
+      LDA   a_const_used_l
+      STA   a_const_hash_l,X
+      LDA   a_const_used_h
+      STA   a_const_hash_h,X
+      LDA   a_const_limit_l
+      STA   a_const_used_l
+      LDA   a_const_limit_h
+      STA   a_const_used_h
+      CLC
+      RTS
+@full:
+      SEC
+      RTS
+
+a_const_read_advance:
+      PHY
+      LDA   a_const_scan+1
+      STA   XMC_W2AM
+      LDA   a_const_scan+2
+      STA   XMC_W2AH
+      LDY   a_const_scan
+      LDA   XRAM_WIN2_BASE,Y
+      PHA
+      JSR   a_const_advance
+      PLA
+      PLY
+      RTS
+
+a_const_write_advance:
+      PHY
+      PHA
+      LDA   a_const_scan+1
+      STA   XMC_W2AM
+      LDA   a_const_scan+2
+      STA   XMC_W2AH
+      LDY   a_const_scan
+      PLA
+      STA   XRAM_WIN2_BASE,Y
+      JSR   a_const_advance
+      PLY
+      RTS
+
+a_const_advance:
+      INC   a_const_scan
+      BNE   @done
+      INC   a_const_scan+1
+      BNE   @done
+      INC   a_const_scan+2
+@done:
+      RTS
+
 ; Find or create an undefined symbol. Carry set means table full.
 a_get_symbol:
+      LDA   a_symbol_len
+      CMP   #NASM_SYMBOL_CAP+1
+      BCS   @bad
       JSR   a_find_symbol
       BCS   @ok
       LDX   a_symbol_count
@@ -2470,6 +2849,13 @@ a_define_absolute:
       STA   a_repeat_l
       LDA   a_tmp1
       STA   a_repeat_h
+      JSR   a_find_symbol
+      BCS   @regular
+      JSR   a_find_constant
+      BCS   @bad
+      JSR   a_append_constant
+      RTS
+@regular:
       LDA   a_pass
       CMP   #NASM_PASS_DEFINE
       BEQ   @define
@@ -2486,17 +2872,11 @@ a_define_absolute:
       INC   a_resolve_changed
       BRA   @check_decl
 @define:
-      JSR   a_find_symbol
-      BCC   @create
       LDX   a_symbol_index
       LDA   a_sym_section,X
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @bad
       BRA   @check_decl
-@create:
-      JSR   a_get_symbol
-      BCS   @bad
-      LDX   a_symbol_index
 @check_decl:
       LDA   a_sym_decl,X
       AND   #NASM_DECL_IMPORT
@@ -2569,6 +2949,214 @@ a_declare_symbols:
       RTS
 @bad:
       SEC
+      RTS
+
+; Mark a comma-separated symbol list as referenced without emitting data.
+a_mark_references:
+@symbol:
+      JSR   a_skip_hspace
+      JSR   a_parse_identifier
+      BCS   @bad
+      JSR   a_get_symbol
+      BCS   @bad
+      LDX   a_symbol_index
+      LDA   a_sym_decl,X
+      ORA   #NASM_DECL_REFERENCED
+      STA   a_sym_decl,X
+      JSR   a_skip_hspace
+      JSR   a_peek
+      BCC   @done
+      CMP   #','
+      BNE   @done
+      JSR   a_next
+      BRA   @symbol
+@done:
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_parse_referenced_condition:
+      JSR   a_skip_hspace
+      JSR   a_parse_identifier
+      BCS   @bad
+      JSR   a_find_symbol
+      BCC   @no
+      LDX   a_symbol_index
+      LDA   a_sym_decl,X
+      AND   #NASM_DECL_REFERENCED
+      BEQ   @no
+      LDA   #1
+      CLC
+      RTS
+@no:
+      LDA   #0
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_conditions_active:
+      LDX   a_cond_depth
+      BEQ   @yes
+      DEX
+      LDA   a_cond_active,X
+      BEQ   @no
+@yes:
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
+; Return A=1 when the following identifier is already a regular symbol or
+; local absolute constant, otherwise A=0. Carry reports syntax only.
+a_parse_defined_condition:
+      JSR   a_skip_hspace
+      JSR   a_parse_identifier
+      BCS   @bad
+      JSR   a_find_symbol
+      BCS   @yes
+      JSR   a_find_constant
+      BCS   @yes
+      LDA   #0
+      CLC
+      RTS
+@yes:
+      LDA   #1
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; Push condition value A. Callers in inactive text pass zero so nested blocks
+; remain inactive without evaluating their contents.
+a_push_condition:
+      LDX   a_cond_depth
+      CPX   #NASM_COND_CAP
+      BCS   @bad
+      AND   #1
+      STA   a_cond_active,X
+      STZ   a_cond_else,X
+      INC   a_cond_depth
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_switch_else:
+      LDX   a_cond_depth
+      BEQ   @bad
+      DEX
+      LDA   a_cond_else,X
+      BNE   @bad
+      INC   a_cond_else,X
+      STX   a_expr_digit
+      CPX   #0
+      BEQ   @toggle
+      DEX
+      LDA   a_cond_active,X
+      BEQ   @inactive
+@toggle:
+      LDX   a_expr_digit
+      LDA   a_cond_active,X
+      EOR   #1
+      STA   a_cond_active,X
+      CLC
+      RTS
+@inactive:
+      LDX   a_expr_digit
+      STZ   a_cond_active,X
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_pop_condition:
+      LDA   a_cond_depth
+      BEQ   @bad
+      DEC   a_cond_depth
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; In inactive text only nesting directives matter; everything else is skipped
+; as source text without allocating symbols or emitting bytes.
+a_skip_inactive_line:
+      JSR   a_peek
+      BCC   @ok
+      CMP   #'.'
+      BNE   a_skip_to_eol
+      JSR   a_next
+      JSR   a_parse_identifier
+      BCS   @bad
+      LDA   #<a_kw_ifndef
+      LDX   #>a_kw_ifndef
+      JSR   a_symbol_is
+      BCS   @push
+      LDA   #<a_kw_ifdef
+      LDX   #>a_kw_ifdef
+      JSR   a_symbol_is
+      BCS   @push
+      LDA   #<a_kw_if
+      LDX   #>a_kw_if
+      JSR   a_symbol_is
+      BCS   @push
+      LDA   #<a_kw_ifref
+      LDX   #>a_kw_ifref
+      JSR   a_symbol_is
+      BCS   @push
+      LDA   #<a_kw_else
+      LDX   #>a_kw_else
+      JSR   a_symbol_is
+      BCS   @else
+      LDA   #<a_kw_endif
+      LDX   #>a_kw_endif
+      JSR   a_symbol_is
+      BCS   @endif
+      BRA   @skip
+@push:
+      LDA   #0
+      JSR   a_push_condition
+      BCS   @bad
+      BRA   @skip
+@else:
+      JSR   a_switch_else
+      BCS   @bad
+      BRA   @skip
+@endif:
+      JSR   a_pop_condition
+      BCS   @bad
+@skip:
+      JSR   a_skip_to_eol
+@ok:
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_skip_to_eol:
+      LDA   a_include_depth
+      STA   a_skip_depth
+@next:
+      JSR   a_peek
+      BCC   @done
+      LDA   a_include_depth
+      CMP   a_skip_depth
+      BNE   @done
+      JSR   a_next
+      CMP   #$0A
+      BNE   @next
+@done:
+      CLC
       RTS
 
 ; Parse count[,fill] into a_repeat_l/h and a_repeat_value.
@@ -2691,8 +3279,8 @@ a_validate_symbols:
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @defined
       LDA   a_sym_decl,X
-      CMP   #NASM_DECL_IMPORT
-      BNE   @bad
+      AND   #NASM_DECL_IMPORT | NASM_DECL_GLOBAL
+      BEQ   @bad
       BRA   @next
 @defined:
       LDA   a_sym_decl,X
@@ -2725,10 +3313,10 @@ a_symbol_name_ptr:
       ASL   a_tmp0
       ROL   a_tmp1
       CLC
-      LDA   #<a_sym_names
+      LDA   nasm_symbol_names_ptr
       ADC   a_tmp0
       STA   a_symbol_ptr
-      LDA   #>a_sym_names
+      LDA   nasm_symbol_names_ptr+1
       ADC   a_tmp1
       STA   a_symbol_ptr+1
       LDX   a_symbol_index
@@ -2899,7 +3487,7 @@ a_expr_peek_operator:
       CMP   #'&'
       BEQ   @and
       CMP   #'<'
-      BEQ   @shl
+      long_beq @shl
       CMP   #'>'
       long_beq @shr
       CMP   #'+'
@@ -2914,6 +3502,8 @@ a_expr_peek_operator:
       long_beq @mod
       CMP   #'='
       long_beq @eq
+      CMP   #'.'
+      long_beq @dot
 @no:
       CLC
       RTS
@@ -2938,18 +3528,18 @@ a_expr_peek_operator:
 @bit_xor:
       LDA #EXPR_XOR
       LDX #5
-      BRA @yes
+      JMP @yes
 @and: JSR a_expr_peek_second
-      BCC @bit_and
+      long_bcc @bit_and
       CMP #'&'
-      BNE @bit_and
+      long_bne @bit_and
       LDA #EXPR_BOOL_AND
       LDX #2
-      BRA @yes
+      JMP @yes
 @bit_and:
       LDA #EXPR_AND
       LDX #6
-      BRA @yes
+      JMP @yes
 @shl: JSR a_expr_peek_second
       BCC @lt
       CMP #'<'
@@ -2990,6 +3580,20 @@ a_expr_peek_operator:
 @eq:  LDA #EXPR_EQ
       LDX #3
       BRA @yes
+@dot:
+      JSR   a_expr_peek_second
+      long_bcc @no
+      AND   #$DF
+      CMP   #'O'
+      long_bne @no
+      JSR   a_expr_peek_third
+      long_bcc @no
+      AND   #$DF
+      CMP   #'R'
+      long_bne @no
+      LDA   #EXPR_DOT_OR
+      LDX   #1
+      BRA   @yes
 @add: LDA #EXPR_ADD
       LDX #8
       BRA @yes
@@ -3038,7 +3642,39 @@ a_expr_peek_second:
       CLC
       RTS
 
+a_expr_peek_third:
+      LDA   a_left+1
+      BNE   @read
+      LDA   a_left
+      CMP   #3
+      BCC   @none
+@read:
+      CLC
+      LDA   a_src
+      ADC   #2
+      TAX
+      LDA   a_src+1
+      ADC   #0
+      STA   WIN3_MI
+      LDA   a_src+2
+      ADC   #0
+      STA   WIN3_HI
+      LDA   WIN3_BASE,X
+      PHA
+      LDA   a_src+1
+      STA   WIN3_MI
+      LDA   a_src+2
+      STA   WIN3_HI
+      PLA
+      SEC
+      RTS
+@none:
+      CLC
+      RTS
+
 a_expr_consume_operator:
+      CMP   #EXPR_DOT_OR
+      BEQ   @triple
       CMP   #EXPR_BOOL_OR
       BEQ   @double
       CMP   #EXPR_BOOL_AND
@@ -3060,6 +3696,13 @@ a_expr_consume_operator:
       CLC
       RTS
 @double:
+      JSR   a_next
+      JSR   a_next
+      BCC   @bad
+      CLC
+      RTS
+@triple:
+      JSR   a_next
       JSR   a_next
       JSR   a_next
       BCC   @bad
@@ -3181,26 +3824,48 @@ a_expr_primary:
       CMP   #39
       long_beq a_expr_character
       CMP   #'('
-      BEQ   @group
+      long_beq @group
       CMP   #':'
       BEQ   @anonymous
+      CMP   #'.'
+      long_beq @builtin
       CMP   #'0'
       BCC   @identifier
       CMP   #'9'+1
       long_bcc a_expr_decimal
 @identifier:
       JSR   a_is_ident_start
-      BCC   @bad
+      long_bcc @bad
       JSR   a_parse_identifier
-      BCS   @bad
-      BRA   @symbol
+      long_bcs @bad
+      JMP   @symbol
 @anonymous:
       JSR   a_parse_anonymous
-      BCS   @bad
+      long_bcs @bad
+      JMP   @object_symbol
 @symbol:
+      JSR   a_find_symbol
+      BCS   @object_found
+      JSR   a_find_constant
+      BCC   @object_symbol
+      LDA   a_const_value_l
+      STA   a_tmp0
+      LDA   a_const_value_h
+      STA   a_tmp1
+      STZ   a_operand_symbol
+      CLC
+      RTS
+@object_symbol:
       JSR   a_get_symbol
-      BCS   @bad
+      long_bcs @bad
+@object_found:
       LDX   a_symbol_index
+      LDA   a_assignment_expr
+      BNE   :+
+      LDA   a_sym_decl,X
+      ORA   #NASM_DECL_REFERENCED
+      STA   a_sym_decl,X
+:
       LDA   a_sym_section,X
       CMP   #NOBJ_SYM_ABSOLUTE
       BNE   @relocatable
@@ -3243,6 +3908,37 @@ a_expr_primary:
       CMP   #')'
       BNE   @bad
       CLC
+      RTS
+@builtin:
+      JSR   a_next
+      JSR   a_parse_identifier
+      BCS   @bad
+      LDA   #<a_kw_referenced
+      LDX   #>a_kw_referenced
+      JSR   a_symbol_is
+      BCC   @bad
+      JSR   a_skip_hspace
+      JSR   a_next
+      BCC   @bad
+      CMP   #'('
+      BNE   @bad
+      JSR   a_parse_referenced_condition
+      BCS   @bad
+      PHA
+      JSR   a_skip_hspace
+      JSR   a_next
+      BCC   @builtin_bad
+      CMP   #')'
+      BNE   @builtin_bad
+      PLA
+      STA   a_tmp0
+      STZ   a_tmp1
+      STZ   a_operand_symbol
+      CLC
+      RTS
+@builtin_bad:
+      PLA
+      SEC
       RTS
 @bad:
       SEC
@@ -3430,6 +4126,8 @@ a_decode_hex_nibble:
       RTS
 
 a_expr_apply:
+      CMP   #EXPR_DOT_OR
+      long_beq @bool_or
       CMP   #EXPR_BOOL_OR
       long_beq @bool_or
       CMP   #EXPR_BOOL_AND
@@ -3943,12 +4641,23 @@ a_kw_byte: .byte "BYTE", 0
 a_kw_word: .byte "WORD", 0
 a_kw_import: .byte "IMPORT", 0
 a_kw_export: .byte "EXPORT", 0
+a_kw_global: .byte "GLOBAL", 0
+a_kw_globalzp: .byte "GLOBALZP", 0
+a_kw_refto: .byte "REFTO", 0
 a_kw_res: .byte "RES", 0
 a_kw_align: .byte "ALIGN", 0
 a_kw_segment: .byte "SEGMENT", 0
 a_kw_include: .byte "INCLUDE", 0
 a_kw_incbin: .byte "INCBIN", 0
 a_kw_assert: .byte "ASSERT", 0
+a_kw_if: .byte "IF", 0
+a_kw_ifdef: .byte "IFDEF", 0
+a_kw_ifndef: .byte "IFNDEF", 0
+a_kw_ifref: .byte "IFREF", 0
+a_kw_else: .byte "ELSE", 0
+a_kw_endif: .byte "ENDIF", 0
+a_kw_setcpu: .byte "SETCPU", 0
+a_kw_referenced: .byte "REFERENCED", 0
 a_kw_code: .byte "CODE", 0
 a_kw_data: .byte "DATA", 0
 a_kw_bss: .byte "BSS", 0
