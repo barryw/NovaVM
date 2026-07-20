@@ -344,6 +344,8 @@ file_dir_list:
       STZ   FIO_NAMELEN
 @fdl_open:
       JSR   fdl_header                 ; column header + rule (once)
+      LDA   #FIO_DIR_FLAG_FULLNAME
+      STA   FIO_DIRTYPE
       JSR   fio_dir_open               ; open the listing (entries fetched below)
 @fdl_loop:
       JSR   fio_dir_read               ; A=0 -> entry ready, !=0 -> end of dir
@@ -353,12 +355,14 @@ file_dir_list:
 @fdl_nm:
       CPY   FIO_NAMELEN
       BCS   @fdl_nmpad
+      CPY   #32
+      BCS   @fdl_type
       LDA   FIO_NAME,Y
       STA   VGC_CHAROUT
       INY
       BRA   @fdl_nm
 @fdl_nmpad:
-      CPY   #18
+      CPY   #34
       BCS   @fdl_type
       LDA   #' '
       STA   VGC_CHAROUT
@@ -366,15 +370,16 @@ file_dir_list:
       BRA   @fdl_nmpad
 @fdl_type:
       LDA   FIO_DIRTYPE                ; --- TYPE (first 7 of the 8-byte field) ---
-      CMP   #$08
+      CMP   #$0B
       BCC   @fdl_typeok
       LDA   #$02                       ; out of range -> BIN
 @fdl_typeok:
       ASL   a
       ASL   a
-      ASL   a                          ; type * 8
+      ASL   a
+      ASL   a                          ; type * 16
       TAX
-      LDY   #$07
+      LDY   #$0E
 @fdl_tl:
       LDA   fdl_strs,X
       STA   VGC_CHAROUT
@@ -382,9 +387,9 @@ file_dir_list:
       DEY
       BNE   @fdl_tl
       JSR   fdl_size                   ; --- SIZE (right-justified decimal) ---
-      LDA   #$0D                        ; CR + LF: the VGC needs BOTH to advance a
-      STA   VGC_CHAROUT                 ; row ($0D alone just returns to column 0,
-      LDA   #$0A                        ; so every entry would overwrite the last).
+      LDA   #$0D                        ; Keep CR for compatibility with older VGCs;
+      STA   VGC_CHAROUT                 ; LF is Nova's logical newline.
+      LDA   #$0A
       STA   VGC_CHAROUT
       BRA   @fdl_loop                  ; read + print the next entry
 @fdl_done:
@@ -464,18 +469,21 @@ pow10_lo: .byte <10000, <1000, <100, <10, <1
 pow10_hi: .byte >10000, >1000, >100, >10, >1
 
 fdl_hdr:
-      .byte "NAME              TYPE    SIZE", $0D, $0A
-      .byte "----------------- ----- ------", $0D, $0A, $00
+      .byte "NAME                              TYPE           SIZE", $0D, $0A
+      .byte "--------------------------------  -------------- ------", $0D, $0A, $00
 
-fdl_strs:                              ; 8 x 8-byte type fields (print first 7)
-      .byte "  BAS   "
-      .byte "  SID   "
-      .byte "  BIN   "
-      .byte "  MID   "
-      .byte "  GFX   "
-      .byte "  DIR   "
-      .byte "  FORTH "
-      .byte "  LOGO  "
+fdl_strs:                              ; 11 x 16-byte type fields (print first 14)
+      .byte "BAS             "
+      .byte "SID             "
+      .byte "BIN             "
+      .byte "MID             "
+      .byte "GFX             "
+      .byte "DIR             "
+      .byte "FORTH           "
+      .byte "LOGO            "
+      .byte "PASCAL SOURCE   "
+      .byte "ASM             "
+      .byte "PASCAL PROJECT  "
 
 ; --- $04 FILE_DELETE: name -> fio_delete ---
 file_delete:

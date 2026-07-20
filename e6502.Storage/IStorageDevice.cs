@@ -1,6 +1,6 @@
 namespace e6502.Storage;
 
-public record StorageDirEntry(string Filename, bool IsDirectory, NdiFileType FileType, int SizeBytes);
+public record StorageDirEntry(string Filename, bool IsDirectory, NdiFileType FileType, int SizeBytes, string Extension = "");
 
 public interface IStorageDevice
 {

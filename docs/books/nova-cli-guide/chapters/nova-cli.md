@@ -345,7 +345,8 @@ List a directory inside an image.
 nova dir <file.ndi> [/path]
 ```
 
-If `/path` is omitted, the root directory is listed.
+If `/path` is omitted, the root directory is listed. Pascal `.pas` files are
+shown as `PASCAL SOURCE`; `.npp` project manifests are shown as `PASCAL PROJECT`.
 
 Tested examples:
 

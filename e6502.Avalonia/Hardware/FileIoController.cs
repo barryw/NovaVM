@@ -36,6 +36,7 @@ public sealed partial class FileIoController
     private IDictionary<byte, byte[]>? _moduleStore;
     private List<FileInfo>? _dirFiles;
     private List<StorageDirEntry>? _dirEntries;
+    private bool _dirFullNames;
     private IStorageDevice? _dirDevice;
     private int _dirIndex;
     private bool _dirFiltered;
@@ -430,6 +431,11 @@ public sealed partial class FileIoController
                 SaveRawRamFile(filename, ".pas", VgcConstants.FioDirTypePascal);
                 return;
             }
+            if (fioType == VgcConstants.FioDirTypePascalProject)
+            {
+                SaveRawRamFile(filename, ".npp", VgcConstants.FioDirTypePascalProject);
+                return;
+            }
             if (fioType == VgcConstants.FioDirTypeAsm)
             {
                 SaveRawRamFile(filename, ".s", VgcConstants.FioDirTypeAsm);
@@ -556,6 +562,7 @@ public sealed partial class FileIoController
                 VgcConstants.FioDirTypeForth => VgcConstants.FioDirTypeForth,
                 VgcConstants.FioDirTypeLogo => VgcConstants.FioDirTypeLogo,
                 VgcConstants.FioDirTypePascal => VgcConstants.FioDirTypePascal,
+                VgcConstants.FioDirTypePascalProject => VgcConstants.FioDirTypePascalProject,
                 VgcConstants.FioDirTypeAsm => VgcConstants.FioDirTypeAsm,
                 VgcConstants.FioDirTypeBin => VgcConstants.FioDirTypeBin,
                 _ => null
@@ -574,6 +581,11 @@ public sealed partial class FileIoController
             if (requestedType == VgcConstants.FioDirTypePascal)
             {
                 LoadRawRamFile(filename, ".pas", VgcConstants.FioDirTypePascal);
+                return;
+            }
+            if (requestedType == VgcConstants.FioDirTypePascalProject)
+            {
+                LoadRawRamFile(filename, ".npp", VgcConstants.FioDirTypePascalProject);
                 return;
             }
             if (requestedType == VgcConstants.FioDirTypeAsm)
@@ -847,6 +859,8 @@ public sealed partial class FileIoController
     {
         try
         {
+            _dirFullNames = (_regs[VgcConstants.FioDirType - VgcConstants.FioBase]
+                & VgcConstants.FioDirFlagFullName) != 0;
             int filterLen = _regs[VgcConstants.FioNameLen - VgcConstants.FioBase];
 
             if (filterLen > 0)
@@ -908,9 +922,10 @@ public sealed partial class FileIoController
                         // Extension filter
                         if (filter.ExtFilter is not null)
                         {
-                            string entryExt = NdiTypeToExt(entry.FileType);
-                            string filterExt = NormalizeFilterExtension(filter.ExtFilter) ?? filter.ExtFilter;
-                            if (!string.Equals(entryExt, filterExt, StringComparison.OrdinalIgnoreCase))
+                            string entryExt = entry.Extension.Length > 0
+                                ? entry.Extension
+                                : NdiTypeToExt(entry.FileType);
+                            if (!string.Equals(entryExt, filter.ExtFilter, StringComparison.OrdinalIgnoreCase))
                                 continue;
                         }
 
@@ -2740,6 +2755,7 @@ public sealed partial class FileIoController
         ".4th" or ".fth" or ".fs" or ".fr" => NdiFileType.Forth,
         ".logo" or ".lgo" => NdiFileType.Logo,
         ".pas" => NdiFileType.Pascal,
+        ".npp" => NdiFileType.PascalProject,
         ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
         _ => NdiFileType.Bas
     };
@@ -2753,6 +2769,7 @@ public sealed partial class FileIoController
         NdiFileType.Forth => ".4th",
         NdiFileType.Logo => ".logo",
         NdiFileType.Pascal => ".pas",
+        NdiFileType.PascalProject => ".npp",
         NdiFileType.Assembly => ".s",
         _ => ".bas"
     };
@@ -2767,6 +2784,7 @@ public sealed partial class FileIoController
         NdiFileType.Forth => VgcConstants.FioDirTypeForth,
         NdiFileType.Logo => VgcConstants.FioDirTypeLogo,
         NdiFileType.Pascal => VgcConstants.FioDirTypePascal,
+        NdiFileType.PascalProject => VgcConstants.FioDirTypePascalProject,
         NdiFileType.Assembly => VgcConstants.FioDirTypeAsm,
         _ => VgcConstants.FioDirTypeBas
     };
@@ -2781,6 +2799,7 @@ public sealed partial class FileIoController
             ".4th" or ".fth" or ".fs" or ".fr" => VgcConstants.FioDirTypeForth,
             ".logo" or ".lgo" => VgcConstants.FioDirTypeLogo,
             ".pas" => VgcConstants.FioDirTypePascal,
+            ".npp" => VgcConstants.FioDirTypePascalProject,
             ".s" or ".asm" or ".inc" => VgcConstants.FioDirTypeAsm,
             "" => null,
             _ => null
@@ -2948,7 +2967,9 @@ public sealed partial class FileIoController
         }
         _regs[VgcConstants.FioDirType - VgcConstants.FioBase] = (byte)type;
 
-        string displayName = entry.Filename;
+        string displayName = _dirFullNames && !entry.IsDirectory
+            ? entry.Filename + entry.Extension
+            : entry.Filename;
         int nameLen = Math.Min(displayName.Length, 63);
         _regs[VgcConstants.FioNameLen - VgcConstants.FioBase] = (byte)nameLen;
         int nameOffset = VgcConstants.FioName - VgcConstants.FioBase;
@@ -2963,7 +2984,7 @@ public sealed partial class FileIoController
 
     private void PopulateDirEntry(FileInfo fi)
     {
-        string baseName = Path.GetFileNameWithoutExtension(fi.Name);
+        string baseName = _dirFullNames ? fi.Name : Path.GetFileNameWithoutExtension(fi.Name);
         string ext = fi.Extension.ToLowerInvariant();
 
         int type = NdiTypeToFioDirType(ExtToNdiType(ext));
@@ -3462,27 +3483,11 @@ public sealed partial class FileIoController
         if (dot >= 0)
         {
             string ext = remainder[dot..];
-            if (NormalizeFilterExtension(ext) is not null)
-            {
-                extFilter = ext.ToLowerInvariant();
-                namePattern = remainder[..dot];
-            }
+            extFilter = ext.ToLowerInvariant();
+            namePattern = remainder[..dot];
         }
 
         return new FilterPattern(devicePrefix, dirPath, namePattern, extFilter);
     }
 
-    private static string? NormalizeFilterExtension(string ext) => ext.ToLowerInvariant() switch
-    {
-        ".bas" => ".bas",
-        ".sid" => ".sid",
-        ".bin" or ".xram" => ".bin",
-        ".mid" or ".midi" or ".nms" => ".mid",
-        ".gfx" or ".nvg" => ".gfx",
-        ".4th" or ".fth" or ".fs" or ".fr" => ".4th",
-        ".logo" or ".lgo" => ".logo",
-        ".pas" => ".pas",
-        ".s" or ".asm" or ".inc" => ".s",
-        _ => null
-    };
 }

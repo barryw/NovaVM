@@ -78,7 +78,7 @@ SYS_RNG32       = $06   ; ()  reporter     -> RESULT b0..3    = 32 random bits
 ; File picker uses the same NUI chrome, owns its rows, and returns the selected
 ; filename into caller RAM. Type mask bits follow FIO_TYPE_* ids: bit0 BAS,
 ; bit1 SID, bit2 BIN, bit3 MID, bit4 GFX, bit5 DIR, bit6 FORTH, bit7 LOGO,
-; bit8 PASCAL, bit9 ASM.
+; bit8 PASCAL SOURCE, bit9 ASM, bit10 PASCAL PROJECT.
 ; Directories/drives/parent are always shown for navigation; mask=0 shows all
 ; files.
 ;   ARG0 b0/b1 = config ptr

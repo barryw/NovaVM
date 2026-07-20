@@ -1181,7 +1181,7 @@ editui_item_save:
 editui_item_buffers:
       .byte "&Buffers Alt-0",0
 editui_item_quit:
-      .byte "E&xit Alt-X",0
+      .byte "E&xit ^Q/Alt-X",0
 editui_item_undo:
       .byte "&Undo ^Z",0
 editui_item_redo:

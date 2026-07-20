@@ -418,6 +418,11 @@ editbuf_dispatch_command:
       RTS
 
 editbuf_key_to_command:
+      CMP   #EDITUI_KEY_CTRL_Q
+      BNE   :+
+      LDA   #EDITUI_CMD_QUIT
+      RTS
+:
       CMP   #EDITUI_KEY_CTRL_B
       BNE   :+
       LDA   #EDITUI_CMD_BUFFER_LIST

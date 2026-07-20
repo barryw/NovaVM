@@ -54,7 +54,9 @@ video sync. The \novacode{vgc\_vsync} helper waits for \novacode{VGC\_FRAME} at
 \item[SCRIBE text] renders the 80 by 50 character layer from character, color,
 font, and text-attribute memory. \novacode{VGC\_CHAROUT} accepts printable text
 and control bytes such as form feed, carriage return, line feed, home, and
-backspace.
+backspace. Line feed is Nova's logical newline: it returns to column zero and
+advances to the next row, scrolling when necessary. Carriage return changes
+only the column and remains available for deliberate overprinting.
 \item[CANVAS graphics] stores the 320 by 200, 16-color bitmap. Drawing commands
 such as \novacode{vgc\_line}, \novacode{vgc\_rect}, and \novacode{vgc\_paint}
 operate on this memory through the ARTIST engine.

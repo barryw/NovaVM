@@ -364,6 +364,7 @@ runtime/asm/*.bin
 runtime/asm/build/
 software/languages/*/*.bin
 software/languages/*/*.BIN
+software/languages/*/tools/build/
 software/modules/**/*.bin
 software/modules/**/*.nmod
 software/assembly/apps/**/*.bin

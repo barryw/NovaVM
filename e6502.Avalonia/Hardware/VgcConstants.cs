@@ -69,7 +69,7 @@ public static class VgcConstants
     public const int FioGAddrH         = 0xB9AC;   // graphics/XRAM offset high
     public const int FioGLenL          = 0xB9AD;   // graphics/XRAM transfer length low
     public const int FioGLenH          = 0xB9AE;   // graphics/XRAM transfer length high
-    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH, 7=LOGO, 8=PASCAL, 9=ASM
+    public const int FioDirType        = 0xB9AF;   // dir entry type: 0=BAS, 1=SID, 2=BIN, 3=MID, 4=GFX, 5=DIR, 6=FORTH, 7=LOGO, 8=PASCAL SOURCE, 9=ASM, 10=PASCAL PROJECT
     public const int FioName           = 0xB9B0;   // filename buffer (64 bytes ASCII)
     public const int FioNameEnd        = 0xB9EF;
 
@@ -141,6 +141,7 @@ public static class VgcConstants
     public const byte FioFileTargetMask  = 0x30;   // FREAD/FWRITE high bits: transfer target
     public const byte FioFileTargetRam   = 0x00;   // FREAD/FWRITE target: CPU RAM at FIO_ENDL/H
     public const byte FioFileTargetXram  = 0x10;   // FREAD/FWRITE target: flat XRAM at FIO_GSPACE/GADDR
+    public const byte FioDirFlagFullName = 0x80;   // DIROPEN input: DIRREAD returns NAME.EXT
 
     public const byte FioDirTypeBas    = 0x00;
     public const byte FioDirTypeSid    = 0x01;
@@ -152,6 +153,7 @@ public static class VgcConstants
     public const byte FioDirTypeLogo   = 0x07;
     public const byte FioDirTypePascal = 0x08;
     public const byte FioDirTypeAsm    = 0x09;
+    public const byte FioDirTypePascalProject = 0x0A;
     public const byte FioErrDiskFull   = 0x04;
     public const byte FioErrNotMounted = 0x05;
 

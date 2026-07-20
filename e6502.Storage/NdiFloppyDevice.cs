@@ -13,6 +13,7 @@ public sealed class NdiFloppyDevice : IStorageDevice
         {
             [".bas"] = NdiFileType.Bas,
             [".pas"] = NdiFileType.Pascal,
+            [".npp"] = NdiFileType.PascalProject,
             [".logo"] = NdiFileType.Logo,
             [".lgo"] = NdiFileType.Logo,
             [".s"] = NdiFileType.Assembly,
@@ -179,7 +180,8 @@ public sealed class NdiFloppyDevice : IStorageDevice
             string displayName = e.IsDirectory
                 ? e.Filename
                 : Path.GetFileNameWithoutExtension(e.Filename);
-            return new StorageDirEntry(displayName, e.IsDirectory, e.FileType, e.IsDirectory ? 0 : e.SizeBytes);
+            string extension = e.IsDirectory ? "" : Path.GetExtension(e.Filename);
+            return new StorageDirEntry(displayName, e.IsDirectory, e.FileType, e.IsDirectory ? 0 : e.SizeBytes, extension);
         }).ToArray();
     }
 

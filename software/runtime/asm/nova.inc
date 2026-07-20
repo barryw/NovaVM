@@ -984,6 +984,13 @@ FIO_FILE_TARGET_RAM   = $00
 .ifndef FIO_FILE_TARGET_XRAM
 FIO_FILE_TARGET_XRAM  = $10
 .endif
+; @label FIO.DIR_FLAG_FULLNAME
+; @kind const
+; @symbol FIO_DIR_FLAG_FULLNAME
+; @summary DIROPEN input flag requesting full NAME.EXT results from DIRREAD.
+.ifndef FIO_DIR_FLAG_FULLNAME
+FIO_DIR_FLAG_FULLNAME = $80
+.endif
 .ifndef META_BASE
 META_BASE         = $BAB0
 .endif
@@ -1481,6 +1488,9 @@ FIO_TYPE_PASCAL   = $08
 .endif
 .ifndef FIO_TYPE_ASM
 FIO_TYPE_ASM      = $09
+.endif
+.ifndef FIO_TYPE_PASCAL_PROJECT
+FIO_TYPE_PASCAL_PROJECT = $0A
 .endif
 
 ; Extension ROM command IDs used by the BASIC-to-extension trampoline.

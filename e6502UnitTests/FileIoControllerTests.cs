@@ -637,6 +637,23 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void DirOpen_FullNameFlagIncludesStoredExtension()
+    {
+        var (fio, _, tempDir, dm) = MakeControllerWithDevice();
+        try
+        {
+            WriteMountedFile(dm, "module.asm", Encoding.ASCII.GetBytes("RTS\n"));
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioDirFlagFullName);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+
+            Assert.AreEqual("module.asm", ReadFilename(fio),
+                "Printable DIR needs the exact stored extension so EDIT can reuse the displayed name.");
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
     public void DirOpen_Returns24BitFileSizeForLargeEntries()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
@@ -1897,7 +1914,8 @@ public class FileIoControllerTests
 
                 Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
                 fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
-                Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+                Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus),
+                    $"{source.Filter} must match the exact stored extension.");
                 Assert.AreEqual(Path.GetFileNameWithoutExtension(source.DiskName), ReadFilename(fio));
                 Assert.AreEqual(source.Type, fio.Read((ushort)VgcConstants.FioDirType),
                     $"{source.DiskName} must report its language-specific FIO directory type.");

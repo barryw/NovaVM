@@ -1117,6 +1117,14 @@ Requires:
 - `FIO_NAME`
 - `FIO_NAMELEN`
 
+## FIO.DIR_FLAG_FULLNAME
+
+DIROPEN input flag requesting full NAME.EXT results from DIRREAD.
+
+- Kind: `const`
+- Symbol: `FIO_DIR_FLAG_FULLNAME`
+- Address: `$80`
+
 ## FIO.DIR_OPEN
 
 Open a directory listing using optional FIO.NAME/FIO.NAMELEN filter.

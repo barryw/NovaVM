@@ -33,6 +33,7 @@
   <Target Name="BuildEditBufTestHarness" BeforeTargets="Build" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
     <Exec Command="make -C $(MSBuildProjectDirectory)/../software/runtime/asm clean-nova-lib build/nova.lib" />
     <Exec Command="make -C $(MSBuildProjectDirectory)/../software/assembly editbuf-test" />
+    <Exec Command="make -C $(MSBuildProjectDirectory)/../software/languages/novapascal ndi" />
   </Target>
 
   <ItemGroup>
@@ -48,11 +49,11 @@
     <None Update="Resources\6502_interrupt_test.bin">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="..\e6502.Avalonia\Resources\ehbasic.bin">
+    <None Include="..\e6502.Avalonia\Resources\ehbasic.bin">
       <Link>Resources\ehbasic.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="..\e6502.Avalonia\Resources\novaforth.bin">
+    <None Include="..\e6502.Avalonia\Resources\novaforth.bin">
       <Link>Resources\novaforth.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -76,8 +77,16 @@
       <Link>Resources\petscii_lower.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="..\e6502.Avalonia\Resources\libcall.bin">
+    <None Include="..\e6502.Avalonia\Resources\libcall.bin">
       <Link>Resources\libcall.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\e6502.Avalonia\Resources\editor.bin">
+      <Link>Resources\editor.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Include="..\e6502.Avalonia\Resources\files.bin">
+      <Link>Resources\files.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

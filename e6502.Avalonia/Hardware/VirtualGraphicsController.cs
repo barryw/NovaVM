@@ -1662,7 +1662,8 @@ public class VirtualGraphicsController : IBusDevice
                 _screenRam[cy * VgcConstants.ScreenCols + cx] = 0x20;
                 break;
 
-            case 0x0A: // LF -- line feed: advance row
+            case 0x0A: // LF -- Nova newline: column 0, next row
+                cx = 0;
                 cy++;
                 if (cy >= VgcConstants.ScreenRows)
                 {

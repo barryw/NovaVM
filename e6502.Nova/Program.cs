@@ -6330,13 +6330,18 @@ static int DoDir(string[] args)
         }
         else
         {
-            Console.WriteLine($"  {"Name",-32}  {"Type",-4}  {"Size",8}");
-            Console.WriteLine($"  {new string('-', 32)}  {new string('-', 4)}  {new string('-', 8)}");
+            Console.WriteLine($"  {"Name",-32}  {"Type",-14}  {"Size",8}");
+            Console.WriteLine($"  {new string('-', 32)}  {new string('-', 14)}  {new string('-', 8)}");
             foreach (var e in entries)
             {
-                string typeStr = e.IsDirectory ? "DIR" : e.FileType.ToString().ToUpperInvariant();
+                string typeStr = e.IsDirectory ? "DIR" : e.FileType switch
+                {
+                    NdiFileType.Pascal => "PASCAL SOURCE",
+                    NdiFileType.PascalProject => "PASCAL PROJECT",
+                    _ => e.FileType.ToString().ToUpperInvariant()
+                };
                 string sizeStr = e.IsDirectory ? "<DIR>" : e.SizeBytes.ToString();
-                Console.WriteLine($"  {e.Filename,-32}  {typeStr,-4}  {sizeStr,8}");
+                Console.WriteLine($"  {e.Filename,-32}  {typeStr,-14}  {sizeStr,8}");
             }
         }
 
@@ -7086,6 +7091,7 @@ static NdiFileType ExtensionToFileType(string ext) =>
     {
         ".bas"            => NdiFileType.Bas,
         ".pas"            => NdiFileType.Pascal,
+        ".npp"            => NdiFileType.PascalProject,
         ".logo" or ".lgo" => NdiFileType.Logo,
         ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
         ".sid"            => NdiFileType.Sid,
@@ -7143,7 +7149,7 @@ static void PrintUsage()
     Console.Error.WriteLine();
     Console.Error.WriteLine("Local NDI image commands:");
     Console.Error.WriteLine("  create     <file.ndi> [--size <KB>|--hd] [--label <name>]");
-    Console.Error.WriteLine("  dir        <file.ndi> [/path]");
+    Console.Error.WriteLine("  dir        <file.ndi> [/path]                         list files with semantic types");
     Console.Error.WriteLine("  info       <file.ndi>");
     Console.Error.WriteLine("  validate   <file.ndi>");
     Console.Error.WriteLine("  label      <file.ndi> <name>");

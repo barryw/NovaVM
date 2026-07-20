@@ -65,6 +65,7 @@ public class HostDirectoryDeviceTests
 
             File.WriteAllText(Path.Combine(dir, "core.4th"), "\\ core library\n");
             File.WriteAllText(Path.Combine(dir, "unit1.pas"), "program Unit1;\n");
+            File.WriteAllText(Path.Combine(dir, "demo.npp"), "NPP 1\nMAIN unit1.pas\n");
             File.WriteAllText(Path.Combine(dir, "turtle.logo"), "TO SQUARE\nEND\n");
             File.WriteAllText(Path.Combine(dir, "main.s"), ".segment \"CODE\"\n");
             File.WriteAllText(Path.Combine(dir, "module.asm"), ".byte 0\n");
@@ -75,6 +76,8 @@ public class HostDirectoryDeviceTests
                 "Host-directory backed disks must expose .4th files as Forth source so FIO directory metadata matches NDI.");
             Assert.AreEqual(NdiFileType.Pascal, device.ListDirectory(null).Single(e => e.Filename == "unit1").FileType,
                 "Host-directory backed disks must expose .pas files as Pascal source, not BASIC or BIN.");
+            Assert.AreEqual(NdiFileType.PascalProject, device.ListDirectory(null).Single(e => e.Filename == "demo").FileType,
+                "Pascal projects must remain distinct from Pascal source files.");
             Assert.AreEqual(NdiFileType.Logo, device.ListDirectory(null).Single(e => e.Filename == "turtle").FileType,
                 "Host-directory backed disks must expose .logo files as Logo source.");
             Assert.AreEqual(NdiFileType.Assembly, device.ListDirectory(null).Single(e => e.Filename == "main").FileType,

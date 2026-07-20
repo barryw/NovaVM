@@ -734,8 +734,10 @@ public class AvaloniaVgcTests
     }
 
     [TestMethod]
-    public void CharOut_LineFeed_AdvancesRow()
+    public void CharOut_LineFeed_StartsNextLine()
     {
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
+        _vgc.Write(VgcConstants.RegCharOut, (byte)'B');
         _vgc.Write(VgcConstants.RegCharOut, 0x0A); // LF
         Assert.AreEqual(0, _vgc.GetCursorX());
         Assert.AreEqual(1, _vgc.GetCursorY());

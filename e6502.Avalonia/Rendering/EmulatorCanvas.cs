@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.Interactivity;
 using e6502.Avalonia;
 using e6502.Avalonia.Editor;
 using e6502.Avalonia.Hardware;
@@ -44,6 +45,7 @@ public class EmulatorCanvas : Control
         _editor = editor;
         _boardInput = boardInput;
         Focusable = true;
+        AddHandler(KeyDownEvent, HandleAltKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         _framebuffer = new WriteableBitmap(
             new PixelSize(NativeWidth, NativeHeight),
             new Vector(96, 96),
@@ -119,15 +121,6 @@ public class EmulatorCanvas : Control
             || (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.Insert))
         {
             _ = PasteClipboardAsync();
-            e.Handled = true;
-            base.OnKeyDown(e);
-            return;
-        }
-
-        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && TryMapAltMenuKey(e.Key, out byte altKey))
-        {
-            _editor.QueueInput(0x1B);
-            _editor.QueueInput(altKey);
             e.Handled = true;
             base.OnKeyDown(e);
             return;
@@ -329,6 +322,16 @@ public class EmulatorCanvas : Control
     private void QueuePrintableChar(byte ch)
     {
         _editor.QueueInput(ch);
+    }
+
+    private void HandleAltKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Alt) || !TryMapAltMenuKey(e.Key, out byte altKey))
+            return;
+
+        _editor.QueueInput(0x1B);
+        _editor.QueueInput(altKey);
+        e.Handled = true;
     }
 
     private static bool TryMapAltMenuKey(Key key, out byte ch)

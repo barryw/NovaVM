@@ -110,6 +110,7 @@ foreach (var asset in options.Assets)
     {
         ".4th" or ".fth" or ".fs" => NdiFileType.Forth,
         ".pas" => NdiFileType.Pascal,
+        ".npp" => NdiFileType.PascalProject,
         ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
         _ => NdiFileType.Bin
     };

@@ -53,6 +53,19 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void PascalDirectoryTypesAreDocumentedAndDistinct()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova", "Program.cs"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs", "books", "nova-cli-guide", "chapters", "nova-cli.md"));
+
+            StringAssert.Contains(program, "PASCAL SOURCE");
+            StringAssert.Contains(program, "PASCAL PROJECT");
+            StringAssert.Contains(guide, "`PASCAL SOURCE`");
+            StringAssert.Contains(guide, "`PASCAL PROJECT`");
+        }
+
+        [TestMethod]
         public void ShowcaseDemoBuildsCanonicalLinkedMusicDisk()
         {
             string repo = FindRepoRoot();

@@ -44,7 +44,7 @@ public class EditBufVmTests
     private const ushort TestMenuMode = 0x0314;
     private const int DocbufXramBase = 0x055000;
 
-    private const byte CtrlA = 0x01, CtrlB = 0x02, CtrlC = 0x03, CtrlF = 0x06, CtrlG = 0x07, CtrlK = 0x0B, CtrlN = 0x0E, CtrlO = 0x0F, CtrlS = 0x13, CtrlV = 0x16, CtrlX = 0x18, CtrlY = 0x19, CtrlZ = 0x1A;
+    private const byte CtrlA = 0x01, CtrlB = 0x02, CtrlC = 0x03, CtrlF = 0x06, CtrlG = 0x07, CtrlK = 0x0B, CtrlN = 0x0E, CtrlO = 0x0F, CtrlQ = 0x11, CtrlS = 0x13, CtrlV = 0x16, CtrlX = 0x18, CtrlY = 0x19, CtrlZ = 0x1A;
     private const byte KeyLeft = 0x1C, KeyRight = 0x1D, KeyUp = 0x1E, KeyDown = 0x1F, KeyBackspace = 0x08, KeyEnter = 0x0D;
     private const byte KeyEsc = 0x1B, KeyCtrlHome = 0x80, KeyCtrlEnd = 0x81, KeyF3 = 0x82, KeyHome = 0x83, KeyF6 = 0x84, KeyShiftF6 = 0x85;
     private const byte CmdOpen = 0x02, CmdBufferNext = 0x14, CmdBufferPrevious = 0x15, CmdBufferList = 0x16;
@@ -604,14 +604,14 @@ public class EditBufVmTests
         string screen = Snapshot(h);
         Assert.IsTrue(screen.Contains("Save ^S", StringComparison.Ordinal),
             $"File menu should advertise the Ctrl+S save binding.\n{screen}");
-        Assert.IsTrue(screen.Contains("Exit Alt-X", StringComparison.Ordinal),
-            $"File menu should advertise the Alt+X exit binding.\n{screen}");
+        Assert.IsTrue(screen.Contains("Exit ^Q/Alt-X", StringComparison.Ordinal),
+            $"File menu should advertise both reliable exit bindings.\n{screen}");
         Assert.IsFalse(screen.Contains("Open", StringComparison.Ordinal),
             $"Default native editor menu should not advertise Open until a real picker exists.\n{screen}");
     }
 
     [DataTestMethod]
-    [DataRow((byte)'f', "Save ^S", "Exit Alt-X")]
+    [DataRow((byte)'f', "Save ^S", "Exit ^Q/Alt-X")]
     [DataRow((byte)'e', "Cut ^X", "Copy ^C")]
     [DataRow((byte)'s', "Find ^F", "Replace")]
     public void AltMenuHotkeysOpenExpectedMenus(byte hotkey, string firstItem, string secondItem)
@@ -668,6 +668,18 @@ public class EditBufVmTests
 
         Assert.AreEqual(ExitQuit, h.Bus.ReadRam(TestResult),
             "Alt-X should still work when the physical keyboard bridge spaces ESC and X by a short delay.");
+    }
+
+    [TestMethod]
+    public void CtrlQQuitsCleanEditor()
+    {
+        var h = Boot();
+
+        Type(h, CtrlQ);
+        RunUntilDone(h);
+
+        Assert.AreEqual(ExitQuit, h.Bus.ReadRam(TestResult),
+            "Ctrl+Q must remain a reliable exit path when a desktop consumes Alt shortcuts.");
     }
 
     [TestMethod]

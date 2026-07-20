@@ -12,6 +12,9 @@ NLINK_ERR_RELOCATION = 3
 
 .global nlink_link
 .global nlink_object_ptr
+.global nlink_object_len
+.global nlink_library_ptr
+.global nlink_library_len
 .global nlink_output_ptr
 .global nlink_output_cap
 .global nlink_load_base

@@ -2648,6 +2648,7 @@ module vgc (
                                     cmd_char_we <= 1;
                                 end
                                 8'h0A: begin
+                                    cursor_x <= 0;
                                     if (cursor_y >= ROWS - 1) begin
                                         scroll_pending <= 1; scroll_clearing <= 0; scroll_col <= 0;
                                     end else

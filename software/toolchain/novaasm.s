@@ -3,14 +3,39 @@
 ; Accepted source is case-insensitive and line-oriented:
 ;   LDA #$nn
 ;   STA $nnnn
+;   JSR symbol
 ;   RTS
 ; Blank lines and ';' comments are ignored.
 ;
-; ponytail: this is the smallest useful assembler core. Add labels, addressing
-; modes, and relocations when the assembly IDE needs its next real program.
+; This first slice supports external ABS16 relocations. NAS has no knowledge of
+; Pascal, the NDK, or any library implementation.
 
       .setcpu "w65c02"
       .include "novaasm.inc"
+
+.macro long_bcs target
+      BCC   :+
+      JMP   target
+:
+.endmacro
+
+.macro long_bcc target
+      BCS   :+
+      JMP   target
+:
+.endmacro
+
+.macro long_bne target
+      BEQ   :+
+      JMP   target
+:
+.endmacro
+
+.macro long_beq target
+      BNE   :+
+      JMP   target
+:
+.endmacro
 
       .segment "ZEROPAGE"
 a_src:       .res 2
@@ -19,10 +44,18 @@ a_dst:       .res 2
 a_cap:       .res 2
 a_header:    .res 2
 a_code_len:  .res 2
+a_reloc_ptr: .res 2
+a_reloc_len: .res 2
+a_reloc_count:.res 2
+a_symbol_len:.res 1
 a_tmp0:      .res 1
 a_tmp1:      .res 1
 
       .segment "BSS"
+NASM_SYMBOL_CAP = 32
+NASM_RELOC_CAP  = 768
+a_symbol:     .res NASM_SYMBOL_CAP
+a_reloc_buf:  .res NASM_RELOC_CAP
       .export nasm_source_ptr
       .export nasm_source_len
       .export nasm_object_ptr
@@ -44,6 +77,14 @@ nasm_assemble:
       STZ   nasm_error
       STZ   nasm_object_len
       STZ   nasm_object_len+1
+      STZ   a_reloc_len
+      STZ   a_reloc_len+1
+      STZ   a_reloc_count
+      STZ   a_reloc_count+1
+      LDA   #<a_reloc_buf
+      STA   a_reloc_ptr
+      LDA   #>a_reloc_buf
+      STA   a_reloc_ptr+1
 
       LDA   nasm_source_ptr
       STA   a_src
@@ -131,8 +172,10 @@ nasm_assemble:
       BEQ   @lda
       CMP   #'S'
       BEQ   @sta
+      CMP   #'J'
+      long_beq @jsr
       CMP   #'R'
-      BEQ   @rts
+      long_beq @rts
       JMP   a_fail_syntax
 
 @lda:
@@ -162,51 +205,76 @@ nasm_assemble:
       JMP   a_fail_syntax
 :
       JSR   a_parse_hex_byte
-      BCS   a_fail_syntax
+      long_bcs a_fail_syntax
       STA   a_tmp0
       LDA   #$A9                  ; LDA #imm
       JSR   a_emit
-      BCS   a_fail_output
+      long_bcs a_fail_output
       LDA   a_tmp0
       JSR   a_emit
-      BCS   a_fail_output
-      BRA   @statement
+      long_bcs a_fail_output
+      JMP   @statement
 
 @sta:
       JSR   a_read_upper
-      BCC   a_fail_syntax
+      long_bcc a_fail_syntax
       CMP   #'T'
-      BNE   a_fail_syntax
+      long_bne a_fail_syntax
       JSR   a_read_upper
-      BCC   a_fail_syntax
+      long_bcc a_fail_syntax
       CMP   #'A'
-      BNE   a_fail_syntax
+      long_bne a_fail_syntax
       JSR   a_skip_hspace
       JSR   a_parse_hex_word
-      BCS   a_fail_syntax
+      long_bcs a_fail_syntax
       LDA   #$8D                  ; STA abs
       JSR   a_emit
-      BCS   a_fail_output
+      long_bcs a_fail_output
       LDA   a_tmp0                ; little-endian operand
       JSR   a_emit
-      BCS   a_fail_output
+      long_bcs a_fail_output
       LDA   a_tmp1
       JSR   a_emit
-      BCS   a_fail_output
+      long_bcs a_fail_output
+      JMP   @statement
+
+@jsr:
+      JSR   a_read_upper
+      long_bcc a_fail_syntax
+      CMP   #'S'
+      long_bne a_fail_syntax
+      JSR   a_read_upper
+      long_bcc a_fail_syntax
+      CMP   #'R'
+      long_bne a_fail_syntax
+      JSR   a_skip_hspace
+      JSR   a_parse_identifier
+      long_bcs a_fail_syntax
+      JSR   a_add_relocation
+      long_bcs a_fail_output
+      LDA   #$20                  ; JSR abs
+      JSR   a_emit
+      long_bcs a_fail_output
+      LDA   #0
+      JSR   a_emit
+      long_bcs a_fail_output
+      LDA   #0
+      JSR   a_emit
+      long_bcs a_fail_output
       JMP   @statement
 
 @rts:
       JSR   a_read_upper
-      BCC   a_fail_syntax
+      long_bcc a_fail_syntax
       CMP   #'T'
-      BNE   a_fail_syntax
+      long_bne a_fail_syntax
       JSR   a_read_upper
-      BCC   a_fail_syntax
+      long_bcc a_fail_syntax
       CMP   #'S'
-      BNE   a_fail_syntax
+      long_bne a_fail_syntax
       LDA   #$60
       JSR   a_emit
-      BCS   a_fail_output
+      long_bcs a_fail_output
       JMP   @statement
 
 @done:
@@ -216,12 +284,40 @@ nasm_assemble:
       INY
       LDA   a_code_len+1
       STA   (a_header),Y
-      CLC
-      LDA   a_code_len
-      ADC   #NOBJ_HEADER_SIZE
+      LDY   #NOBJ_RELOC_COUNT
+      LDA   a_reloc_count
+      STA   (a_header),Y
+      INY
+      LDA   a_reloc_count+1
+      STA   (a_header),Y
+
+      LDA   #<a_reloc_buf
+      STA   a_reloc_ptr
+      LDA   #>a_reloc_buf
+      STA   a_reloc_ptr+1
+@copy_reloc:
+      LDA   a_reloc_len
+      ORA   a_reloc_len+1
+      BEQ   @length
+      LDY   #0
+      LDA   (a_reloc_ptr),Y
+      JSR   a_emit_tail
+      long_bcs a_fail_output
+      INC   a_reloc_ptr
+      BNE   :+
+      INC   a_reloc_ptr+1
+:     LDA   a_reloc_len
+      BNE   :+
+      DEC   a_reloc_len+1
+:     DEC   a_reloc_len
+      BRA   @copy_reloc
+@length:
+      SEC
+      LDA   a_dst
+      SBC   a_header
       STA   nasm_object_len
-      LDA   a_code_len+1
-      ADC   #0
+      LDA   a_dst+1
+      SBC   a_header+1
       STA   nasm_object_len+1
       LDA   #NASM_OK
       RTS
@@ -280,6 +376,131 @@ a_skip_hspace:
       JSR   a_next
       BRA   @loop
 @done:
+      RTS
+
+a_parse_identifier:
+      STZ   a_symbol_len
+      JSR   a_peek_upper
+      BCC   @bad
+      JSR   a_is_ident_start
+      BCC   @bad
+@loop:
+      LDA   a_symbol_len
+      CMP   #NASM_SYMBOL_CAP
+      BCS   @bad
+      JSR   a_read_upper
+      LDX   a_symbol_len
+      STA   a_symbol,X
+      INC   a_symbol_len
+      JSR   a_peek_upper
+      BCC   @ok
+      JSR   a_is_ident
+      BCS   @loop
+@ok:
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_peek_upper:
+      JSR   a_peek
+      BCC   @eof
+      CMP   #'a'
+      BCC   @ok
+      CMP   #'z'+1
+      BCS   @ok
+      AND   #$DF
+@ok:
+      SEC
+      RTS
+@eof:
+      CLC
+      RTS
+
+a_is_ident_start:
+      CMP   #'A'
+      BCC   @underscore
+      CMP   #'Z'+1
+      BCC   @yes
+@underscore:
+      CMP   #'_'
+      BEQ   @yes
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+a_is_ident:
+      JSR   a_is_ident_start
+      BCS   @yes
+      CMP   #'0'
+      BCC   @no
+      CMP   #'9'+1
+      BCC   @yes
+@no:
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+; Record an ABS16 external at the JSR operand which is about to be emitted.
+a_add_relocation:
+      CLC
+      LDA   a_code_len
+      ADC   #1
+      JSR   a_reloc_emit
+      BCS   @bad
+      LDA   a_code_len+1
+      ADC   #0
+      JSR   a_reloc_emit
+      BCS   @bad
+      LDA   #NOBJ_RELOC_ABS16
+      JSR   a_reloc_emit
+      BCS   @bad
+      LDA   a_symbol_len
+      JSR   a_reloc_emit
+      BCS   @bad
+      LDX   #0
+@name:
+      CPX   a_symbol_len
+      BCS   @done
+      LDA   a_symbol,X
+      JSR   a_reloc_emit
+      BCS   @bad
+      INX
+      BRA   @name
+@done:
+      INC   a_reloc_count
+      BNE   :+
+      INC   a_reloc_count+1
+:     CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+a_reloc_emit:
+      PHA
+      LDA   a_reloc_len+1
+      CMP   #>NASM_RELOC_CAP
+      BCC   @room
+      PLA
+      SEC
+      RTS
+@room:
+      PLA
+      LDY   #0
+      STA   (a_reloc_ptr),Y
+      INC   a_reloc_ptr
+      BNE   :+
+      INC   a_reloc_ptr+1
+:     INC   a_reloc_len
+      BNE   :+
+      INC   a_reloc_len+1
+:     CLC
       RTS
 
 ; Parse $nn, returning the byte in A with carry clear.
@@ -365,13 +586,17 @@ a_hex_nibble:
 
 a_read_upper:
       JSR   a_next
-      BCC   @done
+      BCC   @eof
       CMP   #'a'
-      BCC   @done
+      BCC   @ok
       CMP   #'z'+1
-      BCS   @done
+      BCS   @ok
       AND   #$DF
-@done:
+@ok:
+      SEC
+      RTS
+@eof:
+      CLC
       RTS
 
 a_peek:
@@ -422,6 +647,29 @@ a_emit:
       BNE   :+
       INC   a_code_len+1
 :     CLC
+      RTS
+@full:
+      PLA
+      SEC
+      RTS
+
+; Append relocation bytes without extending the code-section length.
+a_emit_tail:
+      PHA
+      LDA   a_cap
+      ORA   a_cap+1
+      BEQ   @full
+      PLA
+      LDY   #0
+      STA   (a_dst),Y
+      INC   a_dst
+      BNE   :+
+      INC   a_dst+1
+:     LDA   a_cap
+      BNE   :+
+      DEC   a_cap+1
+:     DEC   a_cap
+      CLC
       RTS
 @full:
       PLA

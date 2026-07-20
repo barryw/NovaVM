@@ -406,7 +406,7 @@ module test_vgc_text;
         check_eq("row 1 col 1 untouched",           peek_char_cell(1, 1), 8'h20);
     endtask
 
-    // T4: explicit newlines advance cursor_y without touching scroll_offset
+    // T4: LF starts at column 0 of the next row without touching scroll_offset
     // (until we reach the bottom).
     task automatic test_newline_no_scroll();
         $display("");
@@ -414,11 +414,13 @@ module test_vgc_text;
         type_char(8'h0C);
         wait_cmd_done();
         step(4);
+        type_char(8'h58);  // prove LF resets a non-zero column
         for (int i = 0; i < 5; i++) begin
             type_char(8'h0A);  // LF
             // The VGC advances cursor_y immediately (no cmd state).
             step(2);
         end
+        check_eq("cursor_x after LF",        dut.cursor_x,     0);
         check_eq("cursor_y after 5 LFs",     dut.cursor_y,     5);
         check_eq("scroll_offset still 0",    dut.scroll_offset, 0);
     endtask
@@ -648,9 +650,8 @@ module test_vgc_text;
         // CR (0x0D): return cursor to column 0, y unchanged
         type_char(8'h0C); wait_cmd_done(); step(4);
         for (int i = 0; i < 10; i++) type_char(8'h58);  // 10 'X's → col 10
-        type_char(8'h0A); step(4);                       // LF → row 1 col 0... wait, LF only moves y
-        // Actually LF advances y but leaves x alone in this VGC; let's just set
-        // cursor via direct poke to (5, 3), then CR, and check cursor.
+        type_char(8'h0A); step(4);                       // LF → row 1, col 0
+        // Set the cursor directly to isolate CR's carriage-only behavior.
         bus_write(REG_CURSORX_A, 8'd5);
         bus_write(REG_CURSORY_A, 8'd3);
         step(4);
