@@ -5,7 +5,7 @@
       .include "nptool.inc"
       .include "libsystem.inc"
 
-OBJECT_CAP  = 1024
+OBJECT_CAP  = 2048
 LIBRARY_CAP = 1024
 OUTPUT_CAP  = 1024
 CONFIG_CAP  = 512

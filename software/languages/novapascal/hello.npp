@@ -10,4 +10,5 @@ MEMORY {
 
 SEGMENTS {
     CODE: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
 }

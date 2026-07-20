@@ -1,0 +1,15 @@
+NPP 1
+MAIN FIZZBUZZ.PAS
+OUTPUT FIZZBUZZ.BIN
+OPTIMIZE O2
+CONFIG INLINE
+MAP FIZZBUZZ.MAP
+LABEL FIZZBUZZ.LBL
+MEMORY {
+    RAM: start = $8000, size = $0300, file = %O;
+}
+
+SEGMENTS {
+    CODE: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
+}

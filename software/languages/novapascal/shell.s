@@ -857,7 +857,9 @@ shell_print_tool_error:
       CMP   #NPTOOL_ERR_COMPILE
       BEQ   @compile
       CMP   #NPTOOL_ERR_ASSEMBLE
-      BEQ   @assemble
+      BNE   :+
+      JMP   @assemble
+:
       CMP   #NPTOOL_ERR_LINK
       BNE   :+
       JMP   @link
@@ -899,6 +901,26 @@ shell_print_tool_error:
       STA   shell_fio_error
       JMP   shell_print_file_error
 @compile:
+      LDA   #<NPTOOL_ARG0
+      STA   p_word
+      LDA   #>NPTOOL_ARG0
+      STA   p_word+1
+      JSR   print_z
+      LDA   #':'
+      STA   VGC_CHAROUT
+      LDA   NPTOOL_DIAG_LINE
+      LDX   NPTOOL_DIAG_LINE+1
+      JSR   shell_print_u16
+      LDA   #':'
+      STA   VGC_CHAROUT
+      LDA   NPTOOL_DIAG_COL
+      LDX   NPTOOL_DIAG_COL+1
+      JSR   shell_print_u16
+      LDA   #<shell_diag_separator
+      STA   p_word
+      LDA   #>shell_diag_separator
+      STA   p_word+1
+      JSR   print_z
       LDA   #<shell_compile_error
       STA   p_word
       LDA   #>shell_compile_error
@@ -3017,6 +3039,7 @@ shell_new_lf:
       .byte "}", $0A, $0A
       .byte "SEGMENTS {", $0A
       .byte "    CODE: load = RAM, type = ro;", $0A
+      .byte "    BSS: load = RAM, type = bss;", $0A
       .byte "}", $0A, 0
 shell_project_inline_kw: .byte "INLINE"
 

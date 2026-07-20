@@ -18,7 +18,7 @@ $(FIXTURE_DIR)/vsprite_runtime.bin: vsprite_runtime.s vsprite_runtime.cfg $(NOVA
 	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/vsprite_runtime.o vsprite_runtime.s
 	$(LD65) -C vsprite_runtime.cfg -m $(BUILD_DIR)/vsprite_runtime.map -Ln $(BUILD_DIR)/vsprite_runtime.sym -o $@ $(BUILD_DIR)/vsprite_runtime.o
 
-$(FIXTURE_DIR)/vtextprint_runtime.bin: vtextprint_runtime.s vtextprint_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s | $(BUILD_DIR) $(FIXTURE_DIR)
+$(FIXTURE_DIR)/vtextprint_runtime.bin: vtextprint_runtime.s vtextprint_runtime.cfg $(NOVA_LIB)/nova.inc $(NOVA_LIB)/fio.inc $(NOVA_LIB)/fio.s $(NOVA_LIB)/fio_inline.s $(NOVA_LIB)/vtext.inc $(NOVA_LIB)/vtext.s $(NOVA_LIB)/vtext_inline.s $(NOVA_LIB)/blitter.inc $(NOVA_LIB)/blitter.s | $(BUILD_DIR) $(FIXTURE_DIR)
 	$(CA65) --cpu w65c02 -I $(NOVA_LIB) -o $(BUILD_DIR)/vtextprint_runtime.o vtextprint_runtime.s
 	$(LD65) -C vtextprint_runtime.cfg -m $(BUILD_DIR)/vtextprint_runtime.map -Ln $(BUILD_DIR)/vtextprint_runtime.sym -o $@ $(BUILD_DIR)/vtextprint_runtime.o
 

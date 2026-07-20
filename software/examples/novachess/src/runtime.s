@@ -1740,22 +1740,14 @@ show_engine_error_dialog:
         JMP show_dialog_wait_local
 
 load_full_engine:
-        LDA #<engine_full_name
-        STA FIO_ARG_NAMEPTR_L
-        LDA #>engine_full_name
-        STA FIO_ARG_NAMEPTR_H
-        LDA #(engine_full_name_end - engine_full_name)
-        BRA load_engine_named
+        JSR i_fio_name
+        .byte "CHESSENG", 0
+        BRA load_engine
 
 load_rules_engine:
-        LDA #<engine_rules_name
-        STA FIO_ARG_NAMEPTR_L
-        LDA #>engine_rules_name
-        STA FIO_ARG_NAMEPTR_H
-        LDA #(engine_rules_name_end - engine_rules_name)
-load_engine_named:
-        STA FIO_ARG_NAMELEN
-        JSR fio_copy_name
+        JSR i_fio_name
+        .byte "CHESSRUL", 0
+load_engine:
         BNE @done
         JSR fio_load
         JMP ENGINE_LOAD_BANK
@@ -1763,14 +1755,10 @@ load_engine_named:
         RTS
 
 load_title_splash:
-        LDA #<splash_nvg_name
-        STA NVG_NAMEPTR_L
-        LDA #>splash_nvg_name
-        STA NVG_NAMEPTR_H
-        LDA #(splash_nvg_name_end - splash_nvg_name)
-        STA NVG_NAMELEN
-        JSR nvg_load_named
+        JSR i_fio_name
+        .byte "SPLASH.NVG", 0
         BNE @done
+        JMP nvg_load
 @done:
         RTS
 
@@ -3502,17 +3490,6 @@ abs_signed_small:
 
 
 .segment "RODATA"
-
-splash_nvg_name:
-        .byte "SPLASH.NVG"
-splash_nvg_name_end:
-
-engine_full_name:
-        .byte "CHESSENG"
-engine_full_name_end:
-engine_rules_name:
-        .byte "CHESSRUL"
-engine_rules_name_end:
 
 network_overlay_name:
         .byte "NETGAME.OVL"

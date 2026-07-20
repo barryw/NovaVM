@@ -7,6 +7,86 @@ The shell and native Pascal compiler (NPC) remain resident in the
 `$C000-$FFFF` language ROM. NPC streams Pascal source into the NDK document
 XRAM slot, parses it there, and writes generated assembly to disk.
 
+## Executable language slice
+
+`FIZZBUZZ.PAS` and `FIZZBUZZ.NPP` are the current end-to-end compiler slice.
+They build and run on Nova through NPC, NAS, NL, and `PASCAL.NLIB`, printing the
+canonical sequence from 1 through 100.
+
+NPC now uses recursive-descent statement and expression parsers rather than a
+single fixed statement loop. The implemented language core is case-insensitive
+and supports `Byte` variables, nested `begin`/`end`, assignment, `if`/`then`/
+`else`, `while`/`do`, `+`, `-`, `mod`, parentheses, all six byte comparisons,
+string `writeln`, and decimal byte `writeln`. Duplicate variables are rejected.
+Generated branches remain valid when a structured statement grows beyond the
+65C02 relative-branch range.
+
+The resident driver reuses `$2000-$6FFF` as transient compiler workspace before
+NAS or NL is loaded: generated assembly occupies `$2000-$5FFF`, and a 64-entry
+typed symbol table starts at `$6000`. Expression scratch is emitted only when a
+program uses a binary expression. Decimal byte output is a separate
+`P_WRITE_BYTE` archive member, so NL omits it from programs that only print
+strings. NPC emits zero-, one-, and two-character `writeln` literals as direct
+character calls. Longer literals use Nova's inline-parameter ABI:
+
+```asm
+JSR I_P_WRITE_LINE
+.BYTE $46,$69,$7A,$7A,$00
+```
+
+The `I_` prefix means immutable parameters follow the call. The routine walks
+the bytes and advances the saved return address past them before returning;
+NAS and NL require no special handling. Syntax failures are reported as
+`file:line:column` diagnostics.
+
+This is still intentionally a byte-sized slice. Procedures/functions, wider
+integer types, constants, arrays, records, and Pascal units are subsequent
+compiler work rather than accepted-but-partial syntax.
+
+## Pascal NDK units
+
+NPC accepts a standard `USES` clause for canonical NDK source units. A unit
+named `NovaFoo` maps mechanically to `FOO.INC` and `FOO.S`; NPC embeds neither
+an API table nor hardware addresses. The first typed bridge uses the NDK's
+one-byte accumulator ABI and named byte storage directly:
+
+```pascal
+program RandomDemo;
+uses NovaRng, NovaFio;
+var Status, Sample: Byte;
+begin
+  Status := rng_get8();
+  Status := fio_exec(Byte(FIO_CMD_RNG));
+  fio_issue(Status);
+  Sample := RNG_VALUE0;
+  VGC_BORDER := Sample;
+  writeln('Pascal NDK');
+end.
+```
+
+`Byte` variables occupy linker-managed `BSS`. Nova's raw load-address binary
+format materializes live BSS, so each live variable costs exactly one
+zero-filled byte with no per-variable metadata or alignment overhead. A
+no-argument `function()` returns its byte in A; a one-byte routine argument is
+passed in A. Decimal, `$` hexadecimal, and single-character byte values are
+accepted. `Byte(NDK_CONSTANT)` loads a generated, range-checked canonical byte
+constant such as `FIO_CMD_RNG`. An identifier used as a value or assignment
+target remains a symbolic byte address, which gives Pascal direct access to NDK
+pseudo-registers such as `RNG_VALUE0` without teaching NPC their addresses.
+
+NPC emits the declaration includes before program code and implementation
+includes after its terminating `RTS`. NAS assembles those unmodified sources,
+uses `.referenced()`/`.REFTO` to omit unused routines, and NL links the live
+NOBJ sections. Dependencies are explicit in `USES`; `NovaRng` needs `NovaFio`.
+The development disk currently installs the canonical Nova, RNG, and FIO
+sources and supports four NDK units per program. The build generates guarded
+`NOVA.NPI`, `RNG.NPI`, and `FIO.NPI` bindings from the same `@in`, `@out`, and
+`@kind` metadata used by the NDK reference. NPC emits signature assertions for
+every NDK call, so NAS rejects the wrong byte arity or use of a procedure as a
+function before linking. The generated bindings currently describe byte
+constants, byte storage, and routines whose explicit CPU-register ABI uses A;
+X/Y and wider-value ABIs remain unsupported.
+
 Commands load these ordinary Nova load-address-prefixed binaries from disk
 into the shared `$2000-$6FFF` tool slot, one at a time:
 
@@ -54,8 +134,10 @@ project/config input lists land.
 The Pascal-specific code lives in `PASCAL.NLIB`, whose machine operands are
 assembled from NDK definitions in `nova.inc`. `P_WRITE_CHAR` currently pulls a
 separate `P_CHAR_DEVICE` hardware shim through an ordinary NOBJ import, proving
-that archive members may depend on other members. Neither NAS nor NL knows
-Pascal symbols or Nova hardware addresses.
+that archive members may depend on other members. The bulk byte and inline-line
+writers are leaf members backed directly by the same NDK definition, keeping
+mixed numeric/string programs within the current four-object linker core.
+Neither NAS nor NL knows Pascal symbols or Nova hardware addresses.
 
 Their executable frontends, mailbox ABI, project/config readers, preprocessing
 and backend overlays, linker worker, and linker configurations live under
@@ -120,6 +202,8 @@ emission directly: ordinary operand references seed the live set, `.REFTO`
 propagates dependencies, and inactive routines never enter the NOBJ. The
 end-to-end test assembles canonical `rng.s` and `fio.s`, proves an unrelated FIO
 routine is absent, links with NL unchanged, and runs the resulting executable.
+NAS and NL each reserve 2 KB for an NOBJ input/output, leaving lower-RAM
+headroom while accommodating canonical NDK code plus generated Pascal checks.
 Direct `ASSEMBLE file.s [-Dname=value] [-o file.obj]` seeds one case-insensitive
 preprocessor definition and optionally selects the object filename. Options may
 appear in either order.
@@ -139,7 +223,8 @@ existing files:
 
 - `name.PAS` — a single program that prints `Hello, world!`
 - `name.NPP` — the project/build manifest, including `OPTIMIZE O2` and the
-  `NOVA=1` NAS definition plus NL `MEMORY` and `SEGMENTS` configuration
+  `NOVA=1` NAS definition plus NL `MEMORY` and `SEGMENTS` configuration for
+  both initialized `CODE` and zero-fill `BSS`
 
 The `.NPP` manifest is also the NAS project configuration; a separate inert
 assembler- or linker-config file is not required. `BUILD name.NPP` validates
@@ -236,6 +321,7 @@ text while labeling the active type in the status bar. `TYPE` uses the same
 ASCII validation and refuses binary files.
 
 NPP 1 intentionally accepts one `MAIN` plus one optional prebuilt `OBJECT` or
-one `ASM` source. NL now has real cross-object symbols, but repeated inputs and
-multiple Pascal units still need expanded NPP syntax and unit semantics; the
-project parser will not pretend source concatenation is linking.
+one `ASM` source. NDK source units are selected inside Pascal with `USES`, but
+user-authored Pascal units, repeated project inputs, and their initialization
+semantics still need expanded NPP syntax; the project parser will not pretend
+source concatenation is linking.

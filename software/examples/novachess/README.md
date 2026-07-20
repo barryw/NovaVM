@@ -53,6 +53,9 @@ make -C software/examples/novachess test
 
 By default the Makefile expects Caissa at the sibling path `../caissa` from the
 NovaVM repository. Override `CAISSA_ROOT=/absolute/path/to/caissa` when needed.
+Caissa's byte-exact Nova bank layout is currently pinned to LLVM-MOS SDK
+v22.3.2; pass `LLVM_MOS=/opt/llvm-mos-caissa` when using the system-wide
+toolchain installed on Beast.
 Easy, Medium, Hard, and Expert are wall-clock effort budgets of 5, 15, 45, and
 120 seconds. They do not deliberately weaken move choice. Nova always completes
 a full-width depth-2 floor before honoring the deadline, then returns only the

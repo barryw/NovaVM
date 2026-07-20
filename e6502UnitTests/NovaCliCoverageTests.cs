@@ -521,6 +521,39 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void CodegenNdkReferenceWritesPascalByteBindings()
+        {
+            string temp = Path.Combine(Path.GetTempPath(), "nova-cli-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(temp);
+            try
+            {
+                string repo = FindRepoRoot();
+                string bindings = Path.Combine(temp, "pascal");
+                RunNova("codegen", "ndk-reference",
+                    "--runtime-dir", Path.Combine(repo, "software/runtime/asm"),
+                    "--tex", Path.Combine(temp, "reference.tex"),
+                    "--json", Path.Combine(temp, "reference.json"),
+                    "--pascal-dir", bindings);
+
+                string rng = File.ReadAllText(Path.Combine(bindings, "RNG.NPI"));
+                string fio = File.ReadAllText(Path.Combine(bindings, "FIO.NPI"));
+                string nova = File.ReadAllText(Path.Combine(bindings, "NOVA.NPI"));
+                StringAssert.Contains(rng, "; RNG_GET8\n__S8578E3 = $02");
+                StringAssert.Contains(fio, "; FIO_ISSUE\n__S13E4EB = $01");
+                StringAssert.Contains(fio, "; FIO_EXEC\n__S34C9C7 = $03");
+                Assert.IsFalse(fio.Contains("I_FIO_NAME", StringComparison.Ordinal),
+                    "Inline-parameter routines are not ordinary Pascal-callable bindings.");
+                StringAssert.Contains(nova, "; FIO_CMD_RNG\n__CBAB93C = 1");
+                StringAssert.Contains(RunNova("codegen", "help"), "--pascal-dir");
+                Assert.IsFalse(rng.Contains('\r'), "Generated Pascal bindings must use Nova's LF-only text convention.");
+            }
+            finally
+            {
+                Directory.Delete(temp, recursive: true);
+            }
+        }
+
+        [TestMethod]
         public void ToolsDirectoryHasNoShellOrPythonScripts()
         {
             string tools = Path.Combine(FindRepoRoot(), "tools");

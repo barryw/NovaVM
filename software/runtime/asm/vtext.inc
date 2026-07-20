@@ -25,6 +25,8 @@
 ;
 ; Routines return A=0 on success and A=1 on error. X/Y are scratch unless a
 ; routine explicitly documents otherwise.
+; I_VTEXT_PUTS and I_VTEXT_PRINT_AT consume zero-terminated text stored
+; immediately after their JSR and advance the saved return address past it.
 
 .ifndef VTEXT_INC_INCLUDED
 VTEXT_INC_INCLUDED = 1
@@ -102,6 +104,8 @@ VTEXT_REGION_SIZE = 10
 .global vtext_put_run
 .global vtext_puts
 .global vtext_print_at
+.global i_vtext_puts
+.global i_vtext_print_at
 .global vtext_put_hex_nibble
 .global vtext_put_hex_byte
 .global vtext_read_char

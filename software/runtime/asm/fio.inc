@@ -24,6 +24,9 @@
 ;
 ; Routines return A=0 on success and A=1 on error. Detailed status remains
 ; in the FIO_STATUS/FIO_ERRCODE hardware registers.
+;
+; I_FIO_NAME consumes a zero-terminated filename stored immediately after its
+; JSR. It advances the saved return address past those bytes before returning.
 
 .ifndef FIO_INC_INCLUDED
 FIO_INC_INCLUDED = 1
@@ -80,6 +83,7 @@ FIO_ARG_NAMEPTR_H = NVR5L
 .global fio_check
 .global fio_exec
 .global fio_copy_name
+.global i_fio_name
 .global fio_clear_error
 .global fio_set_io_error
 .global fio_save

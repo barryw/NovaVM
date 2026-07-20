@@ -1932,13 +1932,14 @@ static int DoCodegenNdkReference(List<string> args)
     string? runtimeDir = TakeOptionValue(args, "--runtime-dir");
     string? tex = TakeOptionValue(args, "--tex");
     string? json = TakeOptionValue(args, "--json");
+    string? pascalDir = TakeOptionValue(args, "--pascal-dir");
     if (runtimeDir is null || tex is null || json is null || args.Count > 0)
     {
         PrintCodegenUsage();
         return 1;
     }
 
-    NovaBuildTools.GenerateNdkReference(runtimeDir, tex, json);
+    NovaBuildTools.GenerateNdkReference(runtimeDir, tex, json, pascalDir);
     return 0;
 }
 
@@ -1955,7 +1956,7 @@ static void PrintCodegenUsage()
     Console.Error.WriteLine("  nova codegen tokens <basic.asm> [-o tokens.json]");
     Console.Error.WriteLine("  nova codegen novavm-inc <VgcConstants.cs> [basic.sym] [-o novavm.inc]");
     Console.Error.WriteLine("  nova codegen runtime-abi <sources...> --sym <basic.sym> --json <out.json> --md <out.md> [--asm <out.inc>]");
-    Console.Error.WriteLine("  nova codegen ndk-reference --runtime-dir <runtime/asm> --tex <out.tex> --json <out.json>");
+    Console.Error.WriteLine("  nova codegen ndk-reference --runtime-dir <runtime/asm> --tex <out.tex> --json <out.json> [--pascal-dir <out-dir>]");
 }
 
 static int DoDocs(string[] args)

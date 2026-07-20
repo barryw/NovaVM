@@ -96,6 +96,21 @@ Programs can write those registers directly, but pointer-based code should use
 \novacode{fio\_copy\_name}. It validates the length range 1..63, copies bytes
 from \novacode{FIO\_ARG\_NAMEPTR\_L/H}, and returns A=0 on success.
 
+For a static filename, \novacode{I\_FIO\_NAME} is denser: place a
+zero-terminated filename immediately after the call. The routine copies it into
+the same mailbox and resumes after the terminating zero.
+
+\begin{lstlisting}
+      JSR   I_FIO_NAME
+      .byte "LEVEL1", 0
+      BNE   @error
+      JSR   fio_load
+\end{lstlisting}
+
+When implementations are included as source, include
+\novacode{fio\_inline.s} before \novacode{fio.s}; when linking
+\novacode{nova.lib}, the archive resolves both members automatically.
+
 \begin{lstlisting}
 copy_level_name:
       LDA   #<level_name

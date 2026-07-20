@@ -30,6 +30,7 @@ NOVA_LIB_SRCS := \
 	editui_shutdown.s \
 	fio_clear_error.s \
 	fio.s \
+	fio_inline.s \
 	gameserver.s \
 	mouse.s \
 	mouse_events.s \
@@ -44,6 +45,7 @@ NOVA_LIB_SRCS := \
 	nui_uisave.s \
 	nui_wait.s \
 	nvg.s \
+	nvg_named.s \
 	overlay.s \
 	pager.s \
 	replline.s \
@@ -56,6 +58,7 @@ NOVA_LIB_SRCS := \
 	vgc_palette.s \
 	vsprite.s \
 	vtext.s \
+	vtext_inline.s \
 	vtext_mixed.s \
 	xmc.s \
 	xram.s

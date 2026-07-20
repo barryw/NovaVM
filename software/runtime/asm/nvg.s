@@ -31,12 +31,8 @@ nvg_tmp_l:        .res 1
 
       .export nvg_load
       .export nvg_load_at
-      .export nvg_load_named
-      .export nvg_load_named_at
       .export nvg_draw
       .export nvg_draw_at
-      .export nvg_draw_named
-      .export nvg_draw_named_at
 
 ; Clear the graphics bitmap as needed, then load the named NVG file to the
 ; top-left. Native NVG2 full-screen opaque images skip the clear because the
@@ -109,67 +105,6 @@ nvg_draw_current:
       JMP   nvg_draw_native
 @bad_magic:
       JMP   fio_set_io_error
-@done:
-      RTS
-
-; Copy the pointer-based filename arguments and load to the top-left of the
-; graphics bitmap.
-; @label NVG.LOAD_NAMED
-; @kind routine
-; @symbol nvg_load_named
-; @summary Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at offset 0.
-; @requires NVG_NAMELEN NVG_NAMEPTR_L NVG_NAMEPTR_H
-; @out A: 0 on success, 1 on error.
-nvg_load_named:
-      JSR   fio_copy_name
-      BNE   @done
-      JMP   nvg_load
-@done:
-      RTS
-
-; Copy the pointer-based filename arguments, clear as needed, and load to
-; NVG.ADDRL/H.
-; @label NVG.LOAD_NAMED_AT
-; @kind routine
-; @symbol nvg_load_named_at
-; @summary Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at NVG.ADDRL/H.
-; @requires NVG_NAMELEN NVG_NAMEPTR_L NVG_NAMEPTR_H NVG_ADDRL NVG_ADDRH
-; @out A: 0 on success, 1 on error.
-nvg_load_named_at:
-      JSR   fio_copy_name
-      BNE   @done
-      JMP   nvg_load_at
-@done:
-      RTS
-
-; Copy pointer-based filename arguments and draw to the top-left without
-; clearing the graphics plane.
-; @label NVG.DRAW_NAMED
-; @kind routine
-; @symbol nvg_draw_named
-; @summary Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at offset 0 without clearing.
-; @requires NVG_NAMELEN NVG_NAMEPTR_L NVG_NAMEPTR_H
-; @out A: 0 on success, 1 on error.
-nvg_draw_named:
-      JSR   fio_copy_name
-      BNE   @done
-      JMP   nvg_draw
-@done:
-      RTS
-
-; Copy pointer-based filename arguments and draw to NVG.ADDRL/H without
-; clearing the graphics plane. NVG.FILEL/M/H may select an image record inside
-; a larger file.
-; @label NVG.DRAW_NAMED_AT
-; @kind routine
-; @symbol nvg_draw_named_at
-; @summary Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at NVG.ADDRL/H without clearing.
-; @requires NVG_NAMELEN NVG_NAMEPTR_L NVG_NAMEPTR_H NVG_ADDRL NVG_ADDRH NVG_FILEL NVG_FILEM NVG_FILEH
-; @out A: 0 on success, 1 on error.
-nvg_draw_named_at:
-      JSR   fio_copy_name
-      BNE   @done
-      JMP   nvg_draw_at
 @done:
       RTS
 

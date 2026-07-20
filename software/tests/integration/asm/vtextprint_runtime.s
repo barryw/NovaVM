@@ -1,13 +1,12 @@
-; VTEXT.PRINT_AT integration fixture.
+; Inline-parameter NDK integration fixture.
 ;
-; Defines a full-screen region, then prints a string at (col 3, row 2) through
-; the reusable vtext_print_at primitive. VtextPrintAssemblyRuntimeTests supplies
-; a VgcVramBus that models the VGC VRAM plane interface, so the test can read the
-; character plane back and confirm the string landed at the right cells.
+; Exercises I_VTEXT_PRINT_AT, I_VTEXT_PUTS, and I_FIO_NAME. The C# test models
+; VGC VRAM and checks both rendered text and the FIO filename mailbox.
 
 .setcpu "w65c02"
 
 .include "vtext.inc"
+.include "fio.inc"
 
 RESULT       = $2200
 REGION_TABLE = $2400
@@ -38,17 +37,20 @@ run:
         stz VTEXT_REGION_ID
         jsr vtext_select_region
 
-        lda #3
-        sta VTEXT_CURX
-        lda #2
-        sta VTEXT_CURY
-        lda #<msg
-        ldy #>msg
-        jsr vtext_print_at
-        sta RESULT + 0              ; A = return code (0 = ok)
+        jsr i_vtext_print_at
+        .byte 3, 2, "HI", 0
+        sta RESULT + 0
+
+        jsr i_vtext_puts
+        .byte "!", 0
+        sta RESULT + 1
+
+        jsr i_fio_name
+        .byte "CHESSENG", 0
+        sta RESULT + 2
 
         lda #$AA
-        sta RESULT + 1
+        sta RESULT + 3
         rts
 
 set_table:
@@ -58,8 +60,8 @@ set_table:
         sta VTEXT_TABLEH
         rts
 
-msg:
-        .byte "HI", 0
-
 .include "vtext.s"
+.include "vtext_inline.s"
 .include "blitter.s"
+.include "fio_inline.s"
+.include "fio.s"

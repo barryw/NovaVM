@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -65,7 +66,7 @@ public class VtextPrintAssemblyRuntimeTests
     }
 
     [TestMethod]
-    public void PrintAtPlacesStringAtCursorCell()
+    public void InlineParametersAdvanceReturnAndPopulateTextAndFio()
     {
         byte[] fixture = File.ReadAllBytes(
             RepoPath("software", "tests", "integration", "fixtures", "vtextprint_runtime.bin"));
@@ -91,13 +92,22 @@ public class VtextPrintAssemblyRuntimeTests
                 break;
         }
 
-        Assert.AreEqual(0xAA, bus.Read(Result + 1), "vtextprint fixture ran to completion");
-        Assert.AreEqual(0x00, bus.Read(Result + 0), "vtext_print_at reports success");
+        Assert.AreEqual(0xAA, bus.Read(Result + 3), "all inline data was skipped on return");
+        Assert.AreEqual(0x00, bus.Read(Result + 0), "i_vtext_print_at reports success");
+        Assert.AreEqual(0x00, bus.Read(Result + 1), "i_vtext_puts reports success");
+        Assert.AreEqual(0x00, bus.Read(Result + 2), "i_fio_name reports success");
 
         // "HI" printed at col 3, row 2 on an 80-wide region -> cells 163, 164.
         int cell = 2 * 80 + 3;
         Assert.AreEqual((byte)'H', bus.Cell(PlaneChar, cell), "first char at the cursor cell");
         Assert.AreEqual((byte)'I', bus.Cell(PlaneChar, cell + 1), "second char in the next cell");
+        Assert.AreEqual((byte)'!', bus.Cell(PlaneChar, cell + 2), "inline puts continues at the cursor");
+
+        Assert.AreEqual(8, bus.Read(0xB9A3), "FIO filename length");
+        CollectionAssert.AreEqual(
+            "CHESSENG"u8.ToArray(),
+            Enumerable.Range(0, 8).Select(i => bus.Read((ushort)(0xB9B0 + i))).ToArray(),
+            "FIO filename bytes");
     }
 
     private static string RepoPath(params string[] parts)

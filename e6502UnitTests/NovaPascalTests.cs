@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
@@ -45,6 +46,11 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NL", ".BIN"), "NL must be a standard, language-neutral binary.");
             Assert.IsTrue(disk.FileExists("NLWORK", ".OVL"), "NL map/GC work must live in its disk-loaded overlay.");
             Assert.IsTrue(disk.FileExists("PASCAL", ".NLIB"), "Pascal runtime APIs belong in an ordinary linker library.");
+            Assert.IsTrue(disk.FileExists("NOVA", ".INC"), "Pascal NDK units must use the canonical hardware declarations.");
+            Assert.IsTrue(disk.FileExists("NOVA", ".NPI"), "Pascal bindings must be generated from canonical NDK metadata.");
+            Assert.IsTrue(disk.FileExists("RNG", ".NPI"), "Each Pascal NDK unit must carry generated ABI signatures.");
+            Assert.IsTrue(disk.FileExists("RNG", ".S"), "The Pascal disk must carry canonical NDK implementation sources.");
+            Assert.IsTrue(disk.FileExists("FIO", ".S"), "Dependent canonical NDK implementations must remain available to NAS.");
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NAS", ".BIN")[..2]);
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NL", ".BIN")[..2]);
 
@@ -74,7 +80,8 @@ public class NovaPascalTests
                     "NPP 1\nMAIN DEMO.PAS\nOUTPUT DEMO.BIN\nOPTIMIZE O2\n" +
                     "DEFINE NOVA=1\nCONFIG INLINE\nMAP DEMO.MAP\nLABEL DEMO.LBL\n" +
                     "MEMORY {\n    RAM: start = $8000, size = $0100, file = %O;\n}\n\n" +
-                    "SEGMENTS {\n    CODE: load = RAM, type = ro;\n}\n"),
+                    "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                    "    BSS: load = RAM, type = bss;\n}\n"),
                 disk.Load("DEMO", ".NPP"),
                 "The generated project must contain NPC, NAS, and NL configuration.");
             Assert.IsFalse(disk.FileExists("DEMO", ".CFG"),
@@ -149,16 +156,137 @@ public class NovaPascalTests
             StringAssert.Contains(helloMap, "Nova Linker Map v1\nLoad $8000\n");
             StringAssert.Contains(helloMap, "Sections\n");
             StringAssert.Contains(helloMap, "Exports\n");
-            StringAssert.Contains(helloMap, "P_WRITE_CHAR");
+            StringAssert.Contains(helloMap, "I_P_WRITE_LINE");
+            Assert.IsFalse(helloMap.Contains("P_WRITE_CHAR", StringComparison.Ordinal),
+                "NL must strip the single-character writer when a program only uses inline line data.");
             Assert.IsFalse(helloMap.Contains('\r'), "NL maps must use Nova's LF-only text convention.");
             string helloLabels = Encoding.ASCII.GetString(disk.Load("HELLO", ".LBL"));
             StringAssert.Contains(helloLabels, "al 00");
-            StringAssert.Contains(helloLabels, " .P_WRITE_CHAR\n");
+            StringAssert.Contains(helloLabels, " .I_P_WRITE_LINE\n");
             Assert.IsFalse(helloLabels.Contains('\r'), "NL labels must use Nova's LF-only text convention.");
 
             QueueLine(editor, "RUN HELLO.BIN");
             RunUntil(cpu, bus, s => s.Contains("Hello from NovaPascal", StringComparison.Ordinal), "linked program output");
             StringAssert.Contains(Snapshot(bus), "Running at $8000:");
+
+            disk.Save("LITERALS", Encoding.ASCII.GetBytes(
+                "program Literals;\nbegin\n  writeln('');\n  writeln('A');\n" +
+                "  writeln('AB');\n  writeln('ABC')\nend.\n"), ".PAS");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "COMPILE LITERALS.PAS");
+            RunUntil(cpu, bus, s => s.Contains("Writing LITERALS.S", StringComparison.Ordinal),
+                "literal lowering compile");
+            RunUntil(cpu, bus, s => s.Contains("Compile successful", StringComparison.Ordinal),
+                "literal lowering completion");
+            string literalAssembly = Encoding.ASCII.GetString(disk.Load("LITERALS", ".S"));
+            Assert.AreEqual(6, literalAssembly.Split("JSR P_WRITE_CHAR", StringSplitOptions.None).Length - 1,
+                "Zero-, one-, and two-character lines must stay inline, including their LF.");
+            Assert.AreEqual(1, literalAssembly.Split("JSR I_P_WRITE_LINE", StringSplitOptions.None).Length - 1,
+                "A three-character line must cross to the inline-parameter line writer.");
+            StringAssert.Contains(literalAssembly, ".BYTE $41,$42,$43,$00");
+
+            Assert.IsTrue(disk.FileExists("FIZZBUZZ", ".PAS"), "The development disk must carry the compiler's executable language slice.");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD FIZZBUZZ.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: FIZZBUZZ.BIN", StringComparison.Ordinal)
+                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
+                "FizzBuzz compile, assemble, and link");
+            Assert.IsTrue(disk.FileExists("FIZZBUZZ", ".BIN"),
+                $"detail=${bus.Read(0x0276):X2}, object=" +
+                $"{(disk.FileExists("FIZZBUZZ", ".OBJ") ? disk.Load("FIZZBUZZ", ".OBJ").Length : 0)} bytes, " +
+                $"worker=${bus.Read(0x0903):X2}, objects={bus.Read(0x0901)}, roots={bus.Read(0x0902)}\n{Snapshot(bus)}");
+            string fizzBuzzAssembly = Encoding.ASCII.GetString(disk.Load("FIZZBUZZ", ".S"));
+            StringAssert.Contains(fizzBuzzAssembly, "__NP_RHS: .RES 1");
+            StringAssert.Contains(fizzBuzzAssembly, "JSR P_WRITE_BYTE_LN");
+            StringAssert.Contains(fizzBuzzAssembly, "JSR I_P_WRITE_LINE");
+            StringAssert.Contains(fizzBuzzAssembly, ".BYTE $46,$69,$7A,$7A,$42,$75,$7A,$7A,$00");
+            string fizzBuzzMap = Encoding.ASCII.GetString(disk.Load("FIZZBUZZ", ".MAP"));
+            StringAssert.Contains(fizzBuzzMap, "P_WRITE_BYTE_LN");
+            StringAssert.Contains(fizzBuzzMap, "I_P_WRITE_LINE");
+
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN FIZZBUZZ.BIN");
+            RunUntil(cpu, bus, s => s.Contains("97", StringComparison.Ordinal), "FizzBuzz executable output");
+            RunSteps(cpu, bus, 1_000_000);
+            string fizzBuzzOutput = string.Join('\n', Snapshot(bus).Split('\n').Select(line => line.Trim()));
+            StringAssert.Contains(fizzBuzzOutput,
+                "91\n92\nFizz\n94\nBuzz\nFizz\n97\n98\nFizz\nBuzz",
+                "FizzBuzz must execute all numeric, MOD, nested IF/ELSE, and WHILE paths through 100.");
+
+            disk.Save("BADPAS", Encoding.ASCII.GetBytes(
+                "program BadPas;\nbegin\n  writeln(\nend.\n"), ".PAS");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "COMPILE BADPAS.PAS");
+            RunUntil(cpu, bus, s => s.Contains("BADPAS.PAS:", StringComparison.Ordinal)
+                                    && s.Contains(": error: Pascal syntax error.", StringComparison.Ordinal),
+                "source-located Pascal diagnostic");
+            Assert.IsFalse(disk.FileExists("BADPAS", ".S"),
+                "NPC must not leave an assembly artifact after a syntax failure.");
+
+            disk.Save("NDKPAS", Encoding.ASCII.GetBytes(
+                "program NdkPas;\nuses NovaRng, NovaFio;\n" +
+                "var Status, Sample: Byte;\nbegin\n" +
+                "  Status := 0;\n" +
+                "  Status := $00;\n" +
+                "  Status := 'A';\n" +
+                "  Status := rng_get8();\n" +
+                "  Status := fio_exec(Byte(FIO_CMD_RNG));\n" +
+                "  fio_issue(Status);\n" +
+                "  Sample := RNG_VALUE0;\n" +
+                "  VGC_BORDER := Sample;\n" +
+                "  writeln('Pascal NDK');\nend.\n"), ".PAS");
+            disk.Save("NDKPAS", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN NDKPAS.PAS\nOUTPUT NDKPAS.BIN\nCONFIG INLINE\n" +
+                "MAP NDKPAS.MAP\nLABEL NDKPAS.LBL\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $0200, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD NDKPAS.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: NDKPAS.BIN", StringComparison.Ordinal)
+                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
+                "Pascal NDK unit build");
+            Assert.IsTrue(disk.FileExists("NDKPAS", ".BIN"), Snapshot(bus));
+            string ndkAssembly = Encoding.ASCII.GetString(disk.Load("NDKPAS", ".S"));
+            StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.INC\"");
+            StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.NPI\"");
+            StringAssert.Contains(ndkAssembly, "JSR RNG_GET8");
+            StringAssert.Contains(ndkAssembly, ".ASSERT (__S8578E3) = $02");
+            StringAssert.Contains(ndkAssembly, ".ASSERT __CBAB93C = 1\nLDA #FIO_CMD_RNG");
+            StringAssert.Contains(ndkAssembly, ".ASSERT (__S34C9C7) = $03\nJSR FIO_EXEC");
+            StringAssert.Contains(ndkAssembly, ".ASSERT (__S13E4EB & $01) = $01");
+            StringAssert.Contains(ndkAssembly, "LDA #$41\nSTA STATUS");
+            StringAssert.Contains(ndkAssembly, "STA STATUS");
+            StringAssert.Contains(ndkAssembly,
+                "LDA STATUS\n.ASSERT (__S13E4EB & $01) = $01\nJSR FIO_ISSUE");
+            StringAssert.Contains(ndkAssembly, "LDA RNG_VALUE0\nSTA SAMPLE");
+            StringAssert.Contains(ndkAssembly, "LDA SAMPLE\nSTA VGC_BORDER");
+            StringAssert.Contains(ndkAssembly,
+                ".SEGMENT \"BSS\"\nSTATUS: .RES 1\nSAMPLE: .RES 1");
+            StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.S\"");
+            StringAssert.Contains(ndkAssembly, ".INCLUDE \"FIO.S\"");
+            Assert.IsFalse(ndkAssembly.Contains("$A", StringComparison.Ordinal),
+                "NPC must emit NDK symbols and canonical includes, not hardware addresses.");
+            QueueLine(editor, "RUN NDKPAS.BIN");
+            RunUntil(cpu, bus, s => s.Contains("Pascal NDK", StringComparison.Ordinal),
+                "Pascal executable using canonical NDK units");
+            Assert.AreEqual(bus.Read((ushort)VgcConstants.FioRng0),
+                bus.Read((ushort)VgcConstants.RegBorder),
+                "The executable must copy the hardware RNG byte through Pascal's NDK byte ABI.");
+
+            disk.Save("BADABI", Encoding.ASCII.GetBytes(
+                "program BadAbi;\nuses NovaRng, NovaFio;\nbegin\n  rng_get8(0);\nend.\n"), ".PAS");
+            disk.Save("BADABI", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN BADABI.PAS\nOUTPUT BADABI.BIN\nCONFIG INLINE\n" +
+                "MAP BADABI.MAP\nLABEL BADABI.LBL\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $0200, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n}\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD BADABI.NPP");
+            RunUntil(cpu, bus, s => s.Contains("assertion failed", StringComparison.OrdinalIgnoreCase),
+                "generated Pascal NDK signature rejection");
+            Assert.IsFalse(disk.FileExists("BADABI", ".BIN"),
+                "A Pascal call with the wrong NDK arity must fail before linking.");
 
             RunSteps(cpu, bus, 100_000);
             disk.Save("TINY", Encoding.ASCII.GetBytes(
@@ -179,7 +307,7 @@ public class NovaPascalTests
                 "MMIO-overlapping binary rejection");
 
             QueueLine(editor, "TYPE HELLO.S");
-            RunUntil(cpu, bus, s => s.Contains("JSR P_WRITE_CHAR", StringComparison.Ordinal),
+            RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal),
                 "TYPE displays generated assembly text");
 
             QueueLine(editor, "EDIT HELLO.PAS");
@@ -191,7 +319,7 @@ public class NovaPascalTests
                                     && !s.Contains("program Hello;", StringComparison.Ordinal), "shell after Alt-X");
 
             QueueLine(editor, "EDIT HELLO.S");
-            RunUntil(cpu, bus, s => s.Contains("JSR P_WRITE_CHAR", StringComparison.Ordinal)
+            RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal)
                                     && s.Contains("T:Assembly Source", StringComparison.Ordinal),
                 "assembly-aware editor");
             editor.QueueInput(0x11);
@@ -1264,8 +1392,13 @@ public class NovaPascalTests
 
             string assembly = Encoding.ASCII.GetString(disk.Load("HELLO", ".S"));
             StringAssert.Contains(assembly, ".IMPORT P_WRITE_CHAR");
+            StringAssert.Contains(assembly, ".IMPORT I_P_WRITE_LINE");
             StringAssert.Contains(assembly, "; HELLO.PAS:3 WRITELN");
-            StringAssert.Contains(assembly, "JSR P_WRITE_CHAR");
+            StringAssert.Contains(assembly, "JSR I_P_WRITE_LINE");
+            StringAssert.Contains(assembly,
+                ".BYTE $48,$65,$6C,$6C,$6F,$20,$66,$72,$6F,$6D,$20,$4E,$6F,$76,$61,$50,$61,$73,$63,$61,$6C,$00");
+            Assert.IsFalse(assembly.Contains("LDA #$48", StringComparison.Ordinal),
+                "Long string literals must not be lowered character by character.");
             Assert.IsFalse(assembly.Contains('\r'), "NPC output must use Nova's LF-only text convention.");
             Assert.IsFalse(assembly.Contains("LDA #$0D", StringComparison.Ordinal),
                 "WRITELN must emit one Nova LF, not a redundant CR/LF pair.");
@@ -1274,26 +1407,21 @@ public class NovaPascalTests
 
             byte[] objectFile = disk.Load("HELLO", ".OBJ");
             int codeLength = objectFile[26] | objectFile[27] << 8;
-            Assert.AreEqual(111, codeLength, "Literal WRITELN should compile to 22 writes and one RTS.");
+            Assert.AreEqual(26, codeLength,
+                "A 21-character WRITELN should compile to JSR, 22 inline bytes, and RTS.");
             Assert.IsTrue((objectFile[14] | objectFile[15] << 8) > 0,
                 "NAS must preserve external calls as NOBJ relocations.");
             byte[] library = disk.Load("PASCAL", ".NLIB");
             Assert.AreEqual(2, library[4], "Pascal libraries must use complete NOBJ members.");
-            byte[] writeMember = ReadNlibMember(library, "P_WRITE_CHAR");
-            byte[] deviceMember = ReadNlibMember(library, "P_CHAR_DEVICE");
+            byte[] lineMember = ReadNlibMember(library, "I_P_WRITE_LINE");
             byte[] unusedMember = ReadNlibMember(library, "P_UNUSED");
-            byte[] writeCode = ReadNobjSectionData(writeMember, "CODE");
-            byte[] deviceCode = ReadNobjSectionData(deviceMember, "CODE");
+            byte[] lineCode = ReadNobjSectionData(lineMember, "CODE");
             byte[] unusedCode = ReadNobjSectionData(unusedMember, "CODE");
             byte[] executable = disk.Load("HELLO", ".BIN");
-            Assert.AreEqual(2 + codeLength + writeCode.Length + deviceCode.Length, executable.Length,
+            Assert.AreEqual(2 + codeLength + lineCode.Length, executable.Length,
                 "NL must extract the complete transitive member set without NOBJ metadata or padding.");
-            CollectionAssert.AreEqual(new byte[]
-            {
-                0x20, 0x73, 0x80, 0x60,       // P_WRITE_CHAR calls P_CHAR_DEVICE
-                0x8D, 0x0E, 0xA0, 0x60        // P_CHAR_DEVICE writes through the NDK address
-            }, executable[^8..],
-                "NL must relocate imports inside extracted archive members after fixed-point selection.");
+            CollectionAssert.AreEqual(new byte[] { 0xA9, 0x0A, 0x8D, 0x0E, 0xA0, 0x60 }, executable[^6..],
+                "The inline line writer must end by emitting Nova LF through the NDK address.");
             Assert.IsFalse(ContainsSequence(executable, unusedCode),
                 "NL must strip unreferenced library members.");
         }

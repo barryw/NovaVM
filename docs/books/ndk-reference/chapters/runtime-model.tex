@@ -59,6 +59,18 @@ Treat pseudo-registers and hardware command registers as mailboxes. Load them
 immediately before the call that needs them and copy out any result before the
 next subsystem reuses the same bytes.
 
+Routines whose names begin with \novacode{I\_} use Nova's inline-parameter ABI.
+Their immutable argument bytes follow the \novacode{JSR}; the routine consumes
+those bytes and advances the saved return address before returning. This keeps
+static strings and their calls together without pointer setup. Inline blocks
+must match the exact layout documented by the routine and are not ordinary
+Pascal-callable NDK functions.
+
+\begin{lstlisting}
+      JSR   I_VTEXT_PRINT_AT
+      .byte 12, 4, "Ready", 0
+\end{lstlisting}
+
 \section{Hardware And Host Boundaries}
 
 \novacode{nova.inc} is the shared map for Nova hardware addresses and command

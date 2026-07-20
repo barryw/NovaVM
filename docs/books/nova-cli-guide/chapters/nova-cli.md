@@ -203,7 +203,21 @@ The disk boots to `NovaPascal Shell v1.0`. `NEW name` creates `name.PAS` and a
 single end-to-end `name.NPP` manifest. `BUILD name.NPP` validates that manifest,
 runs resident NPC, disk-loaded NAS and NL, and writes the generated assembly,
 object, map, labels, and load-address-prefixed binary. `RUN name.BIN` executes
-the result. `EDIT` opens text files and `Alt-X` or `Ctrl-Q` returns to the shell.
+the result. Pascal `USES NovaRng, NovaFio;` selects canonical NDK declaration
+and implementation sources. `Byte` variables live in zero-fill `BSS`,
+`status := rng_get8();` receives A, `fio_issue(status);` passes A, and named
+pseudo-register assignments remain symbolic through NPC, NAS, and NL.
+Generated `.NPI` bindings validate byte call signatures, while
+`Byte(FIO_CMD_RNG)` uses a generated canonical byte constant. `EDIT` opens text
+files and `Alt-X` or `Ctrl-Q` returns to the shell.
+The disk also includes `FIZZBUZZ.PAS` and `FIZZBUZZ.NPP`. That executable slice
+uses nested structured statements, byte expressions, `mod`, comparisons,
+`while`, `if`/`else`, and numeric `writeln`; NPC reports syntax failures with
+the source filename, line, and column. String `writeln` keeps literals of at
+most two characters as direct writes. Longer literals compile to a single
+`JSR I_P_WRITE_LINE` followed by zero-terminated inline bytes. Nova reserves
+the `I_` prefix for routines whose immutable parameters immediately follow the
+call; the callee advances the saved return address over those parameters.
 See `software/languages/novapascal/README.md` for the NPP format and complete
 native toolchain surface.
 
@@ -232,8 +246,14 @@ Generated build artifacts are produced through `nova codegen`.
 nova codegen tokens software/languages/ehbasic/basic.asm -o software/languages/ehbasic/tokens.json
 nova codegen novavm-inc e6502.Avalonia/Hardware/VgcConstants.cs software/languages/ehbasic/basic.sym -o software/runtime/asm/novavm.inc
 nova codegen runtime-abi <sources...> --sym software/languages/ehbasic/basic.sym --json software/languages/ehbasic/runtime_labels.json --md docs/assembly/runtime-labels.md --asm software/runtime/asm/runtime_labels.inc
-nova codegen ndk-reference --runtime-dir software/runtime/asm --tex docs/books/ndk-reference/generated/library-reference.tex --json docs/books/ndk-reference/generated/ndk-api.json
+nova codegen ndk-reference --runtime-dir software/runtime/asm --tex docs/books/ndk-reference/generated/library-reference.tex --json docs/books/ndk-reference/generated/ndk-api.json [--pascal-dir build/ndk-pascal]
 ```
+
+Optional `--pascal-dir` writes one guarded `.NPI` binding include per NDK
+library. These compact files encode byte constants, byte storage, and supported
+A-register routine signatures directly from the canonical annotations. Inline
+parameter routines remain assembly-only and are omitted from these bindings; the
+NovaPascal build packages the bindings it uses.
 
 Local browser/demo assets are also built through `nova`, not standalone helper
 scripts:
