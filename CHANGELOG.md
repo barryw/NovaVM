@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.33.0 - 2026-07-20
+#### Features
+- build NovaPascal vertical slice - (2b26a11) - Barry Walker
+
+- - -
+
 ## v0.32.0 - 2026-07-20
 #### Features
 - (**novachess**) use shared Caissa engine - (f8696d3) - Barry Walker
