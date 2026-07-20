@@ -26,6 +26,11 @@ source_len:        .res 2
 generated_asm:     .res ASM_CAP
 generated_asm_len: .res 2
 pascal_error:      .res 1
+p_line:            .res 2
+p_decimal:         .res 2
+p_remainder:       .res 2
+p_digit:           .res 1
+p_started:         .res 1
 
       .segment "CODE"
       .export npc_compile_file
@@ -134,6 +139,9 @@ pascal_compile:
       STZ   pascal_error
       STZ   generated_asm_len
       STZ   generated_asm_len+1
+      LDA   #1
+      STA   p_line
+      STZ   p_line+1
       LDA   #DOCBUF_XRAM_BASE_L
       STA   p_src
       LDA   #DOCBUF_XRAM_BASE_M
@@ -152,6 +160,14 @@ pascal_compile:
       STA   p_out_left
       LDA   #>ASM_CAP
       STA   p_out_left+1
+      LDA   #<asm_import
+      STA   p_word
+      LDA   #>asm_import
+      STA   p_word+1
+      JSR   p_emit_text
+      BCC   :+
+      JMP   p_output_error
+:
 
       LDA   #<kw_program
       STA   p_word
@@ -182,6 +198,8 @@ pascal_compile:
       STA   p_word+1
       JSR   p_expect_word
       BCS   p_syntax_error
+      JSR   p_emit_source_comment
+      BCS   p_output_error
       LDA   #'('
       JSR   p_expect_char
       BCS   p_syntax_error
@@ -222,9 +240,6 @@ pascal_compile:
       ORA   p_left+1
       BNE   p_syntax_error
 
-      LDA   #$0D
-      JSR   p_emit_print_char
-      BCS   p_output_error
       LDA   #$0A
       JSR   p_emit_print_char
       BCS   p_output_error
@@ -278,6 +293,81 @@ p_emit_print_char:
       LDA   #>asm_jsr
       STA   p_word+1
       JSR   p_emit_text
+@fail:
+      RTS
+
+p_emit_source_comment:
+      LDA   #<asm_comment
+      STA   p_word
+      LDA   #>asm_comment
+      STA   p_word+1
+      JSR   p_emit_text
+      BCS   @fail
+      LDA   #<NPTOOL_ARG0
+      STA   p_word
+      LDA   #>NPTOOL_ARG0
+      STA   p_word+1
+      JSR   p_emit_text
+      BCS   @fail
+      LDA   #':'
+      JSR   p_emit
+      BCS   @fail
+      JSR   p_emit_line_number
+      BCS   @fail
+      LDA   #<asm_writeln_comment
+      STA   p_word
+      LDA   #>asm_writeln_comment
+      STA   p_word+1
+      JMP   p_emit_text
+@fail:
+      SEC
+      RTS
+
+; Emit the current 16-bit Pascal line number as ordinary decimal text.
+p_emit_line_number:
+      LDA   p_line
+      STA   p_decimal
+      LDA   p_line+1
+      STA   p_decimal+1
+      STZ   p_started
+      LDX   #0
+@place:
+      STZ   p_digit
+@subtract:
+      SEC
+      LDA   p_decimal
+      SBC   decimal_place_lo,X
+      STA   p_remainder
+      LDA   p_decimal+1
+      SBC   decimal_place_hi,X
+      BCC   @emit
+      STA   p_remainder+1
+      LDA   p_remainder
+      STA   p_decimal
+      LDA   p_remainder+1
+      STA   p_decimal+1
+      INC   p_digit
+      BRA   @subtract
+@emit:
+      LDA   p_digit
+      BNE   @digit
+      LDA   p_started
+      BNE   @digit
+      CPX   #4
+      BNE   @next
+@digit:
+      LDA   #1
+      STA   p_started
+      LDA   p_digit
+      CLC
+      ADC   #'0'
+      JSR   p_emit
+      BCS   @fail
+@next:
+      INX
+      CPX   #5
+      BCC   @place
+      CLC
 @fail:
       RTS
 
@@ -488,6 +578,12 @@ p_next:
       DEC   p_left+1
 :     DEC   p_left
       PLA
+      CMP   #$0A
+      BNE   @read
+      INC   p_line
+      BNE   @read
+      INC   p_line+1
+@read:
       SEC
 @eof:
       RTS
@@ -498,6 +594,11 @@ kw_begin:   .byte "BEGIN", 0
 kw_writeln: .byte "WRITELN", 0
 kw_end:     .byte "END", 0
 hex_digits: .byte "0123456789ABCDEF"
+decimal_place_lo: .byte <10000, <1000, <100, <10, <1
+decimal_place_hi: .byte >10000, >1000, >100, >10, >1
+asm_comment: .byte "; ", 0
+asm_import:  .byte ".IMPORT P_WRITE_CHAR", $0A, 0
+asm_writeln_comment: .byte " WRITELN", $0A, 0
 asm_lda:    .byte "LDA #$", 0
 asm_jsr:    .byte "JSR P_WRITE_CHAR", $0A, 0
 asm_rts:    .byte "RTS", $0A, 0

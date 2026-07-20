@@ -1,11 +1,10 @@
-; Raw file I/O shared by NovaPascal tool executables.
+; Raw file I/O shared by Nova disk-tool executables.
 
       .setcpu "w65c02"
       .include "nova.inc"
       .include "libfiles.inc"
       .include "nptool.inc"
 
-NPTOOL_IO_TOO_LARGE = $FE
 NPTOOL_IO_SHORT      = $FD
 
 .ifdef NPTOOL_BIN
@@ -14,20 +13,29 @@ NPTOOL_IO_SHORT      = $FD
 .endif
 
       .segment "ZEROPAGE"
+nptool_io_ptr:
 io_name_ptr:    .res 2
 io_name_len:    .res 1
+nptool_io_aux:
 io_file_id:     .res 2
 io_saved_error: .res 1
+nptool_io_left:
 io_left:        .res 2
 
       .segment "CODE"
       .export nptool_load_arg0
       .export nptool_load_arg2
+      .export nptool_load_arg3
+      .export nptool_load_arg4
       .export nptool_save_arg0
       .export nptool_save_arg1
+      .export nptool_save_named
       .export nptool_validate_text
       .export nptool_print_z
       .export nptool_newline
+      .exportzp nptool_io_ptr
+      .exportzp nptool_io_aux
+      .exportzp nptool_io_left
 .ifdef NPTOOL_BIN
       .export nptool_clear_bss
       .import __BSS_RUN__, __BSS_SIZE__
@@ -141,6 +149,24 @@ nptool_load_arg2:
       STA   io_name_ptr+1
       LDA   NPTOOL_ARG2_LEN
       STA   io_name_len
+      BRA   nptool_load
+
+nptool_load_arg3:
+      LDA   #<NPTOOL_ARG3
+      STA   io_name_ptr
+      LDA   #>NPTOOL_ARG3
+      STA   io_name_ptr+1
+      LDA   NPTOOL_ARG3_LEN
+      STA   io_name_len
+      BRA   nptool_load
+
+nptool_load_arg4:
+      LDA   #<NPTOOL_ARG4
+      STA   io_name_ptr
+      LDA   #>NPTOOL_ARG4
+      STA   io_name_ptr+1
+      LDA   NPTOOL_ARG4_LEN
+      STA   io_name_len
 nptool_load:
       JSR   io_open_read
       BEQ   :+
@@ -210,20 +236,19 @@ nptool_load:
 
 nptool_save_arg0:
       LDA   #<NPTOOL_ARG0
-      STA   io_name_ptr
-      LDA   #>NPTOOL_ARG0
-      STA   io_name_ptr+1
-      LDA   NPTOOL_ARG0_LEN
-      STA   io_name_len
-      BRA   io_save
+      LDX   #>NPTOOL_ARG0
+      LDY   NPTOOL_ARG0_LEN
+      BRA   nptool_save_named
 
 nptool_save_arg1:
       LDA   #<NPTOOL_ARG1
+      LDX   #>NPTOOL_ARG1
+      LDY   NPTOOL_ARG1_LEN
+
+nptool_save_named:
       STA   io_name_ptr
-      LDA   #>NPTOOL_ARG1
-      STA   io_name_ptr+1
-      LDA   NPTOOL_ARG1_LEN
-      STA   io_name_len
+      STX   io_name_ptr+1
+      STY   io_name_len
 
 io_save:
       JSR   io_open_write

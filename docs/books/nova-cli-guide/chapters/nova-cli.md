@@ -173,6 +173,7 @@ The CLI infers local NDI file type from extension:
 | --- | --- | --- |
 | `.bas` | `BAS` | Tokenized when imported with `--tokenize` |
 | `.pas` | `PASCAL` | NovaPascal source text |
+| `.npp` | `PASCAL PROJECT` | NovaPascal project/build manifest |
 | `.logo`, `.lgo` | `LOGO` | NovaLogo source text |
 | `.s`, `.asm`, `.inc` | `ASM` | Nova assembly source text |
 | `.sid` | `SID` | SID music file |
@@ -185,6 +186,26 @@ The CLI infers local NDI file type from extension:
 
 `GFX` is the internal NDI file type name for graphics. User-facing graphics
 assets should use `.nvg`.
+
+## NovaPascal Development Disk
+
+Build the language-neutral assembler/linker and the bootable NovaPascal disk,
+then inspect it with the normal Nova CLI:
+
+```bash
+make -C software/toolchain all
+make -C software/languages/novapascal all
+nova validate software/languages/novapascal/novapascal.ndi
+nova dir software/languages/novapascal/novapascal.ndi
+```
+
+The disk boots to `NovaPascal Shell v1.0`. `NEW name` creates `name.PAS` and a
+single end-to-end `name.NPP` manifest. `BUILD name.NPP` validates that manifest,
+runs resident NPC, disk-loaded NAS and NL, and writes the generated assembly,
+object, map, labels, and load-address-prefixed binary. `RUN name.BIN` executes
+the result. `EDIT` opens text files and `Alt-X` or `Ctrl-Q` returns to the shell.
+See `software/languages/novapascal/README.md` for the NPP format and complete
+native toolchain surface.
 
 ## Local Conversion Commands
 
@@ -1211,7 +1232,8 @@ waits for the management port before returning.
 
 `nova arty deploy-linux-host` places bootable language disks under
 `/data/nova/disks/languages`, currently `novalogo.ndi` and `novaforth.ndi`.
-Pascal images should live there too when NovaPascal lands. It also rebuilds the
+`novapascal.ndi` is currently built and validated locally but is not yet added
+to this deployment command. The command also rebuilds the
 SuperNova showcase, uploads it as `/data/nova/disks/demos/supernova.ndi`, and
 verifies that remote image against the local SHA-256 before restarting NovaHost.
 

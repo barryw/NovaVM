@@ -1,3 +1,13 @@
 NPP 1
 MAIN HELLO.PAS
 OUTPUT HELLO.BIN
+CONFIG INLINE
+MAP HELLO.MAP
+LABEL HELLO.LBL
+MEMORY {
+    RAM: start = $8000, size = $0100, file = %O;
+}
+
+SEGMENTS {
+    CODE: load = RAM, type = ro;
+}
