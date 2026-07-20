@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.35.0 - 2026-07-20
+#### Features
+- assemble canonical NDK sources with NAS - (b947a8d) - Barry Walker
+
+- - -
+
 ## v0.34.0 - 2026-07-20
 #### Features
 - complete NovaPascal project toolchain - (86f657b) - Barry Walker
