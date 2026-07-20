@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.34.0 - 2026-07-20
+#### Features
+- complete NovaPascal project toolchain - (86f657b) - Barry Walker
+
+- - -
+
 ## v0.33.0 - 2026-07-20
 #### Features
 - build NovaPascal vertical slice - (2b26a11) - Barry Walker
