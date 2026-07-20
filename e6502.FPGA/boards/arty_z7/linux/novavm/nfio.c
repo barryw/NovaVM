@@ -67,6 +67,7 @@
 
 #define FIO_PAGE_XRAM   0x00   /* XPAGE target: flat XRAM       */
 #define FIO_PAGE_RAM    0x01   /* XPAGE target: CPU RAM         */
+#define FIO_PAGE_EXTROM 0x04   /* XPAGE target: bank-1 ext_rom  */
 #define FIO_TARGET_MASK 0x30   /* FREAD/FWRITE target high bits */
 #define FIO_TARGET_XRAM 0x10   /* 0x00 = CPU RAM, 0x10 = XRAM   */
 
@@ -1329,6 +1330,21 @@ void fio_xpage(void) {
         if (n < 0) { fio_fail(FIO_ERR_IO); return; }
         for (int i = 0; i < n; i++) poke((addr + i) & 0xFFFF, g_fbuf[i]);
         len = (unsigned)n;
+    } else if (target == FIO_PAGE_EXTROM) {
+        unsigned addr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8);
+        if (addr >= 16384u || len > 16384u - addr) { fio_fail(FIO_ERR_IO); return; }
+        unsigned done = 0;
+        while (done < len) {
+            unsigned chunk = len - done;
+            if (chunk > sizeof g_fbuf) chunk = sizeof g_fbuf;
+            int n = ndi_read(img, idx, foff + done, g_fbuf, chunk);
+            if (n <= 0) break;
+            for (int i = 0; i < n; i++)
+                wr(R_ROMW, (1u << 22) | ((addr + done + (unsigned)i) << 8) | g_fbuf[i]);
+            done += (unsigned)n;
+            if ((unsigned)n < chunk) break;
+        }
+        len = done;
     } else {
         fio_fail(FIO_ERR_IO); return;          /* VGC / gfx4 picture targets = workstream C */
     }

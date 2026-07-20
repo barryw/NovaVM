@@ -132,9 +132,14 @@ PLAYMODE_NETWORK          = $04
 NETWORK_OVERLAY_LOAD      = $6000
 NETWORK_OVERLAY_MAXLEN    = $3000
 
+; Caissa ships a 27,024-byte low-RAM PRG payload plus a raw 16 KiB bank file. Once
+; the low image is resident its loader entry stages/pages the banked half.
+ENGINE_LOAD_BANK          = ENGINE_RESERVE_TT + 3
+
 DIFFICULTY_EASY           = $00
 DIFFICULTY_MEDIUM         = $01
 DIFFICULTY_HARD           = $02
+DIFFICULTY_EXPERT         = $03
 
 INPUT_BUFFER_LEN          = 5
 INPUT_ENTRY_X             = PANEL_TEXT_X + 5
@@ -212,6 +217,8 @@ to_row:              .res 1
 abs_file_delta:      .res 1
 abs_row_delta:       .res 1
 square_tmp:          .res 1
+engine_elapsed_lo:   .res 1
+engine_elapsed_hi:   .res 1
 to_x:                .res 1
 to_y:                .res 1
 play_mode:           .res 1
@@ -326,7 +333,8 @@ setup_text:
         STZ VTEXT_CURY
         LDA #$01
         STA VTEXT_COLOR
-        STZ VTEXT_ATTR
+        LDA #VTEXT_ATTR_BGTRANS
+        STA VTEXT_ATTR
         STZ VTEXT_FLAGS
         RTS
 
@@ -1071,7 +1079,8 @@ inc_mask_ptr:
 draw_panel:
         LDA #$01
         STA VTEXT_COLOR
-        STZ VTEXT_ATTR
+        LDA #VTEXT_ATTR_BGTRANS
+        STA VTEXT_ATTR
 
         LDA #PANEL_TEXT_X
         STA text_x
@@ -1141,61 +1150,65 @@ update_clock:
         SEC
         SBC last_frame
         BEQ @done
-        STA frame_delta
+        STA engine_elapsed_lo
+        STZ engine_elapsed_hi
         LDA VGC_FRAME
         STA last_frame
+        BRA add_clock_elapsed
+@done:  RTS
+
+; A blocking engine search can span multiple wraps of VGC_FRAME, so the normal
+; one-byte delta clock cannot reconstruct it afterward.  Caissa accumulates its
+; own 16-bit frame count while polling the deadline and publishes it here.
+add_engine_search_time:
+        LDA VGC_FRAME
+        STA last_frame              ; prevent update_clock from charging it twice
+        LDA ENGINE_SEARCH_ELAPSED
+        STA engine_elapsed_lo
+        LDA ENGINE_SEARCH_ELAPSED+1
+        STA engine_elapsed_hi
+add_clock_elapsed:
+        LDX #$00
         LDA ENGINE_CURRENTPLAYER
         CMP #ENGINE_WHITES_TURN
         BEQ @white
-        LDA black_clock_frames
-        CLC
-        ADC frame_delta
-        STA black_clock_frames
-@black_second_loop:
-        CMP #FRAMES_PER_SECOND
-        BCC @draw
-        SEC
-        SBC #FRAMES_PER_SECOND
-        STA black_clock_frames
-        JSR inc_black_second
-        LDA black_clock_frames
-        BRA @black_second_loop
+        INX                         ; clock arrays are white, black
 @white:
-        LDA white_clock_frames
+        LDA engine_elapsed_lo
         CLC
-        ADC frame_delta
-        STA white_clock_frames
-@white_second_loop:
+        ADC white_clock_frames,x
+        STA engine_elapsed_lo
+        LDA engine_elapsed_hi
+        ADC #0
+        STA engine_elapsed_hi
+@second_loop:
+        LDA engine_elapsed_hi
+        BNE @second
+        LDA engine_elapsed_lo
         CMP #FRAMES_PER_SECOND
-        BCC @draw
+        BCC @done
+@second:
+        LDA engine_elapsed_lo
         SEC
         SBC #FRAMES_PER_SECOND
-        STA white_clock_frames
-        JSR inc_white_second
-        LDA white_clock_frames
-        BRA @white_second_loop
-@draw:
-        JSR update_clock_panel
+        STA engine_elapsed_lo
+        LDA engine_elapsed_hi
+        SBC #0
+        STA engine_elapsed_hi
+        JSR inc_player_second
+        BRA @second_loop
 @done:
-        RTS
+        LDA engine_elapsed_lo
+        STA white_clock_frames,x
+        JMP update_clock_panel
 
-inc_white_second:
-        INC white_clock_seconds
-        LDA white_clock_seconds
+inc_player_second:
+        INC white_clock_seconds,x
+        LDA white_clock_seconds,x
         CMP #60
         BCC @done
-        STZ white_clock_seconds
-        INC white_clock_minutes
-@done:
-        RTS
-
-inc_black_second:
-        INC black_clock_seconds
-        LDA black_clock_seconds
-        CMP #60
-        BCC @done
-        STZ black_clock_seconds
-        INC black_clock_minutes
+        STZ white_clock_seconds,x
+        INC white_clock_minutes,x
 @done:
         RTS
 
@@ -1304,7 +1317,7 @@ print_status:
         PHA
         LDA #PANEL_TEXT_X
         STA text_x
-        LDA #11
+        LDA #12
         STA text_y
         PLA
         TAY
@@ -1744,7 +1757,8 @@ load_engine_named:
         STA FIO_ARG_NAMELEN
         JSR fio_copy_name
         BNE @done
-        JMP fio_load
+        JSR fio_load
+        JMP ENGINE_LOAD_BANK
 @done:
         RTS
 
@@ -1757,7 +1771,6 @@ load_title_splash:
         STA NVG_NAMELEN
         JSR nvg_load_named
         BNE @done
-        LDA #$00
 @done:
         RTS
 
@@ -1929,25 +1942,21 @@ select_difficulty:
         BEQ @medium
         CMP #'H'
         BEQ @hard
-        CMP #'1'
-        BEQ @easy
-        CMP #'2'
-        BEQ @medium
-        CMP #'3'
-        BEQ @hard
+        CMP #'X'
+        BEQ @expert
         BRA @wait
 @easy:
         LDA #DIFFICULTY_EASY
-        STA selected_difficulty
-        LDA #$00
-        RTS
+        BRA @set
 @medium:
         LDA #DIFFICULTY_MEDIUM
-        STA selected_difficulty
-        LDA #$00
-        RTS
+        BRA @set
 @hard:
         LDA #DIFFICULTY_HARD
+        BRA @set
+@expert:
+        LDA #DIFFICULTY_EXPERT
+@set:
         STA selected_difficulty
         LDA #$00
         RTS
@@ -2025,6 +2034,10 @@ init_engine_game:
         JSR ENGINE_START
         LDA selected_difficulty
         STA ENGINE_DIFFICULTY
+        TAX
+        LDA engine_effort_seconds,x
+        STA ENGINE_EFFORT_SECONDS
+        STZ ENGINE_EFFORT_SECONDS+1
         JMP copy_engine_board
 
 copy_engine_board:
@@ -2170,7 +2183,7 @@ show_post_game_dialog:
 engine_turn:
         JSR set_status_thinking
         JSR ENGINE_CHESS_FIND_BEST_MOVE
-        JSR update_clock
+        JSR add_engine_search_time
         LDA ENGINE_BEST_MOVE_FROM
         STA self_from
         LDA ENGINE_BEST_MOVE_TO
@@ -2920,7 +2933,7 @@ selfplay_loop:
 
         JSR set_status_thinking
         JSR ENGINE_CHESS_FIND_BEST_MOVE
-        JSR update_clock
+        JSR add_engine_search_time
         LDA ENGINE_BEST_MOVE_FROM
         STA self_from
         LDA ENGINE_BEST_MOVE_TO
@@ -2930,8 +2943,7 @@ selfplay_loop:
         BRA @loop
 
 @game_over:
-        JSR show_game_result
-        RTS
+        JMP show_game_result
 
 show_game_result:
         LDA game_state
@@ -3579,11 +3591,14 @@ msg_select_footer:
 msg_setup_level:
         .byte "NOVA LEVEL", 0
 msg_setup_levels:
-        .byte "E  EASY    3 SEC", $0D
-        .byte "M  MEDIUM 10 SEC", $0D
-        .byte "H  HARD   25 SEC", 0
+        .byte "E EASY 5S", $0D
+        .byte "M MED 15S", $0D
+        .byte "H HARD 45S", $0D
+        .byte "X EXP 120S", 0
 msg_level_footer:
-        .byte "E/M/H SELECT  DEL BACK", 0
+        .byte "E/M/H/X  DEL BACK", 0
+engine_effort_seconds:
+        .byte 5, 15, 45, 120
 msg_setup_color:
         .byte "PLAY AS", 0
 msg_setup_colors:

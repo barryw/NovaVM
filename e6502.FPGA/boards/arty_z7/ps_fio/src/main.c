@@ -96,6 +96,7 @@ void drives_load(void);         // drives.c — load /config/mounts.txt at boot
 #define FIO_CMD_XPAGE    0x29      // stream a file SLICE (offset,len) into XRAM/RAM (story paging)
 #define FIO_PAGE_XRAM    0x00      // XPAGE target: flat XRAM
 #define FIO_PAGE_RAM     0x01      // XPAGE target: CPU RAM
+#define FIO_PAGE_EXTROM  0x04      // XPAGE target: bank-1 ext_rom
 #define FIO_CMD_LOADRUNTIME 0x28   // stream a 16KB runtime ROM into the $C000 primary bank
 #define FIO_CMD_FOPEN    0x2D      // open file -> handle
 #define FIO_CMD_FCREATE  0x2E
@@ -715,6 +716,21 @@ static void fio_xpage(void) {
         if (n < 0) { fio_fail(FIO_ERR_IO); return; }
         for (int i = 0; i < n; i++) poke((addr + i) & 0xFFFF, g_fbuf[i]);
         len = (unsigned)n;
+    } else if (target == FIO_PAGE_EXTROM) {
+        unsigned addr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8);
+        if (addr >= MODULE_BYTES || len > MODULE_BYTES - addr) { fio_fail(FIO_ERR_IO); return; }
+        unsigned done = 0;
+        while (done < len) {
+            unsigned chunk = len - done;
+            if (chunk > sizeof g_fbuf) chunk = sizeof g_fbuf;
+            int n = ndi_read(img, idx, foff + done, g_fbuf, chunk);
+            if (n <= 0) break;
+            for (int i = 0; i < n; i++)
+                Xil_Out32(R_ROMW, (1u << 22) | ((addr + done + (unsigned)i) << 8) | g_fbuf[i]);
+            done += (unsigned)n;
+            if ((unsigned)n < chunk) break;
+        }
+        len = done;
     } else {
         fio_fail(FIO_ERR_IO); return;          // VGC / gfx4 picture targets = workstream C
     }
