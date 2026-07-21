@@ -4,16 +4,21 @@
       .include "libeditor.inc"
       .include "libmemory.inc"
       .include "nptool.inc"
+      .include "longbranch.inc"
 
 SOURCE_CAP = $1000
 DOCUMENT_CAP = $FFFF
 
       .segment "BSS"
-source_buf:         .res SOURCE_CAP
 source_len:         .res 2
 document_xaddr:     .res 3
 document_allocated: .res 1
 editor_type_ptr:    .res 2
+editor_hooks:       .res EDITOR_HOOKS_SIZE
+editor_hl_color:    .res 1
+
+      .segment "NOINIT"
+source_buf:         .res SOURCE_CAP
 
       .segment "CODE"
       .export tool_main
@@ -84,13 +89,18 @@ tool_main:
 
 @edit:
       JSR   editor_select_type
+      LDA   editor_type_ptr+0
+      STA   editor_hooks+EDITOR_HOOKS_TYPEL
+      LDA   editor_type_ptr+1
+      STA   editor_hooks+EDITOR_HOOKS_TYPEH
       LDA   document_xaddr+0
       STA   LIB_ARG0+0
       LDA   document_xaddr+1
       STA   LIB_ARG0+1
       LDA   document_xaddr+2
       STA   LIB_ARG0+2
-      STZ   LIB_ARG0+3
+      LDA   #EDITOR_XRAM_FLAG_HOOKS
+      STA   LIB_ARG0+3
       LDA   source_len+0
       STA   LIB_ARG1+0
       LDA   source_len+1
@@ -111,9 +121,9 @@ tool_main:
       STA   LIB_ARG3+0
       LDA   #>NPTOOL_ARG0
       STA   LIB_ARG3+1
-      LDA   editor_type_ptr+0
+      LDA   #<editor_hooks
       STA   LIB_ARG3+2
-      LDA   editor_type_ptr+1
+      LDA   #>editor_hooks
       STA   LIB_ARG3+3
       LDA   #MODULE_ID_EDITOR
       STA   LIB_MOD_ID
@@ -143,6 +153,7 @@ tool_main:
       BNE   @fail
 @ok:
       JSR   tool_release_document
+      BNE   @memory_error
       LDA   #0
       RTS
 
@@ -303,6 +314,8 @@ editor_set_type:
       RTS
 
 editor_select_type:
+      STZ   editor_hooks+EDITOR_HOOKS_HILITE_VECL
+      STZ   editor_hooks+EDITOR_HOOKS_HILITE_VECH
       LDA   #<editor_type_text
       LDX   #>editor_type_text
       JSR   editor_set_type
@@ -424,6 +437,10 @@ editor_select_type:
       LDX   #>editor_type_linker
       JMP   editor_set_type
 @pascal:
+      LDA   #<editor_pascal_hilite
+      STA   editor_hooks+EDITOR_HOOKS_HILITE_VECL
+      LDA   #>editor_pascal_hilite
+      STA   editor_hooks+EDITOR_HOOKS_HILITE_VECH
       LDA   #<editor_type_pascal
       LDX   #>editor_type_pascal
       JMP   editor_set_type
@@ -436,7 +453,201 @@ editor_select_type:
       LDX   #>editor_type_assembly
       JMP   editor_set_type
 
+; Pascal lexer hook. The shared editor owns rendering; NPEDIT only assigns
+; lexical colors for Pascal identifiers, literals, strings, and comments.
+editor_pascal_hilite:
+      LDY   #0
+@next:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      long_bcs @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #$7B
+      long_beq @brace_comment
+      CMP   #'('
+      BEQ   @maybe_paren_comment
+      CMP   #'/'
+      BEQ   @maybe_line_comment
+      CMP   #$27
+      long_beq @string
+      CMP   #'$'
+      long_beq @number
+      JSR   editor_pascal_is_digit
+      long_bcs @number
+      JSR   editor_pascal_is_alpha
+      long_bcs @word
+      INY
+      BRA   @next
+
+@maybe_line_comment:
+      INY
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      long_bcs @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #'/'
+      BNE   @single_char
+      DEY
+      LDA   #EDITOR_PASCAL_COLOR_COMMENT
+      JMP   editor_pascal_color_to_eol
+
+@maybe_paren_comment:
+      INY
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      long_bcs @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #'*'
+      BNE   @single_char
+      DEY
+      LDA   #EDITOR_PASCAL_COLOR_COMMENT
+      STA   editor_hl_color
+@paren_loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      long_bcs @done
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      INY
+      CMP   #'*'
+      BNE   @paren_loop
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      long_bcs @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #'/'
+      BNE   @paren_loop
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      JMP   @next
+
+@single_char:
+      DEY
+      INY
+      JMP   @next
+
+@brace_comment:
+      LDA   #EDITOR_PASCAL_COLOR_COMMENT
+      STA   editor_hl_color
+@brace_loop:
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      INY
+      CMP   #'}'
+      long_beq @next
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCC   @brace_loop
+      RTS
+
+@string:
+      LDA   #EDITOR_PASCAL_COLOR_STRING
+      STA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+@string_loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      INY
+      CMP   #$27
+      BNE   @string_loop
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #$27
+      long_bne @next
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @string_loop
+
+@word:
+      LDA   #EDITOR_PASCAL_COLOR_WORD
+      STA   editor_hl_color
+@word_loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      JSR   editor_pascal_is_ident
+      long_bcc @next
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @word_loop
+
+@number:
+      LDA   #EDITOR_PASCAL_COLOR_NUMBER
+      STA   editor_hl_color
+@number_loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   (EDITOR_HOOK_ABI_HL_PTRL),Y
+      CMP   #'$'
+      BEQ   @number_color
+      JSR   editor_pascal_is_ident
+      long_bcc @next
+@number_color:
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @number_loop
+@done:
+      RTS
+
+editor_pascal_color_to_eol:
+      STA   editor_hl_color
+@loop:
+      CPY   EDITOR_HOOK_ABI_HL_LEN
+      BCS   @done
+      LDA   editor_hl_color
+      STA   EDITOR_HOOK_ABI_HL_COLORS,Y
+      INY
+      BRA   @loop
+@done:
+      RTS
+
+editor_pascal_is_ident:
+      CMP   #'_'
+      BEQ   @yes
+      JSR   editor_pascal_is_digit
+      BCS   @yes
+      JMP   editor_pascal_is_alpha
+@yes:
+      SEC
+      RTS
+
+editor_pascal_is_alpha:
+      CMP   #'A'
+      BCC   @lower
+      CMP   #'Z' + 1
+      BCC   @yes
+@lower:
+      CMP   #'a'
+      BCC   @no
+      CMP   #'z' + 1
+      BCC   @yes
+@yes:
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+editor_pascal_is_digit:
+      CMP   #'0'
+      BCC   @no
+      CMP   #'9' + 1
+      BCS   @no
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
       .segment "RODATA"
+EDITOR_PASCAL_COLOR_WORD    = $63
+EDITOR_PASCAL_COLOR_STRING  = $65
+EDITOR_PASCAL_COLOR_NUMBER  = $67
+EDITOR_PASCAL_COLOR_COMMENT = $6C
 editor_type_text:     .byte "Text", 0
 editor_type_pascal:   .byte "Pascal Source", 0
 editor_type_project:  .byte "Pascal Project", 0

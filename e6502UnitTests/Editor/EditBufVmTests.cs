@@ -42,6 +42,7 @@ public class EditBufVmTests
     private const ushort TestWindowLenL = 0x0310;
     private const ushort TestWindowOffL = 0x0312;
     private const ushort TestMenuMode = 0x0314;
+    private const ushort TestHlCount = 0x0315;
     private const int DocbufXramBase = 0x055000;
 
     private const byte CtrlA = 0x01, CtrlB = 0x02, CtrlC = 0x03, CtrlF = 0x06, CtrlG = 0x07, CtrlK = 0x0B, CtrlN = 0x0E, CtrlO = 0x0F, CtrlQ = 0x11, CtrlS = 0x13, CtrlV = 0x16, CtrlX = 0x18, CtrlY = 0x19, CtrlZ = 0x1A;
@@ -82,6 +83,7 @@ public class EditBufVmTests
         bus.WriteRam(TestDocFullLenL, 0x00);
         bus.WriteRam((ushort)(TestDocFullLenL + 1), 0x00);
         bus.WriteRam(TestMenuMode, testMenuMode ? (byte)0x01 : (byte)0x00);
+        bus.WriteRam(TestHlCount, 0x00);
         if (seedText != null)
         {
             for (int i = 0; i < seedText.Length; i++)
@@ -210,6 +212,9 @@ public class EditBufVmTests
 
     private static int WindowLength(Harness h) =>
         h.Bus.ReadRam(TestWindowLenL) | (h.Bus.ReadRam((ushort)(TestWindowLenL + 1)) << 8);
+
+    private static int FullDocumentLength(Harness h) =>
+        h.Bus.ReadRam(TestDocFullLenL) | (h.Bus.ReadRam((ushort)(TestDocFullLenL + 1)) << 8);
 
     private static int WindowOffset(Harness h) =>
         h.Bus.ReadRam(TestWindowOffL) | (h.Bus.ReadRam((ushort)(TestWindowOffL + 1)) << 8);
@@ -856,6 +861,25 @@ public class EditBufVmTests
         var h = Boot(hlMark: 0x2A);
         Assert.AreEqual(0x2A, ColorAt(h, ViewLeft, ViewTop),
             "The highlight hook should color the first character of the line.");
+    }
+
+    [TestMethod]
+    public void WindowBoundaryArrowNoOpDoesNotRepaintTheEditor()
+    {
+        var h = Boot(windowedDocMode: true);
+
+        byte topPaints = h.Bus.ReadRam(TestHlCount);
+        Type(h, KeyUp);
+        Assert.AreEqual(topPaints, h.Bus.ReadRam(TestHlCount),
+            "Up at the first XRAM window must not repaint an unchanged editor.");
+
+        while (WindowOffset(h) + WindowLength(h) < FullDocumentLength(h))
+            Type(h, KeyCtrlEnd, KeyDown);
+        Type(h, KeyCtrlEnd);
+        byte bottomPaints = h.Bus.ReadRam(TestHlCount);
+        Type(h, KeyDown);
+        Assert.AreEqual(bottomPaints, h.Bus.ReadRam(TestHlCount),
+            "Down at the final XRAM window must not repaint an unchanged editor.");
     }
 
     [TestMethod]

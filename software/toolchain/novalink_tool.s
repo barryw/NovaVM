@@ -3,35 +3,12 @@
       .setcpu "w65c02"
       .include "novalink.inc"
       .include "nptool.inc"
+      .include "longbranch.inc"
       .include "libsystem.inc"
 
-LIBRARY_CAP = 1024
+LIBRARY_CAP = 4096
 OUTPUT_CAP  = $1800
 CONFIG_CAP  = 512
-
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
 
 config_ptr  = nptool_io_ptr
 config_word = nptool_io_aux
@@ -50,6 +27,8 @@ config_match_index:.res 1
 config_min:      .res 2
 config_max:      .res 2
 worker_loaded:   .res 1
+
+      .segment "NOINIT"
 library_buf:.res LIBRARY_CAP
 output_buf: .res OUTPUT_CAP
 config_buf: .res CONFIG_CAP
@@ -318,7 +297,7 @@ tool_default_options:
       STA   nlink_load_base+1
       RTS
 
-; NLWORK owns $0900-$09F4, including ARG6. Preserve the label filename in the
+; NLWORK owns $0900-$0A87, including ARG6. Preserve the label filename in the
 ; configuration buffer after parsing has finished and before loading the worker.
 tool_preserve_label:
       LDA   NPTOOL_ARG6_LEN

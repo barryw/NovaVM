@@ -34,14 +34,19 @@ LIBEDITOR_INC = 1
 EDITOR_FN_EDIT = $00
 
 ; EDITOR_FN_EDIT_XRAM — edit a paged document stored in XRAM.
-;   In:  ARG0 b0..b2 = document XRAM base
+;   In:  ARG0 b0..b2 = document XRAM base, b3 = EDITOR_XRAM_FLAG_*
 ;        ARG1 lo word = current document length, hi word = RAM window pointer
 ;        ARG2 lo word = allocated document capacity, hi word = RAM window size
-;        ARG3 lo word = title pointer, hi word = type-name pointer
+;        ARG3 lo word = title pointer; hi word = type-name pointer, or hook
+;                       table pointer when EDITOR_XRAM_FLAG_HOOKS is set
 ;   Out: RESULT and ARG1 match EDITOR_FN_EDIT; the XRAM document is updated.
 ; The editor pages complete-line slices through caller-owned scratch RAM as
 ; navigation crosses them. The host remains responsible for file load/save.
 EDITOR_FN_EDIT_XRAM = $01
+
+; Set ARG0 byte3 to opt into the EDITOR_HOOKS_* table carried in ARG3 high word.
+; Zero preserves the original type-name pointer contract.
+EDITOR_XRAM_FLAG_HOOKS = $01
 
 ; EDITOR-specific status values returned through LIB_STATUS.
 LERR_EDITOR_FAIL = $8E

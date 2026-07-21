@@ -47,16 +47,16 @@ toolchain:
 $(BUILD_DIR)/resident_io.o: $(TOOLCHAIN)/nptool_io.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ $(TOOLCHAIN)/nptool_io.s
 
-$(BUILD_DIR)/npc_resident.o: tools/npc.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/xram.inc $(NOVA_ASM)/docbuf.inc | $(BUILD_DIR)
+$(BUILD_DIR)/npc_resident.o: tools/npc.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc $(NOVA_ASM)/docbuf.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npc.s
 
-$(BUILD_DIR)/npedit.o: tools/npedit.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libeditor.inc $(NOVA_ASM)/libmemory.inc | $(BUILD_DIR)
+$(BUILD_DIR)/npedit.o: tools/npedit.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libeditor.inc $(NOVA_ASM)/libmemory.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npedit.s
 
 $(NPEDIT): $(BUILD_DIR)/npedit.o $(TOOL_IO) $(TOOL_CFG)
 	ld65 -C $(TOOL_CFG) -m $(BUILD_DIR)/npedit.map -o $@ $(BUILD_DIR)/npedit.o $(TOOL_IO)
 
-$(BUILD_DIR)/npo2.o: tools/npo2.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+$(BUILD_DIR)/npo2.o: tools/npo2.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/xramstream.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npo2.s
 
 $(NPO2): $(BUILD_DIR)/npo2.o $(TOOL_IO) $(TOOL_CFG)

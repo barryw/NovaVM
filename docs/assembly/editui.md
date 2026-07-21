@@ -161,14 +161,17 @@ each defaulting to a no-op so the editor works standalone:
 | `EDITBUF_SAVE_VECL/H` | `Ctrl-S`, and the dialog "Save First" choice | Host validates/saves/installs; returns A = `EDITBUF_SAVE_OK` / `_DRAFT` / `_ERROR`, optionally pointing `EDITBUF_STATUS` at a message |
 | `EDITBUF_INDENT_VECL/H` | after a newline | Host returns A = number of leading spaces to auto-indent the new line |
 | `EDITBUF_HILITE_VECL/H` | once per visible line during render | Host fills `EDITBUF_HL_COLORS` (one VGC color byte per char) for syntax highlighting; inputs are `EDITBUF_HL_PTR` and `EDITBUF_HL_LEN` |
-| `EDITBUF_COMMAND_VECL/H` | document/session commands such as `Ctrl-N`, `Ctrl-O`, `F6`, `Shift-F6`, `Ctrl-B`, `Alt-0`, and window-boundary navigation | Host receives A = `EDITUI_CMD_*` and owns the document model, open-buffer list, file picker behavior, and optional XRAM window paging |
+| `EDITBUF_COMMAND_VECL/H` | document/session commands such as `Ctrl-N`, `Ctrl-O`, `F6`, `Shift-F6`, `Ctrl-B`, `Alt-0`, and window-boundary navigation | Host receives A = `EDITUI_CMD_*` and owns the document model, open-buffer list, file picker behavior, and optional XRAM window paging. For boundary `WINDOW_NEXT`/`WINDOW_PREVIOUS`, return carry set only when the window changed. |
 | `EDITBUF_CHANGED_VECL/H` | after edits, save state changes, or active document metadata changes | Host syncs the active document model, usually by copying the RAM edit window back into XRAM-backed document state |
 
 When an XRAM-backed host loads only a slice of a larger document into RAM,
 editbuf sends `EDITUI_CMD_WINDOW_NEXT`, `EDITUI_CMD_WINDOW_PREVIOUS`,
 `EDITUI_CMD_WINDOW_FIRST`, or `EDITUI_CMD_WINDOW_LAST` through the command hook
 as navigation crosses a window or moves to a document endpoint. Hosts that do
-not support windowed documents can ignore those commands.
+not support windowed documents can ignore those commands. A no-op boundary
+request leaves the body and status bar untouched instead of flashing a full
+redraw. Status updates paint replacement text before clearing only the stale
+tail, so cursor movement never exposes a blank status row.
 
 Usage:
 
@@ -212,12 +215,15 @@ The paged, language-neutral `EDITOR` module exposes two entry points in
   callers only allocate/load before the call and save/release afterward. The
   current ABI carries 16-bit lengths, so one document may contain up to 65,535
   bytes without consuming an equally large lower-RAM buffer.
-
 For `EDITOR_FN_EDIT_XRAM`, pass the XRAM base in `ARG0` bytes 0..2, document
 length and RAM-window pointer in `ARG1`, XRAM capacity and RAM-window capacity
 in `ARG2`, and title/type pointers in `ARG3`. Final document length is returned
 in `ARG1`; `RESULT` uses the same exit-reason and save-request bytes as
 `EDITOR_FN_EDIT`. The editor preserves the caller's XMC window-3 mapping.
+For a paged document with language hooks, set `EDITOR_XRAM_FLAG_HOOKS` in
+`ARG0` byte 3 and pass the hook-table pointer instead of the type pointer in
+`ARG3` high word. The pager preserves type, status, save, indent, highlight,
+and menu hooks while retaining generic command/change hooks for XRAM sync.
 
 `EDITOR_FN_EDIT` copies this 16-byte table into the matching `EDITBUF`
 configuration bytes before running the editor:

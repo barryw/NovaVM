@@ -4,31 +4,8 @@
       .setcpu "w65c02"
       .include "nobj.inc"
       .include "novalink.inc"
+      .include "longbranch.inc"
       .include "nl_worker.inc"
-
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
 
       .segment "ZEROPAGE"
 w_obj:          .res 2

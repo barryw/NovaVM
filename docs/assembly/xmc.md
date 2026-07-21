@@ -49,8 +49,16 @@ scratch. Current platform-owned ranges are:
 | `$070000-$07F9FF` | NVG decode staging. |
 | `$07FA00-$07FEFF` | XMC allocator metadata. |
 
-Assembly programs should allocate transient storage through `MEM_ALLOC` or
-`xmc_alloc_block` instead of claiming these fixed platform ranges.
+NDK programs should allocate every transient block through `MEM_ALLOC` and pair
+it with `MEM_RELEASE`; code linked directly with the XMC runtime can use the
+equivalent `xmc_alloc_block`/`xmc_release` entry points. Do not claim a fixed
+address inside either the managed heap or a platform-owned range.
+
+`MEM_MAP_WINDOW` accepts the allocator's complete 24-bit result and a window
+number. `MEM_UNMAP_WINDOW` disables that window. A client may use a mapped
+window for fast byte access, but mapping never transfers ownership: the
+original allocation must still be released with its original address and
+length.
 
 ## Shared XRAM Runtime
 

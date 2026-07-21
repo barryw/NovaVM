@@ -20,16 +20,16 @@ $(BUILD_DIR):
 $(BUILD_DIR)/nptool_io.o: nptool_io.s nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -D NPTOOL_BIN -I . -I $(NOVA_ASM) -o $@ nptool_io.s
 
-$(BUILD_DIR)/novaasm_tool.o: novaasm_tool.s nas_preprocessor.inc nas_project.inc nas_backend.inc nas_core.inc nptool.inc novaasm.inc nobj.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novaasm_tool.o: novaasm_tool.s longbranch.inc nas_preprocessor.inc nas_project.inc nas_backend.inc nas_core.inc nptool.inc novaasm.inc nobj.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novaasm_tool.s
 
-$(BUILD_DIR)/novaasm_core.o: novaasm.s novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novaasm_core.o: novaasm.s longbranch.inc wordmath.inc novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -D NASM_CORE_OVERLAY -I . -I $(NOVA_ASM) -o $@ novaasm.s
 
-$(BUILD_DIR)/novalink_tool.o: novalink_tool.s nptool.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/libsystem.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novalink_tool.o: novalink_tool.s longbranch.inc nptool.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/libsystem.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novalink_tool.s
 
-$(BUILD_DIR)/novalink_core.o: novalink.s novalink.inc nl_worker.inc nobj.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novalink_core.o: novalink.s longbranch.inc novalink.inc nl_worker.inc nobj.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -o $@ novalink.s
 
 $(NAS): $(BUILD_DIR)/novaasm_tool.o $(BUILD_DIR)/nptool_io.o tool.cfg
@@ -38,7 +38,7 @@ $(NAS): $(BUILD_DIR)/novaasm_tool.o $(BUILD_DIR)/nptool_io.o tool.cfg
 $(NL): $(BUILD_DIR)/novalink_tool.o $(BUILD_DIR)/novalink_core.o $(BUILD_DIR)/nptool_io.o tool.cfg
 	ld65 -C tool.cfg -m $(BUILD_DIR)/novalink.map -o $@ $(BUILD_DIR)/novalink_tool.o $(BUILD_DIR)/novalink_core.o $(BUILD_DIR)/nptool_io.o
 
-$(NASPP_PAYLOAD): nas_preprocessor.s nas_preprocessor.inc overlay.cfg $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc | $(BUILD_DIR)
+$(NASPP_PAYLOAD): nas_preprocessor.s longbranch.inc wordmath.inc xramstream.inc nas_preprocessor.inc overlay.cfg $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $(BUILD_DIR)/nas_preprocessor.o nas_preprocessor.s
 	ld65 -C overlay.cfg -m $(BUILD_DIR)/naspp.map -Ln $(BUILD_DIR)/naspp.sym -o $@ $(BUILD_DIR)/nas_preprocessor.o
 
@@ -48,7 +48,7 @@ $(BUILD_DIR)/nas_backend.o: nas_backend.s nas_backend.inc nas_core.inc | $(BUILD
 $(NASBE_PAYLOAD): $(BUILD_DIR)/novaasm_core.o $(BUILD_DIR)/nas_backend.o overlay.cfg
 	ld65 -C overlay.cfg -m $(BUILD_DIR)/nasbe.map -Ln $(BUILD_DIR)/nasbe.sym -o $@ $(BUILD_DIR)/novaasm_core.o $(BUILD_DIR)/nas_backend.o
 
-$(BUILD_DIR)/nl_worker.o: nl_worker.s nl_worker.inc novalink.inc nobj.inc | $(BUILD_DIR)
+$(BUILD_DIR)/nl_worker.o: nl_worker.s longbranch.inc nl_worker.inc novalink.inc nobj.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -o $@ nl_worker.s
 
 $(NLWORK_PAYLOAD): $(BUILD_DIR)/nl_worker.o overlay.cfg

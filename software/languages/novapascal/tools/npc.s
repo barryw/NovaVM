@@ -2,6 +2,8 @@
 
       .setcpu "w65c02"
       .include "nptool.inc"
+      .include "longbranch.inc"
+      .include "libmemory.inc"
       .include "xram.inc"
       .include "docbuf.inc"
 
@@ -28,30 +30,6 @@ PASCAL_OK         = 0
 PASCAL_ERR_SYNTAX = 1
 PASCAL_ERR_OUTPUT = 2
 
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
-
       .segment "ZEROPAGE"
 p_src:       .res 3
 p_left:      .res 2
@@ -63,6 +41,8 @@ p_char:      .res 1
 
       .segment "BSS"
 source_len:        .res 2
+source_xaddr:      .res 3
+source_allocated:  .res 1
 generated_asm_len: .res 2
 pascal_error:      .res 1
 p_line:            .res 2
@@ -118,6 +98,9 @@ p_control_a_lo:    .res 8
 p_control_a_hi:    .res 8
 p_control_b_lo:    .res 8
 p_control_b_hi:    .res 8
+p_window_m:        .res 1
+p_window_h:        .res 1
+p_window_valid:    .res 1
 
 ; The compiler and disk-loaded tools execute sequentially. Reusing their lower
 ; RAM slot gives NPC a useful output/symbol workspace without consuming the
@@ -131,6 +114,7 @@ generated_asm = ASM_BASE
       .export pascal_error
 
 npc_compile_file:
+      STZ   source_allocated
       STZ   NPTOOL_STATUS
       STZ   NPTOOL_DETAIL
       LDA   #<npc_banner
@@ -151,23 +135,9 @@ npc_compile_file:
       LDX   #>NPTOOL_ARG0
       JSR   nptool_print_z
       JSR   nptool_newline
-      LDA   #DOCBUF_XRAM_BASE_L
-      STA   XRAM_ADDRL
-      LDA   #DOCBUF_XRAM_BASE_M
-      STA   XRAM_ADDRM
-      LDA   #DOCBUF_XRAM_BASE_H
-      STA   XRAM_ADDRH
-      LDA   #<SOURCE_CAP
-      STA   XRAM_LENL
-      LDA   #>SOURCE_CAP
-      STA   XRAM_LENH
-      LDA   NPTOOL_ARG0_LEN
-      STA   XRAM_NAMELEN
-      LDA   #<NPTOOL_ARG0
-      STA   XRAM_NAMEPTR_L
-      LDA   #>NPTOOL_ARG0
-      STA   XRAM_NAMEPTR_H
-      JSR   xram_xload
+      JSR   npc_allocate_source
+      BNE   @memory_error
+      JSR   npc_load_source
       BNE   @io_error
       LDA   XRAM_LENL
       STA   source_len+0
@@ -195,10 +165,18 @@ npc_compile_file:
       LDA   #<npc_ok
       LDX   #>npc_ok
       JSR   nptool_print_z
+      JSR   npc_release_source
+      BNE   @memory_error
       LDA   #0
       RTS
+@memory_error:
+      LDA   LIB_STATUS
+      STA   NPTOOL_DETAIL
+      LDA   #NPTOOL_ERR_MEMORY
+      STA   NPTOOL_STATUS
+      BRA   @fail
 @io_error:
-      LDA   FIO_ERRCODE
+      LDA   LIB_STATUS
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_IO
       STA   NPTOOL_STATUS
@@ -209,6 +187,7 @@ npc_compile_file:
       LDA   #NPTOOL_ERR_COMPILE
       STA   NPTOOL_STATUS
 @fail:
+      JSR   npc_release_source
       LDA   #1
       RTS
 
@@ -216,6 +195,83 @@ tool_bad_args:
       LDA   #NPTOOL_ERR_ARGS
       STA   NPTOOL_STATUS
       LDA   #1
+      RTS
+
+npc_clear_lib_args:
+      LDX   #15
+@clear:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @clear
+      RTS
+
+npc_memory_call:
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+npc_allocate_source:
+      JSR   npc_clear_lib_args
+      LDA   #<SOURCE_CAP
+      STA   LIB_ARG2
+      LDA   #>SOURCE_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   npc_memory_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   source_xaddr,X
+      DEX
+      BPL   @copy
+      INC   source_allocated
+      LDA   #0
+@done:
+      RTS
+
+npc_load_source:
+      JSR   npc_clear_lib_args
+      LDA   #<NPTOOL_ARG0
+      STA   LIB_ARG0
+      LDA   #>NPTOOL_ARG0
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG0_LEN
+      STA   LIB_ARG1
+      LDX   #2
+@address:
+      LDA   source_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      LDA   #<SOURCE_CAP
+      STA   LIB_ARG3
+      LDA   #>SOURCE_CAP
+      STA   LIB_ARG3+1
+      LDA   #MEM_XLOAD
+      JMP   npc_memory_call
+
+npc_release_source:
+      LDA   source_allocated
+      BEQ   @done
+      STZ   source_allocated
+      JSR   npc_clear_lib_args
+      LDX   #2
+@address:
+      LDA   source_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<SOURCE_CAP
+      STA   LIB_ARG2
+      LDA   #>SOURCE_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JSR   npc_memory_call
+@done:
       RTS
 
       .segment "RODATA"
@@ -241,16 +297,17 @@ pascal_compile:
       STZ   p_control_depth
       STZ   p_operator_depth
       STZ   p_array_depth
+      STZ   p_window_valid
       LDA   #1
       STA   p_line
       STZ   p_line+1
       STA   p_column
       STZ   p_column+1
-      LDA   #DOCBUF_XRAM_BASE_L
+      LDA   source_xaddr
       STA   p_src
-      LDA   #DOCBUF_XRAM_BASE_M
+      LDA   source_xaddr+1
       STA   p_src+1
-      LDA   #DOCBUF_XRAM_BASE_H
+      LDA   source_xaddr+2
       STA   p_src+2
       LDA   source_len
       STA   p_left
@@ -550,8 +607,8 @@ p_parse_routine_declarations:
       LDX   #>asm_function_return
       BRA   @emit_end
 @procedure_end:
-      LDA   #<asm_rts
-      LDX   #>asm_rts
+      LDA   #<asm_routine_return
+      LDX   #>asm_routine_return
 @emit_end:
       JSR   p_emit_ax_text
       BCS   @output
@@ -2373,10 +2430,23 @@ p_emit_local_signature:
       RTS
 
 p_emit_saved_label:
-      JSR   p_emit_saved_identifier
+      LDA   #<asm_routine_start
+      LDX   #>asm_routine_start
+      JSR   p_emit_ax_text
       BCS   @fail
-      LDA   #':'
+      LDA   p_function_active
+      BEQ   :+
+      LDA   #'F'
+      BRA   :++
+:
+      LDA   #'P'
+:
       JSR   p_emit
+      BCS   @fail
+      LDA   #' '
+      JSR   p_emit
+      BCS   @fail
+      JSR   p_emit_saved_identifier
       BCS   @fail
       LDA   #$0A
       JMP   p_emit
@@ -2529,9 +2599,9 @@ p_emit_constant_identifier:
       RTS
 
 p_emit_load_identifier:
-      LDA   #<asm_lda_direct
+      LDA   #<asm_load_byte_ir
       STA   p_word
-      LDA   #>asm_lda_direct
+      LDA   #>asm_load_byte_ir
       STA   p_word+1
       JSR   p_emit_text
       BCS   @fail
@@ -2544,21 +2614,14 @@ p_emit_load_identifier:
       RTS
 
 p_emit_load_word_identifier:
-      LDA   #<asm_lda_direct
-      LDX   #>asm_lda_direct
+      LDA   #<asm_load_word_ir
+      LDX   #>asm_load_word_ir
       JSR   p_emit_ax_text
       BCS   @fail
       JSR   p_emit_identifier
       BCS   @fail
-      LDA   #<asm_word_load_high
-      LDX   #>asm_word_load_high
-      JSR   p_emit_ax_text
-      BCS   @fail
-      JSR   p_emit_identifier
-      BCS   @fail
-      LDA   #<asm_plus_one_end
-      LDX   #>asm_plus_one_end
-      JMP   p_emit_ax_text
+      LDA   #$0A
+      JMP   p_emit
 @fail:
       SEC
       RTS
@@ -2629,43 +2692,18 @@ p_emit_store_saved:
       LDA   p_expr_type
       CMP   #TYPE_WORD
       BNE   @word_from_byte
-      LDA   #<asm_sta_direct
-      LDX   #>asm_sta_direct
-      JSR   p_emit_ax_text
-      BCS   @fail
-      JSR   p_emit_saved_identifier
-      BCS   @fail
-      LDA   #<asm_word_store_high
-      LDX   #>asm_word_store_high
-      JSR   p_emit_ax_text
-      BCS   @fail
-      JSR   p_emit_saved_identifier
-      BCS   @fail
-      LDA   #<asm_plus_one_end
-      LDX   #>asm_plus_one_end
-      JMP   p_emit_ax_text
+      LDA   #<asm_store_word_ir
+      LDX   #>asm_store_word_ir
+      BRA   @direct_typed
 @word_from_byte:
-      LDA   #<asm_sta_direct
-      LDX   #>asm_sta_direct
-      JSR   p_emit_ax_text
-      BCS   @fail
-      JSR   p_emit_saved_identifier
-      BCS   @fail
-      LDA   #<asm_word_zero_high
-      LDX   #>asm_word_zero_high
-      JSR   p_emit_ax_text
-      BCS   @fail
-      JSR   p_emit_saved_identifier
-      BCS   @fail
-      LDA   #<asm_plus_one_end
-      LDX   #>asm_plus_one_end
-      JMP   p_emit_ax_text
+      LDA   #<asm_store_extend_ir
+      LDX   #>asm_store_extend_ir
+      BRA   @direct_typed
 @direct_byte:
-      LDA   #<asm_sta_direct
-      STA   p_word
-      LDA   #>asm_sta_direct
-      STA   p_word+1
-      JSR   p_emit_text
+      LDA   #<asm_store_byte_ir
+      LDX   #>asm_store_byte_ir
+@direct_typed:
+      JSR   p_emit_ax_text
       BCS   @fail
       JSR   p_emit_saved_identifier
       BCS   @fail
@@ -3094,15 +3132,29 @@ p_peek:
       LDA   p_left
       ORA   p_left+1
       BEQ   @eof
-      LDA   p_src
-      STA   XRAM_ADDRL
+      LDA   p_window_valid
+      BEQ   @map
       LDA   p_src+1
-      STA   XRAM_ADDRM
+      CMP   p_window_m
+      BNE   @map
       LDA   p_src+2
-      STA   XRAM_ADDRH
-      JSR   xram_read8
-      BNE   @eof
-      LDA   XRAM_DATA
+      CMP   p_window_h
+      BEQ   @read
+@map:
+      STZ   XMC_W2AL
+      LDA   p_src+1
+      STA   p_window_m
+      STA   XMC_W2AM
+      LDA   p_src+2
+      STA   p_window_h
+      STA   XMC_W2AH
+      LDA   XMC_WINCTL
+      ORA   #XRAM_WIN2_ENABLE
+      STA   XMC_WINCTL
+      INC   p_window_valid
+@read:
+      LDX   p_src
+      LDA   XRAM_WIN2_BASE,X
       SEC
       RTS
 @eof:
@@ -3177,12 +3229,11 @@ asm_byte_res: .byte ": .RES 1", $0A, 0
 asm_word_res: .byte ": .RES 2", $0A, 0
 asm_array_res: .byte ": .RES $", 0
 asm_lda:    .byte "LDA #$", 0
-asm_lda_direct: .byte "LDA ", 0
-asm_sta_direct: .byte "STA ", 0
-asm_word_load_high: .byte $0A, "LDX ", 0
-asm_word_store_high: .byte $0A, "STX ", 0
-asm_word_zero_high: .byte $0A, "STZ ", 0
-asm_plus_one_end: .byte "+1", $0A, 0
+asm_load_byte_ir: .byte ".O2LB ", 0
+asm_load_word_ir: .byte ".O2LW ", 0
+asm_store_byte_ir: .byte ".O2SB ", 0
+asm_store_word_ir: .byte ".O2SW ", 0
+asm_store_extend_ir: .byte ".O2SZ ", 0
 asm_word_literal_high: .byte $0A, "LDX #$", 0
 asm_index_high_zero: .byte "LDX #$00", $0A, 0
 ; Compact typed IR consumed by NPO2 before NAS sees the generated source.
@@ -3197,14 +3248,16 @@ asm_jsr_write_byte_ln: .byte "JSR P_WRITE_BYTE_LN", $0A, 0
 asm_jsr_write_line: .byte "JSR I_P_WRITE_LINE", $0A, ".BYTE ", 0
 asm_line_end: .byte "$00", $0A, 0
 asm_rts:    .byte "RTS", $0A, 0
-asm_function_entry: .byte "LDA #$00", $0A, "PHA", $0A, 0
-asm_function_store: .byte "TSX", $0A, "STA $0101,X", $0A, 0
-asm_function_return: .byte "PLA", $0A, "RTS", $0A, 0
+asm_routine_start: .byte ".O2R ", 0
+asm_routine_return: .byte ".O2E P", $0A, 0
+asm_function_entry: .byte ".O2K", $0A, 0
+asm_function_store: .byte ".O2V", $0A, 0
+asm_function_return: .byte ".O2E F", $0A, 0
 asm_pha:    .byte "PHA", $0A, 0
 asm_phx_pha: .byte "PHX", $0A, "PHA", $0A, 0
 asm_pla:    .byte "PLA", $0A, 0
-asm_add:    .byte "STA NVR0L", $0A, "PLA", $0A, "CLC", $0A, "ADC NVR0L", $0A, 0
-asm_subtract: .byte "STA NVR0L", $0A, "PLA", $0A, "SEC", $0A, "SBC NVR0L", $0A, 0
+asm_add:    .byte ".O2+", $0A, 0
+asm_subtract: .byte ".O2-", $0A, 0
 asm_rhs_word: .byte "STA NVR0L", $0A, "STX NVR0H", $0A, 0
 asm_rhs_byte: .byte "STA NVR0L", $0A, "STZ NVR0H", $0A, 0
 asm_lhs_word: .byte "PLA", $0A, "PLX", $0A, 0
@@ -3212,7 +3265,7 @@ asm_lhs_byte: .byte "PLA", $0A, "LDX #$00", $0A, 0
 asm_add_word: .byte ".O2A", $0A, 0
 asm_subtract_word: .byte ".O2S", $0A, 0
 asm_mod:    .byte "STA NVR0L", $0A, "BNE :+", $0A, "PLA", $0A, "STP", $0A, ":", $0A, "PLA", $0A, ":", $0A, "CMP NVR0L", $0A, "BCC :+", $0A, "SEC", $0A, "SBC NVR0L", $0A, "BRA :-", $0A, ":", $0A, 0
-asm_compare_start: .byte "STA NVR0L", $0A, "PLA", $0A, "CMP NVR0L", $0A, 0
+asm_compare_start: .byte ".O2Q", $0A, 0
 asm_compare_word_start: .byte ".O2X", $0A, 0
 asm_compare_eq: .byte ".O2C E", $0A, 0
 asm_compare_ne: .byte ".O2C N", $0A, 0
@@ -3231,7 +3284,7 @@ asm_include_start: .byte ".INCLUDE ", 34, 0
 asm_inc_end: .byte ".INC", 34, $0A, 0
 asm_source_end: .byte ".S", 34, $0A, 0
 asm_pascal_end: .byte ".NPI", 34, $0A, 0
-asm_jsr_prefix: .byte "JSR ", 0
+asm_jsr_prefix: .byte ".O2J ", 0
 asm_sig_start: .byte ".ASSERT (__S", 0
 asm_local_sig_start: .byte "__S", 0
 asm_local_sig_end: .byte " = $", 0

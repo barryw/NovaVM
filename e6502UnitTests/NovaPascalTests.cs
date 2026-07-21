@@ -14,6 +14,40 @@ namespace e6502UnitTests;
 public class NovaPascalTests
 {
     [TestMethod]
+    public void ToolchainUsesNdkManagedXramAndOverlayApis()
+    {
+        string npc = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npc.s"));
+        string optimizer = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npo2.s"));
+        string editor = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npedit.s"));
+        string assembler = File.ReadAllText(RepoPath("software", "toolchain", "novaasm_tool.s"));
+        string linker = File.ReadAllText(RepoPath("software", "toolchain", "novalink_tool.s"));
+        string linkerAbi = File.ReadAllText(RepoPath("software", "toolchain", "novalink.inc"));
+
+        StringAssert.Contains(npc, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(npc, "LDA   #MEM_RELEASE");
+        Assert.IsFalse(npc.Contains("DOCBUF_XRAM_BASE", StringComparison.Ordinal),
+            "NPC must allocate transient source storage instead of claiming the editor's XRAM slot.");
+        StringAssert.Contains(optimizer, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(optimizer, "LDA   #MEM_RELEASE");
+        StringAssert.Contains(optimizer, ".include \"xramstream.inc\"");
+        StringAssert.Contains(editor, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(editor, "LDA   #MEM_RELEASE");
+        StringAssert.Contains(assembler, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(assembler, "LDA   #MEM_RELEASE");
+        StringAssert.Contains(assembler, "LDA   #SYS_OVL_LOAD");
+        StringAssert.Contains(assembler, "LDA   #SYS_OVL_MAIN");
+        StringAssert.Contains(assembler, "LDA   #SYS_OVL_UNLOAD");
+        Assert.IsFalse(assembler.Contains("overlay_load_fixed", StringComparison.Ordinal),
+            "NAS must not bypass the NDK System overlay lifecycle.");
+        StringAssert.Contains(linker, "LDA   #SYS_OVL_LOAD");
+        StringAssert.Contains(linker, "LDA   #SYS_OVL_MAIN");
+        StringAssert.Contains(linker, "LDA   #SYS_OVL_UNLOAD");
+        Assert.IsFalse(linker.Contains("overlay_load_fixed", StringComparison.Ordinal),
+            "NL must not bypass the NDK System overlay lifecycle.");
+        StringAssert.Contains(linkerAbi, "NLINK_OBJECT_CAP     = 8");
+    }
+
+    [TestMethod]
     public void ShellBuildsRunsAndReturnsFromEditor()
     {
         string root = Path.Combine(Path.GetTempPath(), $"novapascal-{Guid.NewGuid():N}");
@@ -130,6 +164,7 @@ public class NovaPascalTests
                 disk.Delete("DEMO", extension);
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
 
+            int xramPagesBeforeBuild = bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8;
             QueueLine(editor, "BUILD HELLO.NPP");
             RunUntil(cpu, bus, s => s.Contains("Compiling HELLO.PAS", StringComparison.Ordinal),
                 "project compiler launch");
@@ -151,9 +186,18 @@ public class NovaPascalTests
                     ? "NovaPascal reported a linker configuration error"
                 : buildScreen.Contains("Linker error", StringComparison.Ordinal) ? "NovaPascal reported: Linker error"
                 : buildScreen);
+            Assert.AreEqual(xramPagesBeforeBuild, bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8,
+                "NPC, NPO2, and NAS must release every transient NDK XRAM allocation after BUILD.");
             StringAssert.Contains(buildScreen, "Nova Pascal Compiler v1.0");
             StringAssert.Contains(buildScreen, "Compiling HELLO.PAS");
             StringAssert.Contains(buildScreen, "Writing HELLO.S");
+            StringAssert.Contains(buildScreen, "Nova Pascal Optimizer v1.0");
+            StringAssert.Contains(buildScreen, "Pass 1: typed IR optimization");
+            StringAssert.Contains(buildScreen, "Pass 2: leaf routine inlining");
+            StringAssert.Contains(buildScreen, "Pass 3: caller routine inlining");
+            StringAssert.Contains(buildScreen, "Pass 4: dead routine cleanup");
+            StringAssert.Contains(buildScreen, "Pass 5: instruction selection");
+            StringAssert.Contains(buildScreen, "Pass 6: machine peepholes");
             StringAssert.Contains(buildScreen, "Nova Assembler v1.0");
             StringAssert.Contains(buildScreen, "Preprocessing HELLO.S");
             StringAssert.Contains(buildScreen, "Assembling HELLO.S");
@@ -255,8 +299,8 @@ public class NovaPascalTests
                 $"relocations={(lifeObject.Length > 15 ? lifeObject[14] | lifeObject[15] << 8 : 0)}\n{Snapshot(bus)}");
             byte[] lifeExecutable = disk.Load("LIFE", ".BIN");
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x80 }, lifeExecutable[..2]);
-            Assert.IsTrue(lifeExecutable.Length <= 5600,
-                $"Life O2 output regressed beyond 5,600 bytes; got {lifeExecutable.Length} bytes.");
+            Assert.IsTrue(lifeExecutable.Length <= 5200,
+                $"Life O2 output regressed beyond 5,200 bytes; got {lifeExecutable.Length} bytes.");
             string lifeMap = Encoding.ASCII.GetString(disk.Load("LIFE", ".MAP"));
             StringAssert.Contains(lifeMap, "GRAPHICSTILE4X8");
             StringAssert.Contains(lifeMap, "VGC_FILL");
@@ -282,11 +326,25 @@ public class NovaPascalTests
             StringAssert.Contains(lifeAssembly, "ADC #>CELLS");
             StringAssert.Contains(lifeAssembly, "STA (NVR1L)");
             StringAssert.Contains(lifeAssembly, "CMP #$19");
-            StringAssert.Contains(lifeAssembly, "ADC #$01");
+            StringAssert.Contains(lifeAssembly, "INC I");
+            StringAssert.Contains(lifeAssembly, "INC COL");
+            StringAssert.Contains(lifeAssembly, "INC ROW");
             StringAssert.Contains(lifeAssembly, "ADC #<(CELLS-$51)",
-                "O2 must fuse constant index arithmetic into the relocated array address.");
-            StringAssert.Contains(lifeAssembly, "ADC #>(CELLS+$51)",
-                "O2 must fuse positive constant index arithmetic into the relocated array address.");
+                "O2 must form the guarded neighbor window once from its lowest cell offset.");
+            StringAssert.Contains(lifeAssembly, "LDA (NVR4L),Y",
+                "O2 must reuse a formed array window through indexed-indirect loads.");
+            StringAssert.Contains(lifeAssembly, "LDY #$A2",
+                "The -81 through +81 neighbor window must span all eight B3/S23 cells.");
+            StringAssert.Contains(lifeAssembly,
+                "LDA (NVR4L),Y\nCLC\nADC NEIGHBORS\nSTA NEIGHBORS",
+                "A pure array read may commute with the accumulator load and eliminate its stack temporary.");
+            Assert.IsFalse(lifeAssembly.Contains("LDA NEIGHBORS\nPHA", StringComparison.Ordinal),
+                "The hot neighbor sum must not spill its accumulator to the hardware stack.");
+            Assert.IsFalse(lifeAssembly.Contains("LDA ROW\nCMP #$00", StringComparison.Ordinal),
+                "Unsigned x > 0 must branch from the zero flag without a redundant compare.");
+            StringAssert.Contains(lifeAssembly, "STA NVR2L",
+                "O2 must retain repeated effect-free array loads within a basic block.");
+            StringAssert.Contains(lifeAssembly, "LDA NVR2L");
             foreach (string helper in new[]
                      {
                          "JSR I_P_AGET", "JSR I_P_ASETB", "JSR I_P_ASETW",
@@ -298,17 +356,18 @@ public class NovaPascalTests
             Assert.IsFalse(lifeAssembly.Contains(".O2", StringComparison.Ordinal),
                 "Internal optimizer IR must be fully lowered before NAS.");
             StringAssert.Contains(lifeAssembly, "JMP __NP_MAIN");
-            StringAssert.Contains(lifeAssembly, "RANDOMCELL:");
-            StringAssert.Contains(lifeAssembly, "SEED:");
             StringAssert.Contains(lifeAssembly, "DRAW:");
-            StringAssert.Contains(lifeAssembly, "COUNTNEIGHBORS:");
-            StringAssert.Contains(lifeAssembly, "NEXTCELL:");
-            StringAssert.Contains(lifeAssembly, "EVOLVE:");
             StringAssert.Contains(lifeAssembly, "COMMIT:");
             StringAssert.Contains(lifeAssembly, "JSR RANDOMBYTE");
-            StringAssert.Contains(lifeAssembly, "JSR COUNTNEIGHBORS");
-            StringAssert.Contains(lifeAssembly, "JSR NEXTCELL");
-            StringAssert.Contains(lifeAssembly, "STA $0101,X");
+            Assert.IsFalse(lifeAssembly.Contains("JSR COUNTNEIGHBORS", StringComparison.Ordinal));
+            Assert.IsFalse(lifeAssembly.Contains("JSR NEXTCELL", StringComparison.Ordinal));
+            Assert.IsFalse(lifeAssembly.Contains("COUNTNEIGHBORS:", StringComparison.Ordinal),
+                "A single-call leaf routine must be inlined and its dead body removed.");
+            Assert.IsFalse(lifeAssembly.Contains("EVOLVE:", StringComparison.Ordinal),
+                "Inlining must iterate so a single-call caller becomes eligible after its leaves.");
+            Assert.IsFalse(lifeAssembly.Contains("STA $0101,X", StringComparison.Ordinal),
+                "A call-free function tail must keep its result in compiler scratch, not a stack slot.");
+            StringAssert.Contains(lifeAssembly, "STA NVR3L");
             StringAssert.Contains(lifeAssembly, ".ASSERT __PA02FE8 = $02");
             StringAssert.Contains(lifeAssembly, "JSR GRAPHICSTILE4X8");
             StringAssert.Contains(lifeAssembly, "JSR POLLKEY");
@@ -348,6 +407,38 @@ public class NovaPascalTests
                     bus.Read((ushort)VgcConstants.RegMode) == VgcConstants.ModeTextOnly
                     && s.Contains("NP> ", StringComparison.Ordinal),
                 "Life return to the Pascal shell");
+
+            disk.Save("RETSAFE", Encoding.ASCII.GetBytes(
+                "program RetSafe;\nuses NovaRandom;\nvar Sample: Byte;\n" +
+                "function Keep(): Byte;\nbegin\n  Keep := 7;\n  Sample := RandomByte()\nend;\n" +
+                "begin\n  writeln(Keep())\nend.\n"), ".PAS");
+            disk.Save("RETSAFE", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN RETSAFE.PAS\nOUTPUT RETSAFE.BIN\nOPTIMIZE O2\n" +
+                "CONFIG INLINE\nMAP RETSAFE.MAP\nLABEL RETSAFE.LBL\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD RETSAFE.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: RETSAFE.BIN", StringComparison.Ordinal)
+                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
+                "effectful function-result fallback build");
+            Assert.IsTrue(disk.FileExists("RETSAFE", ".S"), Snapshot(bus));
+            string returnSafeAssembly = Encoding.ASCII.GetString(disk.Load("RETSAFE", ".S"));
+            StringAssert.Contains(returnSafeAssembly, "TSX\nSTA $0101,X",
+                "A function that calls after assigning its result must retain the stack-backed result ABI.");
+            Assert.AreEqual(1,
+                returnSafeAssembly.Split("JSR RANDOMBYTE", StringSplitOptions.None).Length - 1,
+                "Effect analysis must preserve the original call exactly once while reconstructing typed IR.");
+            Assert.IsFalse(returnSafeAssembly.Contains("STA NVR3L", StringComparison.Ordinal),
+                "Effect analysis must not place a result across an unknown call in volatile scratch.");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN RETSAFE.BIN");
+            RunUntil(cpu, bus, s => s.Split('\n').Any(line => line.Trim() == "7"),
+                "stack-preserved function result");
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal),
+                "effectful function return to the Pascal shell");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP", ".LBL" })
+                disk.Delete("RETSAFE", extension);
 
             disk.Save("BADPAS", Encoding.ASCII.GetBytes(
                 "program BadPas;\nbegin\n  writeln(\nend.\n"), ".PAS");
@@ -449,6 +540,11 @@ public class NovaPascalTests
             QueueLine(editor, "EDIT HELLO.PAS");
             RunUntil(cpu, bus, s => s.Contains("HELLO.PAS", StringComparison.Ordinal)
                                     && s.Contains("program Hello;", StringComparison.Ordinal), "Pascal editor");
+            RunSteps(cpu, bus, 100_000);
+            Assert.AreEqual((byte)0x63, bus.Vgc.GetScreenColor(0, 1),
+                "NPEDIT must apply Pascal lexical color to source words.");
+            Assert.AreEqual((byte)0x65, bus.Vgc.GetScreenColor(10, 3),
+                "NPEDIT must apply Pascal string color to quoted literals.");
             editor.QueueInput(0x1B);
             editor.QueueInput((byte)'x');
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal)
@@ -1647,7 +1743,8 @@ public class NovaPascalTests
                 return;
         }
 
-        Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}\n{Snapshot(bus)}");
+        Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}, " +
+                    $"tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}\n{Snapshot(bus)}");
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

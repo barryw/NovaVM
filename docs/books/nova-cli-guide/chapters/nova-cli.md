@@ -203,10 +203,18 @@ The disk boots to `NovaPascal Shell v1.0`. `NEW name` creates `name.PAS` and a
 single end-to-end `name.NPP` manifest. `BUILD name.NPP` validates that manifest,
 runs resident NPC, disk-loaded NPO2, NAS, and NL, and writes the generated
 assembly, object, map, labels, and load-address-prefixed binary. NPO2 performs
-typed 65C02 instruction selection followed by constant peepholes, including
-direct comparison branches, inline word/array operations, and relocation-aware
-fusion of constant index arithmetic into array addresses. The final `.S` is
-ordinary readable assembly; NAS and NL contain no Pascal-specific logic.
+six typed streaming passes: local dataflow optimization; iterative single-call
+leaf/caller inlining with dead-routine removal; 65C02 instruction selection;
+and machine peepholes. O2 includes direct comparison branches, byte/word
+self-update reduction, effect-safe accumulator and repeated-load forwarding,
+call-free function-result folding, inline word/array operations, and formation
+of one relocatable base for compatible constant-offset array accesses. The
+final `.S` is ordinary readable assembly; NAS and NL contain no Pascal-specific
+logic.
+NPC, NPO2, NPEDIT, and NAS obtain transient XRAM through the NDK Memory module
+and release every allocation on success or failure. NAS and NL load, enter, and
+unload their `$7000` workers only through the NDK System overlay API; the tools
+do not reserve private XRAM blocks or implement private overlay loaders.
 `RUN name.BIN` executes the result. Pascal `uses NovaGraphics;` exposes native Pascal graphics
 procedures while its precompiled unit adapter alone handles the canonical VGC
 NDK parameter layout and command protocol. `uses NovaInput;` provides

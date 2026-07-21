@@ -16,32 +16,10 @@
       .setcpu "w65c02"
       .include "novaasm.inc"
       .include "nas_core.inc"
+      .include "longbranch.inc"
+      .include "wordmath.inc"
       .include "xram.inc"
       .include "nas_backend.inc"
-
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
 
 NASM_SYMBOL_CAP       = 32
 NASM_IDENTIFIER_CAP   = 64
@@ -4399,78 +4377,11 @@ a_expr_constants:
       RTS
 
 a_expr_multiply:
-      STZ   a_expr_acc_l
-      STZ   a_expr_acc_h
-      LDX   #16
-@loop:
-      LDA   a_expr_rhs_l
-      AND   #1
-      BEQ   @shift
-      CLC
-      LDA   a_expr_acc_l
-      ADC   a_tmp0
-      STA   a_expr_acc_l
-      LDA   a_expr_acc_h
-      ADC   a_tmp1
-      STA   a_expr_acc_h
-@shift:
-      ASL   a_tmp0
-      ROL   a_tmp1
-      LSR   a_expr_rhs_h
-      ROR   a_expr_rhs_l
-      DEX
-      BNE   @loop
-      LDA   a_expr_acc_l
-      STA   a_tmp0
-      LDA   a_expr_acc_h
-      STA   a_tmp1
+      word_multiply a_tmp0, a_tmp1, a_expr_rhs_l, a_expr_rhs_h, a_expr_acc_l, a_expr_acc_h
       RTS
 
 a_expr_divide:
-      STZ   a_expr_acc_l
-      STZ   a_expr_acc_h
-      STZ   a_expr_rem_l
-      STZ   a_expr_rem_h
-      LDX   #16
-@loop:
-      ASL   a_tmp0
-      ROL   a_tmp1
-      ROL   a_expr_rem_l
-      ROL   a_expr_rem_h
-      ASL   a_expr_acc_l
-      ROL   a_expr_acc_h
-      LDA   a_expr_rem_h
-      CMP   a_expr_rhs_h
-      BCC   @next
-      BNE   @subtract
-      LDA   a_expr_rem_l
-      CMP   a_expr_rhs_l
-      BCC   @next
-@subtract:
-      SEC
-      LDA   a_expr_rem_l
-      SBC   a_expr_rhs_l
-      STA   a_expr_rem_l
-      LDA   a_expr_rem_h
-      SBC   a_expr_rhs_h
-      STA   a_expr_rem_h
-      INC   a_expr_acc_l
-@next:
-      DEX
-      BNE   @loop
-      LDA   a_expr_digit
-      CMP   #EXPR_MOD
-      BEQ   @remainder
-      LDA   a_expr_acc_l
-      STA   a_tmp0
-      LDA   a_expr_acc_h
-      STA   a_tmp1
-      RTS
-@remainder:
-      LDA   a_expr_rem_l
-      STA   a_tmp0
-      LDA   a_expr_rem_h
-      STA   a_tmp1
+      word_divide a_tmp0, a_tmp1, a_expr_rhs_l, a_expr_rhs_h, a_expr_acc_l, a_expr_acc_h, a_expr_rem_l, a_expr_rem_h, a_expr_digit, EXPR_MOD
       RTS
 
 a_read_upper:

@@ -107,7 +107,7 @@ MEM_DIR_READ    = $17  ; ()                  -> emit next dir entry into XMC_* r
 ; =====================================================================
 ; XMC hardware mapping windows (xmc.s)
 ; =====================================================================
-MEM_MAP_WINDOW  = $18  ; (xaddr:ARG0 b0.b1 -> XMC_XAL/M, win:ARG3 b0 -> X)  -> map window in current bank
+MEM_MAP_WINDOW  = $18  ; (xaddr:ARG0 u24, win:ARG3 b0 -> X)                   -> map window at flat XRAM address
 MEM_UNMAP_WINDOW = $19 ; (win:ARG3 b0 -> X)                                  -> disable a mapped window
 
 ; =====================================================================

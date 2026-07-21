@@ -3,6 +3,9 @@
 
       .setcpu "w65c02"
       .include "xram.inc"
+      .include "longbranch.inc"
+      .include "wordmath.inc"
+      .include "xramstream.inc"
       .include "nas_preprocessor.inc"
 
 LINE_CAP       = 255
@@ -33,36 +36,13 @@ EXPR_DIV     = 17
 EXPR_MOD     = 18
 EXPR_BOOL_XOR = 19
 
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
-
       .segment "ZEROPAGE"
 string_ptr: .res 2
 work_ptr:   .res 2
 
       .segment "BSS"
 input_base:       .res 3
+input_addr:       .res 3
 input_pos:        .res 2
 input_len:        .res 2
 output_addr:      .res 3
@@ -174,8 +154,9 @@ naspp_main:
       LDA   NASPP_OUTPUT_CAP+1
       STA   output_cap+1
       LDA   XMC_WINCTL
-      ORA   #XRAM_WIN3_ENABLE
+      ORA   #XRAM_WIN2_ENABLE | XRAM_WIN3_ENABLE
       STA   XMC_WINCTL
+      JSR   map_output
 
 @next_line:
       JSR   read_line
@@ -395,6 +376,7 @@ read_line:
       LDA   #1
       RTS
 @start:
+      JSR   map_input
       INC   current_line
       BNE   :+
       INC   current_line+1
@@ -413,7 +395,7 @@ read_line:
       JSR   read_input_byte
       STA   byte_value
       PLX
-      JSR   increment_input_pos
+      JSR   increment_input
       LDA   byte_value
       CMP   #$0A
       BEQ   @lf
@@ -431,77 +413,7 @@ read_line:
       LDA   #0
       RTS
 
-input_at_end:
-      LDA   input_pos+1
-      CMP   input_len+1
-      BCC   @no
-      BNE   @yes
-      LDA   input_pos
-      CMP   input_len
-      BCC   @no
-@yes:
-      SEC
-      RTS
-@no:
-      CLC
-      RTS
-
-read_input_byte:
-      CLC
-      LDA   input_base
-      ADC   input_pos
-      STA   byte_value
-      LDA   input_base+1
-      ADC   input_pos+1
-      STA   WIN3_MI
-      LDA   input_base+2
-      ADC   #0
-      STA   WIN3_HI
-      LDX   byte_value
-      LDA   WIN3_BASE,X
-      RTS
-
-increment_input_pos:
-      INC   input_pos
-      BNE   :+
-      INC   input_pos+1
-:
-      RTS
-
-emit_byte:
-      STA   byte_value
-      LDA   output_len+1
-      CMP   output_cap+1
-      BCC   @write
-      BNE   @full
-      LDA   output_len
-      CMP   output_cap
-      BCC   @write
-@full:
-      LDA   #NASPP_ERR_OUTPUT
-      STA   NASPP_ERROR
-      LDA   #1
-      RTS
-@write:
-      LDA   output_addr+1
-      STA   WIN3_MI
-      LDA   output_addr+2
-      STA   WIN3_HI
-      LDX   output_addr
-      LDA   byte_value
-      STA   WIN3_BASE,X
-      INC   output_addr
-      BNE   :+
-      INC   output_addr+1
-      BNE   :+
-      INC   output_addr+2
-:
-      INC   output_len
-      BNE   :+
-      INC   output_len+1
-:
-      LDA   #0
-      RTS
+      xram_stream_impl NASPP_ERROR, NASPP_ERR_OUTPUT
 
 emit_line_raw:
       STZ   line_index
@@ -815,6 +727,7 @@ expr_copy_define:
       STA   input_pos
       LDA   macro_body_start_h,X
       STA   input_pos+1
+      JSR   map_input
 @source_byte:
       LDX   define_slot
       LDA   input_pos+1
@@ -827,7 +740,7 @@ expr_copy_define:
 @source_emit:
       JSR   read_input_byte
       STA   byte_value
-      JSR   increment_input_pos
+      JSR   increment_input
       LDA   byte_value
       JSR   expr_append
       BNE   @source_error
@@ -1715,78 +1628,11 @@ expr_compare:
       RTS
 
 expr_multiply:
-      STZ   expr_acc_l
-      STZ   expr_acc_h
-      LDX   #16
-@loop:
-      LDA   expr_rhs_l
-      AND   #1
-      BEQ   @shift
-      CLC
-      LDA   expr_acc_l
-      ADC   expr_value_l
-      STA   expr_acc_l
-      LDA   expr_acc_h
-      ADC   expr_value_h
-      STA   expr_acc_h
-@shift:
-      ASL   expr_value_l
-      ROL   expr_value_h
-      LSR   expr_rhs_h
-      ROR   expr_rhs_l
-      DEX
-      BNE   @loop
-      LDA   expr_acc_l
-      STA   expr_value_l
-      LDA   expr_acc_h
-      STA   expr_value_h
+      word_multiply expr_value_l, expr_value_h, expr_rhs_l, expr_rhs_h, expr_acc_l, expr_acc_h
       RTS
 
 expr_divide:
-      STZ   expr_acc_l
-      STZ   expr_acc_h
-      STZ   expr_rem_l
-      STZ   expr_rem_h
-      LDX   #16
-@loop:
-      ASL   expr_value_l
-      ROL   expr_value_h
-      ROL   expr_rem_l
-      ROL   expr_rem_h
-      ASL   expr_acc_l
-      ROL   expr_acc_h
-      LDA   expr_rem_h
-      CMP   expr_rhs_h
-      BCC   @next
-      BNE   @subtract
-      LDA   expr_rem_l
-      CMP   expr_rhs_l
-      BCC   @next
-@subtract:
-      SEC
-      LDA   expr_rem_l
-      SBC   expr_rhs_l
-      STA   expr_rem_l
-      LDA   expr_rem_h
-      SBC   expr_rhs_h
-      STA   expr_rem_h
-      INC   expr_acc_l
-@next:
-      DEX
-      BNE   @loop
-      LDA   expr_digit
-      CMP   #EXPR_MOD
-      BEQ   @remainder
-      LDA   expr_acc_l
-      STA   expr_value_l
-      LDA   expr_acc_h
-      STA   expr_value_h
-      RTS
-@remainder:
-      LDA   expr_rem_l
-      STA   expr_value_l
-      LDA   expr_rem_h
-      STA   expr_value_h
+      word_divide expr_value_l, expr_value_h, expr_rhs_l, expr_rhs_h, expr_acc_l, expr_acc_h, expr_rem_l, expr_rem_h, expr_digit, EXPR_MOD
       RTS
 
 expr_skip_spaces:
@@ -2813,6 +2659,7 @@ emit_define:
       STA   input_pos
       LDA   macro_body_start_h,X
       STA   input_pos+1
+      JSR   map_input
 @loop:
       LDA   input_pos+1
       CMP   macro_body_end_h,X
@@ -2825,7 +2672,7 @@ emit_define:
       PHX
       JSR   read_input_byte
       STA   byte_value
-      JSR   increment_input_pos
+      JSR   increment_input
       LDA   byte_value
       JSR   emit_byte
       BEQ   :+

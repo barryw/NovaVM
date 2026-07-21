@@ -14,6 +14,18 @@ namespace e6502UnitTests;
 public class RuntimeLibraryAbiTests
 {
     [TestMethod]
+    public void MemoryWindowMappingConsumesTheFullAllocatedXramAddress()
+    {
+        string abi = File.ReadAllText(RepoPath("software", "runtime", "asm", "libmemory.inc"));
+        string module = File.ReadAllText(RepoPath("software", "modules", "memory", "memory.s"));
+
+        StringAssert.Contains(abi, "MEM_MAP_WINDOW  = $18  ; (xaddr:ARG0 u24");
+        StringAssert.Contains(module,
+            "LDA   LIB_ARG0+2\n      STA   XMC_BANK",
+            "A mapped window must stay in the allocator-returned 24-bit XRAM bank.");
+    }
+
+    [TestMethod]
     public void GameServerAssemblyProtocolConstantsMatchServer()
     {
         string inc = File.ReadAllText(RepoPath("software", "runtime", "asm", "gameserver.inc"));
@@ -234,6 +246,20 @@ public class RuntimeLibraryAbiTests
     }
 
     [TestMethod]
+    public void EditUiStatusReplacesTextBeforeClearingItsStaleTail()
+    {
+        string source = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.s"));
+        int start = source.IndexOf("editui_draw_status:", StringComparison.Ordinal);
+        int end = source.IndexOf("editui_menu_open_hotkey:", start, StringComparison.Ordinal);
+        string routine = source[start..end];
+
+        int paint = routine.IndexOf("JSR   editui_print_marked", StringComparison.Ordinal);
+        int clear = routine.IndexOf("JMP   vtext_clear_region", StringComparison.Ordinal);
+        Assert.IsTrue(paint >= 0 && clear > paint,
+            "Status updates must paint replacement text before clearing only its stale tail; clear-first visibly flickers.");
+    }
+
+    [TestMethod]
     public void EditUiMenuHotkeysMatchVisibleAmpersandMarkers()
     {
         string impl = File.ReadAllText(RepoPath("software", "runtime", "asm", "editui.s"));
@@ -294,6 +320,7 @@ public class RuntimeLibraryAbiTests
 
         AssertConstant("EDITOR_FN_EDIT", 0x00);
         AssertConstant("EDITOR_FN_EDIT_XRAM", 0x01);
+        AssertConstant("EDITOR_XRAM_FLAG_HOOKS", 0x01);
         AssertConstant("EDITOR_FN_COUNT", 0x02);
         Assert.IsFalse(constants.ContainsKey(editEx), "The editor ABI must not keep a legacy extended edit function.");
         Assert.IsFalse(constants.Keys.Any(name => name.StartsWith(profilePrefix, StringComparison.Ordinal)), "Editor profiles must be removed; callers pass hook tables.");

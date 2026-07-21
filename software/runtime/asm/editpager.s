@@ -105,6 +105,9 @@ sys_edit_xram:
       STZ   ep_page_offsets+1
       JSR   ep_load_window
 
+      LDA   LIB_ARG0+3
+      AND   #EDITOR_XRAM_FLAG_HOOKS
+      BNE   @hooks_ready
       LDX   #EDITOR_HOOKS_SIZE-1
 @clear_hooks:
       STZ   ep_hooks,X
@@ -114,14 +117,11 @@ sys_edit_xram:
       STA   ep_hooks+EDITOR_HOOKS_TYPEL
       LDA   ep_type+1
       STA   ep_hooks+EDITOR_HOOKS_TYPEH
-      LDA   #<ep_command_hook
-      STA   ep_hooks+EDITOR_HOOKS_COMMAND_VECL
-      LDA   #>ep_command_hook
-      STA   ep_hooks+EDITOR_HOOKS_COMMAND_VECH
-      LDA   #<ep_changed_hook
-      STA   ep_hooks+EDITOR_HOOKS_CHANGED_VECL
-      LDA   #>ep_changed_hook
-      STA   ep_hooks+EDITOR_HOOKS_CHANGED_VECH
+      LDA   #<ep_hooks
+      STA   ep_type+0
+      LDA   #>ep_hooks
+      STA   ep_type+1
+@hooks_ready:
 
       LDA   ep_buffer+0
       STA   LIB_ARG0+0
@@ -145,9 +145,9 @@ sys_edit_xram:
       STA   LIB_ARG3+0
       LDA   ep_title+1
       STA   LIB_ARG3+1
-      LDA   #<ep_hooks
+      LDA   ep_type+0
       STA   LIB_ARG3+2
-      LDA   #>ep_hooks
+      LDA   ep_type+1
       STA   LIB_ARG3+3
       JSR   sys_edit
       LDA   LIB_STATUS
@@ -374,11 +374,12 @@ ep_command_hook:
       BEQ   ep_window_first
       CMP   #EDITUI_CMD_WINDOW_LAST
       BEQ   ep_window_last
+      CLC
       RTS
 
 ep_window_next:
       JSR   ep_commit_window
-      BCS   @done
+      BCS   @changed
       CLC
       LDA   ep_window_off+0
       ADC   ep_window_span+0
@@ -400,12 +401,16 @@ ep_window_next:
       JSR   ep_load_window
       STZ   EDITBUF_CURL
       STZ   EDITBUF_CURH
+@changed:
+      SEC
+      RTS
 @done:
+      CLC
       RTS
 
 ep_window_previous:
       JSR   ep_commit_window
-      BCS   @done
+      BCS   @changed
       LDA   ep_page_index
       BEQ   @done
       DEC   ep_page_index
@@ -415,7 +420,11 @@ ep_window_previous:
       STA   EDITBUF_CURL
       LDA   ep_window_span+1
       STA   EDITBUF_CURH
+@changed:
+      SEC
+      RTS
 @done:
+      CLC
       RTS
 
 ep_window_first:

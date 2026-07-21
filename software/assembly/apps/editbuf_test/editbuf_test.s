@@ -36,6 +36,7 @@ TEST_WINDOWLENH= $0311
 TEST_WINDOWOFFL= $0312          ; current RAM window offset lo
 TEST_WINDOWOFFH= $0313
 TEST_MENUMODE  = $0314          ; nonzero => install a test menu with a disabled row
+TEST_HLCNT     = $0315          ; number of highlighted rows (detects repaints)
 TEXT_CAP       = 2048
 WINDOW_LEN     = 1024
 LARGE_B_OFF    = WINDOW_LEN
@@ -177,6 +178,7 @@ test_indent_hook:
 
 ; HILITE hook: stamp the first character of every line with a sentinel color.
 test_hilite_hook:
+      INC   TEST_HLCNT
       LDA   EDITBUF_HL_LEN
       BEQ   @done
       LDA   TEST_HLMARK
@@ -190,6 +192,7 @@ test_command_hook:
       STA   TEST_LASTCMD
       LDA   TEST_DOCMODE
       BNE   :+
+      CLC
       RTS
 :     CMP   #2
       BNE   :+
@@ -201,6 +204,7 @@ test_command_hook:
       BEQ   test_doc_previous
       CMP   #EDITUI_CMD_BUFFER_LIST
       BEQ   test_doc_list
+      CLC
       RTS
 
 test_doc_next:
@@ -228,7 +232,8 @@ test_window_command:
 :     CMP   #EDITUI_CMD_BUFFER_PREVIOUS
       BNE   :+
       JMP   test_window_page_previous
-:     RTS
+:     CLC
+      RTS
 
 test_doc_previous:
       JSR   test_editbuf_to_docbuf
@@ -346,7 +351,10 @@ test_window_page_next:
       JSR   test_window_load_current
       STZ   EDITBUF_CURL
       STZ   EDITBUF_CURH
+      SEC
+      RTS
 @done:
+      CLC
       RTS
 
 test_window_page_previous:
@@ -369,7 +377,10 @@ test_window_page_previous:
       STA   EDITBUF_CURL
       LDA   EDITBUF_LENH
       STA   EDITBUF_CURH
+      SEC
+      RTS
 @done:
+      CLC
       RTS
 
 test_window_changed_hook:

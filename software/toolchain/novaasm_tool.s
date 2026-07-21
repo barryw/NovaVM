@@ -30,6 +30,13 @@ source_allocated:.res 1
 source_len:      .res 2
 expanded_xaddr: .res 3
 expanded_allocated:.res 1
+preprocessor_loaded:.res 1
+preprocessor_status:.res 1
+preprocessor_detail:.res 1
+preprocessor_error:.res 1
+release_error:    .res 1
+release_detail:   .res 1
+include_release_error:.res 1
 backend_loaded:  .res 1
 expanded_len:   .res 2
 constant_xaddr: .res 3
@@ -39,6 +46,8 @@ include_slot:    .res 1
 include_xaddr:   .res NASM_INCLUDE_DEPTH * 3
 include_large:   .res NASM_INCLUDE_DEPTH
 include_names:   .res NASM_INCLUDE_DEPTH * NASM_FILENAME_CAP
+
+      .segment "NOINIT"
 object_buf:      .res OBJECT_CAP
 core_symbol_names:.res NASCORE_SYMBOL_NAMES_CAP
 core_reloc_buffer:.res NASCORE_RELOC_CAP
@@ -198,11 +207,7 @@ tool_main:
       BEQ   :+
       JMP   @fail_release
 :
-      JSR   tool_release_backend
-      JSR   tool_release_includes
-      JSR   tool_release_constants
-      JSR   tool_release_expanded
-      JSR   tool_release_source
+      JSR   tool_release_all
       BEQ   :+
       JMP   @memory_error
 :
@@ -258,11 +263,7 @@ tool_main:
       LDA   #NPTOOL_ERR_IO
       STA   NPTOOL_STATUS
 @fail_release:
-      JSR   tool_release_backend
-      JSR   tool_release_includes
-      JSR   tool_release_constants
-      JSR   tool_release_expanded
-      JSR   tool_release_source
+      JSR   tool_release_all
 @fail:
       LDA   #1
       RTS
@@ -302,6 +303,43 @@ tool_sys_call:
       STA   LIB_MOD_ID
       JSR   LIB_LOADER_BAND
       LDA   LIB_STATUS
+      RTS
+
+tool_release_all:
+      STZ   release_error
+      JSR   tool_release_preprocessor
+      JSR   tool_record_release
+      JSR   tool_release_backend
+      JSR   tool_record_release
+      JSR   tool_release_includes
+      JSR   tool_record_release
+      JSR   tool_release_constants
+      JSR   tool_record_release
+      JSR   tool_release_expanded
+      JSR   tool_record_release
+      JSR   tool_release_source
+      JSR   tool_record_release
+      LDA   release_error
+      BEQ   @done
+      LDA   release_detail
+      STA   LIB_STATUS
+      LDA   #1
+@done:
+      RTS
+
+tool_record_release:
+      CMP   #0
+      BEQ   @done
+      PHA
+      LDA   release_error
+      BNE   @discard
+      INC   release_error
+      PLA
+      STA   release_detail
+      RTS
+@discard:
+      PLA
+@done:
       RTS
 
 tool_alloc_expanded:
@@ -370,7 +408,12 @@ tool_preprocess:
       STA   LIB_ARG3+1
       LDA   #SYS_OVL_LOAD
       JSR   tool_sys_call
-      BNE   @error
+      BEQ   :+
+      LDA   LIB_RESULT+1
+      STA   preprocessor_detail
+      BRA   @error
+:
+      INC   preprocessor_loaded
       JSR   tool_clear_args
       LDX   #2
 @input:
@@ -390,15 +433,15 @@ tool_preprocess:
       STA   NASPP_OUTPUT_CAP+1
       LDA   #SYS_OVL_MAIN
       JSR   tool_sys_call
-      BNE   @error
+      STA   preprocessor_status
+      LDA   LIB_RESULT+1
+      STA   preprocessor_detail
       LDA   NASPP_INPUT_LEN
       STA   expanded_len
       LDA   NASPP_INPUT_LEN+1
       STA   expanded_len+1
-      JSR   tool_clear_args
-      LDA   #SYS_OVL_UNLOAD
-      JMP   tool_sys_call
-@error:
+      LDA   NASPP_ERROR
+      STA   preprocessor_error
       LDA   NASPP_ERROR_LINE
       STA   NPTOOL_DIAG_LINE
       LDA   NASPP_ERROR_LINE+1
@@ -407,12 +450,33 @@ tool_preprocess:
       STA   NPTOOL_DIAG_COL
       LDA   NASPP_ERROR_COL+1
       STA   NPTOOL_DIAG_COL+1
-      LDA   NASPP_ERROR
+      JSR   tool_release_preprocessor
+      ORA   preprocessor_status
+      BNE   @error
+      LDA   #0
+      RTS
+@error:
+      LDA   preprocessor_error
+      BNE   :+
+      LDA   preprocessor_detail
       BNE   :+
       LDA   LIB_RESULT+1
+      BNE   :+
+      LDA   LIB_STATUS
 :
       STA   NPTOOL_DETAIL
       LDA   #1
+      RTS
+
+tool_release_preprocessor:
+      LDA   preprocessor_loaded
+      BEQ   @done
+      STZ   preprocessor_loaded
+      JSR   tool_clear_args
+      LDA   #SYS_OVL_UNLOAD
+      JMP   tool_sys_call
+@done:
+      LDA   #0
       RTS
 
 tool_load_backend:
@@ -683,15 +747,17 @@ nasm_include_close:
       RTS
 
 tool_release_includes:
+      STZ   include_release_error
 @loop:
       LDA   include_count
       BEQ   @done
       JSR   nasm_include_close
       BEQ   @loop
+      INC   include_release_error
       DEC   include_count
       BRA   @loop
 @done:
-      LDA   #0
+      LDA   include_release_error
       RTS
 
 tool_release_include_slot:

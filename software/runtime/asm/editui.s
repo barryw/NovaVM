@@ -399,12 +399,44 @@ editui_draw_title_band:
       RTS
 
 editui_draw_status:
-      JSR   editui_full_region
-      STZ   VTEXT_LEFT
+      LDA   EDITUI_STATUSL
+      ORA   EDITUI_STATUSH
+      BEQ   @clear_all
+      LDA   EDITUI_STATUSL
+      STA   EDITUI_PRINTL
+      LDA   EDITUI_STATUSH
+      STA   EDITUI_PRINTH
+      STZ   EDITUI_PRINTX
       LDA   #EDITUI_STATUS_ROW
-      STA   VTEXT_TOP
+      STA   EDITUI_PRINTY
+      LDA   #EDITUI_COLOR_STATUS
+      STA   EDITUI_PRINT_COLOR
+      LDA   #EDITUI_COLOR_STATUS_HOT
+      STA   EDITUI_HOT_COLOR
+      JSR   editui_print_marked
+
+      ; Paint the replacement before erasing its stale tail. Clearing the
+      ; whole row first made the status bar visibly flash on every cursor move.
+      JSR   editui_strlen
+      CMP   #EDITUI_SCREEN_COLS
+      BCS   @done
+      STA   VTEXT_LEFT
+      LDA   #EDITUI_SCREEN_COLS
+      SEC
+      SBC   VTEXT_LEFT
+      STA   VTEXT_WIDTH
+      JMP   editui_clear_status_region
+@clear_all:
+      STZ   VTEXT_LEFT
       LDA   #EDITUI_SCREEN_COLS
       STA   VTEXT_WIDTH
+      JMP   editui_clear_status_region
+@done:
+      RTS
+
+editui_clear_status_region:
+      LDA   #EDITUI_STATUS_ROW
+      STA   VTEXT_TOP
       LDA   #1
       STA   VTEXT_HEIGHT
       STZ   VTEXT_CURX
@@ -415,25 +447,7 @@ editui_draw_status:
       STZ   VTEXT_FLAGS
       LDA   #' '
       STA   VTEXT_CHAR
-      JSR   vtext_clear_region
-      LDA   EDITUI_STATUSL
-      ORA   EDITUI_STATUSH
-      BEQ   @done
-      LDA   EDITUI_STATUSL
-      STA   EDITUI_PRINTL
-      LDA   EDITUI_STATUSH
-      STA   EDITUI_PRINTH
-      LDA   #1
-      STA   EDITUI_PRINTX
-      LDA   #EDITUI_STATUS_ROW
-      STA   EDITUI_PRINTY
-      LDA   #EDITUI_COLOR_STATUS
-      STA   EDITUI_PRINT_COLOR
-      LDA   #EDITUI_COLOR_STATUS_HOT
-      STA   EDITUI_HOT_COLOR
-      JSR   editui_print_marked
-@done:
-      RTS
+      JMP   vtext_clear_region
 
 editui_menu_open_hotkey:
       STA   EDITUI_MENU_KEY

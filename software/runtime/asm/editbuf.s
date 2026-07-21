@@ -135,13 +135,13 @@ EB_STATUS_DIGIT:    .res 1
 EB_STATUS_STARTED:  .res 1
 EB_STATUS_NUML:     .res 1
 EB_STATUS_NUMH:     .res 1
-EB_BLT_HEIGHT:      .res 1
 EB_PROMPTLEN:       .res 1
 EB_FINDLEN:         .res 1
 EB_PROMPT_MSGL:     .res 1
 EB_PROMPT_MSGH:     .res 1
 EB_PROMPT_LABELL:   .res 1
 EB_PROMPT_LABELH:   .res 1
+EB_RENDER_RESERVED: .res 1       ; preserves the published hook-mailbox ABI
 
 EB_TITLEBUF:        .res 64
 EB_STATUSBUF:       .res 80
@@ -1410,11 +1410,19 @@ editbuf_move_right:
       SBC   EDITBUF_LENH
       BCC   @local
       LDA   #EDITUI_CMD_WINDOW_NEXT
-      JMP   editbuf_do_host_command
+      JSR   editbuf_call_command
+      LDA   EDITBUF_CURL
+      CMP   EDITBUF_LENL
+      LDA   EDITBUF_CURH
+      SBC   EDITBUF_LENH
+      BCS   @done
+      JMP   editbuf_after_host_command
 @local:
       JSR   editbuf_cursor_inc
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
+@done:
+      RTS
 
 editbuf_move_home:
       JSR   editbuf_begin_move
@@ -1480,7 +1488,11 @@ editbuf_move_up:
       ORA   EB_CURLINEH
       BNE   @local
       LDA   #EDITUI_CMD_WINDOW_PREVIOUS
-      JMP   editbuf_do_host_command
+      JSR   editbuf_call_command
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JMP   editbuf_after_host_command
 @local:
       ; target line = curline - 1
       LDA   EB_CURLINEL
@@ -1493,6 +1505,8 @@ editbuf_move_up:
 :     DEC   EB_SCRATCHL
       JSR   editbuf_goto_line_col
       JMP   editbuf_after_move
+@done:
+      RTS
 
 editbuf_move_down:
       JSR   editbuf_begin_move
@@ -1510,7 +1524,9 @@ editbuf_move_down:
       SBC   EDITBUF_LENH
       BCC   :+
       LDA   #EDITUI_CMD_WINDOW_NEXT
-      JMP   editbuf_do_host_command
+      JSR   editbuf_call_command
+      BCC   @done
+      JMP   editbuf_after_host_command
 :
       LDX   EB_SCRATCHL
       LDA   EB_SCRATCHH
@@ -1556,6 +1572,8 @@ editbuf_move_down:
       BNE   @adv
 @moved:
       JMP   editbuf_after_move_known
+@done:
+      RTS
 
 editbuf_page_up:
       JSR   editbuf_begin_move
@@ -2026,45 +2044,6 @@ editbuf_render_from_row:
       BRA   @loop
 @done:
       JMP   editbuf_finish_screen
-
-; editbuf_render_row_count — repaint EB_BLT_HEIGHT visible rows starting at
-; EB_ROW, then refresh chrome and cursor.
-editbuf_render_row_count:
-      JSR   editbuf_render_rows
-      JMP   editbuf_finish_screen
-
-; editbuf_render_rows — repaint EB_BLT_HEIGHT visible rows starting at EB_ROW.
-; Returns without refreshing status/cursor so callers can compose sparse repairs.
-editbuf_render_rows:
-      STZ   EB_SELSTARTL
-      STZ   EB_SELSTARTH
-      STZ   EB_SELENDL
-      STZ   EB_SELENDH
-      CLC
-      LDA   EB_TOPLINEL
-      ADC   EB_ROW
-      STA   EB_SCRATCHL
-      LDA   EB_TOPLINEH
-      ADC   #0
-      STA   EB_SCRATCHH
-      JSR   editbuf_offset_of_line
-      LDA   EB_LINEOFFL
-      STA   EB_VISLINEL
-      LDA   EB_LINEOFFH
-      STA   EB_VISLINEH
-      STZ   EB_PAINTSTART
-@loop:
-      LDA   EB_BLT_HEIGHT
-      BEQ   @done
-      LDA   EB_ROW
-      CMP   #EDITBUF_VIEW_ROWS
-      BCS   @done
-      JSR   editbuf_render_row
-      INC   EB_ROW
-      DEC   EB_BLT_HEIGHT
-      BRA   @loop
-@done:
-      RTS
 
 editbuf_adjust_scroll:
       ; vertical: if curline < topline -> topline = curline
@@ -3389,6 +3368,7 @@ editbuf_default_hilite:
 editbuf_default_menu:
       RTS
 editbuf_default_command:
+      CLC
       RTS
 editbuf_default_changed:
       RTS

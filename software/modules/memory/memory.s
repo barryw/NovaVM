@@ -214,7 +214,7 @@
 ;
 ;@fn MEM_MAP_WINDOW
 ;@ndk xmc_map_window
-;@arg xaddr u16 window base -> XMC_XAL/M (ARG0 byte0,1)
+;@arg xaddr u24 flat window base -> XMC_XAL/M + XMC_BANK (ARG0 byte0,1,2)
 ;@arg win u8 window index 0..3 -> X (ARG3 byte0)
 ;@ret void
 ;@status LERR_OK, LERR_MEM_FAIL
@@ -648,12 +648,14 @@ mem_dir_read:
 ; XMC hardware mapping windows.
 ; ===========================================================================
 
-; --- $18 MEM_MAP_WINDOW: ARG0 b0/b1 base -> XMC_XAL/M, ARG3 b0 win -> X -> xmc_map_window ---
+; --- $18 MEM_MAP_WINDOW: ARG0 u24 base -> XMC_XAL/M + bank, ARG3 b0 win -> xmc_map_window ---
 mem_map_window:
       LDA   LIB_ARG0+0
       STA   XMC_XAL
       LDA   LIB_ARG0+1
       STA   XMC_XAM
+      LDA   LIB_ARG0+2
+      STA   XMC_BANK
       LDX   LIB_ARG3+0
       JSR   xmc_map_window
       JMP   mem_finish_status

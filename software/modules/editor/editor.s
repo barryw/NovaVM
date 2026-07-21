@@ -57,12 +57,13 @@ SE_DSTH  = LIB_ZP+3
 ;@fn EDITOR_FN_EDIT_XRAM
 ;@brief Edit a generic XRAM-backed document through a movable 4 KiB RAM window.
 ;@arg xaddr u24 document base (ARG0 byte0..2)
+;@arg flags u8 EDITOR_XRAM_FLAG_* options (ARG0 byte3)
 ;@arg length u16 current document length (ARG1 low word)
 ;@arg window u16 caller scratch pointer (ARG1 high word)
 ;@arg capacity u16 allocated document capacity (ARG2 low word)
 ;@arg window-size u16 caller scratch capacity (ARG2 high word)
 ;@arg title u16 NUL-terminated title pointer (ARG3 low word)
-;@arg type u16 NUL-terminated type-name pointer (ARG3 high word)
+;@arg type u16 type-name or EDITOR_HOOKS_* pointer selected by flags (ARG3 high word)
 ;@ret u8 exit reason and save flag as EDITOR_FN_EDIT; final length in ARG1
 ;@effect Pages complete-line windows as navigation crosses XRAM boundaries.
 ;@status LERR_OK
@@ -203,7 +204,20 @@ sys_edit:
       BRA   @hooks_done
 
 @hooks_done:
+      ; XRAM sessions always use the generic pager's document hooks. LIB_FN_ID
+      ; still identifies the outer call while the pager enters sys_edit.
+      LDA   LIB_FN_ID
+      BEQ   @run
+      LDA   #<ep_command_hook
+      STA   EDITBUF_COMMAND_VECL
+      LDA   #>ep_command_hook
+      STA   EDITBUF_COMMAND_VECH
+      LDA   #<ep_changed_hook
+      STA   EDITBUF_CHANGED_VECL
+      LDA   #>ep_changed_hook
+      STA   EDITBUF_CHANGED_VECH
 
+@run:
       ; --- run the modal editor ---
       STZ   se_saved_flag
       JSR   editbuf_reset_state

@@ -6,30 +6,7 @@
 
       .setcpu "w65c02"
       .include "novalink.inc"
-
-.macro long_bcs target
-      BCC   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bcc target
-      BCS   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_bne target
-      BEQ   :+
-      JMP   target
-:
-.endmacro
-
-.macro long_beq target
-      BNE   :+
-      JMP   target
-:
-.endmacro
+      .include "longbranch.inc"
 
 NLINK_SECTION_CAP = 8
 NLINK_TOTAL_SECTION_CAP = NLINK_OBJECT_CAP * NLINK_SECTION_CAP

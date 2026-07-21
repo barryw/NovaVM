@@ -4,18 +4,26 @@
 file, editor, compiler, assembler, linker, build, and run commands.
 
 The shell and native Pascal compiler (NPC) remain resident in the
-`$C000-$FFFF` language ROM. NPC streams Pascal source into the NDK document
-XRAM slot, parses it there, and writes generated assembly to disk.
+`$C000-$FFFF` language ROM. NPC allocates transient source storage through the
+NDK Memory module, streams Pascal source into that block, parses it there, and
+releases it after writing generated assembly to disk.
 
 O2 is a separate disk-loaded compiler stage, `NPO2.BIN`, so optimization does
 not consume scarce resident ROM and NAS/NL remain language-neutral. NPC emits a
 compact typed linear IR into the temporary `.S` stream. NPO2 uses two transient
-16 KiB XRAM buffers: pass 1 selects direct 65C02 branches and inline word/array
-operations; pass 2 folds constant stack temporaries and fuses constant word
-index arithmetic into relocatable array addresses such as
-`ADC #<(CELLS-$51)`. It overwrites the `.S` file with ordinary readable 65C02
+16 KiB NDK-managed XRAM buffers for six streaming passes and releases both on
+every exit path: typed dataflow optimization;
+three rounds of leaf/caller inlining and dead-routine removal; 65C02 instruction
+selection; and final machine peepholes. The typed pass strength-reduces byte and
+word self-updates, canonicalizes unsigned zero comparisons, forwards repeated
+effect-free array loads, removes stack temporaries from byte accumulations, and
+forms guarded constant-offset array windows once for indexed-indirect reuse.
+Call-free function tails keep their result in compiler scratch, while the stack
+ABI remains the conservative fallback. Inlining is limited to local leaf
+routines with exactly one static call site and iterates so their callers can
+become eligible. NPO2 overwrites the `.S` file with ordinary readable 65C02
 assembly before NAS runs; no `.O2` records reach NAS or user-visible output.
-Both `COMPILE` and `BUILD` print the optimizer banner and each pass as it runs.
+Both `COMPILE` and `BUILD` print the optimizer banner and every pass as it runs.
 
 ## Executable language slice
 
@@ -40,10 +48,13 @@ Generated branches remain valid when a structured statement grows beyond the
 65C02 relative-branch range.
 
 Routine declarations appear after global variables and before the program's
-main `begin`. NPC emits one jump over their bodies, ordinary `JSR`/`RTS` calls,
-and a stack-resident function-result byte, so nested calls do not share a global
-return slot. Life uses `RandomCell`, `Seed`, `Draw`, `CountNeighbors`,
-`NextCell`, `Evolve`, and `Commit` instead of one monolithic main block.
+main `begin`. NPC records routine boundaries, calls, and function-result effects
+in typed IR. NPO2 lowers ordinary `JSR`/`RTS` and stack-resident results when a
+routine must remain callable; at O2 it removes a single-call leaf and substitutes
+its body at the call site, and it uses an NDK scratch byte when no call can occur
+after a function-result assignment. Life remains readable Pascal built from
+`RandomCell`, `Seed`, `Draw`, `CountNeighbors`, `NextCell`, `Evolve`, and
+`Commit`; optimization does not require source-level flattening.
 
 The resident driver reuses `$2000-$6FFF` as transient compiler workspace before
 NAS or NL is loaded: generated assembly occupies `$2000-$5FFF`, and a 64-entry
@@ -163,13 +174,17 @@ into the shared `$2000-$6FFF` tool slot, one at a time:
 - `NPEDIT.BIN` — thin file/type adapter for the shared editor (`Alt-X` or
   `Ctrl-Q` returns to the shell). It streams documents into transient XRAM;
   generic Editor-module paging keeps only the current window in lower RAM.
-- `NPO2.BIN` — Pascal-specific typed instruction selection and O2 peepholes
+  Pascal files install NPEDIT's lexical hook for identifiers, numbers, quoted
+  strings, and Pascal comments; other file types remain plain editor clients.
+- `NPO2.BIN` — Pascal-specific typed dataflow, inlining, instruction selection,
+  and O2 machine peepholes
 - `NAS.BIN` — Nova assembler
 - `NL.BIN` — Nova linker
 
 NAS loads `NASPP.OVL` at `$7000` for preprocessing. The resident frontend
 passes input and output XRAM allocations through a stable mailbox, invokes the
-standard validated NOVO loader, then assembles the returned stream. The first
+NDK `SYS_OVL_LOAD`/`SYS_OVL_MAIN`/`SYS_OVL_UNLOAD` API, then assembles the
+returned stream. The first
 overlay implementation expands case-insensitive `.MACRO name p1, p2` through
 `.ENDMACRO` definitions and nested `.IF`, `.IFDEF`, `.IFNDEF`, `.ELSEIF`,
 `.ELSE`, and `.ENDIF` blocks. `.DEFINE name value` performs case-insensitive identifier
@@ -180,14 +195,19 @@ complete language-neutral two-pass assembly core and W65C02 opcode/addressing
 tables; the small resident executable supplies XRAM/file I/O callbacks through
 a fixed mailbox. Parsing, symbols, sections, relocations, expressions, and the
 opcode matrix therefore consume the overlay slot rather than lower RAM.
+NL invokes `NLWORK.OVL` through the same NDK overlay API. No toolchain stage has
+a private overlay loader.
 
 Linked programs default to `$7000`, outside the tool slot. `RUN` reads the
 binary's load-address prefix, validates that the payload fits writable
 application RAM below Nova MMIO, streams the payload directly from FIO to that
 address, and invokes it. Executable size is therefore independent of the
 shell's 4 KiB source/project buffer.
-NAS allocates its source text in XRAM for each invocation and releases it on
-exit; lower RAM is reserved for the object, symbol, and relocation working set.
+NAS allocates source, preprocessed text, constants, and include files through
+`MEM_ALLOC`, loads files with `MEM_XLOAD`, and balances every allocation with
+`MEM_RELEASE`, including errors. Lower RAM is reserved for the object, symbol,
+and relocation working set; large scratch buffers are uninitialized workspace
+and are not redundantly cleared at startup.
 
 NAS and NL are language-neutral toolchain programs. NAS emits NOBJ external
 relocations for symbolic calls. NLIB v2 stores complete NOBJ members; NL resolves
@@ -204,7 +224,7 @@ build, while projects can override it without changing NL.
 globals across them before searching `PASCAL.NLIB`; the output name is derived
 from the first object. Duplicate case-insensitive globals in the final selected
 object set are rejected even if no live relocation references them. The current
-core ABI reserves four object slots, while the shell command exposes two until
+core ABI reserves eight object slots, while the shell command exposes two until
 project/config input lists land.
 The Pascal-specific code lives in `PASCAL.NLIB`, whose machine operands are
 assembled from NDK definitions in `nova.inc`. `P_WRITE_CHAR` currently pulls a

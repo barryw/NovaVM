@@ -113,7 +113,8 @@ EDITBUF_COLOR_SEL    = $30      ; selection: black on cyan
 .global EDITBUF_HILITE_VECH
 .global EDITBUF_MENU_VECL     ; MENU-config hook vector
 .global EDITBUF_MENU_VECH
-.global EDITBUF_COMMAND_VECL  ; document-command hook vector (A=EDITUI_CMD_*)
+.global EDITBUF_COMMAND_VECL  ; document-command hook vector (A=EDITUI_CMD_*;
+                              ; window commands set C if the window changed)
 .global EDITBUF_COMMAND_VECH
 .global EDITBUF_CHANGED_VECL  ; called after edits/save dirty-state changes
 .global EDITBUF_CHANGED_VECH

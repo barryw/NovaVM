@@ -103,9 +103,13 @@ window 3 directly, remap it after calling the byte helpers.
 
 ## Platform-Owned Ranges
 
-Applications should treat `$000000-$03FFFF` as allocator-managed heap and should
-request storage through `MEM_ALLOC` or `xmc_alloc_block`. The platform currently
-owns `$040000-$047FFF` for shared text undo snapshots, `$048000-$04FFFF` for
+Applications should treat `$000000-$03FFFF` as allocator-managed heap. NDK
+clients must pair `MEM_ALLOC` with `MEM_RELEASE`; code linked directly with the
+XMC runtime can use the equivalent `xmc_alloc_block`/`xmc_release` pair.
+`MEM_MAP_WINDOW` maps the complete 24-bit address returned by the allocator,
+and `MEM_UNMAP_WINDOW` disables the window without releasing the block. The
+platform currently owns `$040000-$047FFF` for shared text undo snapshots,
+`$048000-$04FFFF` for
 redo snapshots, `$050000-$053FFF` for the shared clipboard, `$054000-$054EFF`
 for editui menu save-under scratch, `$055000-$05CFFF` for shared editor
 document buffers, `$05D000-$05FFFF` for remaining editor/NUI scratch,
