@@ -83,6 +83,9 @@ RuntimeLabelBuckets:
       .byte 13
       .word $B9A9
       .byte "AUDIO.RELEASE"
+      .byte 22
+      .word $B9A6
+      .byte "AUDIO.SOUND_INSTRUMENT"
       .byte 20
       .word $0010
       .byte "AUDIO.STATUS_LOADING"
@@ -290,9 +293,6 @@ RuntimeLabelBuckets:
       .byte 0
 
 @bucket_19:
-      .byte 16
-      .word $B9A6
-      .byte "AUDIO.INSTRUMENT"
       .byte 0
 
 @bucket_1A:

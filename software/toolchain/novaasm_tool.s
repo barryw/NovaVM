@@ -2,6 +2,7 @@
 
       .setcpu "w65c02"
       .include "novaasm.inc"
+      .include "longbranch.inc"
       .include "nptool.inc"
       .include "libmemory.inc"
       .include "libsystem.inc"
@@ -660,29 +661,33 @@ nasm_include_open:
       CPY   #3
       BCC   @address
 
-      JSR   tool_clear_args
+      JSR   tool_load_include_current
+      BEQ   @load_ok
+      LDA   FIO_ERRCODE
+      CMP   #FIO_ERR_NOTFOUND
+      long_bne @release_bad
       JSR   tool_include_name_pointer
-      LDA   include_name_ptr
-      STA   LIB_ARG0
-      LDA   include_name_ptr+1
-      STA   LIB_ARG0+1
-      LDA   nasm_include_name_len
-      STA   LIB_ARG1
-      JSR   tool_include_xindex
       LDY   #0
-@load_address:
-      LDA   include_xaddr,X
-      STA   LIB_ARG2,Y
-      INX
+      LDA   (include_name_ptr),Y
+      CMP   #'/'
+      long_beq @release_bad
+      LDA   nasm_include_name_len
+      CMP   #NPTOOL_ARG_CAP-1
+      long_bcs @release_bad
+      TAY
+@root_shift:
+      DEY
+      LDA   (include_name_ptr),Y
       INY
-      CPY   #3
-      BCC   @load_address
-      JSR   tool_include_cap
-      STA   LIB_ARG3
-      STX   LIB_ARG3+1
-      LDA   #MEM_XLOAD
-      JSR   tool_mem_call
+      STA   (include_name_ptr),Y
+      DEY
+      BNE   @root_shift
+      LDA   #'/'
+      STA   (include_name_ptr),Y
+      INC   nasm_include_name_len
+      JSR   tool_load_include_current
       BNE   @release_bad
+@load_ok:
       LDX   include_slot
       LDA   include_large,X
       BNE   @check_large
@@ -696,7 +701,7 @@ nasm_include_open:
       BNE   @bad
       LDX   include_slot
       INC   include_large,X
-      BRA   @allocate
+      JMP   @allocate
 @check_large:
       LDA   XRAM_LENH
       CMP   #>INCLUDE_LOAD_CAP
@@ -731,6 +736,32 @@ nasm_include_open:
 @bad:
       LDA   #1
       RTS
+
+; Load the active include name through the NDK. The caller retries a missing
+; project-relative include from the disk root, where SDK/NDK sources live.
+tool_load_include_current:
+      JSR   tool_clear_args
+      JSR   tool_include_name_pointer
+      LDA   include_name_ptr
+      STA   LIB_ARG0
+      LDA   include_name_ptr+1
+      STA   LIB_ARG0+1
+      LDA   nasm_include_name_len
+      STA   LIB_ARG1
+      JSR   tool_include_xindex
+      LDY   #0
+@load_address:
+      LDA   include_xaddr,X
+      STA   LIB_ARG2,Y
+      INX
+      INY
+      CPY   #3
+      BCC   @load_address
+      JSR   tool_include_cap
+      STA   LIB_ARG3
+      STX   LIB_ARG3+1
+      LDA   #MEM_XLOAD
+      JMP   tool_mem_call
 
 nasm_include_close:
       LDA   include_count
@@ -833,5 +864,5 @@ nas_assembling: .byte "Assembling ", 0
 nas_preprocessing:.byte "Preprocessing ", 0
 nas_writing:    .byte "Writing ", 0
 nas_ok:         .byte "Assembly successful", $0D, $0A, 0
-naspp_name:     .byte "NASPP.OVL"
-nasbe_name:     .byte "NASBE.OVL"
+naspp_name:     .byte "/NASPP.OVL"
+nasbe_name:     .byte "/NASBE.OVL"

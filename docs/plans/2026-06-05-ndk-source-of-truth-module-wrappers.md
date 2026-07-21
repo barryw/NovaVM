@@ -27,7 +27,7 @@ a large driver costs only the routines actually called.)
 
 - `runtime/asm/audio.s`: add `audio_tone` (freq in NVR0L/H, dur in A → sawtooth
   voice 0: master vol, freq, ADSR, gate on, wait, gate off) and `audio_noise`
-  (dur in A → noise burst). `audio_volume` already exists (master via AUDIO_VOLUME
+  (dur in A → noise burst). `audio_volume` already exists (master via AUDIO_VOLUME_LEVEL
   + AUDIO_VOICE).
 - `runtime/asm/vgc.s`: add `vgc_wait_frames` (A = N → loop `vgc_vsync`).
   `vgc_vsync` already waits one frame.

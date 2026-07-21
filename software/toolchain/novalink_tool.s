@@ -444,9 +444,14 @@ config_parse:
       LDX   #>cfg_npp
       JSR   config_expect_word
       long_bcs @bad
-      LDA   #'1'
-      JSR   config_expect_char
-      long_bcs @bad
+      JSR   config_skip_ws
+      JSR   config_next
+      long_bcc @bad
+      CMP   #'1'
+      BEQ   @project_version
+      CMP   #'2'
+      long_bne @bad
+@project_version:
       JSR   config_seek_memory
       long_bcs @bad
       BRA   @memory_word
@@ -1325,7 +1330,7 @@ nl_stripping:.byte "Stripping unused sections", $0D, $0A, 0
 nl_writing: .byte "Writing ", 0
 nl_map:     .byte "Map ", 0
 nl_labels:  .byte "Labels ", 0
-nl_worker_name:.byte "NLWORK.OVL"
+nl_worker_name:.byte "/NLWORK.OVL"
 nl_ok:      .byte "Link successful", $0D, $0A, 0
 cfg_npp:    .byte "NPP", 0
 cfg_memory: .byte "MEMORY", 0

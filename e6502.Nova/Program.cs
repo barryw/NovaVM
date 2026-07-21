@@ -1957,6 +1957,7 @@ static void PrintCodegenUsage()
     Console.Error.WriteLine("  nova codegen novavm-inc <VgcConstants.cs> [basic.sym] [-o novavm.inc]");
     Console.Error.WriteLine("  nova codegen runtime-abi <sources...> --sym <basic.sym> --json <out.json> --md <out.md> [--asm <out.inc>]");
     Console.Error.WriteLine("  nova codegen ndk-reference --runtime-dir <runtime/asm> --tex <out.tex> --json <out.json> [--pascal-dir <out-dir>]");
+    Console.Error.WriteLine("    --pascal-dir emits a complete .PAS/.NPI/.INC/.S unit bundle for every NDK library");
 }
 
 static int DoDocs(string[] args)

@@ -22,28 +22,37 @@ shell_tool_result:.res 1
 shell_tool_load_error_code:.res 1
 
       .segment "BSS"
+shell_project_plan:   .res NPP_PLAN_SIZE
+.assert shell_project_plan = NPP_PLAN_BASE, error, "NPP project mailbox moved"
+
+shell_project_out_len = NPP_PLAN_BASE + NPP_PLAN_OUTPUT_LEN
+shell_project_output  = NPP_PLAN_BASE + NPP_PLAN_OUTPUT
+shell_project_obj_len = NPP_PLAN_BASE + NPP_PLAN_OBJECT_LEN
+shell_project_object  = NPP_PLAN_BASE + NPP_PLAN_OBJECT
+shell_nas_define_len  = NPP_PLAN_BASE + NPP_PLAN_DEFINE_LEN
+shell_nas_define      = NPP_PLAN_BASE + NPP_PLAN_DEFINE
+shell_project_cfg_len = NPP_PLAN_BASE + NPP_PLAN_CONFIG_LEN
+shell_project_config  = NPP_PLAN_BASE + NPP_PLAN_CONFIG
+shell_project_map_len = NPP_PLAN_BASE + NPP_PLAN_MAP_LEN
+shell_project_map     = NPP_PLAN_BASE + NPP_PLAN_MAP
+shell_project_label_len = NPP_PLAN_BASE + NPP_PLAN_LABEL_LEN
+shell_project_label   = NPP_PLAN_BASE + NPP_PLAN_LABEL
+shell_project_optimize = NPP_PLAN_BASE + NPP_PLAN_OPTIMIZE
+shell_project_asm      = NPP_PLAN_BASE + NPP_PLAN_ASM
+shell_project_inline   = NPP_PLAN_BASE + NPP_PLAN_INLINE
+
 shell_name:           .res SHELL_NAME_CAP
 shell_name2:          .res SHELL_NAME_CAP
-shell_project_output: .res SHELL_NAME_CAP
-shell_project_out_len:.res 1
-shell_project_object: .res SHELL_NAME_CAP
-shell_project_obj_len:.res 1
 shell_project_main_obj:.res SHELL_NAME_CAP
 shell_project_main_len:.res 1
-shell_project_asm:    .res 1
-shell_nas_define:     .res SHELL_NAME_CAP
-shell_nas_define_len: .res 1
-shell_project_config: .res SHELL_NAME_CAP
-shell_project_cfg_len:.res 1
-shell_project_map:    .res SHELL_NAME_CAP
-shell_project_map_len:.res 1
-shell_project_label:  .res SHELL_NAME_CAP
-shell_project_label_len:.res 1
-shell_project_optimize:.res 1
 shell_project_file:   .res SHELL_NAME_CAP
 shell_project_file_len:.res 1
-shell_project_inline: .res 1
-shell_new_len:        .res 2
+shell_project_dir:    .res SHELL_NAME_CAP
+shell_project_dir_len:.res 1
+shell_saved_cwd:      .res SHELL_NAME_CAP
+shell_saved_cwd_len:  .res 1
+shell_project_unit_index:.res 1
+shell_project_scoped: .res 1
 shell_program_entry:  .res 2
 shell_number:          .res 2
 shell_digit:           .res 1
@@ -90,6 +99,9 @@ shell_loop:
       shell_try shell_kw_cd,       shell_cmd_cd
       shell_try shell_kw_type,     shell_cmd_type
       shell_try shell_kw_new,      shell_cmd_new
+      shell_try shell_kw_addunit,  shell_cmd_addunit
+      shell_try shell_kw_delunit,  shell_cmd_delunit
+      shell_try shell_kw_delproject, shell_cmd_delproject
       shell_try shell_kw_edit,     shell_cmd_edit
       shell_try shell_kw_del,      shell_cmd_del
       shell_try shell_kw_ren,      shell_cmd_ren
@@ -433,39 +445,16 @@ shell_cmd_type:
       JMP   shell_loop
 
 shell_cmd_new:
-      JSR   shell_require_name
-      BCS   @done
+      JSR   shell_read_args
+      BCS   @usage
+      LDA   shell_name_len
+      BEQ   @usage
       LDA   shell_name2_len
       BNE   @usage
-      JSR   shell_new_project
-      BCS   @failed
-      LDA   #<shell_new_created
-      STA   p_word
-      LDA   #>shell_new_created
-      STA   p_word+1
-      JSR   print_z
-      LDA   #<shell_ext_npp
-      STA   p_word
-      LDA   #>shell_ext_npp
-      STA   p_word+1
-      JSR   shell_derive_name
-      JSR   shell_print_name2
-      JSR   shell_newline
-      BRA   @done
-@failed:
-      LDA   shell_load_error
-      CMP   #2
-      BEQ   @usage
-      CMP   #0
-      BEQ   @file_error
-      LDA   #<shell_new_exists
-      STA   p_word
-      LDA   #>shell_new_exists
-      STA   p_word+1
-      JSR   print_z
-      BRA   @done
-@file_error:
-      JSR   shell_print_file_error
+      LDA   #NPP_OP_NEW
+      JSR   shell_launch_project_op
+      BCC   @done
+      JSR   shell_print_tool_error
       BRA   @done
 @usage:
       LDA   #<shell_usage
@@ -473,6 +462,57 @@ shell_cmd_new:
       LDA   #>shell_usage
       STA   p_word+1
       JSR   print_z
+@done:
+      JMP   shell_loop
+
+shell_cmd_addunit:
+      JSR   shell_read_args
+      BCS   @usage
+      LDA   shell_name_len
+      BEQ   @usage
+      LDA   shell_name2_len
+      BEQ   @usage
+      LDA   #NPP_OP_ADD_UNIT
+      JSR   shell_launch_project_op
+      BCC   @done
+      JSR   shell_print_tool_error
+      BRA   @done
+@usage:
+      JSR   shell_print_usage
+@done:
+      JMP   shell_loop
+
+shell_cmd_delunit:
+      JSR   shell_read_args
+      BCS   @usage
+      LDA   shell_name_len
+      BEQ   @usage
+      LDA   shell_name2_len
+      BEQ   @usage
+      LDA   #NPP_OP_DEL_UNIT
+      JSR   shell_launch_project_op
+      BCC   @done
+      JSR   shell_print_tool_error
+      BRA   @done
+@usage:
+      JSR   shell_print_usage
+@done:
+      JMP   shell_loop
+
+shell_cmd_delproject:
+      JSR   shell_read_args
+      BCS   @usage
+      LDA   shell_name_len
+      BEQ   @usage
+      LDA   shell_name2_len
+      BNE   @usage
+      LDA   #NPP_OP_DEL_PROJECT
+      JSR   shell_launch_project_op
+      BCC   @done
+      JSR   shell_print_tool_error
+      BRA   @done
+@usage:
+      JSR   shell_print_usage
 @done:
       JMP   shell_loop
 
@@ -605,6 +645,7 @@ shell_cmd_build:
       JMP   @done
 :
       JSR   shell_reset_link_base
+      STZ   shell_project_scoped
       STZ   shell_project_out_len
       STZ   shell_project_obj_len
       STZ   shell_project_asm
@@ -615,19 +656,31 @@ shell_cmd_build:
       STZ   shell_project_optimize
       STZ   shell_project_inline
       STZ   shell_project_file_len
-      JSR   shell_name_is_npp
-      BCC   @source_ready
-      JSR   shell_save_project_file
-      JSR   shell_load_project
-      BEQ   :+
+      JSR   shell_name_has_dot
+      BCS   @check_project_file
+      JSR   shell_enter_project
+      BCC   @project
       JMP   @file_error
-:
-      JSR   shell_parse_project
-      BCC   :+
-      JMP   @project_error
-:
+@check_project_file:
+      JSR   shell_name_is_npp
+      long_bcc @source_build
+@project:
+      JSR   shell_save_project_file
+      STZ   shell_name2_len
+      STZ   shell_name2
+      LDA   #NPP_OP_PARSE
+      JSR   shell_launch_project_op
+      BCC   @parsed
+      JMP   @tool_error
+@parsed:
+      JSR   shell_copy_arg0_to_name
+      LDA   NPP_PLAN_BASE+NPP_PLAN_LOAD_LO
+      STA   NPTOOL_LINK_BASE
+      LDA   NPP_PLAN_BASE+NPP_PLAN_LOAD_HI
+      STA   NPTOOL_LINK_BASE+1
+      JSR   shell_use_inline_config
       LDA   shell_project_cfg_len
-      BEQ   @source_ready
+      BEQ   @compile_project
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_link_config
       LDA   #NPTOOL_FLAG_VALIDATE
@@ -638,9 +691,62 @@ shell_cmd_build:
       STA   p_word+1
       LDA   #shell_tool_linker_end-shell_tool_linker
       JSR   shell_launch_tool
-      BCC   @source_ready
+      BCC   @compile_project
       JMP   @tool_error
-@source_ready:
+@compile_project:
+      JSR   shell_compile_unoptimized
+      BCC   @units
+      JMP   @tool_error
+@units:
+      STZ   shell_project_unit_index
+@unit:
+      LDA   shell_project_unit_index
+      CMP   NPP_PLAN_BASE+NPP_PLAN_UNIT_COUNT
+      BCS   @combine
+      JSR   shell_restore_project_file
+      STZ   shell_name2_len
+      STZ   shell_name2
+      JSR   shell_prepare_tool_args
+      LDA   #NPP_OP_GET_UNIT
+      STA   NPTOOL_FLAGS
+      LDA   shell_project_unit_index
+      STA   NPTOOL_DETAIL
+      LDA   #<shell_tool_project
+      STA   p_word
+      LDA   #>shell_tool_project
+      STA   p_word+1
+      LDA   #shell_tool_project_end-shell_tool_project
+      JSR   shell_launch_tool
+      long_bcs @tool_error
+      JSR   shell_copy_arg0_to_name
+      JSR   shell_compile_unoptimized
+      long_bcs @tool_error
+      INC   shell_project_unit_index
+      BRA   @unit
+@combine:
+      JSR   shell_restore_project_file
+      LDA   #<shell_ext_s
+      STA   p_word
+      LDA   #>shell_ext_s
+      STA   p_word+1
+      JSR   shell_derive_name
+      JSR   shell_prepare_tool_args
+      LDA   #NPP_OP_COMBINE
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_project
+      STA   p_word
+      LDA   #>shell_tool_project
+      STA   p_word+1
+      LDA   #shell_tool_project_end-shell_tool_project
+      JSR   shell_launch_tool
+      long_bcs @tool_error
+      JSR   shell_use_inline_config
+      JSR   shell_optimize
+      long_bcs @tool_error
+      JSR   shell_promote_name2
+      JMP   @assemble
+
+@source_build:
       LDA   #<shell_ext_s
       STA   p_word
       LDA   #>shell_ext_s
@@ -655,8 +761,8 @@ shell_cmd_build:
       BCC   :+
       JMP   @tool_error
 :
-
       JSR   shell_promote_name2
+@assemble:
       LDA   #<shell_ext_obj
       STA   p_word
       LDA   #>shell_ext_obj
@@ -715,18 +821,34 @@ shell_cmd_build:
 @tool_error:
       JSR   shell_print_tool_error
       BRA   @done
-@project_error:
-      LDA   #<shell_project_error
-      STA   p_word
-      LDA   #>shell_project_error
-      STA   p_word+1
-      JSR   print_z
 @done:
+      JSR   shell_leave_project
       JMP   shell_loop
 
 shell_cmd_run:
       JSR   shell_require_name
       BCS   @done
+      STZ   shell_project_scoped
+      JSR   shell_name_has_dot
+      BCS   @check_manifest
+      JSR   shell_enter_project
+      BCC   @manifest
+      BRA   @file_error
+@check_manifest:
+      JSR   shell_name_is_npp
+      BCC   @load
+@manifest:
+      JSR   shell_save_project_file
+      STZ   shell_name2_len
+      STZ   shell_name2
+      LDA   #NPP_OP_PARSE
+      JSR   shell_launch_project_op
+      BCS   @tool_error
+      LDA   shell_project_out_len
+      BEQ   @bad_project
+      JSR   shell_use_project_output
+      JSR   shell_promote_name2
+@load:
       JSR   shell_load_program
       CMP   #1
       BEQ   @file_error
@@ -755,22 +877,186 @@ shell_cmd_run:
       BRA   @done
 @file_error:
       JSR   shell_print_file_error
+      BRA   @done
+@tool_error:
+      JSR   shell_print_tool_error
+      BRA   @done
+@bad_project:
+      LDA   #<shell_project_error
+      STA   p_word
+      LDA   #>shell_project_error
+      STA   p_word+1
+      JSR   print_z
 @done:
+      JSR   shell_leave_project
       JMP   shell_loop
 
 ; ---------------------------------------------------------------------
 ; External tool execution.
 ; ---------------------------------------------------------------------
-shell_load_project:
-      LDA   #<source_buf
-      STA   p_copy_dst
-      LDA   #>source_buf
-      STA   p_copy_dst+1
-      LDA   #<SHELL_BUFFER_CAP
-      STA   p_out_left
-      LDA   #>SHELL_BUFFER_CAP
-      STA   p_out_left+1
-      JMP   shell_load_shell_name
+shell_print_usage:
+      LDA   #<shell_usage
+      STA   p_word
+      LDA   #>shell_usage
+      STA   p_word+1
+      JMP   print_z
+
+shell_name_has_dot:
+      LDY   #0
+@byte:
+      CPY   shell_name_len
+      BCS   @no
+      LDA   shell_name,Y
+      CMP   #'.'
+      BEQ   @yes
+      INY
+      BRA   @byte
+@yes:
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
+shell_save_cwd:
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      LDA   #FILE_PWD
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @bad
+      LDA   FIO_NAMELEN
+      CMP   #SHELL_NAME_CAP
+      BCS   @bad
+      STA   shell_saved_cwd_len
+      TAX
+      STZ   shell_saved_cwd,X
+@copy:
+      DEX
+      BMI   @ok
+      LDA   FIO_NAME,X
+      STA   shell_saved_cwd,X
+      BRA   @copy
+@ok:
+      CLC
+      RTS
+@bad:
+      LDA   FIO_ERRCODE
+      STA   shell_fio_error
+      SEC
+      RTS
+
+shell_enter_project:
+      JSR   shell_save_cwd
+      BCS   @bad
+      LDA   shell_name_len
+      STA   shell_project_dir_len
+      TAX
+      STZ   shell_project_dir,X
+@save:
+      DEX
+      BMI   @cd
+      LDA   shell_name,X
+      STA   shell_project_dir,X
+      BRA   @save
+@cd:
+      LDA   #FILE_CD
+      JSR   shell_call_file_name
+      LDA   LIB_STATUS
+      BNE   @bad
+      INC   shell_project_scoped
+      LDA   #<shell_ext_npp
+      STA   p_word
+      LDA   #>shell_ext_npp
+      STA   p_word+1
+      JSR   shell_derive_name
+      JSR   shell_promote_name2
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+shell_leave_project:
+      LDA   shell_project_scoped
+      BEQ   @done
+      STZ   shell_project_scoped
+      LDA   shell_saved_cwd_len
+      STA   shell_name_len
+      TAX
+      STZ   shell_name,X
+@copy:
+      DEX
+      BMI   @cd
+      LDA   shell_saved_cwd,X
+      STA   shell_name,X
+      BRA   @copy
+@cd:
+      LDA   #FILE_CD
+      JSR   shell_call_file_name
+      LDA   LIB_STATUS
+      BEQ   @done
+      JSR   shell_print_file_error
+@done:
+      RTS
+
+shell_restore_project_file:
+      LDA   shell_project_file_len
+      STA   shell_name_len
+      TAX
+      STZ   shell_name,X
+@copy:
+      DEX
+      BMI   @done
+      LDA   shell_project_file,X
+      STA   shell_name,X
+      BRA   @copy
+@done:
+      RTS
+
+shell_copy_arg0_to_name:
+      LDA   NPTOOL_ARG0_LEN
+      STA   shell_name_len
+      TAX
+      STZ   shell_name,X
+@copy:
+      DEX
+      BMI   @done
+      LDA   NPTOOL_ARG0,X
+      STA   shell_name,X
+      BRA   @copy
+@done:
+      RTS
+
+shell_compile_unoptimized:
+      LDA   #<shell_ext_asm
+      STA   p_word
+      LDA   #>shell_ext_asm
+      STA   p_word+1
+      JSR   shell_derive_name
+      JSR   shell_prepare_tool_args
+      JSR   npc_compile_file
+      BEQ   @ok
+      SEC
+      RTS
+@ok:
+      CLC
+      RTS
+
+; A selects an NPP_OP_* operation. The two parsed shell arguments are passed
+; through the ordinary disk-tool mailbox.
+shell_launch_project_op:
+      PHA
+      JSR   shell_prepare_tool_args
+      PLA
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_project
+      STA   p_word
+      LDA   #>shell_tool_project
+      STA   p_word+1
+      LDA   #shell_tool_project_end-shell_tool_project
+      JMP   shell_launch_tool
 
 shell_prepare_tool_args:
       STZ   NPTOOL_STATUS
@@ -885,6 +1171,10 @@ shell_print_tool_error:
       CMP   #NPTOOL_ERR_MEMORY
       BNE   :+
       JMP   @memory
+:
+      CMP   #NPTOOL_ERR_PROJECT
+      BNE   :+
+      JMP   @project
 :
       CMP   #NPTOOL_ERR_ARGS
       BNE   :+
@@ -1039,6 +1329,38 @@ shell_print_tool_error:
       STA   p_word
       LDA   #>shell_memory_error
       STA   p_word+1
+      JMP   print_z
+@project:
+      LDA   NPTOOL_DETAIL
+      CMP   #NPP_DETAIL_EXISTS
+      BNE   :+
+      LDA   #<shell_project_exists
+      LDX   #>shell_project_exists
+      BRA   @project_message
+:
+      CMP   #NPP_DETAIL_NOT_MEMBER
+      BNE   :+
+      LDA   #<shell_unit_not_member
+      LDX   #>shell_unit_not_member
+      BRA   @project_message
+:
+      CMP   #NPP_DETAIL_NESTED_DIR
+      BNE   :+
+      LDA   #<shell_project_nested
+      LDX   #>shell_project_nested
+      BRA   @project_message
+:
+      CMP   #NPP_DETAIL_TOO_MANY
+      BNE   :+
+      LDA   #<shell_too_many_units
+      LDX   #>shell_too_many_units
+      BRA   @project_message
+:
+      LDA   #<shell_project_error
+      LDX   #>shell_project_error
+@project_message:
+      STA   p_word
+      STX   p_word+1
       JMP   print_z
 @args:
       LDA   #<shell_usage
@@ -1206,597 +1528,6 @@ shell_reset_link_base:
       STA   NPTOOL_LINK_BASE
       LDA   #>OUTPUT_BASE
       STA   NPTOOL_LINK_BASE+1
-      RTS
-
-; ---------------------------------------------------------------------
-; NPP v1 parser.
-;
-; NPP 1 keeps one MAIN/OUTPUT pair and optional O2/DEFINE/OBJECT/ASM/link options.
-; ---------------------------------------------------------------------
-p_expect_word:
-      JSR   p_skip_ws
-      LDY   #0
-@loop:
-      LDA   (p_word),Y
-      BEQ   @boundary
-      STA   p_expected
-      JSR   p_read_upper
-      BCC   @bad
-      CMP   p_expected
-      BNE   @bad
-      INC   p_word
-      BNE   @loop
-      INC   p_word+1
-      BRA   @loop
-@boundary:
-      JSR   p_peek_upper
-      BCC   @ok
-      JSR   p_is_ident
-      BCS   @bad
-@ok:
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-p_expect_char:
-      STA   p_expected
-      JSR   p_skip_ws
-      JSR   p_next
-      BCC   @bad
-      CMP   p_expected
-      BNE   @bad
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-p_skip_ws:
-@loop:
-      JSR   p_peek
-      BCC   @done
-      CMP   #' '
-      BEQ   @eat
-      CMP   #$09
-      BEQ   @eat
-      CMP   #$0D
-      BEQ   @eat
-      CMP   #$0A
-      BNE   @done
-@eat:
-      JSR   p_next
-      BRA   @loop
-@done:
-      RTS
-
-p_peek_upper:
-      JSR   p_peek
-      BCC   @eof
-      JSR   shell_upper
-      SEC
-      RTS
-@eof:
-      CLC
-      RTS
-
-p_read_upper:
-      JSR   p_next
-      BCC   @eof
-      JSR   shell_upper
-      SEC
-      RTS
-@eof:
-      CLC
-      RTS
-
-p_is_ident:
-      CMP   #'A'
-      BCC   @underscore
-      CMP   #'Z'+1
-      BCC   @yes
-@underscore:
-      CMP   #'_'
-      BEQ   @yes
-      CMP   #'0'
-      BCC   @no
-      CMP   #'9'+1
-      BCC   @yes
-@no:
-      CLC
-      RTS
-@yes:
-      SEC
-      RTS
-
-p_peek:
-      LDA   p_left
-      ORA   p_left+1
-      BEQ   @eof
-      LDY   #0
-      LDA   (p_src),Y
-      SEC
-      RTS
-@eof:
-      CLC
-      RTS
-
-p_next:
-      JSR   p_peek
-      BCC   @eof
-      PHA
-      INC   p_src
-      BNE   :+
-      INC   p_src+1
-:     LDA   p_left
-      BNE   :+
-      DEC   p_left+1
-:     DEC   p_left
-      PLA
-      SEC
-@eof:
-      RTS
-
-shell_parse_project:
-      LDA   #<source_buf
-      STA   p_src
-      LDA   #>source_buf
-      STA   p_src+1
-      LDA   shell_file_len
-      STA   p_left
-      LDA   shell_file_len+1
-      STA   p_left+1
-
-      LDA   #<shell_project_magic
-      STA   p_word
-      LDA   #>shell_project_magic
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @bad_early
-      LDA   #'1'
-      JSR   p_expect_char
-      BCS   @bad_early
-      LDA   #<shell_project_main_kw
-      STA   p_word
-      LDA   #>shell_project_main_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @bad_early
-      LDA   #<shell_name
-      STA   p_copy_dst
-      LDA   #>shell_name
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCS   @bad_early
-      LDA   shell_token_len
-      STA   shell_name_len
-      BRA   @output
-@bad_early:
-      JMP   @bad
-
-@output:
-      LDA   #<shell_project_output_kw
-      STA   p_word
-      LDA   #>shell_project_output_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCC   :+
-      JMP   @bad
-:
-      LDA   #<shell_project_output
-      STA   p_copy_dst
-      LDA   #>shell_project_output
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCC   :+
-      JMP   @bad
-:
-      LDA   shell_token_len
-      STA   shell_project_out_len
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'A'
-      BNE   :+
-      JMP   @asm
-:
-      CMP   #'D'
-      BNE   :+
-      JMP   @define
-:
-      CMP   #'O'
-      BNE   :+
-      JMP   @object_or_optimize
-:
-      CMP   #'C'
-      BNE   :+
-      JMP   @config
-:
-      CMP   #'M'
-      BEQ   :+
-      JMP   @load_or_label
-:
-      JMP   @map
-@define:
-      LDA   shell_nas_define_len
-      BEQ   :+
-      JMP   @bad
-:
-      LDA   #<shell_project_define_kw
-      STA   p_word
-      LDA   #>shell_project_define_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCC   :+
-      JMP   @bad
-:
-      LDA   #<shell_nas_define
-      STA   p_copy_dst
-      LDA   #>shell_nas_define
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCC   :+
-      JMP   @bad
-:
-      LDA   shell_token_len
-      STA   shell_nas_define_len
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'A'
-      BNE   :+
-      JMP   @asm
-:
-      CMP   #'O'
-      BNE   :+
-      JMP   @object_or_optimize
-:
-      CMP   #'C'
-      BNE   :+
-      JMP   @config
-:
-      CMP   #'M'
-      BEQ   :+
-      JMP   @load_or_label
-:
-      JMP   @map
-@object_or_optimize:
-      JSR   p_skip_ws
-      LDA   p_left+1
-      BNE   :+
-      LDA   p_left
-      CMP   #2
-      BCC   @optimize_bad
-:
-      LDY   #1
-      LDA   (p_src),Y
-      JSR   shell_upper
-      CMP   #'P'
-      BEQ   @optimize
-      JMP   @object
-@optimize:
-      LDA   shell_project_optimize
-      BNE   @optimize_bad
-      LDA   #<shell_project_optimize_kw
-      STA   p_word
-      LDA   #>shell_project_optimize_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @optimize_bad
-      JSR   p_skip_ws
-      JSR   p_read_upper
-      BCC   @optimize_bad
-      CMP   #'O'
-      BNE   @optimize_bad
-      JSR   p_next
-      BCC   @optimize_bad
-      CMP   #'2'
-      BNE   @optimize_bad
-      LDA   #2
-      STA   shell_project_optimize
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'A'
-      BNE   :+
-      JMP   @asm
-:
-      CMP   #'D'
-      BNE   :+
-      JMP   @define
-:
-      CMP   #'O'
-      BNE   :+
-      JMP   @object_or_optimize
-:
-      CMP   #'C'
-      BNE   :+
-      JMP   @config
-:
-      CMP   #'M'
-      BNE   @load_or_label
-      JMP   @map
-@optimize_bad:
-      JMP   @bad
-@asm:
-      LDA   #<shell_project_asm_kw
-      STA   p_word
-      LDA   #>shell_project_asm_kw
-      STA   p_word+1
-      LDA   #1
-      STA   shell_project_asm
-      BRA   @aux_keyword
-@object:
-      LDA   #<shell_project_object_kw
-      STA   p_word
-      LDA   #>shell_project_object_kw
-      STA   p_word+1
-      STZ   shell_project_asm
-@aux_keyword:
-      JSR   p_expect_word
-      BCC   :+
-      JMP   @bad
-:
-      LDA   #<shell_project_object
-      STA   p_copy_dst
-      LDA   #>shell_project_object
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCC   :+
-      JMP   @bad
-:
-      LDA   shell_token_len
-      STA   shell_project_obj_len
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'C'
-      BNE   :+
-      JMP   @config
-:
-      CMP   #'M'
-      BNE   @load_or_label
-      JMP   @map
-@load_bad:
-      JMP   @bad
-@load_ok:
-      JMP   @ok
-@load_label:
-      JMP   @label
-@load_or_label:
-      JSR   p_skip_ws
-      LDA   p_left+1
-      BNE   @second_keyword_byte
-      LDA   p_left
-      CMP   #2
-      BCC   @load_bad
-@second_keyword_byte:
-      LDY   #1
-      LDA   (p_src),Y
-      JSR   shell_upper
-      CMP   #'A'
-      BEQ   @load_label
-@load:
-      LDA   #<shell_project_load_kw
-      STA   p_word
-      LDA   #>shell_project_load_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCC   :+
-      JMP   @bad
-:
-      LDA   #'$'
-      JSR   p_expect_char
-      BCS   @load_bad
-      JSR   p_parse_hex16
-      BCS   @load_bad
-      LDA   shell_number
-      STA   NPTOOL_LINK_BASE
-      LDA   shell_number+1
-      STA   NPTOOL_LINK_BASE+1
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'C'
-      BEQ   @config
-      CMP   #'M'
-      BEQ   @map
-      CMP   #'L'
-      BEQ   @load_or_label
-      BRA   @load_bad
-@config:
-      LDA   #<shell_project_config_kw
-      STA   p_word
-      LDA   #>shell_project_config_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @load_bad
-      LDA   #<shell_project_config
-      STA   p_copy_dst
-      LDA   #>shell_project_config
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCS   @load_bad
-      LDA   shell_token_len
-      STA   shell_project_cfg_len
-      JSR   shell_use_inline_config
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   :+
-      JMP   @ok
-:
-      JSR   p_peek_upper
-      CMP   #'M'
-      BEQ   @map
-      CMP   #'L'
-      BEQ   :+
-      JMP   @bad
-:
-      JMP   @load_or_label
-@map:
-      LDA   shell_project_map_len
-      BNE   @bad
-      LDA   #<shell_project_map_kw
-      STA   p_word
-      LDA   #>shell_project_map_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @bad
-      LDA   #<shell_project_map
-      STA   p_copy_dst
-      LDA   #>shell_project_map
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCS   @bad
-      LDA   shell_token_len
-      STA   shell_project_map_len
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BNE   @label
-      BRA   @ok
-@label:
-      LDA   shell_project_label_len
-      BNE   @bad
-      LDA   #<shell_project_label_kw
-      STA   p_word
-      LDA   #>shell_project_label_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @bad
-      LDA   #<shell_project_label
-      STA   p_copy_dst
-      LDA   #>shell_project_label
-      STA   p_copy_dst+1
-      JSR   shell_project_token
-      BCS   @bad
-      LDA   shell_token_len
-      STA   shell_project_label_len
-      JSR   p_skip_ws
-      LDA   p_left
-      ORA   p_left+1
-      BEQ   @ok
-      LDA   shell_project_inline
-      BEQ   @bad
-      LDA   #<shell_project_memory_kw
-      STA   p_word
-      LDA   #>shell_project_memory_kw
-      STA   p_word+1
-      JSR   p_expect_word
-      BCS   @bad
-@ok:
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-p_parse_hex16:
-      STZ   shell_number
-      STZ   shell_number+1
-      LDX   #4
-@digit:
-      JSR   p_next
-      BCC   @bad
-      JSR   shell_hex_nibble
-      BCS   @bad
-      STA   shell_digit
-      ASL   shell_number
-      ROL   shell_number+1
-      ASL   shell_number
-      ROL   shell_number+1
-      ASL   shell_number
-      ROL   shell_number+1
-      ASL   shell_number
-      ROL   shell_number+1
-      LDA   shell_number
-      ORA   shell_digit
-      STA   shell_number
-      DEX
-      BNE   @digit
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-shell_hex_nibble:
-      JSR   shell_upper
-      CMP   #'0'
-      BCC   @bad
-      CMP   #'9'+1
-      BCS   @letter
-      SEC
-      SBC   #'0'
-      CLC
-      RTS
-@letter:
-      CMP   #'A'
-      BCC   @bad
-      CMP   #'F'+1
-      BCS   @bad
-      SEC
-      SBC   #'A'-10
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-shell_project_token:
-      JSR   p_skip_ws
-      STZ   shell_token_len
-@loop:
-      JSR   p_peek
-      BCC   @done
-      CMP   #' '
-      BEQ   @done
-      CMP   #$09
-      BEQ   @done
-      CMP   #$0D
-      BEQ   @done
-      CMP   #$0A
-      BEQ   @done
-      LDA   shell_token_len
-      CMP   #SHELL_NAME_CAP-1
-      BCS   @bad
-      JSR   p_next
-      LDY   shell_token_len
-      STA   (p_copy_dst),Y
-      INC   shell_token_len
-      BRA   @loop
-@done:
-      LDA   shell_token_len
-      BEQ   @bad
-      LDY   shell_token_len
-      LDA   #0
-      STA   (p_copy_dst),Y
-      CLC
-      RTS
-@bad:
-      SEC
       RTS
 
 shell_name_is_npp:
@@ -2456,276 +2187,6 @@ shell_derive_name:
       STY   shell_name2_len
       RTS
 
-shell_new_project:
-      STZ   shell_load_error
-      STZ   shell_fio_error
-      JSR   shell_new_validate_name
-      BCC   :+
-      JMP   @usage
-:
-      LDA   #<shell_ext_pas
-      LDX   #>shell_ext_pas
-      JSR   shell_new_require_absent
-      BCC   :+
-      JMP   @failed
-:
-      LDA   #<shell_ext_npp
-      LDX   #>shell_ext_npp
-      JSR   shell_new_require_absent
-      BCC   :+
-      JMP   @failed
-:
-      JSR   shell_new_reset
-      LDA   #<shell_new_pas_prefix
-      LDX   #>shell_new_pas_prefix
-      JSR   shell_new_append_z
-      JSR   shell_new_append_name
-      LDA   #<shell_new_pas_suffix
-      LDX   #>shell_new_pas_suffix
-      JSR   shell_new_append_z
-      LDA   #<shell_ext_pas
-      LDX   #>shell_ext_pas
-      JSR   shell_new_save_ext
-      BCS   @failed
-
-      JSR   shell_new_reset
-      LDA   #<shell_new_npp_prefix
-      LDX   #>shell_new_npp_prefix
-      JSR   shell_new_append_z
-      JSR   shell_new_append_name
-      LDA   #<shell_ext_pas
-      LDX   #>shell_ext_pas
-      JSR   shell_new_append_z
-      LDA   #<shell_new_npp_output
-      LDX   #>shell_new_npp_output
-      JSR   shell_new_append_z
-      JSR   shell_new_append_name
-      LDA   #<shell_ext_bin
-      LDX   #>shell_ext_bin
-      JSR   shell_new_append_z
-      LDA   #<shell_new_npp_options
-      LDX   #>shell_new_npp_options
-      JSR   shell_new_append_z
-      LDA   #<shell_new_npp_map
-      LDX   #>shell_new_npp_map
-      JSR   shell_new_append_z
-      JSR   shell_new_append_name
-      LDA   #<shell_ext_map
-      LDX   #>shell_ext_map
-      JSR   shell_new_append_z
-      LDA   #<shell_new_npp_label
-      LDX   #>shell_new_npp_label
-      JSR   shell_new_append_z
-      JSR   shell_new_append_name
-      LDA   #<shell_ext_lbl
-      LDX   #>shell_ext_lbl
-      JSR   shell_new_append_z
-      LDA   #<shell_new_lf
-      LDX   #>shell_new_lf
-      JSR   shell_new_append_z
-      LDA   #<shell_ext_npp
-      LDX   #>shell_ext_npp
-      JSR   shell_new_save_ext
-@failed:
-      RTS
-@usage:
-      LDA   #2
-      STA   shell_load_error
-      SEC
-      RTS
-
-shell_new_validate_name:
-      LDA   shell_name_len
-      BEQ   @bad
-      LDA   shell_name
-      CMP   #'_'
-      BEQ   @rest
-      JSR   shell_upper
-      CMP   #'A'
-      BCC   @bad
-      CMP   #'Z'+1
-      BCS   @bad
-@rest:
-      LDX   #1
-@byte:
-      CPX   shell_name_len
-      BCS   @ok
-      LDA   shell_name,X
-      JSR   shell_upper
-      JSR   p_is_ident
-      BCC   @bad
-      INX
-      BRA   @byte
-@ok:
-      CLC
-      RTS
-@bad:
-      SEC
-      RTS
-
-shell_new_require_absent:
-      STA   p_word
-      STX   p_word+1
-      JSR   shell_derive_name
-      LDA   #<shell_name2
-      STA   p_word
-      LDA   #>shell_name2
-      STA   p_word+1
-      LDA   shell_name2_len
-      STA   shell_io_len
-      JSR   shell_copy_fio_name
-      BNE   @open_error
-      LDA   #FIO_FILE_ACCESS_READ
-      STA   FIO_DIRTYPE
-      JSR   fio_fopen
-      BNE   @open_error
-      LDA   FIO_SRCL
-      STA   shell_file_id
-      LDA   FIO_SRCH
-      STA   shell_file_id+1
-      JSR   shell_close_file
-      LDA   #1
-      STA   shell_load_error
-      SEC
-      RTS
-@open_error:
-      LDA   FIO_ERRCODE
-      CMP   #FIO_ERR_NOTFOUND
-      BEQ   @absent
-      STA   shell_fio_error
-      STZ   shell_load_error
-      SEC
-      RTS
-@absent:
-      CLC
-      RTS
-
-shell_new_reset:
-      STZ   shell_new_len
-      STZ   shell_new_len+1
-      RTS
-
-shell_new_append_name:
-      LDA   #<shell_name
-      LDX   #>shell_name
-      LDY   shell_name_len
-      BRA   shell_new_append
-
-; A/X = source, Y = length.
-shell_new_append:
-      STA   p_word
-      STX   p_word+1
-      STY   shell_token_len
-      LDY   #0
-@loop:
-      CPY   shell_token_len
-      BCS   @ok
-      LDA   (p_word),Y
-      PHY
-      JSR   shell_new_append_byte
-      PLY
-      BCS   @bad
-      INY
-      BRA   @loop
-@ok:
-      CLC
-@bad:
-      RTS
-
-; A/X = zero-terminated source.
-shell_new_append_z:
-      STA   p_word
-      STX   p_word+1
-      LDY   #0
-@loop:
-      LDA   (p_word),Y
-      BEQ   @ok
-      PHY
-      JSR   shell_new_append_byte
-      PLY
-      BCS   @bad
-      INY
-      BNE   @loop
-@bad:
-      SEC
-      RTS
-@ok:
-      CLC
-      RTS
-
-shell_new_append_byte:
-      PHA
-      LDA   shell_new_len+1
-      CMP   #>SHELL_BUFFER_CAP
-      BCC   @room
-      PLA
-      SEC
-      RTS
-@room:
-      CLC
-      LDA   #<source_buf
-      ADC   shell_new_len
-      STA   p_copy_dst
-      LDA   #>source_buf
-      ADC   shell_new_len+1
-      STA   p_copy_dst+1
-      PLA
-      LDY   #0
-      STA   (p_copy_dst),Y
-      INC   shell_new_len
-      BNE   :+
-      INC   shell_new_len+1
-:
-      CLC
-      RTS
-
-shell_new_save_ext:
-      STA   p_word
-      STX   p_word+1
-      JSR   shell_derive_name
-      LDA   #<shell_name2
-      STA   p_word
-      LDA   #>shell_name2
-      STA   p_word+1
-      LDA   shell_name2_len
-      STA   shell_io_len
-      JSR   shell_copy_fio_name
-      BNE   @error
-      LDA   #FIO_FILE_ACCESS_WRITE
-      STA   FIO_DIRTYPE
-      JSR   fio_fcreate
-      BNE   @error
-      LDA   FIO_SRCL
-      STA   shell_file_id
-      LDA   FIO_SRCH
-      STA   shell_file_id+1
-      LDA   #<source_buf
-      STA   FIO_ENDL
-      LDA   #>source_buf
-      STA   FIO_ENDH
-      LDA   shell_new_len
-      STA   FIO_GLENL
-      LDA   shell_new_len+1
-      STA   FIO_GLENH
-      LDA   #FIO_FILE_TARGET_RAM
-      STA   FIO_DIRTYPE
-      JSR   fio_fwrite
-      BNE   @write_error
-      JSR   shell_close_file
-      CLC
-      RTS
-@write_error:
-      LDA   FIO_ERRCODE
-      STA   shell_fio_error
-      JSR   shell_close_file
-      SEC
-      RTS
-@error:
-      LDA   FIO_ERRCODE
-      STA   shell_fio_error
-      STZ   shell_load_error
-      SEC
-      RTS
 
 ; ---------------------------------------------------------------------
 ; Raw file loader for .NPP, TYPE, and $7000 binaries.
@@ -3031,7 +2492,11 @@ shell_assemble_include:.byte "cannot read include file.", $0D, $0A, 0
 shell_assemble_assert:.byte "assertion failed.", $0D, $0A, 0
 shell_link_error: .byte "Linker error.", $0D, $0A, 0
 shell_link_config_error: .byte "Linker configuration error.", $0D, $0A, 0
-shell_project_error: .byte "Invalid NPP 1 project file.", $0D, $0A, 0
+shell_project_error: .byte "Invalid Pascal project.", $0D, $0A, 0
+shell_project_exists: .byte "Project or unit already exists.", $0D, $0A, 0
+shell_unit_not_member: .byte "Unit is not in the project.", $0D, $0A, 0
+shell_project_nested: .byte "Project contains a nested directory.", $0D, $0A, 0
+shell_too_many_units: .byte "Project has too many units.", $0D, $0A, 0
 shell_binary_error: .byte "Not a runnable Nova binary.", $0D, $0A, 0
 shell_tool_load_error: .byte "Tool load error $", 0
 shell_decimal_divisors:
@@ -3043,7 +2508,10 @@ shell_help:
       .byte "  PWD              Show directory", $0D, $0A
       .byte "  CD dir           Change directory", $0D, $0A
       .byte "  TYPE file        Print ASCII text only", $0D, $0A
-      .byte "  NEW name         Create an O2 Pascal project", $0D, $0A
+      .byte "  NEW name         Create a Pascal project directory", $0D, $0A
+      .byte "  ADDUNIT proj unit Add a Pascal unit", $0D, $0A
+      .byte "  DELUNIT proj unit Delete a Pascal unit", $0D, $0A
+      .byte "  DELPROJECT proj  Delete a Pascal project", $0D, $0A
       .byte "  EDIT file        Edit source/project/config text", $0D, $0A
       .byte "  DEL file         Delete a file", $0D, $0A
       .byte "  REN old new      Rename a file", $0D, $0A
@@ -3053,8 +2521,9 @@ shell_help:
       .byte "  COMPILE file.pas Write file.S", $0D, $0A
       .byte "  ASSEMBLE file.s [-Dname=value] [-o file.obj]", $0D, $0A
       .byte "  LINK main.obj [more.obj] [-C cfg] [-M map] [-Ln labels]", $0D, $0A
+      .byte "  BUILD project    Build an NPP Pascal project", $0D, $0A
       .byte "  BUILD file.pas   Compile, assemble, link", $0D, $0A
-      .byte "  BUILD file.npp   Build an NPP 1 project", $0D, $0A
+      .byte "  RUN project      Run a Pascal project", $0D, $0A
       .byte "  RUN file.bin     Run a linked program", $0D, $0A, 0
 
 shell_kw_help:     .byte "HELP", 0
@@ -3063,6 +2532,9 @@ shell_kw_pwd:      .byte "PWD", 0
 shell_kw_cd:       .byte "CD", 0
 shell_kw_type:     .byte "TYPE", 0
 shell_kw_new:      .byte "NEW", 0
+shell_kw_addunit:  .byte "ADDUNIT", 0
+shell_kw_delunit:  .byte "DELUNIT", 0
+shell_kw_delproject:.byte "DELPROJECT", 0
 shell_kw_edit:     .byte "EDIT", 0
 shell_kw_del:      .byte "DEL", 0
 shell_kw_ren:      .byte "REN", 0
@@ -3074,63 +2546,24 @@ shell_kw_link:     .byte "LINK", 0
 shell_kw_build:    .byte "BUILD", 0
 shell_kw_run:      .byte "RUN", 0
 
-shell_project_magic:     .byte "NPP", 0
-shell_project_main_kw:   .byte "MAIN", 0
-shell_project_output_kw: .byte "OUTPUT", 0
-shell_project_optimize_kw:.byte "OPTIMIZE", 0
-shell_project_define_kw: .byte "DEFINE", 0
-shell_project_asm_kw:    .byte "ASM", 0
-shell_project_object_kw: .byte "OBJECT", 0
-shell_project_load_kw:   .byte "LOAD", 0
-shell_project_config_kw: .byte "CONFIG", 0
-shell_project_memory_kw: .byte "MEMORY", 0
-shell_project_map_kw:    .byte "MAP", 0
-shell_project_label_kw:  .byte "LABEL", 0
 shell_ext_s:   .byte ".S", 0
+shell_ext_asm: .byte ".ASM", 0
 shell_ext_obj: .byte ".OBJ", 0
 shell_ext_bin: .byte ".BIN", 0
-shell_ext_pas: .byte ".PAS", 0
 shell_ext_npp: .byte ".NPP", 0
-shell_ext_cfg: .byte ".CFG", 0
-shell_ext_map: .byte ".MAP", 0
-shell_ext_lbl: .byte ".LBL", 0
-
-shell_new_created: .byte "Created ", 0
-shell_new_exists: .byte "Project already exists.", $0D, $0A, 0
-shell_new_pas_prefix: .byte "program ", 0
-shell_new_pas_suffix:
-      .byte ";", $0A
-      .byte "begin", $0A
-      .byte "  writeln('Hello, world!');", $0A
-      .byte "end.", $0A, 0
-shell_new_npp_prefix: .byte "NPP 1", $0A, "MAIN ", 0
-shell_new_npp_output: .byte $0A, "OUTPUT ", 0
-shell_new_npp_options:
-      .byte $0A, "OPTIMIZE O2", $0A
-      .byte "DEFINE NOVA=1", $0A
-      .byte "CONFIG INLINE", 0
-shell_new_npp_map: .byte $0A, "MAP ", 0
-shell_new_npp_label: .byte $0A, "LABEL ", 0
-shell_new_lf:
-      .byte $0A
-      .byte "MEMORY {", $0A
-      .byte "    RAM: start = $8000, size = $0100, file = %O;", $0A
-      .byte "}", $0A, $0A
-      .byte "SEGMENTS {", $0A
-      .byte "    CODE: load = RAM, type = ro;", $0A
-      .byte "    BSS: load = RAM, type = bss;", $0A
-      .byte "}", $0A, 0
 shell_project_inline_kw: .byte "INLINE"
 
-shell_pascal_library: .byte "PASCAL.NLIB"
+shell_pascal_library: .byte "/PASCAL.NLIB"
 shell_pascal_library_end:
-shell_tool_editor: .byte "NPEDIT.BIN"
+shell_tool_editor: .byte "/NPEDIT.BIN"
 shell_tool_editor_end:
-shell_tool_optimizer: .byte "NPO2.BIN"
+shell_tool_optimizer: .byte "/NPO2.BIN"
 shell_tool_optimizer_end:
-shell_tool_assembler: .byte "NAS.BIN"
+shell_tool_project: .byte "/NPPROJ.BIN"
+shell_tool_project_end:
+shell_tool_assembler: .byte "/NAS.BIN"
 shell_tool_assembler_end:
-shell_tool_linker: .byte "NL.BIN"
+shell_tool_linker: .byte "/NL.BIN"
 shell_tool_linker_end:
 
       .segment "CODE"

@@ -521,7 +521,7 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
-        public void CodegenNdkReferenceWritesPascalByteBindings()
+        public void CodegenNdkReferenceWritesCompletePascalUnitBundles()
         {
             string temp = Path.Combine(Path.GetTempPath(), "nova-cli-test-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
@@ -538,12 +538,41 @@ namespace e6502UnitTests
                 string rng = File.ReadAllText(Path.Combine(bindings, "RNG.NPI"));
                 string fio = File.ReadAllText(Path.Combine(bindings, "FIO.NPI"));
                 string nova = File.ReadAllText(Path.Combine(bindings, "NOVA.NPI"));
-                StringAssert.Contains(rng, "; RNG_GET8\n__S8578E3 = $02");
-                StringAssert.Contains(fio, "; FIO_ISSUE\n__S13E4EB = $01");
-                StringAssert.Contains(fio, "; FIO_EXEC\n__S34C9C7 = $03");
+                StringAssert.Contains(rng, "; RNG_GET8\n.ifndef __S8578E3\n__S8578E3 = $02");
+                StringAssert.Contains(fio, "; FIO_ISSUE\n.ifndef __S13E4EB\n__S13E4EB = $01");
+                StringAssert.Contains(fio, "; FIO_EXEC\n.ifndef __S34C9C7\n__S34C9C7 = $03");
                 Assert.IsFalse(fio.Contains("I_FIO_NAME", StringComparison.Ordinal),
                     "Inline-parameter routines are not ordinary Pascal-callable bindings.");
-                StringAssert.Contains(nova, "; FIO_CMD_RNG\n__CBAB93C = 1");
+                StringAssert.Contains(nova, "; FIO_CMD_RNG\n.ifndef __CBAB93C\n__CBAB93C = 1");
+                Assert.IsFalse(File.ReadAllText(Path.Combine(bindings, "FIO.S"))
+                        .Contains("Nova NDK — fio_inline.s", StringComparison.Ordinal),
+                    "Assembly-only inline ABI sources must not bloat a typed Pascal unit.");
+                StringAssert.Contains(File.ReadAllText(Path.Combine(bindings, "NVG.S")),
+                    "Nova NDK — nvg_named.s",
+                    "Every split source containing Pascal-callable routines must be composed into the unit.");
+                StringAssert.Contains(File.ReadAllText(Path.Combine(bindings, "VGC.INC")),
+                    "Nova NDK — vgc.inc");
+                StringAssert.Contains(File.ReadAllText(Path.Combine(bindings, "NUIDIALOG.INC")),
+                    ".include \"NUI.INC\"");
+                string audioContract = File.ReadAllText(Path.Combine(bindings, "NOVAAUDIO.PAS"));
+                StringAssert.Contains(audioContract, "unit NovaAudio;");
+                StringAssert.Contains(audioContract, "AUDIO_VOLUME_LEVEL: Byte; external;");
+                StringAssert.Contains(audioContract, "function AUDIO_STATUS(): Byte; external;");
+                Assert.IsTrue(File.Exists(Path.Combine(bindings, "FIOCLEARERROR.NPI")));
+                Assert.IsTrue(File.Exists(Path.Combine(bindings, "NOVAFIOCLEARERROR.PAS")));
+                StringAssert.Contains(File.ReadAllText(Path.Combine(bindings, "VGCVSYNC.S")),
+                    ".include \"VGC.S\"",
+                    "A duplicate helper library must delegate to the canonical owning unit.");
+                string xramImplementation = File.ReadAllText(Path.Combine(bindings, "XRAM.S"));
+                StringAssert.Contains(xramImplementation, ".include \"DMA.S\"");
+                StringAssert.Contains(xramImplementation, ".include \"FIO.S\"");
+                Assert.IsTrue(xramImplementation.IndexOf("xram_dma_result:", StringComparison.Ordinal)
+                              < xramImplementation.IndexOf(".include \"DMA.S\"", StringComparison.Ordinal),
+                    "Dependency implementations must follow callers so .referenced() stripping can see live edges.");
+                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.NPI").Length);
+                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.INC").Length);
+                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.S").Length);
+                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.PAS").Length);
                 StringAssert.Contains(RunNova("codegen", "help"), "--pascal-dir");
                 Assert.IsFalse(rng.Contains('\r'), "Generated Pascal bindings must use Nova's LF-only text convention.");
             }

@@ -201,7 +201,7 @@ SID_DEFAULT_PW_HI   = $08
 audio_play_sound_async:
       STA   AUDIO_NOTE
       STX   AUDIO_DURATION
-      STY   AUDIO_INSTRUMENT
+      STY   AUDIO_SOUND_INSTRUMENT
       BRA   audio_sound_async
 .endif
 
@@ -215,7 +215,7 @@ audio_play_sound_async:
 ; @out A: 0 on success, nonzero on error
 .if AUDIO_EMIT_ALL .OR .referenced(audio_set_volume)
 audio_set_volume:
-      STA   AUDIO_VOLUME
+      STA   AUDIO_VOLUME_LEVEL
       STX   AUDIO_VOICE
       BRA   audio_volume
 .endif
@@ -224,8 +224,8 @@ audio_set_volume:
 ; @kind routine
 ; @symbol audio_sound_async
 ; @abi pseudo-register
-; @summary Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
-; @requires AUDIO.NOTE AUDIO.DURATION AUDIO.INSTRUMENT
+; @summary Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.SOUND_INSTRUMENT.
+; @requires AUDIO.NOTE AUDIO.DURATION AUDIO.SOUND_INSTRUMENT
 ; @out A: 0 on success, nonzero on error
 .if AUDIO_EMIT_ALL .OR .referenced(audio_sound_async)
 audio_sound_async:
@@ -304,7 +304,7 @@ audio_sound_async:
 ; @out A: 0 on success, nonzero on error
 .if AUDIO_EMIT_ALL .OR .referenced(audio_volume)
 audio_volume:
-      LDA   AUDIO_VOLUME
+      LDA   AUDIO_VOLUME_LEVEL
       AND   #$0F
       STA   NVR1L
       LDX   AUDIO_VOICE
@@ -504,7 +504,7 @@ audio_tick:
 
 .if AUDIO_EMIT_ALL .OR .referenced(audio_load_instrument)
 audio_load_instrument:
-      LDA   AUDIO_INSTRUMENT
+      LDA   AUDIO_SOUND_INSTRUMENT
       AND   #$0F
       STA   NVR3H
       ASL

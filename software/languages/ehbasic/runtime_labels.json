@@ -50,18 +50,6 @@
       "summary": "Initialize the SID sound-effect instrument table and scheduler state."
     },
     {
-      "label": "AUDIO.INSTRUMENT",
-      "source": "../../runtime/asm/audio.inc",
-      "line": 206,
-      "inputs": [],
-      "outputs": [],
-      "requires": [],
-      "kind": "u8",
-      "symbol": "AUDIO_INSTRUMENT",
-      "summary": "Instrument slot for AUDIO.SOUND.",
-      "address": "$B9A6"
-    },
-    {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../../runtime/asm/audio.s",
       "line": 393,
@@ -741,12 +729,24 @@
       "requires": [
         "AUDIO.NOTE",
         "AUDIO.DURATION",
-        "AUDIO.INSTRUMENT"
+        "AUDIO.SOUND_INSTRUMENT"
       ],
       "kind": "routine",
       "symbol": "audio_sound_async",
       "abi": "pseudo-register",
-      "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT."
+      "summary": "Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.SOUND_INSTRUMENT."
+    },
+    {
+      "label": "AUDIO.SOUND_INSTRUMENT",
+      "source": "../../runtime/asm/audio.inc",
+      "line": 206,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "u8",
+      "symbol": "AUDIO_SOUND_INSTRUMENT",
+      "summary": "Instrument slot for AUDIO.SOUND.",
+      "address": "$B9A6"
     },
     {
       "label": "AUDIO.STATUS",
@@ -942,7 +942,7 @@
       "outputs": [],
       "requires": [],
       "kind": "u8",
-      "symbol": "AUDIO_VOLUME",
+      "symbol": "AUDIO_VOLUME_LEVEL",
       "summary": "Volume level for AUDIO.VOLUME.",
       "address": "$B9A4"
     },

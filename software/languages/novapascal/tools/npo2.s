@@ -931,6 +931,8 @@ try_array_cache:
       RTS
 
 line_is_cache_barrier:
+      JSR   line_is_inline_asm
+      BEQ   @yes
       LDA   line_len
       BEQ   @structured
       TAX
@@ -982,6 +984,22 @@ line_is_cache_barrier:
       RTS
 @yes:
       LDA   #1
+      RTS
+
+; NPC indents inline NAS source. Zero means this line is opaque assembly.
+line_is_inline_asm:
+      LDA   line_len
+      BEQ   @no
+      LDA   line_buf
+      CMP   #' '
+      BEQ   @yes
+      CMP   #$09
+      BEQ   @yes
+@no:
+      LDA   #1
+      RTS
+@yes:
+      LDA   #0
       RTS
 
 invalidate_array_cache:
@@ -1211,6 +1229,8 @@ analyze_array_window:
 @scan:
       JSR   read_line
       long_bne @restore
+      JSR   line_is_inline_asm
+      long_beq @restore
       LDA   #<ir_routine_end
       LDX   #>ir_routine_end
       JSR   line_starts
@@ -1501,6 +1521,8 @@ analyze_function_result:
 @line:
       JSR   read_line
       BNE   @unsafe
+      JSR   line_is_inline_asm
+      BEQ   @unsafe
       LDA   #<ir_function_store
       LDX   #>ir_function_store
       JSR   line_equals
@@ -2132,7 +2154,7 @@ analyze_inline_target:
       STZ   input_pos+1
 @find:
       JSR   read_line
-      BNE   @no
+      long_bne @no
       LDA   #<ir_routine
       LDX   #>ir_routine
       JSR   line_starts
@@ -2149,6 +2171,8 @@ analyze_inline_target:
 @leaf:
       JSR   read_line
       BNE   @no
+      JSR   line_is_inline_asm
+      BEQ   @no
       LDA   #<ir_routine_end
       LDX   #>ir_routine_end
       JSR   line_starts
@@ -2170,6 +2194,8 @@ analyze_inline_target:
 @call:
       JSR   read_line
       BNE   @counted
+      JSR   inline_asm_references_target
+      BEQ   @no
       LDA   #<ir_call
       LDX   #>ir_call
       JSR   line_starts
@@ -2191,6 +2217,86 @@ analyze_inline_target:
 @no:
       JSR   restore_scan_return
       LDA   #1
+      RTS
+
+; Zero when an opaque NAS line contains target_buf as a case-insensitive
+; symbol token. Any such reference keeps the Pascal routine callable.
+inline_asm_references_target:
+      JSR   line_is_inline_asm
+      BNE   @no
+      STZ   operand_pos
+@candidate:
+      LDX   operand_pos
+      CPX   line_len
+      BCS   @no
+      CPX   #0
+      BEQ   @compare_start
+      DEX
+      LDA   line_buf,X
+      JSR   inline_symbol_char
+      BCS   @next
+@compare_start:
+      LDX   operand_pos
+      LDY   #0
+@compare:
+      CPY   target_len
+      BEQ   @after
+      CPX   line_len
+      BCS   @next
+      LDA   line_buf,X
+      JSR   inline_upper
+      CMP   target_buf,Y
+      BNE   @next
+      INX
+      INY
+      BRA   @compare
+@after:
+      CPX   line_len
+      BEQ   @yes
+      LDA   line_buf,X
+      JSR   inline_symbol_char
+      BCC   @yes
+@next:
+      INC   operand_pos
+      BRA   @candidate
+@yes:
+      LDA   #0
+      RTS
+@no:
+      LDA   #1
+      RTS
+
+inline_symbol_char:
+      JSR   inline_upper
+      CMP   #'A'
+      BCC   @digit
+      CMP   #'Z'+1
+      BCC   @yes
+@digit:
+      CMP   #'0'
+      BCC   @special
+      CMP   #'9'+1
+      BCC   @yes
+@special:
+      CMP   #'_'
+      BEQ   @yes
+      CMP   #'@'
+      BEQ   @yes
+      CMP   #'.'
+      BEQ   @yes
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+inline_upper:
+      CMP   #'a'
+      BCC   @done
+      CMP   #'z'+1
+      BCS   @done
+      AND   #$DF
+@done:
       RTS
 
 ; symbol_buf is a call operand. Zero means a matching local routine exists.

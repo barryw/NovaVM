@@ -4,6 +4,8 @@
 #   NDI_RUNTIME  the 16KB runtime ROM to boot   (e.g. novaforth.bin)
 #   NDI_OUTPUT   the .ndi image to produce       (e.g. novaforth.ndi)
 #   NDI_LABEL    disk label, <=8 chars           (e.g. NFORTH)
+# Optional NDI_DIRECTORY_SECTORS defaults to 48; development disks with many
+# source assets can raise it without changing the NDI format.
 # and providing a rule that builds $(NDI_RUNTIME). Then:
 #   make ndi    -> a clean image from scratch (runtime + AUTOBOOT.bin + pack)
 #
@@ -23,6 +25,7 @@ NDI_PACKER       := $(NDI_MK_DIR)../../examples/novaz/tools/Nova.NovaZ.Packer/No
 NDI_AUTOBOOT_S   := $(NDI_MK_DIR)autoboot.s
 NDI_AUTOBOOT_CFG := $(NDI_MK_DIR)autoboot.cfg
 NDI_SIZE_KB      ?= 1440
+NDI_DIRECTORY_SECTORS ?= 48
 
 ndi-autoboot.o: $(NDI_AUTOBOOT_S) $(NDI_AUTOBOOT_CFG)
 	$(CA65) --cpu w65c02 -I $(NDI_NOVA_ASM) -o $@ $(NDI_AUTOBOOT_S)
@@ -40,6 +43,7 @@ $(NDI_OUTPUT): $(NDI_RUNTIME) AUTOBOOT.bin $(NDI_PACKER) $(NDI_ASSET_DEPS)
 	    --autoboot AUTOBOOT.bin \
 	    --runtime "$(NDI_RUNTIME)" --runtime-name "RUNTIME.BIN" \
 	    --label "$(NDI_LABEL)" --size-kb "$(NDI_SIZE_KB)" \
+	    --directory-sectors "$(NDI_DIRECTORY_SECTORS)" \
 	    $(NDI_ASSETS)
 
 # Build a completely clean image from scratch (no stale runtime/autoboot/.ndi).

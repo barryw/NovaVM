@@ -34,14 +34,6 @@ Initialize the SID sound-effect instrument table and scheduler state.
 - Symbol: `audio_init`
 - ABI: `none`
 
-## AUDIO.INSTRUMENT
-
-Instrument slot for AUDIO.SOUND.
-
-- Kind: `u8`
-- Symbol: `AUDIO_INSTRUMENT`
-- Address: `$B9A6`
-
 ## AUDIO.INSTRUMENT_SET
 
 Define a simple SID sound-effect instrument envelope and waveform.
@@ -500,7 +492,7 @@ Outputs:
 
 ## AUDIO.SOUND
 
-Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.INSTRUMENT.
+Start a fire-and-forget SID note from AUDIO.NOTE, AUDIO.DURATION, and AUDIO.SOUND_INSTRUMENT.
 
 - Kind: `routine`
 - Symbol: `audio_sound_async`
@@ -512,7 +504,15 @@ Outputs:
 Requires:
 - `AUDIO.NOTE`
 - `AUDIO.DURATION`
-- `AUDIO.INSTRUMENT`
+- `AUDIO.SOUND_INSTRUMENT`
+
+## AUDIO.SOUND_INSTRUMENT
+
+Instrument slot for AUDIO.SOUND.
+
+- Kind: `u8`
+- Symbol: `AUDIO_SOUND_INSTRUMENT`
+- Address: `$B9A6`
 
 ## AUDIO.STATUS
 
@@ -644,7 +644,7 @@ Requires:
 Volume level for AUDIO.VOLUME.
 
 - Kind: `u8`
-- Symbol: `AUDIO_VOLUME`
+- Symbol: `AUDIO_VOLUME_LEVEL`
 - Address: `$B9A4`
 
 ## AUDIO.WAIT_LOADING

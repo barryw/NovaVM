@@ -1237,7 +1237,7 @@ play_win_sound:
 play_note:
       STA   AUDIO_NOTE
       STX   AUDIO_DURATION
-      STY   AUDIO_INSTRUMENT
+      STY   AUDIO_SOUND_INSTRUMENT
       STZ   FIO_STATUS
       STZ   FIO_ERRCODE
       LDA   #FIO_CMD_SOUND

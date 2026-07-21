@@ -16,25 +16,111 @@
 .ifndef XRAM_IMPLEMENTATION_INCLUDED
 XRAM_IMPLEMENTATION_INCLUDED = 1
 
+; Emit only referenced domains for source-included applications. ROM/library
+; builds retain the complete implementation through NOVA_EMIT_ALL_RUNTIME.
+.ifdef NOVA_STRIP_UNUSED
+XRAM_EMIT_ALL = 0
+.else
+.ifdef XRAM_STRIP_UNUSED
+XRAM_EMIT_ALL = 0
+.else
+.ifdef NOVA_EMIT_ALL_RUNTIME
+XRAM_EMIT_ALL = 1
+.else
+.ifdef XRAM_EMIT_ALL_RUNTIME
+XRAM_EMIT_ALL = 1
+.else
+XRAM_EMIT_ALL = 0
+.endif
+.endif
+.endif
+.endif
+
+.if XRAM_EMIT_ALL = 0
+.if .referenced(xram_xmc_read8) .OR .referenced(xram_xmc_write8) .OR .referenced(xram_xmc_copy_from_ram) .OR .referenced(xram_xmc_copy_to_ram) .OR .referenced(xram_xmc_fill)
+      .refto xram_xmc_load_addr
+      .refto xram_xmc_load_ram
+      .refto xram_xmc_load_len
+      .refto xram_read8
+      .refto xram_write8
+      .refto xram_copy_from_ram
+      .refto xram_copy_to_ram
+      .refto xram_fill
+.endif
+.if .referenced(xram_xload) .OR .referenced(xram_xsave)
+      .refto xram_map_fio_error
+      .refto xram_store_fio_size
+      .refto xram_set_ok
+.endif
+.if .referenced(xram_read8) .OR .referenced(xram_write8)
+      .refto xram_addr_is_in_range
+      .refto xram_map_window3
+      .refto xram_set_ok
+.endif
+.if .referenced(xram_addr_is_in_range) .OR .referenced(xram_map_fio_error)
+      .refto xram_set_error
+.endif
+.if .referenced(xram_copy_from_ram) .OR .referenced(xram_copy_to_ram) .OR .referenced(xram_fill) .OR .referenced(xram_wait_dma)
+      .refto xram_set_dma_len16
+      .refto xram_dma_result
+      .refto xram_set_ok
+      .refto xram_set_error
+.endif
+.endif
+
       .segment "CODE"
 
+.if XRAM_EMIT_ALL .OR .referenced(xram_set_ok)
       .export xram_set_ok
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_set_error)
       .export xram_set_error
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_addr_is_in_range)
       .export xram_addr_is_in_range
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_map_window3)
       .export xram_map_window3
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_read8)
       .export xram_read8
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_write8)
       .export xram_write8
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_copy_from_ram)
       .export xram_copy_from_ram
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_copy_to_ram)
       .export xram_copy_to_ram
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_fill)
       .export xram_fill
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xload)
       .export xram_xload
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xsave)
       .export xram_xsave
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_wait_dma)
       .export xram_wait_dma
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_read8)
       .export xram_xmc_read8
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_write8)
       .export xram_xmc_write8
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_copy_from_ram)
       .export xram_xmc_copy_from_ram
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_copy_to_ram)
       .export xram_xmc_copy_to_ram
+.endif
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_fill)
       .export xram_xmc_fill
+.endif
 
 ; ---------------------------------------------------------------------
 ; Status helpers
@@ -43,12 +129,14 @@ XRAM_IMPLEMENTATION_INCLUDED = 1
 ; @kind routine
 ; @symbol xram_set_ok
 ; @summary Set XMC-compatible XRAM status to OK and return A=0.
+.if XRAM_EMIT_ALL .OR .referenced(xram_set_ok)
 xram_set_ok:
       LDA   #XMC_OK
       STA   XMC_STATUS
       LDA   #$00
       STA   XMC_ERRCODE
       RTS
+.endif
 
 ; Input: A = XMC-compatible error code.
 ; @label XRAM.SET_ERROR
@@ -57,6 +145,7 @@ xram_set_ok:
 ; @summary Set XMC-compatible XRAM error status.
 ; @in A: XMC-compatible error code.
 ; @out A: 1.
+.if XRAM_EMIT_ALL .OR .referenced(xram_set_error)
 xram_set_error:
       PHA
       LDA   #XMC_STATUS_ERROR
@@ -65,10 +154,12 @@ xram_set_error:
       STA   XMC_ERRCODE
       LDA   #$01
       RTS
+.endif
 
 ; ---------------------------------------------------------------------
 ; XMC MMIO wrappers
 ; ---------------------------------------------------------------------
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_load_addr) .OR .referenced(xram_xmc_load_ram) .OR .referenced(xram_xmc_load_len)
 xram_xmc_load_addr:
       LDA   XMC_XAL
       STA   XRAM_ADDRL
@@ -91,12 +182,14 @@ xram_xmc_load_len:
       LDA   XMC_LENH
       STA   XRAM_LENH
       RTS
+.endif
 
 ; @label XRAM.XMC_READ8
 ; @kind routine
 ; @symbol xram_xmc_read8
 ; @summary Read one byte from XMC_XAL/M/H into XMC_DATA.
 ; @requires XMC_XAL XMC_XAM XMC_XAH
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_read8)
 xram_xmc_read8:
       JSR   xram_xmc_load_addr
       JSR   xram_read8
@@ -106,51 +199,60 @@ xram_xmc_read8:
       LDA   #$00
 @done:
       RTS
+.endif
 
 ; @label XRAM.XMC_WRITE8
 ; @kind routine
 ; @symbol xram_xmc_write8
 ; @summary Write XMC_DATA to XMC_XAL/M/H.
 ; @requires XMC_XAL XMC_XAM XMC_XAH XMC_DATA
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_write8)
 xram_xmc_write8:
       JSR   xram_xmc_load_addr
       LDA   XMC_DATA
       STA   XRAM_DATA
       JMP   xram_write8
+.endif
 
 ; @label XRAM.XMC_COPY_FROM_RAM
 ; @kind routine
 ; @symbol xram_xmc_copy_from_ram
 ; @summary Copy RAM to XRAM using the XMC register ABI.
 ; @requires XMC_RAML XMC_RAMH XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_copy_from_ram)
 xram_xmc_copy_from_ram:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_ram
       JSR   xram_xmc_load_len
       JMP   xram_copy_from_ram
+.endif
 
 ; @label XRAM.XMC_COPY_TO_RAM
 ; @kind routine
 ; @symbol xram_xmc_copy_to_ram
 ; @summary Copy XRAM to RAM using the XMC register ABI.
 ; @requires XMC_XAL XMC_XAM XMC_XAH XMC_RAML XMC_RAMH XMC_LENL XMC_LENH
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_copy_to_ram)
 xram_xmc_copy_to_ram:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_ram
       JSR   xram_xmc_load_len
       JMP   xram_copy_to_ram
+.endif
 
 ; @label XRAM.XMC_FILL
 ; @kind routine
 ; @symbol xram_xmc_fill
 ; @summary Fill XRAM using the XMC register ABI.
 ; @requires XMC_XAL XMC_XAM XMC_XAH XMC_LENL XMC_LENH XMC_DATA
+.if XRAM_EMIT_ALL .OR .referenced(xram_xmc_fill)
 xram_xmc_fill:
       JSR   xram_xmc_load_addr
       JSR   xram_xmc_load_len
       LDA   XMC_DATA
       STA   XRAM_DATA
       JMP   xram_fill
+.endif
 
 ; ---------------------------------------------------------------------
 ; Direct file streaming
@@ -168,6 +270,7 @@ xram_xmc_fill:
 ; @symbol xram_xload
 ; @summary Stream a file directly into XRAM using the XRAM pseudo-register ABI.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_NAMELEN XRAM_NAMEPTR_L XRAM_NAMEPTR_H
+.if XRAM_EMIT_ALL .OR .referenced(xram_xload)
 xram_xload:
       JSR   fio_prepare_xram_transfer
       BNE   @done
@@ -178,12 +281,14 @@ xram_xload:
       JMP   xram_set_ok
 @done:
       JMP   xram_map_fio_error
+.endif
 
 ; @label XRAM.XSAVE
 ; @kind routine
 ; @symbol xram_xsave
 ; @summary Stream XRAM directly to a file using the XRAM pseudo-register ABI.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_NAMELEN XRAM_NAMEPTR_L XRAM_NAMEPTR_H
+.if XRAM_EMIT_ALL .OR .referenced(xram_xsave)
 xram_xsave:
       JSR   fio_prepare_xram_transfer
       BNE   @done
@@ -194,7 +299,9 @@ xram_xsave:
       JMP   xram_set_ok
 @done:
       JMP   xram_map_fio_error
+.endif
 
+.if XRAM_EMIT_ALL .OR .referenced(xram_map_fio_error) .OR .referenced(xram_store_fio_size)
 xram_map_fio_error:
       LDA   FIO_ERRCODE
       CMP   #FIO_ERR_NOTFOUND
@@ -211,6 +318,7 @@ xram_store_fio_size:
       LDA   FIO_SIZEH
       STA   XRAM_LENH
       RTS
+.endif
 
 ; Validate a single-byte flat XRAM address. This prevents hardware-window
 ; users from accidentally wrapping high addresses back into the 512KB device.
@@ -219,6 +327,7 @@ xram_store_fio_size:
 ; @symbol xram_addr_is_in_range
 ; @summary Validate XRAM_ADDRH is inside the 512KB XRAM device.
 ; @requires XRAM_ADDRH
+.if XRAM_EMIT_ALL .OR .referenced(xram_addr_is_in_range)
 xram_addr_is_in_range:
       LDA   XRAM_ADDRH
       CMP   #XRAM_CAPACITY_HIGH
@@ -228,6 +337,7 @@ xram_addr_is_in_range:
 @ok:
       LDA   #$00
       RTS
+.endif
 
 ; ---------------------------------------------------------------------
 ; Windowed byte access
@@ -237,6 +347,7 @@ xram_addr_is_in_range:
 ; @symbol xram_map_window3
 ; @summary Map XRAM window 3 to XRAM_ADDRM/H.
 ; @requires XRAM_ADDRM XRAM_ADDRH
+.if XRAM_EMIT_ALL .OR .referenced(xram_map_window3)
 xram_map_window3:
       LDA   XMC_WINCTL
       ORA   #XRAM_WIN3_ENABLE
@@ -247,6 +358,7 @@ xram_map_window3:
       LDA   XRAM_ADDRH
       STA   WIN3_HI
       RTS
+.endif
 
 ; @label XRAM.READ8
 ; @kind routine
@@ -254,6 +366,7 @@ xram_map_window3:
 ; @summary Read one byte from XRAM_ADDRL/M/H into XRAM_DATA.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH
 ; @out XRAM_DATA: Byte read from XRAM.
+.if XRAM_EMIT_ALL .OR .referenced(xram_read8)
 xram_read8:
       JSR   xram_addr_is_in_range
       BNE   @done
@@ -264,12 +377,14 @@ xram_read8:
       JMP   xram_set_ok
 @done:
       RTS
+.endif
 
 ; @label XRAM.WRITE8
 ; @kind routine
 ; @symbol xram_write8
 ; @summary Write XRAM_DATA to XRAM_ADDRL/M/H.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_DATA
+.if XRAM_EMIT_ALL .OR .referenced(xram_write8)
 xram_write8:
       JSR   xram_addr_is_in_range
       BNE   @done
@@ -280,6 +395,7 @@ xram_write8:
       JMP   xram_set_ok
 @done:
       RTS
+.endif
 
 ; ---------------------------------------------------------------------
 ; DMA bulk transfers
@@ -289,6 +405,7 @@ xram_write8:
 ; @symbol xram_copy_from_ram
 ; @summary Copy CPU RAM to XRAM using the XRAM pseudo-register ABI.
 ; @requires XRAM_RAML XRAM_RAMH XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH
+.if XRAM_EMIT_ALL .OR .referenced(xram_copy_from_ram)
 xram_copy_from_ram:
       LDA   #DMA_SPACE_CPU
       STA   DMA_SRCSPACE
@@ -310,12 +427,14 @@ xram_copy_from_ram:
       JSR   xram_set_dma_len16
       JSR   dma_start_copy
       JMP   xram_dma_result
+.endif
 
 ; @label XRAM.COPY_TO_RAM
 ; @kind routine
 ; @symbol xram_copy_to_ram
 ; @summary Copy XRAM to CPU RAM using the XRAM pseudo-register ABI.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_RAML XRAM_RAMH XRAM_LENL XRAM_LENH
+.if XRAM_EMIT_ALL .OR .referenced(xram_copy_to_ram)
 xram_copy_to_ram:
       LDA   #DMA_SPACE_XRAM
       STA   DMA_SRCSPACE
@@ -337,12 +456,14 @@ xram_copy_to_ram:
       JSR   xram_set_dma_len16
       JSR   dma_start_copy
       JMP   xram_dma_result
+.endif
 
 ; @label XRAM.FILL
 ; @kind routine
 ; @symbol xram_fill
 ; @summary Fill XRAM using XRAM_ADDRL/M/H, XRAM_LENL/H, and XRAM_DATA.
 ; @requires XRAM_ADDRL XRAM_ADDRM XRAM_ADDRH XRAM_LENL XRAM_LENH XRAM_DATA
+.if XRAM_EMIT_ALL .OR .referenced(xram_fill)
 xram_fill:
       LDA   #DMA_SPACE_CPU
       STA   DMA_SRCSPACE
@@ -364,7 +485,9 @@ xram_fill:
       STA   DMA_FILLVALUE
       JSR   dma_start_fill
       JMP   xram_dma_result
+.endif
 
+.if XRAM_EMIT_ALL .OR .referenced(xram_set_dma_len16) .OR .referenced(xram_dma_result)
 xram_set_dma_len16:
       LDA   XRAM_LENL
       STA   DMA_LENL
@@ -372,14 +495,18 @@ xram_set_dma_len16:
       STA   DMA_LENM
       STZ   DMA_LENH
       RTS
+.endif
 
 ; @label XRAM.WAIT_DMA
 ; @kind routine
 ; @symbol xram_wait_dma
 ; @summary Wait for the shared DMA controller and map the result to XRAM status.
+.if XRAM_EMIT_ALL .OR .referenced(xram_wait_dma)
 xram_wait_dma:
       JSR   dma_wait
+.endif
 
+.if XRAM_EMIT_ALL .OR .referenced(xram_dma_result)
 xram_dma_result:
       CMP   #DMA_RESULT_OK
       BEQ   @ok
@@ -394,5 +521,6 @@ xram_dma_result:
       JMP   xram_set_error
 @ok:
       JMP   xram_set_ok
+.endif
 
 .endif

@@ -194,28 +194,60 @@ then inspect it with the normal Nova CLI:
 
 ```bash
 make -C software/toolchain all
-make -C software/languages/novapascal all
+make -C software/languages/novapascal novapascal.ndi
 nova validate software/languages/novapascal/novapascal.ndi
 nova dir software/languages/novapascal/novapascal.ndi
 ```
 
-The disk boots to `NovaPascal Shell v1.0`. `NEW name` creates `name.PAS` and a
-single end-to-end `name.NPP` manifest. `BUILD name.NPP` validates that manifest,
-runs resident NPC, disk-loaded NPO2, NAS, and NL, and writes the generated
-assembly, object, map, labels, and load-address-prefixed binary. NPO2 performs
-six typed streaming passes: local dataflow optimization; iterative single-call
-leaf/caller inlining with dead-routine removal; 65C02 instruction selection;
-and machine peepholes. O2 includes direct comparison branches, byte/word
-self-update reduction, effect-safe accumulator and repeated-load forwarding,
-call-free function-result folding, inline word/array operations, and formation
-of one relocatable base for compatible constant-offset array accesses. The
-final `.S` is ordinary readable assembly; NAS and NL contain no Pascal-specific
-logic.
+The disk boots to `NovaPascal Shell v1.0`. `NEW HelloWorld` creates a
+`HELLOWORLD` project directory containing `MAIN.PAS` and the single end-to-end
+`HELLOWORLD.NPP` configuration for NPC, NAS, and NL. `ADDUNIT HELLOWORLD
+GREETER` creates `GREETER.PAS` with a Pascal `interface`/`implementation`
+skeleton and adds it to the NPP 2 manifest; `DELUNIT HELLOWORLD GREETER`
+removes it. `DELPROJECT HELLOWORLD` validates and removes the project, but
+refuses directories containing nested directories.
+
+`BUILD HELLOWORLD` enters the project, validates its complete manifest and
+linker configuration, compiles `MAIN.PAS` and every repeated `UNIT` source,
+then runs disk-loaded NPO2, NAS, and NL. Unit streams are combined in manifest
+order with the program entry point, so O2 optimizes and dead-strips across the
+whole project before NAS writes one object and NL links `PASCAL.NLIB`. Generated
+per-source `.ASM` and combined `.S` assembly, object, map, labels, and
+load-address-prefixed binary stay in the project directory. `RUN HELLOWORLD`
+executes that result. Direct `BUILD file.pas`, `BUILD file.npp`, and `RUN
+file.bin` remain available for compatible flat-file workflows.
+
+Project source uses normal Pascal syntax: the program selects project units
+with `uses`, and each unit separates public declarations from matching
+implementations. The current source-unit ABI supports public parameterless
+procedures and parameterless `Byte`/`Boolean` functions. NPP 2 accepts up to 16
+unit files; NPP 1 remains a supported single-main compatibility format. No
+source includes are required, and project units do not create a redundant
+persistent interface artifact—the compiler emits checked signatures into the
+whole-project assembly stream.
+
+Small 65C02 fragments may be written as a line-oriented Pascal `asm` ... `end`
+statement using ordinary NAS syntax. NPC copies the block into generated
+assembly, and NPO2 treats it as an opaque register-and-memory barrier. O2 does
+not inline routines containing assembly, preserves routines referenced by its
+case-insensitive NAS symbols, uses stack-backed function results, and rebuilds
+cached array addresses afterward. Larger assembly implementations continue to
+use the generated unit bundle (`.PAS`, `.NPI`, `.INC`, and `.S`) so Pascal sees
+a native contract backed by canonical NDK source.
+
+NPO2 performs six typed streaming passes: local dataflow optimization;
+iterative single-call leaf/caller inlining with dead-routine removal; 65C02
+instruction selection; and machine peepholes. O2 includes direct comparison
+branches, byte/word self-update reduction, effect-safe accumulator and
+repeated-load forwarding, call-free function-result folding, inline word/array
+operations, and formation of one relocatable base for compatible
+constant-offset array accesses. The final `.S` is ordinary readable assembly;
+NAS and NL contain no Pascal-specific logic.
 NPC, NPO2, NPEDIT, and NAS obtain transient XRAM through the NDK Memory module
 and release every allocation on success or failure. NAS and NL load, enter, and
 unload their `$7000` workers only through the NDK System overlay API; the tools
 do not reserve private XRAM blocks or implement private overlay loaders.
-`RUN name.BIN` executes the result. Pascal `uses NovaGraphics;` exposes native Pascal graphics
+Pascal `uses NovaGraphics;` exposes native Pascal graphics
 procedures while its precompiled unit adapter alone handles the canonical VGC
 NDK parameter layout and command protocol. `uses NovaInput;` provides
 nonblocking `PollKey()` input without exposing MMIO. `uses NovaRandom;` similarly exposes
@@ -236,9 +268,10 @@ uses nested structured statements, byte expressions, `mod`, comparisons,
 Boolean arrays, unsigned 16-bit `Word` values and indices, checked
 multi-argument unit procedure calls, parameterless procedures, and
 parameterless `Byte`/`Boolean` functions. It seeds a random, roughly half-full
-80-by-25 board, applies B3/S23 simultaneously through two arrays, and draws a
-full-screen, vsync-paced differential display on Nova's native 320-by-200
-graphics plane until Enter is pressed. Functions return through assignment to their own
+80-by-25 board, applies B3/S23 simultaneously through two arrays, demonstrates
+inline NAS in its direct 2,000-byte `Commit` copy, and draws a full-screen,
+vsync-paced differential display on Nova's native 320-by-200 graphics plane
+until Enter is pressed. Functions return through assignment to their own
 name; NPC keeps that result on the 65C02 stack so nested calls do not share a
 global result byte. NPC reports syntax failures with the source filename, line,
 and column. String `writeln` keeps literals of at most two characters as direct
@@ -277,11 +310,20 @@ nova codegen runtime-abi <sources...> --sym software/languages/ehbasic/basic.sym
 nova codegen ndk-reference --runtime-dir software/runtime/asm --tex docs/books/ndk-reference/generated/library-reference.tex --json docs/books/ndk-reference/generated/ndk-api.json [--pascal-dir build/ndk-pascal]
 ```
 
-Optional `--pascal-dir` writes one guarded `.NPI` binding include per NDK
-library. These compact files encode byte constants, byte storage, and supported
-A-register routine signatures directly from the canonical annotations. Inline
-parameter routines remain assembly-only and are omitted from these bindings; the
-NovaPascal build packages the bindings it uses.
+Optional `--pascal-dir` writes a complete generated Pascal unit bundle for every
+NDK library. Each bundle contains a human-readable `.PAS` contract, guarded
+`.NPI` byte-ABI checks, a declaration `.INC`, and an implementation `.S` composed
+from every canonical source containing Pascal-callable entries. Underscores are
+removed from generated disk stems, so the `vgc_vsync` library becomes the native
+Pascal unit `NovaVgcVsync` and files `VGCVSYNC.*`. The generator rewrites only
+include filenames; routine bodies and hardware declarations remain the canonical
+NDK source. Canonical declaration includes also drive implementation dependencies,
+which are appended after callers so source-level dead stripping sees live edges
+without a hand-maintained dependency table or order-sensitive `USES` clause.
+`.NPI` files encode byte constants, byte storage, and supported
+A-register routine signatures directly from annotations. Inline-parameter and
+wider register routines remain assembly-callable but are omitted from the typed
+Pascal contract and implementation facade until NovaPascal can express their ABI.
 
 Local browser/demo assets are also built through `nova`, not standalone helper
 scripts:

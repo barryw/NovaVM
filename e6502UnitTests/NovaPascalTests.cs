@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using e6502.Avalonia.Hardware;
 using e6502.Avalonia.Input;
+using e6502.Storage;
 using KDS.e6502;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -53,8 +54,18 @@ public class NovaPascalTests
         string root = Path.Combine(Path.GetTempPath(), $"novapascal-{Guid.NewGuid():N}");
         string disks = Path.Combine(root, "disks");
         Directory.CreateDirectory(disks);
+        string sourceImage = RepoPath("software", "languages", "novapascal", "novapascal.ndi");
+        using (NdiImage image = NdiImage.Open(sourceImage))
+        {
+            Assert.AreEqual(96u, image.Header.DirectorySectorCount,
+                "A development disk needs room for generated units and user build artifacts.");
+            NdiDirEntry[] entries = image.ListDirectory(0xFFFF);
+            Assert.AreEqual(NdiFileType.Assembly,
+                entries.Single(entry => entry.Filename.Equals("AUDIO.NPI", StringComparison.OrdinalIgnoreCase)).FileType,
+                "Compiled unit interfaces are editable assembly text, not opaque binaries.");
+        }
         File.Copy(
-            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            sourceImage,
             Path.Combine(disks, "fd0.ndi"));
 
         try
@@ -75,6 +86,7 @@ public class NovaPascalTests
             Assert.IsFalse(disk.FileExists("NPC", ".BIN"), "NPC must remain resident at $C000, not be a disk tool.");
             Assert.IsTrue(disk.FileExists("NPEDIT", ".BIN"), "The editor must be a standard disk-loaded binary.");
             Assert.IsTrue(disk.FileExists("NPO2", ".BIN"), "O2 passes must run from lower RAM without displacing resident NPC.");
+            Assert.IsTrue(disk.FileExists("NPPROJ", ".BIN"), "Project operations must run from a standard disk-loaded binary.");
             Assert.IsTrue(disk.FileExists("NAS", ".BIN"), "NAS must be a standard, language-neutral binary.");
             Assert.IsTrue(disk.FileExists("NASPP", ".OVL"), "NAS preprocessing must live in its disk-loaded overlay.");
             Assert.IsTrue(disk.FileExists("NASBE", ".OVL"), "NAS assembly core and opcode tables must live in its disk-loaded backend overlay.");
@@ -85,6 +97,21 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NVR", ".INC"), "Compiler scratch registers must come from the canonical NDK mailbox include.");
             Assert.IsTrue(disk.FileExists("NOVA", ".INC"), "Pascal NDK units must use the canonical hardware declarations.");
             Assert.IsTrue(disk.FileExists("NOVA", ".NPI"), "Pascal bindings must be generated from canonical NDK metadata.");
+            string[] ndkUnitStems =
+            {
+                "NOVA", "FIO", "AUDIO", "VGC", "SPRITE", "MSPRITE", "VSPRITE", "VTEXT", "NUI",
+                "COPPER", "DMA", "BLITTER", "XRAM", "XMC", "PAGER", "RNG", "NVG", "ANIM", "TWEEN",
+                "NIC", "GAMESERVER", "OVERLAY", "VGCWAIT", "COPPERSPLIT", "DOCBUF", "FIOCLEARERROR",
+                "MOUSE", "MOUSEEVENTS", "NUIDIALOG", "NUIFILE", "NUIINPUT", "NUILIST", "NUITEXT",
+                "NUIUISAVE", "NUIWAIT", "SPRITEBANK", "VGCPALETTE", "VGCVSYNC", "VTEXTMIXED", "WTS",
+            };
+            foreach (string stem in ndkUnitStems)
+            {
+                Assert.IsTrue(disk.FileExists(stem, ".NPI"), $"{stem} must have a generated Pascal ABI.");
+                Assert.IsTrue(disk.FileExists(stem, ".INC"), $"{stem} must have a generated declaration facade.");
+                Assert.IsTrue(disk.FileExists(stem, ".S"), $"{stem} must have a generated implementation facade.");
+                Assert.IsTrue(disk.FileExists("NOVA" + stem, ".PAS"), $"{stem} must have a Pascal unit contract.");
+            }
             Assert.IsTrue(disk.FileExists("RNG", ".NPI"), "Each Pascal NDK unit must carry generated ABI signatures.");
             Assert.IsTrue(disk.FileExists("RNG", ".S"), "The Pascal disk must carry canonical NDK implementation sources.");
             Assert.IsTrue(disk.FileExists("FIO", ".S"), "Dependent canonical NDK implementations must remain available to NAS.");
@@ -101,13 +128,18 @@ public class NovaPascalTests
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NAS", ".BIN")[..2]);
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NL", ".BIN")[..2]);
 
-            QueueLine(editor, "DIR");
-            RunUntil(cpu, bus, s => s.Contains("PASCAL SOURCE", StringComparison.Ordinal)
-                                    && s.Contains("PASCAL PROJECT", StringComparison.Ordinal),
-                "distinct Pascal source and project descriptors in directory listing");
-            Assert.IsTrue(Snapshot(bus).Contains("HELLO.PAS", StringComparison.Ordinal));
-            Assert.IsTrue(Snapshot(bus).Contains("HELLO.NPP", StringComparison.Ordinal));
-            RunSteps(cpu, bus, 100_000);
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("HELLO", StringComparison.OrdinalIgnoreCase)),
+                "Packaged Pascal projects must live in directories.");
+            disk.CurrentDirectory = "HELLO";
+            var helloEntries = disk.ListDirectory(null).ToArray();
+            Assert.AreEqual(NdiFileType.Pascal,
+                helloEntries.Single(entry => entry.Filename.Equals("MAIN", StringComparison.OrdinalIgnoreCase)
+                                             && entry.Extension.Equals(".PAS", StringComparison.OrdinalIgnoreCase)).FileType);
+            Assert.AreEqual(NdiFileType.PascalProject,
+                helloEntries.Single(entry => entry.Filename.Equals("HELLO", StringComparison.OrdinalIgnoreCase)
+                                             && entry.Extension.Equals(".NPP", StringComparison.OrdinalIgnoreCase)).FileType);
+            disk.CurrentDirectory = "/";
 
             QueueLine(editor, "HELP");
             RunUntil(cpu, bus, s => s.Contains("RUN file.bin", StringComparison.Ordinal), "shell help");
@@ -117,62 +149,167 @@ public class NovaPascalTests
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
 
             QueueLine(editor, "NEW DEMO");
-            RunUntil(cpu, bus, s => s.Contains("Created DEMO.NPP", StringComparison.Ordinal),
+            RunUntil(cpu, bus, s => s.Contains("Created project DEMO", StringComparison.Ordinal),
                 "new Pascal project");
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("DEMO", StringComparison.OrdinalIgnoreCase)));
+            disk.CurrentDirectory = "DEMO";
             byte[] demoSource = Encoding.ASCII.GetBytes(
                 "program DEMO;\nbegin\n  writeln('Hello, world!');\nend.\n");
-            CollectionAssert.AreEqual(demoSource, disk.Load("DEMO", ".PAS"),
-                "NEW must create a minimal LF-only Pascal program.");
+            byte[] createdDemoSource = disk.Load("MAIN", ".PAS");
+            CollectionAssert.AreEqual(demoSource, createdDemoSource,
+                $"NEW must create a minimal LF-only Pascal program; got {Convert.ToHexString(createdDemoSource)}.");
             CollectionAssert.AreEqual(Encoding.ASCII.GetBytes(
-                    "NPP 1\nMAIN DEMO.PAS\nOUTPUT DEMO.BIN\nOPTIMIZE O2\n" +
+                    "NPP 2\nMAIN MAIN.PAS\nOUTPUT DEMO.BIN\nOPTIMIZE O2\n" +
                     "DEFINE NOVA=1\nCONFIG INLINE\nMAP DEMO.MAP\nLABEL DEMO.LBL\n" +
-                    "MEMORY {\n    RAM: start = $8000, size = $0100, file = %O;\n}\n\n" +
+                    "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
                     "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
                     "    BSS: load = RAM, type = bss;\n}\n"),
                 disk.Load("DEMO", ".NPP"),
                 "The generated project must contain NPC, NAS, and NL configuration.");
             Assert.IsFalse(disk.FileExists("DEMO", ".CFG"),
                 "Inline projects must not create a redundant linker-config file.");
+            disk.CurrentDirectory = "/";
 
             QueueLine(editor, "NEW DEMO");
-            RunUntil(cpu, bus, s => s.Contains("Project already exists.", StringComparison.Ordinal),
+            RunUntil(cpu, bus, s => s.Contains("Project or unit already exists.", StringComparison.Ordinal),
                 "new project overwrite protection");
-            CollectionAssert.AreEqual(demoSource, disk.Load("DEMO", ".PAS"),
+            disk.CurrentDirectory = "DEMO";
+            CollectionAssert.AreEqual(demoSource, disk.Load("MAIN", ".PAS"),
                 "NEW must never overwrite an existing project file.");
+            disk.CurrentDirectory = "/";
+
+            QueueLine(editor, "ADDUNIT DEMO GREETER");
+            RunUntil(cpu, bus, s => s.Contains("Added unit GREETER", StringComparison.Ordinal),
+                "add Pascal unit");
+            QueueLine(editor, "ADDUNIT DEMO SECOND");
+            RunUntil(cpu, bus, s => s.Contains("Added unit SECOND", StringComparison.Ordinal),
+                "add second Pascal unit");
+            disk.CurrentDirectory = "DEMO";
+            string demoManifest = Encoding.ASCII.GetString(disk.Load("DEMO", ".NPP"));
+            StringAssert.Contains(demoManifest, "UNIT GREETER.PAS\n");
+            StringAssert.Contains(demoManifest, "UNIT SECOND.PAS\n");
+            Assert.IsTrue(disk.FileExists("GREETER", ".PAS"));
+            Assert.IsTrue(disk.FileExists("SECOND", ".PAS"));
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(
+                "program DEMO;\nuses Greeter;\nbegin\n  Greet;\nend.\n"), ".PAS");
+            disk.Save("GREETER", Encoding.ASCII.GetBytes(
+                "unit Greeter;\n\ninterface\nprocedure Greet;\n\nimplementation\n" +
+                "procedure Greet;\nbegin\n  writeln('Hello, world!');\nend;\n\nend.\n"), ".PAS");
+            disk.Save("SECOND", Encoding.ASCII.GetBytes(
+                "unit Second;\n\ninterface\nimplementation\nend.\n"), ".PAS");
+            disk.CurrentDirectory = "/";
 
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
-            QueueLine(editor, "BUILD DEMO.NPP");
-            RunUntil(cpu, bus, s => s.Contains("Build complete: DEMO.BIN", StringComparison.Ordinal)
-                                    || s.Contains("Invalid NPP", StringComparison.Ordinal)
-                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
-                "generated project build");
+            QueueLine(editor, "BUILD DEMO");
+            RunUntil(cpu, bus, s => s.Contains("Compiling MAIN.PAS", StringComparison.Ordinal),
+                "generated project main compilation");
+            string generatedMainScreen = Snapshot(bus);
+            RunUntil(cpu, bus, s => s.Contains("Compiling GREETER.PAS", StringComparison.Ordinal),
+                "generated project unit compilation");
+            string generatedFirstUnitScreen = Snapshot(bus);
+            RunUntil(cpu, bus, s => s.Contains("Compiling SECOND.PAS", StringComparison.Ordinal),
+                "generated project second unit compilation");
+            string generatedUnitScreen = Snapshot(bus);
+            QueueLine(editor, "ZZZ");
+            RunUntil(cpu, bus, s => s.Contains("Unknown command. Type HELP.", StringComparison.Ordinal),
+                "generated project build completion marker");
             string generatedBuildScreen = Snapshot(bus);
+            disk.CurrentDirectory = "DEMO";
+            string generatedAssembly = disk.FileExists("DEMO", ".S")
+                ? Encoding.ASCII.GetString(disk.Load("DEMO", ".S"))
+                : string.Empty;
+            bool generatedObjectExists = disk.FileExists("DEMO", ".OBJ");
+            bool generatedSecondAssemblyExists = disk.FileExists("SECOND", ".ASM");
+            disk.CurrentDirectory = "/";
             Assert.IsTrue(generatedBuildScreen.Contains("Build complete: DEMO.BIN", StringComparison.Ordinal),
-                $"{generatedBuildScreen}\nTool status ${bus.Read(0x0275):X2}, detail ${bus.Read(0x0276):X2}");
+                $"Tool status ${bus.Read(0x0275):X2}, detail ${bus.Read(0x0276):X2}, " +
+                $"diagnostic {bus.Read(0x02F3) | bus.Read(0x02F4) << 8}:" +
+                $"{bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, source " +
+                Encoding.ASCII.GetString(Enumerable.Range(0, bus.Read(0x02FF))
+                    .Select(i => bus.Read((ushort)(0x0800 + i))).ToArray()) + ", " +
+                $"object {generatedObjectExists}, assembly {generatedAssembly.Length} bytes\n" +
+                generatedAssembly.Replace("\n", "\\n", StringComparison.Ordinal) + "\n" +
+                generatedBuildScreen);
             Assert.IsTrue(
-                generatedBuildScreen.IndexOf("Configuration valid", StringComparison.Ordinal) <
-                generatedBuildScreen.IndexOf("Compiling DEMO.PAS", StringComparison.Ordinal),
+                generatedMainScreen.IndexOf("Configuration valid", StringComparison.Ordinal) <
+                generatedMainScreen.IndexOf("Compiling MAIN.PAS", StringComparison.Ordinal),
                 "BUILD must validate linker configuration before NPC creates intermediate files.");
-            StringAssert.Contains(generatedBuildScreen, "Library PASCAL.NLIB",
+            StringAssert.Contains(generatedMainScreen, "Compiling MAIN.PAS");
+            StringAssert.Contains(generatedFirstUnitScreen, "Compiling GREETER.PAS");
+            StringAssert.Contains(generatedUnitScreen, "Compiling SECOND.PAS");
+            Assert.IsTrue(generatedSecondAssemblyExists,
+                "BUILD must compile every declared unit, including manifest entries after the first.");
+            StringAssert.Contains(generatedBuildScreen, "Library /PASCAL.NLIB",
                 "Generated Pascal projects must link the standard runtime/NDK library.");
 
-            QueueLine(editor, "RUN DEMO.BIN");
+            QueueLine(editor, "RUN DEMO");
             RunUntil(cpu, bus, s => s.Contains("Hello, world!", StringComparison.Ordinal),
                 "generated project executable");
-            RunSteps(cpu, bus, 100_000);
-            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP", ".LBL" })
-                disk.Delete("DEMO", extension);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "DELUNIT DEMO GREETER");
+            RunUntil(cpu, bus, s => s.Contains("Deleted unit GREETER", StringComparison.Ordinal)
+                                    || s.Contains("Invalid Pascal project.", StringComparison.Ordinal)
+                                    || s.Contains("Unit is not in the project.", StringComparison.Ordinal)
+                                    || s.Contains("File I/O error.", StringComparison.Ordinal),
+                "delete Pascal unit result");
+            disk.CurrentDirectory = "DEMO";
+            string deletedUnitManifest = Encoding.ASCII.GetString(disk.Load("DEMO", ".NPP"));
+            bool deletedUnitSourceExists = disk.FileExists("GREETER", ".PAS");
+            bool deletedUnitOutputExists = disk.FileExists("DEMO", ".BIN");
+            disk.CurrentDirectory = "/";
+            string deleteUnitScreen = Snapshot(bus);
+            Assert.IsTrue(deleteUnitScreen.Contains("Deleted unit GREETER", StringComparison.Ordinal),
+                $"status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"source={deletedUnitSourceExists}, output={deletedUnitOutputExists}, " +
+                $"manifest={deletedUnitManifest.Replace("\n", "\\n", StringComparison.Ordinal)}\n{deleteUnitScreen}");
+            disk.CurrentDirectory = "DEMO";
+            Assert.IsFalse(disk.FileExists("GREETER", ".PAS"));
+            Assert.IsFalse(disk.FileExists("DEMO", ".BIN"),
+                "Changing unit membership must invalidate stale project output.");
+            Assert.IsFalse(deletedUnitManifest.Contains("UNIT GREETER.PAS", StringComparison.Ordinal));
+            disk.CurrentDirectory = "/";
+            QueueLine(editor, "DELPROJECT DEMO");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project DEMO", StringComparison.Ordinal),
+                "delete Pascal project");
+            Assert.IsFalse(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("DEMO", StringComparison.OrdinalIgnoreCase)));
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            QueueLine(editor, "NEW MAIN");
+            RunUntil(cpu, bus, s => s.Contains("Created project MAIN", StringComparison.Ordinal),
+                "project whose name matches the conventional main source");
+            QueueLine(editor, "BUILD MAIN");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: MAIN.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("Linker error.", StringComparison.Ordinal),
+                "MAIN project build without assembly filename collision");
+            disk.CurrentDirectory = "MAIN";
+            Assert.IsTrue(disk.FileExists("MAIN", ".ASM"),
+                "Per-source assembly must use a distinct filename from the whole-project stream.");
+            Assert.IsTrue(disk.FileExists("MAIN", ".S"),
+                "The whole-project assembly must retain the conventional project .S filename.");
+            Assert.IsTrue(disk.FileExists("MAIN", ".BIN"),
+                "A project named MAIN must build end to end.");
+            disk.CurrentDirectory = "/";
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN MAIN");
+            RunUntil(cpu, bus, s => s.Contains("Hello, world!", StringComparison.Ordinal),
+                "MAIN project executable");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "DELPROJECT MAIN");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project MAIN", StringComparison.Ordinal),
+                "delete MAIN project");
+            Assert.IsFalse(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("MAIN", StringComparison.OrdinalIgnoreCase)));
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
 
             int xramPagesBeforeBuild = bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8;
-            QueueLine(editor, "BUILD HELLO.NPP");
-            RunUntil(cpu, bus, s => s.Contains("Compiling HELLO.PAS", StringComparison.Ordinal),
+            QueueLine(editor, "BUILD HELLO");
+            RunUntil(cpu, bus, s => s.Contains("Compiling MAIN.PAS", StringComparison.Ordinal),
                 "project compiler launch");
             RunUntil(cpu, bus, s => s.Contains("Assembling HELLO.S", StringComparison.Ordinal),
                 "project assembler launch");
-            RunSteps(cpu, bus, 2_000_000);
-            Assert.IsTrue(disk.FileExists("HELLO", ".OBJ"),
-                $"NAS did not write HELLO.OBJ (detail ${bus.Read(0x0276):X2}):\n{Snapshot(bus)}");
             RunUntil(cpu, bus, s => s.Contains("Build complete: HELLO.BIN", StringComparison.Ordinal)
                                     || s.Contains("Linker configuration error", StringComparison.Ordinal),
                 "project build result");
@@ -189,8 +326,8 @@ public class NovaPascalTests
             Assert.AreEqual(xramPagesBeforeBuild, bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8,
                 "NPC, NPO2, and NAS must release every transient NDK XRAM allocation after BUILD.");
             StringAssert.Contains(buildScreen, "Nova Pascal Compiler v1.0");
-            StringAssert.Contains(buildScreen, "Compiling HELLO.PAS");
-            StringAssert.Contains(buildScreen, "Writing HELLO.S");
+            StringAssert.Contains(buildScreen, "Compiling MAIN.PAS");
+            StringAssert.Contains(buildScreen, "Writing MAIN.ASM");
             StringAssert.Contains(buildScreen, "Nova Pascal Optimizer v1.0");
             StringAssert.Contains(buildScreen, "Pass 1: typed IR optimization");
             StringAssert.Contains(buildScreen, "Pass 2: leaf routine inlining");
@@ -205,10 +342,13 @@ public class NovaPascalTests
             StringAssert.Contains(buildScreen, "Nova Linker v1.0");
             StringAssert.Contains(buildScreen, "Config HELLO.NPP");
             StringAssert.Contains(buildScreen, "Linking HELLO.OBJ");
-            StringAssert.Contains(buildScreen, "Library PASCAL.NLIB");
+            StringAssert.Contains(buildScreen, "Library /PASCAL.NLIB");
             StringAssert.Contains(buildScreen, "Writing HELLO.BIN");
             StringAssert.Contains(buildScreen, "Map HELLO.MAP");
             StringAssert.Contains(buildScreen, "Labels HELLO.LBL");
+            disk.CurrentDirectory = "HELLO";
+            Assert.IsTrue(disk.FileExists("HELLO", ".OBJ"),
+                $"NAS did not write HELLO.OBJ (detail ${bus.Read(0x0276):X2}):\n{buildScreen}");
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x80 }, disk.Load("HELLO", ".BIN")[..2],
                 "NPP CONFIG must control NL placement through the shared tool mailbox.");
             string helloMap = Encoding.ASCII.GetString(disk.Load("HELLO", ".MAP"));
@@ -223,8 +363,9 @@ public class NovaPascalTests
             StringAssert.Contains(helloLabels, "al 00");
             StringAssert.Contains(helloLabels, " .I_P_WRITE_LINE\n");
             Assert.IsFalse(helloLabels.Contains('\r'), "NL labels must use Nova's LF-only text convention.");
+            disk.CurrentDirectory = "/";
 
-            QueueLine(editor, "RUN HELLO.BIN");
+            QueueLine(editor, "RUN HELLO");
             RunUntil(cpu, bus, s => s.Contains("Hello from NovaPascal", StringComparison.Ordinal), "linked program output");
             StringAssert.Contains(Snapshot(bus), "Running at $8000:");
 
@@ -244,12 +385,86 @@ public class NovaPascalTests
                 "A three-character line must cross to the inline-parameter line writer.");
             StringAssert.Contains(literalAssembly, ".BYTE $41,$42,$43,$00");
 
-            Assert.IsTrue(disk.FileExists("FIZZBUZZ", ".PAS"), "The development disk must carry the compiler's executable language slice.");
+            disk.Save("INLINEASM", Encoding.ASCII.GetBytes(
+                "program InlineAsm;\nvar\n  Cells: array[0..2] of Byte;\n" +
+                "  Index: Word;\n  First, Second, WindowA, WindowB, Result: Byte;\n\n" +
+                "procedure Mark;\nbegin\n  writeln('M')\nend;\n\n" +
+                "procedure ReadWindow;\nbegin\n  WindowA := Cells[Index + 1];\n  asm\n" +
+                "    stz NVR4L\n    stz NVR4H\n  end;\n" +
+                "  WindowB := Cells[Index + 2]\nend;\n\n" +
+                "function SafeResult(): Byte;\nbegin\n  SafeResult := 7;\n  asm\n" +
+                "    stz NVR3L\n  end\nend;\n\nbegin\n  Index := 0;\n" +
+                "  Cells[0] := 11;\n  Cells[1] := 22;\n  Cells[2] := 33;\n  First := Cells[Index];\n  asm\n" +
+                "    stz NVR2L\n    lda #'@'\n    jsr P_WRITE_CHAR\n" +
+                "    lda #$0A\n    jsr P_WRITE_CHAR\n    jsr mark\n  end;\n" +
+                "  Second := Cells[Index];\n  Mark;\n  ReadWindow;\n" +
+                "  Result := SafeResult();\n  writeln(First);\n  writeln(Second);\n" +
+                "  writeln(WindowA);\n  writeln(WindowB);\n  writeln(Result)\nend.\n"), ".PAS");
+            disk.Save("INLINEASM", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN INLINEASM.PAS\nOUTPUT INLINEASM.BIN\n" +
+                "OPTIMIZE O2\nMAP INLINEASM.MAP\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
-            QueueLine(editor, "BUILD FIZZBUZZ.NPP");
+            QueueLine(editor, "BUILD INLINEASM.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: INLINEASM.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Pascal syntax error.", StringComparison.Ordinal)
+                                    || s.Contains("Assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("Linker error.", StringComparison.Ordinal),
+                "inline assembly build");
+            string inlineBuildScreen = Snapshot(bus);
+            Assert.IsTrue(disk.FileExists("INLINEASM", ".BIN"), inlineBuildScreen);
+            string inlineAssembly = Encoding.ASCII.GetString(disk.Load("INLINEASM", ".S"));
+            StringAssert.Contains(inlineAssembly, "\n     stz NVR2L\n",
+                "NPC must preserve inline NAS source while marking it opaque to O2.");
+            StringAssert.Contains(inlineAssembly, "\n     lda #'@'\n");
+            StringAssert.Contains(inlineAssembly, "\n     jsr mark\n");
+            StringAssert.Contains(inlineAssembly, "MARK:",
+                "An inline reference must keep the Pascal routine callable.");
+            StringAssert.Contains(inlineAssembly, "JSR MARK");
+            StringAssert.Contains(inlineAssembly, "READWINDOW:",
+                "A routine containing opaque assembly must not be inlined.");
+            StringAssert.Contains(inlineAssembly, "SAFERESULT:");
+            Assert.IsFalse(inlineAssembly.Contains("LDA (NVR4L),Y", StringComparison.Ordinal),
+                "Opaque assembly must disable a whole-routine array window it could clobber.");
+            StringAssert.Contains(inlineAssembly, "TSX\nSTA $0101,X",
+                "A function containing opaque assembly must retain its stack-backed result.");
+            Assert.IsFalse(inlineAssembly.Contains("STA NVR3L", StringComparison.Ordinal),
+                "O2 must not keep a function result in scratch across opaque assembly.");
+            Assert.IsFalse(inlineAssembly.Contains(".O2", StringComparison.Ordinal),
+                "Optimizer IR must never leak into an assembly block or the generated source.");
+            StringAssert.Contains(Encoding.ASCII.GetString(disk.Load("INLINEASM", ".MAP")),
+                "P_WRITE_CHAR", "Inline assembly references must participate in normal NL library resolution.");
+
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN INLINEASM.BIN");
+            RunUntil(cpu, bus, s => s.Split('\n').Any(line => line.Trim() == "22"),
+                "inline assembly executable output");
+            RunSteps(cpu, bus, 100_000);
+            string inlineRunScreen = Snapshot(bus);
+            Assert.AreEqual(1, inlineRunScreen.Split('\n').Count(line => line.Trim() == "@"),
+                $"NAS must execute the copied assembly block exactly once.\n{inlineRunScreen}");
+            Assert.AreEqual(2, inlineRunScreen.Split('\n').Count(line => line.Trim() == "M"),
+                "Both the inline and Pascal calls must reach the same retained procedure.");
+            Assert.AreEqual(2, inlineRunScreen.Split('\n').Count(line => line.Trim() == "11"),
+                "Inline assembly must invalidate O2's repeated-array-load cache before subsequent Pascal code.");
+            Assert.AreEqual(1, inlineRunScreen.Split('\n').Count(line => line.Trim() == "22"),
+                "Array accesses after an opaque block must rebuild their address.");
+            Assert.AreEqual(1, inlineRunScreen.Split('\n').Count(line => line.Trim() == "33"),
+                "Array-window state must not survive opaque assembly.");
+            Assert.AreEqual(1, inlineRunScreen.Split('\n').Count(line => line.Trim() == "7"),
+                "A function result must survive opaque assembly.");
+
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("FIZZBUZZ", StringComparison.OrdinalIgnoreCase)),
+                "The development disk must carry the compiler's executable language slice as a project.");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD FIZZBUZZ");
             RunUntil(cpu, bus, s => s.Contains("Build complete: FIZZBUZZ.BIN", StringComparison.Ordinal)
-                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
+                                    || s.Contains("Assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("Linker error.", StringComparison.Ordinal)
+                                    || s.Contains("Pascal syntax error.", StringComparison.Ordinal)
+                                    || s.Contains("Invalid Pascal project.", StringComparison.Ordinal),
                 "FizzBuzz compile, assemble, and link");
+            disk.CurrentDirectory = "FIZZBUZZ";
             Assert.IsTrue(disk.FileExists("FIZZBUZZ", ".BIN"),
                 $"detail=${bus.Read(0x0276):X2}, object=" +
                 $"{(disk.FileExists("FIZZBUZZ", ".OBJ") ? disk.Load("FIZZBUZZ", ".OBJ").Length : 0)} bytes, " +
@@ -268,9 +483,10 @@ public class NovaPascalTests
             string fizzBuzzMap = Encoding.ASCII.GetString(disk.Load("FIZZBUZZ", ".MAP"));
             StringAssert.Contains(fizzBuzzMap, "P_WRITE_BYTE_LN");
             StringAssert.Contains(fizzBuzzMap, "I_P_WRITE_LINE");
+            disk.CurrentDirectory = "/";
 
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
-            QueueLine(editor, "RUN FIZZBUZZ.BIN");
+            QueueLine(editor, "RUN FIZZBUZZ");
             RunUntil(cpu, bus, s => s.Contains("97", StringComparison.Ordinal), "FizzBuzz executable output");
             RunSteps(cpu, bus, 1_000_000);
             string fizzBuzzOutput = string.Join('\n', Snapshot(bus).Split('\n').Select(line => line.Trim()));
@@ -278,14 +494,20 @@ public class NovaPascalTests
                 "91\n92\nFizz\n94\nBuzz\nFizz\n97\n98\nFizz\nBuzz",
                 "FizzBuzz must execute all numeric, MOD, nested IF/ELSE, and WHILE paths through 100.");
 
-            Assert.IsTrue(disk.FileExists("LIFE", ".PAS"),
-                "The development disk must carry the graphics language slice.");
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("LIFE", StringComparison.OrdinalIgnoreCase)),
+                "The development disk must carry the graphics language slice as a project.");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
-            QueueLine(editor, "BUILD LIFE.NPP");
+            QueueLine(editor, "BUILD LIFE");
             RunUntil(cpu, bus, s => s.Contains("Build complete: LIFE.BIN", StringComparison.Ordinal)
-                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase)
+                                    || s.Contains("Assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("Linker error.", StringComparison.Ordinal)
+                                    || s.Contains("Pascal syntax error.", StringComparison.Ordinal)
                                     || s.Contains("File is too large", StringComparison.Ordinal),
                 "Life compile, assemble, and link");
+            disk.CurrentDirectory = "LIFE";
+            if (!disk.FileExists("LIFE", ".BIN"))
+                RunSteps(cpu, bus, 200_000);
             string lifeAssembly = disk.FileExists("LIFE", ".S")
                 ? Encoding.ASCII.GetString(disk.Load("LIFE", ".S"))
                 : string.Empty;
@@ -358,6 +580,10 @@ public class NovaPascalTests
             StringAssert.Contains(lifeAssembly, "JMP __NP_MAIN");
             StringAssert.Contains(lifeAssembly, "DRAW:");
             StringAssert.Contains(lifeAssembly, "COMMIT:");
+            StringAssert.Contains(lifeAssembly, "\n     lda Next+$0100,x\n",
+                "Life must demonstrate inline NAS by copying Pascal arrays directly.");
+            StringAssert.Contains(lifeAssembly, "\n     cpx #$D0\n",
+                "The inline copy must cover the final 208 cells of the 2,000-cell board.");
             StringAssert.Contains(lifeAssembly, "JSR RANDOMBYTE");
             Assert.IsFalse(lifeAssembly.Contains("JSR COUNTNEIGHBORS", StringComparison.Ordinal));
             Assert.IsFalse(lifeAssembly.Contains("JSR NEXTCELL", StringComparison.Ordinal));
@@ -372,7 +598,7 @@ public class NovaPascalTests
             StringAssert.Contains(lifeAssembly, "JSR GRAPHICSTILE4X8");
             StringAssert.Contains(lifeAssembly, "JSR POLLKEY");
 
-            string lifeSource = Encoding.ASCII.GetString(disk.Load("LIFE", ".PAS"));
+            string lifeSource = Encoding.ASCII.GetString(disk.Load("MAIN", ".PAS"));
             StringAssert.Contains(lifeSource, "RandomByte() < 128",
                 "Life must begin from a random, roughly half-full soup rather than one canned organism.");
             StringAssert.Contains(lifeSource, "if Neighbors < 2");
@@ -386,12 +612,15 @@ public class NovaPascalTests
             StringAssert.Contains(lifeSource, "GraphicsWait(1)");
             StringAssert.Contains(lifeSource, "if Cells[I] <> Next[I]",
                 "Life must update changed cells instead of blanking the visible plane.");
+            StringAssert.Contains(lifeSource, "lda Next+$0100,x",
+                "Life must retain its inline-assembly example on the development disk.");
             Assert.IsFalse(lifeSource.Contains("GraphicsClear", StringComparison.Ordinal),
                 "Life must not flicker by clearing between generations.");
             StringAssert.Contains(lifeSource, "while Key <> 13");
+            disk.CurrentDirectory = "/";
 
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
-            QueueLine(editor, "RUN LIFE.BIN");
+            QueueLine(editor, "RUN LIFE");
             int initialPopulation = WaitForStableLifePopulation(
                 cpu, bus, minimum: 400, "a random Life soup across the graphics plane");
             int evolvedPopulation = 0;
@@ -501,6 +730,44 @@ public class NovaPascalTests
                 bus.Read((ushort)VgcConstants.RegBorder),
                 "The executable must copy the hardware RNG byte through Pascal's NDK byte ABI.");
 
+            disk.Save("NDKCAT", Encoding.ASCII.GetBytes(
+                "program NdkCatalog;\nuses NovaAudio, NovaVgc, NovaXram, NovaDma, NovaVgcVsync;\n" +
+                "var Status: Byte;\nbegin\n" +
+                "  Status := audio_status();\n" +
+                "  vgc_display_on;\n" +
+                "  xram_copy_from_ram;\n" +
+                "  Status := dma_wait();\n" +
+                "  xram_set_ok;\n" +
+                "  Status := vgc_vsync();\n" +
+                "  writeln('NDK catalog')\nend.\n"), ".PAS");
+            disk.Save("NDKCAT", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN NDKCAT.PAS\nOUTPUT NDKCAT.BIN\nCONFIG INLINE\n" +
+                "MAP NDKCAT.MAP\nLABEL NDKCAT.LBL\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD NDKCAT.NPP");
+            RunUntil(cpu, bus, _ => disk.FileExists("NDKCAT", ".BIN") || bus.Read(0x0275) == 5,
+                "generated NDK unit catalog build");
+            byte[] catalogObject = disk.FileExists("NDKCAT", ".OBJ") ? disk.Load("NDKCAT", ".OBJ") : [];
+            Assert.IsTrue(disk.FileExists("NDKCAT", ".BIN"),
+                $"detail=${bus.Read(0x0276):X2}, object={catalogObject.Length} bytes, " +
+                $"sections={(catalogObject.Length > 6 ? catalogObject[6] : 0)}, " +
+                $"symbols={(catalogObject.Length > 11 ? catalogObject[10] | catalogObject[11] << 8 : 0)}, " +
+                $"relocations={(catalogObject.Length > 15 ? catalogObject[14] | catalogObject[15] << 8 : 0)}, " +
+                $"header={Convert.ToHexString(catalogObject[..Math.Min(catalogObject.Length, 80)])}\n{Snapshot(bus)}");
+            string catalogAssembly = Encoding.ASCII.GetString(disk.Load("NDKCAT", ".S"));
+            StringAssert.Contains(catalogAssembly, ".INCLUDE \"AUDIO.S\"");
+            StringAssert.Contains(catalogAssembly, ".INCLUDE \"VGCVSYNC.S\"");
+            StringAssert.Contains(catalogAssembly, "JSR AUDIO_STATUS");
+            Assert.IsTrue(disk.Load("NDKCAT", ".BIN").Length <= 768,
+                "Cross-unit dependency closure must retain only selected XRAM and DMA routines.");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP", ".LBL" })
+            {
+                if (disk.FileExists("NDKCAT", extension))
+                    disk.Delete("NDKCAT", extension);
+            }
+
             disk.Save("BADABI", Encoding.ASCII.GetBytes(
                 "program BadAbi;\nuses NovaRng, NovaFio;\nbegin\n  rng_get8(0);\nend.\n"), ".PAS");
             disk.Save("BADABI", Encoding.ASCII.GetBytes(
@@ -519,7 +786,7 @@ public class NovaPascalTests
             disk.Save("TINY", Encoding.ASCII.GetBytes(
                 "mEmOrY { ram: StArT = $8000, SiZe = $0001, FiLe = %o; }\n"), ".CFG");
             disk.Save("TINY", Encoding.ASCII.GetBytes(
-                "NPP 1\nMAIN HELLO.PAS\nOUTPUT TINY.BIN\nCONFIG TINY.CFG\n"), ".NPP");
+                "NPP 1\nMAIN LITERALS.PAS\nOUTPUT TINY.BIN\nCONFIG TINY.CFG\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD TINY.NPP");
             RunUntil(cpu, bus, s => s.Contains("Linker error.", StringComparison.Ordinal),
@@ -533,12 +800,12 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Not a runnable Nova binary.", StringComparison.Ordinal),
                 "MMIO-overlapping binary rejection");
 
-            QueueLine(editor, "TYPE HELLO.S");
+            QueueLine(editor, "TYPE HELLO/HELLO.S");
             RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal),
                 "TYPE displays generated assembly text");
 
-            QueueLine(editor, "EDIT HELLO.PAS");
-            RunUntil(cpu, bus, s => s.Contains("HELLO.PAS", StringComparison.Ordinal)
+            QueueLine(editor, "EDIT HELLO/MAIN.PAS");
+            RunUntil(cpu, bus, s => s.Contains("MAIN.PAS", StringComparison.Ordinal)
                                     && s.Contains("program Hello;", StringComparison.Ordinal), "Pascal editor");
             RunSteps(cpu, bus, 100_000);
             Assert.AreEqual((byte)0x63, bus.Vgc.GetScreenColor(0, 1),
@@ -550,15 +817,15 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal)
                                     && !s.Contains("program Hello;", StringComparison.Ordinal), "shell after Alt-X");
 
-            QueueLine(editor, "EDIT HELLO.S");
+            QueueLine(editor, "EDIT HELLO/HELLO.S");
             RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal)
                                     && s.Contains("T:Assembly Source", StringComparison.Ordinal),
                 "assembly-aware editor");
             editor.QueueInput(0x11);
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "shell after Ctrl-Q");
 
-            QueueLine(editor, "EDIT HELLO.NPP");
-            RunUntil(cpu, bus, s => s.Contains("MAIN HELLO.PAS", StringComparison.Ordinal)
+            QueueLine(editor, "EDIT HELLO/HELLO.NPP");
+            RunUntil(cpu, bus, s => s.Contains("MAIN MAIN.PAS", StringComparison.Ordinal)
                                     && s.Contains("T:Pascal Project", StringComparison.Ordinal),
                 "project-aware editor");
             editor.QueueInput(0x11);
@@ -572,7 +839,7 @@ public class NovaPascalTests
             editor.QueueInput(0x11);
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "shell after config editor");
 
-            QueueLine(editor, "TYPE HELLO.BIN");
+            QueueLine(editor, "TYPE HELLO/HELLO.BIN");
             RunUntil(cpu, bus, s => s.Contains("Not a text file.", StringComparison.Ordinal),
                 "TYPE rejects binary files");
 
@@ -758,7 +1025,7 @@ public class NovaPascalTests
             RunSteps(cpu, bus, 100_000);
 
             disk.Save("MULTIPRJ", Encoding.ASCII.GetBytes(
-                "NPP 1\nMAIN HELLO.PAS\nOUTPUT MULTIPRJ.BIN\nOBJECT MULTIUTIL.OBJ\n"), ".NPP");
+                "NPP 1\nMAIN LITERALS.PAS\nOUTPUT MULTIPRJ.BIN\nOBJECT MULTIUTIL.OBJ\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD MULTIPRJ.NPP");
             RunUntil(cpu, bus, s => s.Contains("Build complete: MULTIPRJ.BIN", StringComparison.Ordinal)
@@ -775,7 +1042,7 @@ public class NovaPascalTests
             disk.Save("PRJUTIL", Encoding.ASCII.GetBytes(
                 ".export ProjectHelper\nProjectHelper:\nlda #ProjectChar\nsta $A00E\nrts\n"), ".S");
             disk.Save("ASMPROJ", Encoding.ASCII.GetBytes(
-                "NPP 1\nMAIN HELLO.PAS\nOUTPUT ASMPROJ.BIN\n" +
+                "NPP 1\nMAIN LITERALS.PAS\nOUTPUT ASMPROJ.BIN\n" +
                 "DEFINE projectchar=$50\nASM PRJUTIL.S\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD ASMPROJ.NPP");
@@ -1628,6 +1895,7 @@ public class NovaPascalTests
             }, branchObject[32..51],
                 "NAS must encode every W65C02 relative branch with checked displacement.");
 
+            disk.CurrentDirectory = "HELLO";
             Assert.IsTrue(disk.FileExists("HELLO", ".S"), "BUILD must retain generated assembly.");
             Assert.IsTrue(disk.FileExists("HELLO", ".OBJ"), "BUILD must retain the NOBJ object.");
             Assert.IsTrue(disk.FileExists("HELLO", ".BIN"), "BUILD must retain the linked binary.");
@@ -1635,7 +1903,7 @@ public class NovaPascalTests
             string assembly = Encoding.ASCII.GetString(disk.Load("HELLO", ".S"));
             StringAssert.Contains(assembly, ".IMPORT P_WRITE_CHAR");
             StringAssert.Contains(assembly, ".IMPORT I_P_WRITE_LINE");
-            StringAssert.Contains(assembly, "; HELLO.PAS:3 WRITELN");
+            StringAssert.Contains(assembly, "; MAIN.PAS:3 WRITELN");
             StringAssert.Contains(assembly, "JSR I_P_WRITE_LINE");
             StringAssert.Contains(assembly,
                 ".BYTE $48,$65,$6C,$6C,$6F,$20,$66,$72,$6F,$6D,$20,$4E,$6F,$76,$61,$50,$61,$73,$63,$61,$6C,$00");
@@ -1653,7 +1921,9 @@ public class NovaPascalTests
                 "A 21-character WRITELN should compile to JSR, 22 inline bytes, and RTS.");
             Assert.IsTrue((objectFile[14] | objectFile[15] << 8) > 0,
                 "NAS must preserve external calls as NOBJ relocations.");
+            disk.CurrentDirectory = "/";
             byte[] library = disk.Load("PASCAL", ".NLIB");
+            disk.CurrentDirectory = "HELLO";
             Assert.AreEqual(2, library[4], "Pascal libraries must use complete NOBJ members.");
             byte[] lineMember = ReadNlibMember(library, "I_P_WRITE_LINE");
             byte[] unusedMember = ReadNlibMember(library, "P_UNUSED");
@@ -1666,6 +1936,7 @@ public class NovaPascalTests
                 "The inline line writer must end by emitting Nova LF through the NDK address.");
             Assert.IsFalse(ContainsSequence(executable, unusedCode),
                 "NL must strip unreferenced library members.");
+            disk.CurrentDirectory = "/";
         }
         finally
         {
@@ -1744,7 +2015,19 @@ public class NovaPascalTests
         }
 
         Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}, " +
-                    $"tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}\n{Snapshot(bus)}");
+                    $"tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                    $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
+                    $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, " +
+                    $"source={ReadMailboxText(bus, 0x0800, 64)}\n{Snapshot(bus)}");
+    }
+
+    private static string ReadMailboxText(CompositeBusDevice bus, ushort address, int capacity)
+    {
+        var bytes = new byte[capacity];
+        int length = 0;
+        while (length < bytes.Length && (bytes[length] = bus.Read((ushort)(address + length))) != 0)
+            length++;
+        return Encoding.ASCII.GetString(bytes, 0, length);
     }
 
     private static void RunSteps(Cpu cpu, CompositeBusDevice bus, int steps)

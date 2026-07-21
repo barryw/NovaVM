@@ -4,7 +4,7 @@ namespace e6502.Storage;
 /// Composes NdiHeader, NdiBam, and NdiDirectory into a file-backed disk image.
 ///
 /// File layout:
-///   [Header: 1 sector] [BAM: N sectors] [Directory: 48 sectors] [Data: remaining sectors]
+///   [Header: 1 sector] [BAM: N sectors] [Directory: configured sectors] [Data: remaining sectors]
 ///
 /// BAM tracks data sectors only (indexed from 0, physical offset = DataStartSector * SectorSize).
 /// </summary>
@@ -35,9 +35,9 @@ public sealed class NdiImage : IDisposable
     /// Creates a new, formatted NDI disk image at <paramref name="path"/>.
     /// Overwrites any existing file.
     /// </summary>
-    public static void CreateFormatted(string path, string label, int sizeKB)
+    public static void CreateFormatted(string path, string label, int sizeKB, int directorySectors = 48)
     {
-        var header = NdiHeader.Create(label, sizeKB);
+        var header = NdiHeader.Create(label, sizeKB, directorySectors);
         long totalBytes = (long)header.TotalSectors * header.SectorSize;
 
         // Write a zeroed file of the correct total size.

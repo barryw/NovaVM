@@ -12,10 +12,10 @@
 ; Sound effect:
 ;   AUDIO_NOTE       MIDI note
 ;   AUDIO_DURATION   duration in 60 Hz frames
-;   AUDIO_INSTRUMENT instrument slot
+;   AUDIO_SOUND_INSTRUMENT instrument slot
 ;
 ; Volume:
-;   AUDIO_VOLUME     SID volume level
+;   AUDIO_VOLUME_LEVEL SID volume level
 ;   AUDIO_VOICE      0=master, 1..6=SID voice volume
 ;
 ; Instrument:
@@ -203,17 +203,17 @@ AUDIO_NOTE       = FIO_SRCL
 ; @symbol AUDIO_DURATION
 ; @summary Duration in 60 Hz frames for AUDIO.SOUND.
 AUDIO_DURATION   = FIO_SRCH
-; @label AUDIO.INSTRUMENT
+; @label AUDIO.SOUND_INSTRUMENT
 ; @kind u8
-; @symbol AUDIO_INSTRUMENT
+; @symbol AUDIO_SOUND_INSTRUMENT
 ; @summary Instrument slot for AUDIO.SOUND.
-AUDIO_INSTRUMENT = FIO_ENDL
+AUDIO_SOUND_INSTRUMENT = FIO_ENDL
 
 ; @label AUDIO.VOLUME_LEVEL
 ; @kind u8
-; @symbol AUDIO_VOLUME
+; @symbol AUDIO_VOLUME_LEVEL
 ; @summary Volume level for AUDIO.VOLUME.
-AUDIO_VOLUME     = FIO_SRCL
+AUDIO_VOLUME_LEVEL = FIO_SRCL
 ; @label AUDIO.VOICE
 ; @kind u8
 ; @symbol AUDIO_VOICE

@@ -125,18 +125,32 @@ end;
 
 procedure Commit;
 begin
-  I := 0;
-  Row := 0;
-  while Row < 25 do
-  begin
-    Col := 0;
-    while Col < 80 do
-    begin
-      Cells[I] := Next[I];
-      I := I + 1;
-      Col := Col + 1
-    end;
-    Row := Row + 1
+  asm
+    ; 2000 bytes = seven full pages and a $D0-byte tail.
+    ldx #0
+  @pages:
+    lda Next,x
+    sta Cells,x
+    lda Next+$0100,x
+    sta Cells+$0100,x
+    lda Next+$0200,x
+    sta Cells+$0200,x
+    lda Next+$0300,x
+    sta Cells+$0300,x
+    lda Next+$0400,x
+    sta Cells+$0400,x
+    lda Next+$0500,x
+    sta Cells+$0500,x
+    lda Next+$0600,x
+    sta Cells+$0600,x
+    inx
+    bne @pages
+  @tail:
+    lda Next+$0700,x
+    sta Cells+$0700,x
+    inx
+    cpx #$D0
+    bne @tail
   end
 end;
 

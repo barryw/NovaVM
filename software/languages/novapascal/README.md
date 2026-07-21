@@ -27,12 +27,12 @@ Both `COMPILE` and `BUILD` print the optimizer banner and every pass as it runs.
 
 ## Executable language slice
 
-`FIZZBUZZ.PAS`/`FIZZBUZZ.NPP` and `LIFE.PAS`/`LIFE.NPP` are executable
-end-to-end compiler slices. Both build and run on Nova through NPC, NAS, NL,
-and `PASCAL.NLIB`. FizzBuzz exercises byte expressions and structured control
-flow. Life seeds a random, roughly half-full 80-by-25 Conway board, applies
-B3/S23 simultaneously through two 2,000-cell buffers, and renders across all
-320-by-200 pixels until Enter is pressed.
+`FIZZBUZZ/MAIN.PAS` with `FIZZBUZZ/FIZZBUZZ.NPP` and `LIFE/MAIN.PAS` with
+`LIFE/LIFE.NPP` are executable end-to-end compiler slices. Both build and run
+on Nova through NPC, NPO2, NAS, NL, and `PASCAL.NLIB`. FizzBuzz exercises byte
+expressions and structured control flow. Life seeds a random, roughly half-full
+80-by-25 Conway board, applies B3/S23 simultaneously through two 2,000-cell
+buffers, and renders across all 320-by-200 pixels until Enter is pressed.
 
 NPC now uses recursive-descent statement and expression parsers rather than a
 single fixed statement loop. The implemented language core is case-insensitive
@@ -56,6 +56,33 @@ after a function-result assignment. Life remains readable Pascal built from
 `RandomCell`, `Seed`, `Draw`, `CountNeighbors`, `NextCell`, `Evolve`, and
 `Commit`; optimization does not require source-level flattening.
 
+## Inline assembly
+
+Small 65C02 fragments use a Pascal `asm` statement and ordinary NAS syntax:
+
+```pascal
+asm
+  lda #'A'
+  jsr P_WRITE_CHAR
+end;
+```
+
+`asm` must end its source line, and the matching `end` starts its own line.
+NPC copies every intervening line into generated assembly, preserving spelling
+and NAS comments while normalizing line endings to LF. NPO2 treats those lines
+as opaque barriers: it neither interprets them as compiler IR nor carries
+register or memory facts across them. An assembly block may therefore clobber
+A, X, Y, flags, and memory, but it must restore the 65C02 stack pointer and fall
+through to the following Pascal statement. O2 also keeps routines containing
+assembly out of source inlining, retains Pascal routines named by assembly,
+uses stack-backed function results, and rebuilds cached array addresses after
+the block.
+
+Symbols made available by a Pascal `uses` clause remain available to NAS in the
+block. Substantial assembly belongs in the existing unit bundle (`.PAS`, `.NPI`,
+`.INC`, and `.S`) so it retains a Pascal-facing contract and the canonical NDK
+implementation rather than growing inside a Pascal source file.
+
 The resident driver reuses `$2000-$6FFF` as transient compiler workspace before
 NAS or NL is loaded: generated assembly occupies `$2000-$5FFF`, and a 64-entry
 typed symbol table starts at `$6000`. Generated arithmetic uses the canonical
@@ -78,10 +105,11 @@ NAS and NL require no special handling. Syntax failures are reported as
 
 `Word` is currently unsigned and uses A for its low byte and X for its high
 byte. `Boolean` and `Char` occupy one byte, as do Boolean array elements.
-Routine parameters and local declarations, signed `Integer`, wider integer
-types, `Real`, sets, records, pointers, word arrays, word output, and compilation
-of user-authored units remain subsequent work rather than accepted-but-partial
-syntax.
+Project-owned units support public parameterless procedures and public
+parameterless `Byte`/`Boolean` functions. Routine parameters, routine-local and
+unit-local declarations, unit initialization/finalization, signed `Integer`,
+wider integer types, `Real`, sets, records, pointers, word arrays, and word
+output remain subsequent work rather than accepted-but-partial syntax.
 
 ## Pascal standard units
 
@@ -112,17 +140,18 @@ so it never clears the visible plane between generations.
 `GRAPHICS.INC` and `GRAPHICS.S` implement those Pascal procedures over the
 canonical `vgc.inc` and `vgc.s` NDK sources. Only the adapter knows the VGC
 parameter layout and wait protocol. `Life` consequently contains no MMIO
-addresses, NDK pseudo-registers, or assembly calls. Multi-argument unit
-procedures use a byte-stack ABI; NPC emits an exact arity assertion and removes
-the arguments after the call.
+addresses or NDK pseudo-registers. Its `Commit` procedure is the inline-NAS
+example: a direct 2,000-byte `Next`-to-`Cells` copy using ordinary Pascal symbol
+names. Multi-argument unit procedures use a byte-stack ABI; NPC emits an exact
+arity assertion and removes the arguments after the call.
 
 `NovaRandom` follows the same model. Its Pascal-facing `RandomByte(): Byte`
 function adapts the canonical `rng_get8`, `RNG_VALUE0`, and FIO implementation;
 Life neither invents a private pseudo-random generator nor sees their ABI.
 Stable, Pascal-shaped unit APIs backed by canonical NDK implementations remain
-the model for the rest of the NDK. A standard unit is currently a precompiled
-platform component; NPC does not yet compile arbitrary user-authored unit
-implementations.
+the model for the rest of the NDK. Standard platform units remain precompiled,
+generated components tied to canonical NDK metadata. Project-owned units are
+ordinary `.PAS` sources compiled as part of an NPP 2 build.
 
 ## Low-level NDK bindings
 
@@ -155,18 +184,37 @@ constant such as `FIO_CMD_RNG`. An identifier used as a value or assignment
 target remains a symbolic byte address, which gives Pascal direct access to NDK
 pseudo-registers such as `RNG_VALUE0` without teaching NPC their addresses.
 
-NPC emits the declaration includes before program code and implementation
-includes after its terminating `RTS`. NAS assembles those unmodified sources,
-uses `.referenced()`/`.REFTO` to omit unused routines, and NL links the live
-NOBJ sections. Dependencies are explicit in `USES`; `NovaRng` needs `NovaFio`.
-The development disk currently installs the canonical Nova, RNG, and FIO
-sources and supports four NDK units per program. The build generates guarded
-`NOVA.NPI`, `RNG.NPI`, and `FIO.NPI` bindings from the same `@in`, `@out`, and
-`@kind` metadata used by the NDK reference. NPC emits signature assertions for
-every NDK call, so NAS rejects the wrong byte arity or use of a procedure as a
-function before linking. The generated bindings currently describe byte
-constants, byte storage, and routines whose explicit CPU-register ABI uses A;
-X/Y and wider-value ABIs remain unsupported.
+NPC emits declaration includes before program code and implementation includes
+after its terminating `RTS`. NAS uses `.referenced()`/`.REFTO` to omit unused
+routines, and NL links only live NOBJ sections. Each unit follows the canonical
+NDK include graph and appends dependency implementations after its own body.
+Consequently `uses NovaRng;` can call RNG without naming or ordering its internal
+FIO dependency, while a program that directly calls FIO still declares
+`NovaFio` for its typed interface.
+
+The development disk installs generated unit bundles for all 40 annotated NDK
+libraries: Nova, FIO, Audio, VGC, Sprite, Meta-Sprite, Virtual Sprite, Virtual
+Text, NUI and its component libraries, Copper, DMA, Blitter, XRAM, XMC, Pager,
+RNG, NVG, Animation, Tween, NIC, Game Server, Overlay, Mouse, Sprite Bank, WTS,
+and the focused VGC/FIO/text helpers. Each bundle has a human-readable
+`NOVA*.PAS` contract, checked `.NPI` ABI, declaration `.INC`, and implementation
+`.S`. Library underscores are removed from Pascal names and disk stems:
+`vgc_vsync` is `NovaVgcVsync` and `VGCVSYNC.*`; `fio_clear_error` is
+`NovaFioClearError` and `FIOCLEARERROR.*`.
+
+The generator composes split libraries from every canonical source containing
+Pascal-callable entries rather than maintaining copied implementations.
+Assembly-only inline-parameter sources are deliberately omitted, preserving
+dead stripping and the typed unit boundary. NPC supports 16 units per program
+and embeds no API catalog or hardware address.
+It emits signature assertions for every typed call, so NAS rejects the wrong
+byte arity or use of a procedure as a function before linking. Generated
+contracts currently describe byte constants, byte storage, and routines whose
+explicit CPU-register ABI uses A. X/Y and wider-value ABIs remain available in
+the assembly implementation but are omitted from the typed contract until the
+Pascal type system can represent them cleanly. Pascal-shaped adapters such as
+`NovaGraphics`, `NovaInput`, and `NovaRandom` continue to hide multi-register
+NDK protocols for common application code.
 
 Commands load these ordinary Nova load-address-prefixed binaries from disk
 into the shared `$2000-$6FFF` tool slot, one at a time:
@@ -319,61 +367,136 @@ Recursive macro/definition expansion remains under development.
 
 ## Creating a project
 
-`NEW name` creates a complete, buildable Pascal project without overwriting
-existing files:
-
-- `name.PAS` — a single program that prints `Hello, world!`
-- `name.NPP` — the project/build manifest, including `OPTIMIZE O2` and the
-  `NOVA=1` NAS definition plus NL `MEMORY` and `SEGMENTS` configuration for
-  both initialized `CODE` and zero-fill `BSS`
-
-The `.NPP` manifest is also the NAS project configuration; a separate inert
-assembler- or linker-config file is not required. `BUILD name.NPP` validates
-the embedded NL configuration before creating intermediates, then compiles, assembles,
-and links the generated project with `PASCAL.NLIB`, which supplies the Pascal
-standard runtime and its NDK-backed Nova hardware calls. NPC currently has one
-supported optimization level, O2, and uses it when `OPTIMIZE` is omitted as
-well as when the generated project states it explicitly.
-NAS receives the project filename and owns extraction and validation of its
-case-insensitive `DEFINE`; the shell only routes the file to the tool. Direct
-`ASSEMBLE -Dname=value` uses the same NAS preprocessor path.
-
-## NPP 1 projects
-
-An `.NPP` project is a small, source-controlled build manifest:
+`NEW HelloWorld` creates a complete project directory without overwriting an
+existing project:
 
 ```text
-NPP 1
-MAIN HELLO.PAS
-OUTPUT HELLO.BIN
+HELLOWORLD/
+    MAIN.PAS
+    HELLOWORLD.NPP
+```
+
+`MAIN.PAS` is a minimal program that prints `Hello, world!`.
+`HELLOWORLD.NPP` is the single end-to-end NPC, NAS, and NL configuration. It
+selects O2, defines `NOVA=1` for NAS, links initialized `CODE` and zero-fill
+`BSS` at `$8000`, and requests `.MAP` and `.LBL` reports. Project and unit names
+are case-insensitive Pascal identifiers of at most 15 characters.
+
+The project commands are:
+
+```text
+NEW project
+ADDUNIT project unit
+DELUNIT project unit
+DELPROJECT project
+BUILD project
+RUN project
+```
+
+`ADDUNIT HELLOWORLD GREETER` creates `GREETER.PAS` with a normal Pascal
+`interface`/`implementation` skeleton and inserts `UNIT GREETER.PAS` into the
+manifest. `DELUNIT` removes that manifest entry, its source, and its generated
+unit files. Both commands invalidate stale project output. A project may list
+up to 16 units. Names beginning with `Nova` are reserved for generated NDK
+platform units.
+
+`DELPROJECT` validates that the directory contains an NPP 2 project, refuses a
+project containing nested directories, then deletes the ordinary files in the
+project and removes the directory. The nested-directory check prevents the
+command from silently deleting a directory tree.
+
+## Project-owned Pascal units
+
+A program names a project unit with the familiar Pascal `uses` clause:
+
+```pascal
+program HelloWorld;
+uses Greeter;
+begin
+  Greet;
+end.
+```
+
+The unit declares its public interface separately from its implementation:
+
+```pascal
+unit Greeter;
+
+interface
+procedure Greet;
+
+implementation
+procedure Greet;
+begin
+  writeln('Hello, world!');
+end;
+
+end.
+```
+
+Public declarations and definitions must match in order and signature. The
+current project-unit ABI supports parameterless procedures and parameterless
+`Byte`/`Boolean` functions. Unit parameters, local storage, and
+initialization/finalization blocks are intentionally deferred until NPC can
+implement their Pascal semantics cleanly.
+
+The NPP manifest owns build membership; source files do not include one another.
+`uses` owns Pascal visibility and calls. Every listed unit is compiled, and O2
+removes routines that are unreachable from the program. Project units do not
+create another persistent interface artifact: NPC emits checked signatures into
+their generated assembly, and the whole-project optimizer sees the validated
+program and unit streams together.
+
+## NPP project manifests
+
+NPP 2 adds repeated `UNIT` entries to the original project format:
+
+```text
+NPP 2
+MAIN MAIN.PAS
+UNIT GREETER.PAS
+UNIT FORMAT.PAS
+OUTPUT HELLOWORLD.BIN
 OPTIMIZE O2
-DEFINE feature=$01
-OBJECT SUPPORT.OBJ
+DEFINE NOVA=1
 CONFIG INLINE
-MAP HELLO.MAP
-LABEL HELLO.LBL
+MAP HELLOWORLD.MAP
+LABEL HELLOWORLD.LBL
 MEMORY {
-    RAM: start = $8000, size = $0100, file = %O;
+    RAM: start = $8000, size = $1000, file = %O;
 }
 SEGMENTS {
     CODE: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
 }
 ```
 
-`OBJECT` is optional and links one ordinary NAS-produced NOBJ after the main
-Pascal object through the same NL path used by direct `LINK` commands. `ASM`
-may be used instead of `OBJECT`; BUILD runs NAS on that source and links its
-derived `.OBJ`. The two forms are mutually exclusive in NPP 1. Optional
-`DEFINE name=value` passes the same NAS preprocessor definition to project
-assembly steps.
-`OPTIMIZE O2` is optional, may appear after `OUTPUT`, and explicitly selects
-NPC's current optimized 65C02 lowering.
-`LOAD` is optional and defaults to `$7000`. It accepts exactly four hexadecimal
-digits and controls NL placement and relocation through the shared linker
-mailbox. `CONFIG INLINE` makes NL read the project file's own linker sections;
-`CONFIG file.cfg` remains available for direct/shared linker configurations and
-is authoritative when combined with `LOAD`. NL accepts the first useful
-ld65-shaped subset:
+`BUILD HELLOWORLD` enters the project directory and validates the complete NPP
+and linker configuration before creating intermediates. It compiles
+`MAIN.PAS` and each `UNIT` to readable `.ASM` 65C02 streams, combines the unit streams
+in manifest order with the program entry point, runs NPO2 across the whole
+program, assembles one NOBJ with NAS, and links it with NL and `PASCAL.NLIB`.
+Each tool prints its banner, inputs, outputs, pass names, and completion status.
+Per-source `.ASM`, combined project `.S`, `.OBJ`, `.BIN`, `.MAP`, and `.LBL`
+files remain in the project directory. Distinct assembly extensions prevent a
+project named `MAIN` from colliding with the compiler output for `MAIN.PAS`.
+`RUN HELLOWORLD` loads that project's `.BIN` and starts it at its encoded load
+address.
+
+NPP 1 remains accepted for compatible flat, single-source projects. It permits
+one `MAIN` and no `UNIT` entries. NPP 2 is required by the project mutation
+commands. Either version may name one optional ordinary NAS-produced `OBJECT`,
+or one `ASM` source that BUILD assembles before linking; the forms are mutually
+exclusive. Optional `DEFINE name=value` uses the same case-insensitive NAS
+preprocessor path as direct `ASSEMBLE file.s -Dname=value`.
+
+`OPTIMIZE O2` is optional and explicitly selects NPC's current optimized 65C02
+lowering; O2 is also the default. `LOAD` is optional and defaults to `$7000`.
+It accepts exactly four hexadecimal digits and controls NL placement and
+relocation through the shared linker mailbox. `CONFIG INLINE` makes NL read the
+project file's own linker sections. `CONFIG file.cfg` remains available for a
+shared linker configuration and is authoritative when combined with `LOAD`.
+NL accepts this useful ld65-shaped subset:
 
 ```text
 MEMORY {
@@ -401,6 +524,7 @@ An optional `SYMBOLS` block after `SEGMENTS` defines up to four absolute linker
 symbols. NAS sources import them normally; NL resolves them case-insensitively
 at the exact configured value without load-address rebasing and rejects any
 same-name object export.
+
 `MAP` is optional and writes an LF-only placement/export map. `LABEL` writes an
 LF-only VICE label file (`al 00hhhh .NAME`) from the same live placed exports.
 Direct `LINK main.obj [more.obj] [-C file.cfg] [-M file.map] [-Ln file.lbl]`
@@ -410,19 +534,9 @@ report through the same fixed language-neutral mailbox, then unloads it and
 saves the report. Reports share NL's 6 KB output buffer and fail loudly if they
 do not fit.
 
-`BUILD HELLO.NPP` visibly runs resident NPC, then loads NAS, then loads NL.
-Each stage prints its banner, input, output, and completion status. It compiles
-the main Pascal source to textual 65C02 assembly, assembles that into an NOBJ,
-and links the requested binary with `PASCAL.NLIB`. The generated `.S`, `.OBJ`,
-and `.BIN` files remain on disk.
-
 `DIR` prints complete filenames, including extensions. `EDIT` accepts ASCII
 Pascal source/projects, assembly source/includes, linker configs, and ordinary
 text while labeling the active type in the status bar. `TYPE` uses the same
-ASCII validation and refuses binary files.
-
-NPP 1 intentionally accepts one `MAIN` plus one optional prebuilt `OBJECT` or
-one `ASM` source. Precompiled Pascal standard units are selected inside Pascal
-with `USES`, but user-authored Pascal units, repeated project inputs, and their
-initialization semantics still need expanded NPP syntax; the project parser
-will not pretend source concatenation is linking.
+ASCII validation and refuses binary files. Direct `BUILD file.pas`,
+`BUILD file.npp`, and `RUN file.bin` remain available for compatible flat-file
+workflows.

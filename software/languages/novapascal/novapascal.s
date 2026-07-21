@@ -10,6 +10,8 @@
       .include "fio.inc"
       .include "replline.inc"
       .include "nptool.inc"
+      .include "longbranch.inc"
+      .include "tools/npproj.inc"
 
       .import npc_compile_file
 

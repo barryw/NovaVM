@@ -15,8 +15,8 @@ SYMBOL_CAP  = 64
 SYMBOL_NAME_CAP = 32
 SYMBOL_SIZE = SYMBOL_NAME_CAP + 2
 P_IDENT_CAP = 32
-P_UNIT_CAP = 4
-P_UNIT_NAME_CAP = 12
+P_UNIT_CAP = 16
+P_UNIT_NAME_CAP = 16
 P_UNIT_STORAGE = P_UNIT_CAP * P_UNIT_NAME_CAP
 TYPE_NONE          = 0
 TYPE_BYTE          = 1
@@ -93,6 +93,13 @@ p_mark_line:       .res 2
 p_mark_column:     .res 2
 p_function_active: .res 1
 p_function_hash:   .res 3
+p_compiling_unit:  .res 1
+p_interface_count: .res 1
+p_interface_index: .res 1
+p_interface_sig:   .res 16
+p_interface_hash0: .res 16
+p_interface_hash1: .res 16
+p_interface_hash2: .res 16
 p_control_depth:   .res 1
 p_control_a_lo:    .res 8
 p_control_a_hi:    .res 8
@@ -294,6 +301,9 @@ pascal_compile:
       STZ   p_label
       STZ   p_label+1
       STZ   p_function_active
+      STZ   p_compiling_unit
+      STZ   p_interface_count
+      STZ   p_interface_index
       STZ   p_control_depth
       STZ   p_operator_depth
       STZ   p_array_depth
@@ -329,12 +339,20 @@ pascal_compile:
       BCC   :+
       JMP   p_output_error
 :
-      LDA   #<kw_program
-      STA   p_word
-      LDA   #>kw_program
-      STA   p_word+1
-      JSR   p_expect_word
+      JSR   p_capture_identifier
       BCC   :+
+      JMP   p_syntax_error
+:
+      LDA   #<kw_unit
+      LDX   #>kw_unit
+      JSR   p_ident_is
+      BCC   @program_keyword
+      JMP   p_compile_unit
+@program_keyword:
+      LDA   #<kw_program
+      LDX   #>kw_program
+      JSR   p_ident_is
+      BCS   :+
       JMP   p_syntax_error
 :
       JSR   p_identifier
@@ -352,28 +370,11 @@ pascal_compile:
       LDX   #>kw_uses
       JSR   p_ident_is
       BCC   @expect_begin
-@unit:
-      JSR   p_capture_identifier
-      long_bcs p_syntax_error
-      JSR   p_store_unit
-      BCC   @unit_delimiter
+      JSR   p_parse_uses
+      BCC   @expect_begin
       LDA   p_emit_error
       long_bne p_output_error
       JMP   p_syntax_error
-@unit_delimiter:
-      JSR   p_skip_ws
-      JSR   p_peek
-      long_bcc p_syntax_error
-      CMP   #','
-      BNE   @units_done
-      JSR   p_next
-      BRA   @unit
-@units_done:
-      LDA   #';'
-      JSR   p_expect_char
-      long_bcs p_syntax_error
-      JSR   p_capture_identifier
-      long_bcs p_syntax_error
 @expect_begin:
       LDA   #<kw_begin
       LDX   #>kw_begin
@@ -440,7 +441,7 @@ pascal_compile:
       JSR   p_emit_ax_text
       long_bcs p_output_error
       JSR   p_parse_routine_declarations
-      BCS   @parse_fail
+      BCS   p_program_parse_fail
       LDA   #<asm_main_label
       LDX   #>asm_main_label
       JSR   p_emit_ax_text
@@ -453,9 +454,13 @@ pascal_compile:
       STA   p_word+1
       JSR   p_emit_text
       long_bcs p_output_error
+      LDA   #<asm_main_label
+      LDX   #>asm_main_label
+      JSR   p_emit_ax_text
+      long_bcs p_output_error
 @parse_body:
       JSR   p_parse_statement_list
-      BCS   @parse_fail
+      BCS   p_program_parse_fail
       LDA   #'.'
       JSR   p_expect_char
       long_bcs p_syntax_error
@@ -470,15 +475,212 @@ pascal_compile:
       STA   p_word+1
       JSR   p_emit_text
       long_bcs p_output_error
+p_finish_compile:
       JSR   p_emit_unit_sources
       long_bcs p_output_error
       LDA   #PASCAL_OK
       RTS
 
+p_program_parse_fail:
+      LDA   p_emit_error
+      long_bne p_output_error
+      JMP   p_syntax_error
+
+; USES has already been captured. It accepts generated Nova* NDK units and
+; project-owned Pascal units, then leaves the next identifier in p_ident.
+p_parse_uses:
+@unit:
+      JSR   p_capture_identifier
+      BCS   @fail
+      JSR   p_store_unit
+      BCC   @delimiter
+      SEC
+      RTS
+@delimiter:
+      JSR   p_skip_ws
+      JSR   p_peek
+      BCC   @fail
+      CMP   #','
+      BNE   @done
+      JSR   p_next
+      BRA   @unit
+@done:
+      LDA   #';'
+      JSR   p_expect_char
+      BCS   @fail
+      JSR   p_capture_identifier
+@fail:
+      RTS
+
+; unit-file = UNIT name ; INTERFACE [USES ... ;]
+;             {procedure/function declarations}
+;             IMPLEMENTATION [USES ... ;]
+;             {procedure/function definitions} END .
+;
+; This first native unit ABI intentionally shares the compiler's existing
+; no-argument Procedure and Byte/Boolean Function contract. Interface and
+; implementation declarations must match in order, which keeps validation
+; deterministic and compact on the 65C02.
+p_compile_unit:
+      INC   p_compiling_unit
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      LDA   #';'
+      JSR   p_expect_char
+      long_bcs p_syntax_error
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      LDA   #<kw_interface
+      LDX   #>kw_interface
+      JSR   p_ident_is
+      long_bcc p_syntax_error
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      LDA   #<kw_uses
+      LDX   #>kw_uses
+      JSR   p_ident_is
+      BCC   @interface_item
+      JSR   p_parse_uses
+      long_bcs @parse_fail
+
+@interface_item:
+      LDA   #<kw_implementation
+      LDX   #>kw_implementation
+      JSR   p_ident_is
+      long_bcs @implementation
+      LDA   #<kw_procedure
+      LDX   #>kw_procedure
+      JSR   p_ident_is
+      BCC   @interface_function
+      STZ   p_digit
+      BRA   @interface_name
+@interface_function:
+      LDA   #<kw_function
+      LDX   #>kw_function
+      JSR   p_ident_is
+      long_bcc p_syntax_error
+      LDA   #2
+      STA   p_digit
+@interface_name:
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      JSR   p_save_identifier
+      JSR   p_skip_ws
+      JSR   p_peek
+      long_bcc p_syntax_error
+      CMP   #'('
+      BNE   @interface_type
+      JSR   p_next
+      LDA   #')'
+      JSR   p_expect_char
+      long_bcs p_syntax_error
+@interface_type:
+      LDA   p_digit
+      BEQ   @interface_end
+      LDA   #':'
+      JSR   p_expect_char
+      long_bcs p_syntax_error
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      LDA   #<kw_byte
+      LDX   #>kw_byte
+      JSR   p_ident_is
+      BCS   @interface_end
+      LDA   #<kw_boolean
+      LDX   #>kw_boolean
+      JSR   p_ident_is
+      long_bcc p_syntax_error
+@interface_end:
+      JSR   p_store_interface_routine
+      long_bcs p_syntax_error
+      LDA   #';'
+      JSR   p_expect_char
+      long_bcs p_syntax_error
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      JMP   @interface_item
+
+@implementation:
+      JSR   p_capture_identifier
+      long_bcs p_syntax_error
+      LDA   #<kw_uses
+      LDX   #>kw_uses
+      JSR   p_ident_is
+      BCC   @implementation_item
+      JSR   p_parse_uses
+      BCS   @parse_fail
+@implementation_item:
+      LDA   #<kw_end
+      LDX   #>kw_end
+      JSR   p_ident_is
+      BCS   @unit_end
+      JSR   p_is_routine_keyword
+      long_bcc p_syntax_error
+      LDA   #<asm_code
+      LDX   #>asm_code
+      JSR   p_emit_ax_text
+      long_bcs p_output_error
+      JSR   p_parse_routine_declarations
+      BCS   @parse_fail
+@unit_end:
+      LDA   p_interface_index
+      CMP   p_interface_count
+      long_bne p_syntax_error
+      LDA   #'.'
+      JSR   p_expect_char
+      long_bcs p_syntax_error
+      JSR   p_skip_ws
+      LDA   p_left
+      ORA   p_left+1
+      long_bne p_syntax_error
+      JMP   p_finish_compile
+
 @parse_fail:
       LDA   p_emit_error
       long_bne p_output_error
       JMP   p_syntax_error
+
+p_store_interface_routine:
+      LDX   p_interface_count
+      CPX   #16
+      BCS   @fail
+      LDA   p_digit
+      STA   p_interface_sig,X
+      LDA   p_saved_hash
+      STA   p_interface_hash0,X
+      LDA   p_saved_hash+1
+      STA   p_interface_hash1,X
+      LDA   p_saved_hash+2
+      STA   p_interface_hash2,X
+      INC   p_interface_count
+      CLC
+      RTS
+@fail:
+      SEC
+      RTS
+
+p_validate_interface_routine:
+      LDX   p_interface_index
+      CPX   p_interface_count
+      BCS   @fail
+      LDA   p_digit
+      CMP   p_interface_sig,X
+      BNE   @fail
+      LDA   p_saved_hash
+      CMP   p_interface_hash0,X
+      BNE   @fail
+      LDA   p_saved_hash+1
+      CMP   p_interface_hash1,X
+      BNE   @fail
+      LDA   p_saved_hash+2
+      CMP   p_interface_hash2,X
+      BNE   @fail
+      INC   p_interface_index
+      CLC
+      RTS
+@fail:
+      SEC
+      RTS
 
 p_syntax_error:
       LDA   #PASCAL_ERR_SYNTAX
@@ -575,6 +777,11 @@ p_parse_routine_declarations:
       JSR   p_ident_is
       long_bcc @fail
 @header_end:
+      LDA   p_compiling_unit
+      BEQ   :+
+      JSR   p_validate_interface_routine
+      BCS   @fail
+:
       LDA   #';'
       JSR   p_expect_char
       BCS   @fail
@@ -615,6 +822,13 @@ p_parse_routine_declarations:
       STZ   p_function_active
       JSR   p_capture_identifier
       BCS   @fail
+      LDA   p_compiling_unit
+      BEQ   :+
+      LDA   #<kw_end
+      LDX   #>kw_end
+      JSR   p_ident_is
+      BCS   @done
+:
       LDA   #<kw_begin
       LDX   #>kw_begin
       JSR   p_ident_is
@@ -694,6 +908,10 @@ p_parse_statement:
       LDX   #>kw_writeln
       JSR   p_ident_is
       long_bcs p_parse_writeln
+      LDA   #<kw_asm
+      LDX   #>kw_asm
+      JSR   p_ident_is
+      long_bcs p_parse_asm
 
       JSR   p_save_identifier
       STZ   p_indexed
@@ -820,6 +1038,68 @@ p_parse_statement:
       JSR   p_emit_call_saved
       BCS   @output
       CLC
+      RTS
+@output:
+      INC   p_emit_error
+@fail:
+      SEC
+      RTS
+
+; Copy a line-oriented ASM block directly to NAS. A leading space keeps each
+; source line opaque to NPO2 while remaining ordinary NAS layout. END must be
+; the first Pascal token on its own line; the statement-list parser owns its
+; optional trailing semicolon.
+p_parse_asm:
+@header:
+      JSR   p_peek
+      BCC   @fail
+      CMP   #' '
+      BEQ   @header_eat
+      CMP   #$09
+      BEQ   @header_eat
+      CMP   #$0D
+      BEQ   @header_eat
+      CMP   #$0A
+      BNE   @fail
+      JSR   p_next
+      BRA   @line
+@header_eat:
+      JSR   p_next
+      BRA   @header
+@line:
+      LDA   #<kw_end
+      LDX   #>kw_end
+      JSR   p_peek_keyword
+      BCS   @end
+      LDA   #' '
+      JSR   p_emit
+      BCS   @output
+@copy:
+      JSR   p_peek
+      BCC   @fail
+      CMP   #$0D
+      BEQ   @skip
+      CMP   #$0A
+      BEQ   @newline
+      JSR   p_next
+      JSR   p_emit
+      BCS   @output
+      BRA   @copy
+@skip:
+      JSR   p_next
+      BRA   @copy
+@newline:
+      JSR   p_next
+      LDA   #$0A
+      JSR   p_emit
+      BCS   @output
+      BRA   @line
+@end:
+      LDA   #<kw_end
+      STA   p_word
+      LDA   #>kw_end
+      STA   p_word+1
+      JSR   p_expect_word
       RTS
 @output:
       INC   p_emit_error
@@ -2231,36 +2511,47 @@ p_emit_call_identifier_name:
 ; hardware address is embedded in NPC; routine statements retain their symbol.
 p_store_unit:
       STZ   p_emit_error
+      LDA   p_ident_len
+      BEQ   @bad
+      CMP   #4
+      BCC   @user
+      LDA   p_ident+0
+      CMP   #'N'
+      BNE   @user
+      LDA   p_ident+1
+      CMP   #'O'
+      BNE   @user
+      LDA   p_ident+2
+      CMP   #'V'
+      BNE   @user
+      LDA   p_ident+3
+      CMP   #'A'
+      BNE   @user
+      LDA   p_ident_len
+      CMP   #5
+      BCC   @bad
+      BRA   @platform
+@user:
+      LDA   p_ident_len
+      CMP   #P_UNIT_NAME_CAP
+      BCS   @bad
+      CLC
+      RTS
+@platform:
       LDX   p_unit_count
       CPX   #P_UNIT_CAP
       BCS   @bad
       LDA   p_ident_len
-      CMP   #5
-      BCC   @bad
       SEC
       SBC   #4
       CMP   #P_UNIT_NAME_CAP+1
       BCS   @bad
       STA   p_unit_len,X
-      LDA   p_ident+0
-      CMP   #'N'
-      BNE   @bad
-      LDA   p_ident+1
-      CMP   #'O'
-      BNE   @bad
-      LDA   p_ident+2
-      CMP   #'V'
-      BNE   @bad
-      LDA   p_ident+3
-      CMP   #'A'
-      BNE   @bad
       TXA
       ASL
       ASL
-      STA   p_expected
       ASL
-      CLC
-      ADC   p_expected
+      ASL
       TAX
       LDY   #4
 @copy:
@@ -2305,10 +2596,8 @@ p_emit_unit_line:
       TXA
       ASL
       ASL
-      STA   p_expected
       ASL
-      CLC
-      ADC   p_expected
+      ASL
       CLC
       ADC   #<p_unit_names
       STA   p_word
@@ -3195,6 +3484,9 @@ p_next:
 
       .segment "RODATA"
 kw_program: .byte "PROGRAM", 0
+kw_unit:    .byte "UNIT", 0
+kw_interface: .byte "INTERFACE", 0
+kw_implementation: .byte "IMPLEMENTATION", 0
 kw_begin:   .byte "BEGIN", 0
 kw_uses:    .byte "USES", 0
 kw_var:     .byte "VAR", 0
@@ -3209,6 +3501,7 @@ kw_of:      .byte "OF", 0
 kw_procedure: .byte "PROCEDURE", 0
 kw_function:  .byte "FUNCTION", 0
 kw_writeln: .byte "WRITELN", 0
+kw_asm:     .byte "ASM", 0
 kw_end:     .byte "END", 0
 kw_if:      .byte "IF", 0
 kw_then:    .byte "THEN", 0

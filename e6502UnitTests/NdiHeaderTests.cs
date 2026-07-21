@@ -95,6 +95,16 @@ public class NdiHeaderTests
     }
 
     [TestMethod]
+    public void CreateSupportsLargerDirectoryTablesForDevelopmentDisks()
+    {
+        var header = NdiHeader.Create("DEV", 1440, directorySectors: 96);
+
+        Assert.AreEqual(96u, header.DirectorySectorCount,
+            "Tool disks need room for generated source and build artifacts without changing the NDI format.");
+        Assert.AreEqual(header.DirectoryStartSector + 96u, header.DataStartSector);
+    }
+
+    [TestMethod]
     public void FreeSectorCount_CanBeUpdated()
     {
         var header = NdiHeader.Create("DISK", 800);

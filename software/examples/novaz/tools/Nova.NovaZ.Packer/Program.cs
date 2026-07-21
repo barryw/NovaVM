@@ -51,7 +51,7 @@ var outputDir = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath));
 if (!string.IsNullOrEmpty(outputDir))
     Directory.CreateDirectory(outputDir);
 
-NdiImage.CreateFormatted(options.OutputPath, options.Label, options.SizeKb);
+NdiImage.CreateFormatted(options.OutputPath, options.Label, options.SizeKb, options.DirectorySectors);
 using var image = NdiImage.Open(options.OutputPath);
 
 var autoboot = File.ReadAllBytes(options.AutobootPath);
@@ -111,7 +111,7 @@ foreach (var asset in options.Assets)
         ".4th" or ".fth" or ".fs" => NdiFileType.Forth,
         ".pas" => NdiFileType.Pascal,
         ".npp" => NdiFileType.PascalProject,
-        ".s" or ".asm" or ".inc" => NdiFileType.Assembly,
+        ".s" or ".asm" or ".inc" or ".npi" => NdiFileType.Assembly,
         _ => NdiFileType.Bin
     };
     image.WriteFile(fname, type, parent, data);
@@ -157,6 +157,7 @@ internal sealed record Options(
     string StoryName,
     string Label,
     int SizeKb,
+    int DirectorySectors,
     IReadOnlyList<AssetOption> Assets,
     string? SoundsPath,
     string? SoundfontOutPath,
@@ -172,6 +173,7 @@ internal sealed record Options(
         string storyName = "story.bin";
         string label = "NOVAZ";
         int sizeKb = 1440;
+        int directorySectors = 48;
         var assets = new List<AssetOption>();
         string? sounds = null;
         string? soundfontOut = null;
@@ -215,6 +217,10 @@ internal sealed record Options(
                     sizeKb = parsed;
                     i++;
                     break;
+                case "--directory-sectors" when value is not null && int.TryParse(value, out var parsedDirectorySectors):
+                    directorySectors = parsedDirectorySectors;
+                    i++;
+                    break;
                 case "--asset" when value is not null:
                     if (!TryParseAsset(value, out var asset))
                     {
@@ -222,6 +228,17 @@ internal sealed record Options(
                         return null;
                     }
                     assets.Add(asset);
+                    i++;
+                    break;
+                case "--asset-dir" when value is not null:
+                    if (!Directory.Exists(value))
+                    {
+                        Console.Error.WriteLine($"Asset directory not found: {value}");
+                        return null;
+                    }
+                    assets.AddRange(Directory.GetFiles(value, "*", SearchOption.TopDirectoryOnly)
+                        .Order(StringComparer.Ordinal)
+                        .Select(path => new AssetOption(path, Path.GetFileName(path))));
                     i++;
                     break;
                 case "--sounds" when value is not null:
@@ -254,7 +271,7 @@ internal sealed record Options(
             return null;
         if (assets.Any(a => string.IsNullOrWhiteSpace(a.Name) || a.Name.Length > 32))
             return null;
-        if (sizeKb <= 0)
+        if (sizeKb <= 0 || directorySectors <= 0)
             return null;
 
         if (sounds is not null && !File.Exists(sounds))
@@ -269,7 +286,7 @@ internal sealed record Options(
             return null;
         }
 
-        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, assets, sounds, soundfontOut, pictures);
+        return new Options(output, autoboot, runtime, runtimeName, story, storyName, label, sizeKb, directorySectors, assets, sounds, soundfontOut, pictures);
     }
 
     private static bool TryParseAsset(string value, out AssetOption asset)
@@ -291,7 +308,7 @@ internal sealed record Options(
     public static void PrintUsage()
     {
         Console.Error.WriteLine("Nova.NovaZ.Packer");
-        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--sounds <file.blb>] [--pictures <file.blb>] [--label NOVAZ] [--size-kb 1440]");
+        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--asset-dir <directory>] [--sounds <file.blb>] [--pictures <file.blb>] [--label NOVAZ] [--size-kb 1440] [--directory-sectors 48]");
     }
 }
 

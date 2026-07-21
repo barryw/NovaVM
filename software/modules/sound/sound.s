@@ -309,7 +309,7 @@ snd_noise:
 ; --- $02 SND_VOLUME: ARG0 = vol (0-15), master only -> NDK audio_volume ---
 snd_volume:
       LDA   LIB_ARG0+0
-      STA   AUDIO_VOLUME               ; pseudo-register input (= FIO_SRCL)
+      STA   AUDIO_VOLUME_LEVEL         ; pseudo-register input (= FIO_SRCL)
       STZ   AUDIO_VOICE                ; = FIO_SRCH; 0 selects master volume
       JSR   audio_volume
       JMP   snd_ok
@@ -333,7 +333,7 @@ snd_sound:
       LDA   LIB_ARG1+0
       STA   AUDIO_DURATION             ; = FIO_SRCH
       LDA   LIB_ARG2+0
-      STA   AUDIO_INSTRUMENT           ; = FIO_ENDL
+      STA   AUDIO_SOUND_INSTRUMENT     ; = FIO_ENDL
       JSR   audio_sound_async
       JMP   snd_finish_status
 
@@ -487,7 +487,7 @@ snd_music_priority:
       LDA   LIB_ARG0+0
       STA   AUDIO_NOTE                 ; = FIO_SRCL; priority value
       STZ   AUDIO_DURATION             ; = FIO_SRCH
-      STZ   AUDIO_INSTRUMENT           ; = FIO_ENDL  (clobbered by page-in slot idx)
+      STZ   AUDIO_SOUND_INSTRUMENT     ; = FIO_ENDL  (clobbered by page-in slot idx)
       STZ   AUDIO_DECAY                ; = FIO_ENDH
       STZ   AUDIO_SUSTAIN              ; = FIO_SIZEL
       STZ   AUDIO_RELEASE              ; = FIO_SIZEH

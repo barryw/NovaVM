@@ -38,16 +38,18 @@ public sealed class NdiHeader
     /// <summary>
     /// Creates a new header for a disk of the given size in kilobytes.
     /// </summary>
-    public static NdiHeader Create(string label, int sizeKB)
+    public static NdiHeader Create(string label, int sizeKB, int directorySectors = 48)
     {
         if (sizeKB < 1)
             throw new ArgumentOutOfRangeException(nameof(sizeKB), "Image size must be positive.");
+        if (directorySectors < 1)
+            throw new ArgumentOutOfRangeException(nameof(directorySectors), "Directory size must be positive.");
 
         if (label.Length > 32)
             label = label[..32];
 
         const ushort sectorSize = 256;
-        const uint dirCount = 48;
+        uint dirCount = checked((uint)directorySectors);
         const uint sectorsPerBamSector = sectorSize * 8u;
 
         long totalBytes = (long)sizeKB * 1024L;

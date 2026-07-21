@@ -7,7 +7,7 @@ NAS_PREPROCESSOR_INC = 1
 
 NASPP_LOAD     = $7000
 NASPP_MAX      = $3000
-NASPP_NAME_LEN = 9
+NASPP_NAME_LEN = 10
 
 ; SYS_OVL_MAIN leaves LIB_ARG0..3 intact while calling the overlay.
 NASPP_INPUT_XADDR  = LIB_ARG0     ; u24
