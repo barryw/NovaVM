@@ -511,7 +511,13 @@ shell_cmd_compile:
       JSR   shell_derive_name
       JSR   shell_prepare_tool_args
       JSR   npc_compile_file
-      BNE   @tool_error
+      BEQ   :+
+      JMP   @tool_error
+:
+      JSR   shell_optimize
+      BCC   :+
+      JMP   @tool_error
+:
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
@@ -642,7 +648,13 @@ shell_cmd_build:
       JSR   shell_derive_name
       JSR   shell_prepare_tool_args
       JSR   npc_compile_file
-      BNE   @tool_error
+      BEQ   :+
+      JMP   @tool_error
+:
+      JSR   shell_optimize
+      BCC   :+
+      JMP   @tool_error
+:
 
       JSR   shell_promote_name2
       LDA   #<shell_ext_obj
@@ -715,24 +727,11 @@ shell_cmd_build:
 shell_cmd_run:
       JSR   shell_require_name
       BCS   @done
-      LDA   #<source_buf
-      STA   p_copy_dst
-      LDA   #>source_buf
-      STA   p_copy_dst+1
-      LDA   #<SHELL_BUFFER_CAP
-      STA   p_out_left
-      LDA   #>SHELL_BUFFER_CAP
-      STA   p_out_left+1
-      JSR   shell_load_shell_name
-      BNE   @file_error
-      LDA   shell_file_len+1
-      BNE   @size_ok
-      LDA   shell_file_len
-      CMP   #3
-      BCC   @bad_binary
-@size_ok:
-      JSR   shell_copy_program
-      BCS   @bad_binary
+      JSR   shell_load_program
+      CMP   #1
+      BEQ   @file_error
+      CMP   #2
+      BEQ   @bad_binary
       LDA   #<shell_running
       STA   p_word
       LDA   #>shell_running
@@ -849,6 +848,17 @@ shell_launch_tool:
 @failed:
       SEC
       RTS
+
+; NPC emits compact typed IR into the requested .S file. O2 is the sole
+; language level today, so every compile runs its disk-loaded lowering and
+; peephole passes before the language-neutral assembler sees that source.
+shell_optimize:
+      LDA   #<shell_tool_optimizer
+      STA   p_word
+      LDA   #>shell_tool_optimizer
+      STA   p_word+1
+      LDA   #shell_tool_optimizer_end-shell_tool_optimizer
+      JMP   shell_launch_tool
 
 shell_print_tool_error:
       LDA   NPTOOL_STATUS
@@ -1049,13 +1059,72 @@ shell_promote_name2:
       STY   shell_name_len
       RTS
 
-shell_copy_program:
+; Load a raw Nova executable without staging its payload in the 4 KiB shell
+; document buffer. The two-byte entry header is read first, then FIO streams
+; the remaining bytes directly to the validated $7000-$9FFF destination.
+; Returns A=0 success, A=1 file error, or A=2 invalid executable.
+shell_load_program:
+      STZ   shell_load_error
+      STZ   shell_fio_error
+      LDA   #<shell_name
+      STA   p_word
+      LDA   #>shell_name
+      STA   p_word+1
+      LDA   shell_name_len
+      STA   shell_io_len
+      JSR   shell_copy_fio_name
+      BEQ   :+
+      JMP   @open_failed
+:
+      LDA   #FIO_FILE_ACCESS_READ
+      STA   FIO_DIRTYPE
+      JSR   fio_fopen
+      BEQ   :+
+      JMP   @open_failed
+:
+      LDA   FIO_SRCL
+      STA   shell_file_id
+      LDA   FIO_SRCH
+      STA   shell_file_id+1
+      JSR   fio_fsize
+      BEQ   :+
+      JMP   @io_failed
+:
+      LDA   FIO_SIZE2
+      BEQ   :+
+      JMP   @too_large
+:
+      LDA   FIO_SIZEL
+      STA   shell_file_len
+      LDA   FIO_SIZEH
+      STA   shell_file_len+1
+      BNE   @read_header
+      LDA   shell_file_len
+      CMP   #3
+      BCS   @read_header
+      JMP   @bad
+@read_header:
+      LDA   shell_file_id
+      STA   FIO_SRCL
+      LDA   shell_file_id+1
+      STA   FIO_SRCH
+      LDA   #<source_buf
+      STA   FIO_ENDL
+      LDA   #>source_buf
+      STA   FIO_ENDH
+      LDA   #2
+      STA   FIO_GLENL
+      STZ   FIO_GLENH
+      LDA   #FIO_FILE_TARGET_RAM
+      STA   FIO_DIRTYPE
+      JSR   fio_fread
+      BEQ   :+
+      JMP   @io_failed
+:
       LDA   source_buf
       STA   shell_program_entry
-      STA   p_copy_dst
       LDA   source_buf+1
       STA   shell_program_entry+1
-      STA   p_copy_dst+1
       CMP   #>OUTPUT_BASE
       BCC   @bad
       BNE   @base_ok
@@ -1063,10 +1132,6 @@ shell_copy_program:
       CMP   #<OUTPUT_BASE
       BCC   @bad
 @base_ok:
-      LDA   #<(source_buf+2)
-      STA   p_src
-      LDA   #>(source_buf+2)
-      STA   p_src+1
       SEC
       LDA   shell_file_len+0
       SBC   #2
@@ -1077,40 +1142,54 @@ shell_copy_program:
       CLC
       LDA   shell_program_entry
       ADC   p_left
-      STA   shell_number
+      TAX
       LDA   shell_program_entry+1
       ADC   p_left+1
-      STA   shell_number+1
       BCS   @bad
       CMP   #>VGC_MODE
-      BCC   @copy
+      BCC   @load
       BNE   @bad
-      LDA   shell_number
+      TXA
       CMP   #<VGC_MODE
       BNE   @bad
-@copy:
+@load:
+      LDA   shell_file_id
+      STA   FIO_SRCL
+      LDA   shell_file_id+1
+      STA   FIO_SRCH
+      LDA   shell_program_entry
+      STA   FIO_ENDL
+      LDA   shell_program_entry+1
+      STA   FIO_ENDH
       LDA   p_left
-      ORA   p_left+1
-      BEQ   @done
-      LDY   #0
-      LDA   (p_src),Y
-      STA   (p_copy_dst),Y
-      INC   p_src
-      BNE   :+
-      INC   p_src+1
-:     INC   p_copy_dst
-      BNE   :+
-      INC   p_copy_dst+1
-:     LDA   p_left
-      BNE   :+
-      DEC   p_left+1
-:     DEC   p_left
-      BRA   @copy
-@done:
-      CLC
+      STA   FIO_GLENL
+      LDA   p_left+1
+      STA   FIO_GLENH
+      STZ   FIO_DIRTYPE
+      JSR   fio_fread
+      BNE   @io_failed
+      JSR   shell_close_file
+      LDA   #0
       RTS
 @bad:
-      SEC
+      JSR   shell_close_file
+      LDA   #2
+      RTS
+@too_large:
+      LDA   #1
+      STA   shell_load_error
+      BRA   @file_failed
+@io_failed:
+      LDA   FIO_ERRCODE
+      STA   shell_fio_error
+@file_failed:
+      JSR   shell_close_file
+      LDA   #1
+      RTS
+@open_failed:
+      LDA   FIO_ERRCODE
+      STA   shell_fio_error
+      LDA   #1
       RTS
 
 shell_call_program:
@@ -3047,6 +3126,8 @@ shell_pascal_library: .byte "PASCAL.NLIB"
 shell_pascal_library_end:
 shell_tool_editor: .byte "NPEDIT.BIN"
 shell_tool_editor_end:
+shell_tool_optimizer: .byte "NPO2.BIN"
+shell_tool_optimizer_end:
 shell_tool_assembler: .byte "NAS.BIN"
 shell_tool_assembler_end:
 shell_tool_linker: .byte "NL.BIN"

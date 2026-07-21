@@ -24,7 +24,7 @@ public class EditorModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x08, img[5]);   // MODULE_ID_EDITOR
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x01, img[7]);   // EDITOR_FN_COUNT (single hook-table EDIT)
+        Assert.AreEqual(0x02, img[7]);   // EDITOR_FN_COUNT (RAM and XRAM documents)
     }
 
     [TestMethod]
@@ -38,7 +38,7 @@ public class EditorModuleTests
     }
 
     [TestMethod]
-    public void EditorModule_DispatchTablePublishesOnlyHookTableEdit()
+    public void EditorModule_DispatchTablePublishesRamAndXramEditors()
     {
         string src = File.ReadAllText(RepoPath("software", "modules", "editor", "editor.s"));
         string table = Slice(src, "sys_jtable:", "; ===========================================================================");
@@ -51,7 +51,8 @@ public class EditorModuleTests
         string logoType = "sys_edit_type" + "_logo";
 
         StringAssert.Contains(table, ".word   sys_edit-1");
-        Assert.IsFalse(table.Contains(oldDispatch, StringComparison.Ordinal), "The editor dispatch table must expose only EDITOR_FN_EDIT.");
+        StringAssert.Contains(table, ".word   sys_edit_xram-1");
+        Assert.IsFalse(table.Contains(oldDispatch, StringComparison.Ordinal), "The editor dispatch table must not restore the legacy extended ABI.");
         Assert.IsFalse(src.Contains(editEx, StringComparison.Ordinal), "The editor module must not keep the legacy extended edit ABI.");
         Assert.IsFalse(src.Contains(profilePrefix, StringComparison.Ordinal), "The editor module must not dispatch language profile bytes.");
         Assert.IsFalse(src.Contains(forthHilite, StringComparison.Ordinal), "Forth highlighting belongs in Forth-owned hooks.");
@@ -114,7 +115,7 @@ public class EditorModuleTests
     }
 
     [TestMethod]
-    public void EditorModule_HasTwoKilobytesOfRomHeadroom()
+    public void EditorModule_HasOneKilobyteOfRomHeadroom()
     {
         string map = File.ReadAllText(RepoPath("software", "modules", "editor", "editor.map"));
         int rodataEnd = ParseSegmentEnd(map, "RODATA");
@@ -122,8 +123,8 @@ public class EditorModuleTests
         int freeBytes = vectorsStart - (rodataEnd + 1);
 
         Assert.IsTrue(
-            freeBytes >= 0x0800,
-            $"Editor module must keep at least $0800 bytes free for finishing editor work; found ${freeBytes:X4}.");
+            freeBytes >= 0x0400,
+            $"Editor module must keep at least $0400 bytes free after adding generic XRAM paging; found ${freeBytes:X4}.");
     }
 
     private static string RepoPath(params string[] parts)

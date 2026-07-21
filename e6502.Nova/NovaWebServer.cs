@@ -486,7 +486,7 @@ sealed class LocalNovaWebServer
             byte[] bytes = await _management.ReadFileAsync(EnsureAbsolutePath($"lib/{name}"), token);
             NovaModule mod = NovaModule.Parse(bytes);
             bool isStaged = staged.TryGetValue(name, out int sid);
-            modules.Add(ModuleSummaryJson(name, mod, isStaged, sid));
+            modules.Add((JsonNode)ModuleSummaryJson(name, mod, isStaged, sid));
         }
         return new JsonObject { ["modules"] = modules };
     }
@@ -543,10 +543,10 @@ sealed class LocalNovaWebServer
                 {
                     var st = new JsonArray();
                     foreach (string s in fn.Status)
-                        st.Add(s);
+                        st.Add((JsonNode?)JsonValue.Create(s));
                     fo["status"] = st;
                 }
-                fns.Add(fo);
+                fns.Add((JsonNode)fo);
             }
             o["functions"] = fns;
         }

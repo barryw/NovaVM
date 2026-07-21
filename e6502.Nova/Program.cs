@@ -1663,7 +1663,7 @@ static JsonObject CreateGithubInstallationTokenBody(string reposText, string per
 {
     var repositories = new JsonArray();
     foreach (string repo in reposText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        repositories.Add(repo);
+        repositories.Add((JsonNode?)JsonValue.Create(repo));
 
     var permissions = new JsonObject();
     foreach (string item in permissionsText.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -2889,7 +2889,7 @@ static void WriteSdramBlock(string host, int port, int address, IReadOnlyList<in
 {
     var jsonValues = new JsonArray();
     foreach (int value in values)
-        jsonValues.Add(value & 0xFF);
+        jsonValues.Add((JsonNode?)JsonValue.Create(value & 0xFF));
     JsonNode response = SendVmRequest(host, port, new JsonObject
     {
         ["command"] = "write_sdram",
@@ -4641,7 +4641,7 @@ static int WriteGfxOnlyScreenshot(Func<string, JsonNode> Send, string outPath, b
         int len = Math.Min(256, W * H - a);
         var r = Send($"{{\"command\":\"read_vram\",\"space\":3,\"address\":{a},\"length\":{len}}}");
         JsonArray? arr = r["data"] as JsonArray;
-        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add((JsonNode?)JsonValue.Create(one.GetValue<int>())); }
         if (arr is null) { Console.Error.WriteLine($"screenshot: no gfx data at {a}: {r.ToJsonString()}"); return 1; }
         foreach (var n in arr) idx[p++] = (byte)(n!.GetValue<int>() & 0x0F);
     }
@@ -4696,7 +4696,7 @@ static byte[]? ReadVramRange(Func<string, JsonNode> Send, int space, int length)
         int len = Math.Min(256, length - a);
         var r = Send($"{{\"command\":\"read_vram\",\"space\":{space},\"address\":{a},\"length\":{len}}}");
         JsonArray? arr = r["data"] as JsonArray;
-        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+        if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add((JsonNode?)JsonValue.Create(one.GetValue<int>())); }
         if (arr is null) { Console.Error.WriteLine($"screenshot: no data for space {space} at {a}: {r.ToJsonString()}"); return null; }
         foreach (var n in arr) buf[p++] = (byte)(n!.GetValue<int>() & 0xFF);
     }
@@ -4968,7 +4968,7 @@ static byte[]? ReadVramRangeAt(Func<string, JsonNode> Send, int space, int addre
 {
     var r = Send($"{{\"command\":\"read_vram\",\"space\":{space},\"address\":{address},\"length\":{length}}}");
     JsonArray? arr = r["data"] as JsonArray;
-    if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add(one.GetValue<int>()); }
+    if (arr is null && r["value"] is JsonNode one) { arr = new JsonArray(); arr.Add((JsonNode?)JsonValue.Create(one.GetValue<int>())); }
     if (arr is null) return null;
     byte[] buf = new byte[length];
     int p = 0;

@@ -27,7 +27,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s \
 	$(NOVA_ASM)/pager.inc $(NOVA_ASM)/pager.s \
 	$(NOVA_ASM)/rng.inc $(NOVA_ASM)/rng.s \
-	$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s \
+	$(NOVA_ASM)/nvg.inc $(NOVA_ASM)/nvg.s $(NOVA_ASM)/nvg_named.s \
 	$(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s $(NOVA_ASM)/vtext_mixed.s \
 	$(NOVA_ASM)/nui.inc $(NOVA_ASM)/nui.s \
 	$(NOVA_ASM)/replline.inc $(NOVA_ASM)/replline.s \

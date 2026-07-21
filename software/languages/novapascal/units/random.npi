@@ -1,0 +1,7 @@
+; Compiled interface for NOVARAND.PAS.
+.ifndef NPI_RANDOM
+NPI_RANDOM = 1
+.include "NOVA.NPI"
+; RANDOMBYTE
+__S0EAC1A = $02
+.endif

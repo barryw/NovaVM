@@ -1378,7 +1378,7 @@
     {
       "label": "FIO.ARG_ADDRH",
       "source": "../../runtime/asm/fio.inc",
-      "line": 48,
+      "line": 51,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1390,7 +1390,7 @@
     {
       "label": "FIO.ARG_ADDRL",
       "source": "../../runtime/asm/fio.inc",
-      "line": 38,
+      "line": 41,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1402,7 +1402,7 @@
     {
       "label": "FIO.ARG_ADDRM",
       "source": "../../runtime/asm/fio.inc",
-      "line": 43,
+      "line": 46,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1414,7 +1414,7 @@
     {
       "label": "FIO.ARG_LENH",
       "source": "../../runtime/asm/fio.inc",
-      "line": 58,
+      "line": 61,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1426,7 +1426,7 @@
     {
       "label": "FIO.ARG_LENL",
       "source": "../../runtime/asm/fio.inc",
-      "line": 53,
+      "line": 56,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1438,7 +1438,7 @@
     {
       "label": "FIO.ARG_NAMELEN",
       "source": "../../runtime/asm/fio.inc",
-      "line": 63,
+      "line": 66,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1450,7 +1450,7 @@
     {
       "label": "FIO.ARG_NAMEPTR_H",
       "source": "../../runtime/asm/fio.inc",
-      "line": 73,
+      "line": 76,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1462,7 +1462,7 @@
     {
       "label": "FIO.ARG_NAMEPTR_L",
       "source": "../../runtime/asm/fio.inc",
-      "line": 68,
+      "line": 71,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -3215,7 +3215,7 @@
     {
       "label": "NVG.DRAW",
       "source": "../../runtime/asm/nvg.s",
-      "line": 75,
+      "line": 71,
       "inputs": [],
       "outputs": [
         {
@@ -3234,7 +3234,7 @@
     {
       "label": "NVG.DRAW_AT",
       "source": "../../runtime/asm/nvg.s",
-      "line": 93,
+      "line": 89,
       "inputs": [],
       "outputs": [
         {
@@ -3257,8 +3257,8 @@
     },
     {
       "label": "NVG.DRAW_NAMED",
-      "source": "../../runtime/asm/nvg.s",
-      "line": 147,
+      "source": "../../runtime/asm/nvg_named.s",
+      "line": 51,
       "inputs": [],
       "outputs": [
         {
@@ -3273,12 +3273,13 @@
       ],
       "kind": "routine",
       "symbol": "nvg_draw_named",
+      "library": "nvg",
       "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at offset 0 without clearing."
     },
     {
       "label": "NVG.DRAW_NAMED_AT",
-      "source": "../../runtime/asm/nvg.s",
-      "line": 163,
+      "source": "../../runtime/asm/nvg_named.s",
+      "line": 65,
       "inputs": [],
       "outputs": [
         {
@@ -3298,6 +3299,7 @@
       ],
       "kind": "routine",
       "symbol": "nvg_draw_named_at",
+      "library": "nvg",
       "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then draw the NVG image at NVG.ADDRL/H without clearing."
     },
     {
@@ -3339,7 +3341,7 @@
     {
       "label": "NVG.LOAD",
       "source": "../../runtime/asm/nvg.s",
-      "line": 45,
+      "line": 41,
       "inputs": [],
       "outputs": [
         {
@@ -3358,7 +3360,7 @@
     {
       "label": "NVG.LOAD_AT",
       "source": "../../runtime/asm/nvg.s",
-      "line": 63,
+      "line": 59,
       "inputs": [],
       "outputs": [
         {
@@ -3378,8 +3380,8 @@
     },
     {
       "label": "NVG.LOAD_NAMED",
-      "source": "../../runtime/asm/nvg.s",
-      "line": 117,
+      "source": "../../runtime/asm/nvg_named.s",
+      "line": 23,
       "inputs": [],
       "outputs": [
         {
@@ -3394,12 +3396,13 @@
       ],
       "kind": "routine",
       "symbol": "nvg_load_named",
+      "library": "nvg",
       "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at offset 0."
     },
     {
       "label": "NVG.LOAD_NAMED_AT",
-      "source": "../../runtime/asm/nvg.s",
-      "line": 132,
+      "source": "../../runtime/asm/nvg_named.s",
+      "line": 37,
       "inputs": [],
       "outputs": [
         {
@@ -3416,6 +3419,7 @@
       ],
       "kind": "routine",
       "symbol": "nvg_load_named_at",
+      "library": "nvg",
       "summary": "Copy NVG.NAMEPTR/NVG.NAMELEN into FIO.NAME, then load the NVG image at NVG.ADDRL/H."
     },
     {
@@ -4942,7 +4946,7 @@
     {
       "label": "VGC.CHARBG_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 196,
+      "line": 314,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4953,7 +4957,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 422,
+      "line": 584,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4973,7 +4977,7 @@
     {
       "label": "VGC.CLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 144,
+      "line": 252,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4984,7 +4988,7 @@
     {
       "label": "VGC.COMMAND",
       "source": "../../runtime/asm/vgc.s",
-      "line": 72,
+      "line": 172,
       "inputs": [
         {
           "name": "A",
@@ -4994,7 +4998,7 @@
       "outputs": [],
       "requires": [],
       "kind": "routine",
-      "symbol": "vgc_cmd",
+      "symbol": "vgc_issue",
       "summary": "Issue a raw VGC command without waiting for completion."
     },
     {
@@ -5011,7 +5015,7 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 216,
+      "line": 338,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5022,7 +5026,7 @@
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 207,
+      "line": 327,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5033,7 +5037,7 @@
     {
       "label": "VGC.EXEC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 103,
+      "line": 207,
       "inputs": [
         {
           "name": "A",
@@ -5049,7 +5053,7 @@
     {
       "label": "VGC.FILL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 449,
+      "line": 617,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5069,7 +5073,7 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 367,
+      "line": 517,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5080,7 +5084,7 @@
     {
       "label": "VGC.FLASH_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 357,
+      "line": 505,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5091,7 +5095,7 @@
     {
       "label": "VGC.GCLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 378,
+      "line": 530,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5102,7 +5106,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../../runtime/asm/vgc.s",
-      "line": 386,
+      "line": 540,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5127,7 +5131,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 431,
+      "line": 595,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5147,7 +5151,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../../runtime/asm/vgc.s",
-      "line": 261,
+      "line": 391,
       "inputs": [
         {
           "name": "A",
@@ -5163,7 +5167,7 @@
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 250,
+      "line": 378,
       "inputs": [
         {
           "name": "A",
@@ -5179,7 +5183,7 @@
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 239,
+      "line": 365,
       "inputs": [
         {
           "name": "A",
@@ -5195,7 +5199,7 @@
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 225,
+      "line": 349,
       "inputs": [
         {
           "name": "A",
@@ -5215,7 +5219,7 @@
     {
       "label": "VGC.LINE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 413,
+      "line": 573,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5235,7 +5239,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 270,
+      "line": 402,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -5255,7 +5259,7 @@
     {
       "label": "VGC.MEM_READ",
       "source": "../../runtime/asm/vgc.s",
-      "line": 301,
+      "line": 439,
       "inputs": [],
       "outputs": [
         {
@@ -5276,7 +5280,7 @@
     {
       "label": "VGC.MEM_WRITE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 311,
+      "line": 451,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5293,7 +5297,7 @@
     {
       "label": "VGC.PAINT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 458,
+      "line": 628,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5357,7 +5361,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 395,
+      "line": 551,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5373,7 +5377,7 @@
     {
       "label": "VGC.RECT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 440,
+      "line": 606,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5393,7 +5397,7 @@
     {
       "label": "VGC.REVERSE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 322,
+      "line": 464,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5404,7 +5408,7 @@
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 334,
+      "line": 478,
       "inputs": [
         {
           "name": "A",
@@ -5420,7 +5424,7 @@
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 347,
+      "line": 493,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5431,7 +5435,7 @@
     {
       "label": "VGC.SET_BG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 167,
+      "line": 279,
       "inputs": [
         {
           "name": "X",
@@ -5447,7 +5451,7 @@
     {
       "label": "VGC.SET_BORDER",
       "source": "../../runtime/asm/vgc.s",
-      "line": 176,
+      "line": 290,
       "inputs": [
         {
           "name": "X",
@@ -5463,7 +5467,7 @@
     {
       "label": "VGC.SET_CHARBG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 185,
+      "line": 301,
       "inputs": [
         {
           "name": "X",
@@ -5479,7 +5483,7 @@
     {
       "label": "VGC.SET_FG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 158,
+      "line": 268,
       "inputs": [
         {
           "name": "X",
@@ -5495,7 +5499,7 @@
     {
       "label": "VGC.SET_FONT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 292,
+      "line": 428,
       "inputs": [
         {
           "name": "X",
@@ -5511,7 +5515,7 @@
     {
       "label": "VGC.SET_MODE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 283,
+      "line": 417,
       "inputs": [
         {
           "name": "X",
@@ -5592,7 +5596,7 @@
     {
       "label": "VGC.UNPLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 404,
+      "line": 562,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5629,7 +5633,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 114,
+      "line": 220,
       "inputs": [],
       "outputs": [
         {
@@ -5645,7 +5649,7 @@
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "../../runtime/asm/vgc.s",
-      "line": 82,
+      "line": 184,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5656,7 +5660,7 @@
     {
       "label": "VGC.WAIT_FRAMES",
       "source": "../../runtime/asm/vgc.s",
-      "line": 127,
+      "line": 235,
       "inputs": [
         {
           "name": "A",

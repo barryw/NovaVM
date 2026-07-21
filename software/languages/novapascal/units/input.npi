@@ -1,0 +1,7 @@
+; Compiled interface for NOVAINPUT.PAS.
+.ifndef NPI_INPUT
+NPI_INPUT = 1
+.include "NOVA.NPI"
+; POLLKEY
+__SC45EC5 = $02
+.endif

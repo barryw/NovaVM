@@ -9,6 +9,7 @@
         <IsAotCompatible>true</IsAotCompatible>
         <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+        <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
     </PropertyGroup>
 
     <ItemGroup>
@@ -36,6 +37,7 @@
     <ItemGroup>
         <ProjectReference Include="..\e6502\e6502.csproj" />
         <ProjectReference Include="..\e6502.Storage\e6502.Storage.csproj" />
+        <ProjectReference Include="..\e6502.Nova\e6502.Nova.csproj" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <!-- POSIX tool validation (macOS / Linux) -->
@@ -56,20 +58,20 @@
 
     <!-- Assemble the EhBASIC ROM + keyboard viewer from source (POSIX) -->
     <Target Name="AssembleRom" BeforeTargets="PreBuildEvent" DependsOnTargets="ValidateTools" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="make -C $(ProjectDir)../software/languages/ehbasic" />
+        <Exec Command="make -C $(ProjectDir)../software/languages/ehbasic basic.bin extension.bin" />
         <Exec Command="make -C $(ProjectDir)../software/runtime/asm install" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/basic.bin" DestinationFiles="$(ProjectDir)Resources/ehbasic.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/ehbasic/extension.bin" DestinationFiles="$(ProjectDir)Resources/extension.bin" />
         <!-- Shared-library modules: rebuild + stage their 16K images into Resources so
              CompositeBusDevice pre-stages them into the XRAM shelf at boot. -->
-        <Exec Command="make -C $(ProjectDir)../software/modules/graphics" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/system" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/editor" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/sound" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/files" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/memory" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/net" />
-        <Exec Command="make -C $(ProjectDir)../software/modules/turtle" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/graphics graphics.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/system system.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/editor editor.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/sound sound.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/files files.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/memory memory.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/net net.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/turtle turtle.bin" />
         <Exec Command="make -C $(ProjectDir)../software/assembly editbuf-demo" />
         <Exec Command="make -C $(ProjectDir)../software/languages/novaforth" />
         <Exec Command="make -C $(ProjectDir)../software/languages/novalogo" />
@@ -103,8 +105,8 @@
     </Target>
 
     <!-- Generate the PDF user guide (POSIX) -->
-    <Target Name="GeneratePdf" BeforeTargets="PreBuildEvent" DependsOnTargets="AssembleRom" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
-        <Exec Command="dotnet run --project ../e6502.Nova -c Release -- docs basic-user-guide --repo .." />
+    <Target Name="GeneratePdf" AfterTargets="Build" Condition="!$([MSBuild]::IsOSPlatform('Windows')) AND '$(SkipRomBuild)' != 'true'">
+        <Exec Command="dotnet run --no-build --project ../e6502.Nova -c $(Configuration) -- docs basic-user-guide --repo .." />
     </Target>
 
     <!-- Generate the PDF user guide (Windows) -->

@@ -16,12 +16,13 @@ P_IDENT_CAP = 32
 P_UNIT_CAP = 4
 P_UNIT_NAME_CAP = 12
 P_UNIT_STORAGE = P_UNIT_CAP * P_UNIT_NAME_CAP
-; ponytail: the first NDK ABI is one-byte values in A plus named byte storage;
-; add wider values only when a Pascal program needs them.
-
-TYPE_NONE    = 0
-TYPE_BYTE    = 1
-TYPE_BOOLEAN = 2
+TYPE_NONE          = 0
+TYPE_BYTE          = 1
+TYPE_BOOLEAN       = TYPE_BYTE
+TYPE_CHAR          = TYPE_BYTE
+TYPE_WORD          = 2
+TYPE_ARRAY_BYTE    = 3
+TYPE_ARRAY_BOOLEAN = TYPE_ARRAY_BYTE
 
 PASCAL_OK         = 0
 PASCAL_ERR_SYNTAX = 1
@@ -79,6 +80,7 @@ p_ident_hash:      .res 3
 p_saved_hash:      .res 3
 p_call_hash:       .res 3
 p_in_argument:     .res 1
+p_argument_count:  .res 1
 p_unit_count:      .res 1
 p_unit_len:        .res P_UNIT_CAP
 p_unit_iter:       .res 1
@@ -89,17 +91,28 @@ p_unit_names:      .res P_UNIT_STORAGE
 p_symbol_count:    .res 1
 p_symbol_group:    .res 1
 p_symbol_iter:     .res 1
+p_decl_type:       .res 1
+p_array_len:       .res 2
+p_indexed:         .res 1
+p_target_symbol:   .res 1
+p_target_type:     .res 1
+p_index_type:      .res 1
+p_array_depth:     .res 1
+p_array_symbols:   .res 8
 p_expr_type:       .res 1
+p_left_type:       .res 1
 p_operator:        .res 1
 p_operator_depth:  .res 1
 p_operator_stack:  .res 8
+p_operand_types:   .res 8
 p_label:           .res 2
 p_label_saved:     .res 2
 p_mark_src:        .res 3
 p_mark_left:       .res 2
 p_mark_line:       .res 2
 p_mark_column:     .res 2
-p_temp_emitted:    .res 1
+p_function_active: .res 1
+p_function_hash:   .res 3
 p_control_depth:   .res 1
 p_control_a_lo:    .res 8
 p_control_a_hi:    .res 8
@@ -214,9 +227,7 @@ npc_ok:        .byte "Compile successful", $0D, $0A, 0
       .segment "CODE"
 ; NovaPascal's frontend is a conventional recursive-descent compiler. It emits
 ; typed accumulator code while parsing, so the native compiler needs no AST.
-; This first language slice deliberately implements the grammar exercised by
-; FizzBuzz: Byte storage, nested compound statements, expressions, IF/ELSE,
-; WHILE, MOD, comparisons, and string/numeric WRITELN.
+; Byte/Boolean/Char values use A; Word values use A=low and X=high.
 pascal_compile:
       STZ   pascal_error
       STZ   generated_asm_len
@@ -226,9 +237,10 @@ pascal_compile:
       STZ   p_symbol_count
       STZ   p_label
       STZ   p_label+1
-      STZ   p_temp_emitted
+      STZ   p_function_active
       STZ   p_control_depth
       STZ   p_operator_depth
+      STZ   p_array_depth
       LDA   #1
       STA   p_line
       STZ   p_line+1
@@ -313,7 +325,7 @@ pascal_compile:
       LDA   #<kw_var
       LDX   #>kw_var
       JSR   p_ident_is
-      long_bcc p_syntax_error
+      BCC   @after_vars
       LDA   #<asm_bss
       STA   p_word
       LDA   #>asm_bss
@@ -342,11 +354,7 @@ pascal_compile:
       LDA   #':'
       JSR   p_expect_char
       long_bcs p_syntax_error
-      LDA   #<kw_byte
-      STA   p_word
-      LDA   #>kw_byte
-      STA   p_word+1
-      JSR   p_expect_word
+      JSR   p_parse_decl_type
       long_bcs p_syntax_error
       JSR   p_emit_symbol_group
       long_bcs p_output_error
@@ -359,8 +367,28 @@ pascal_compile:
       LDX   #>kw_begin
       JSR   p_ident_is
       BCS   @vars_done
+      JSR   p_is_routine_keyword
+      BCS   @vars_done
       BRA   @var_group
 @vars_done:
+@after_vars:
+      LDA   #<kw_begin
+      LDX   #>kw_begin
+      JSR   p_ident_is
+      BCS   @body
+      JSR   p_is_routine_keyword
+      long_bcc p_syntax_error
+      LDA   #<asm_code_with_routines
+      LDX   #>asm_code_with_routines
+      JSR   p_emit_ax_text
+      long_bcs p_output_error
+      JSR   p_parse_routine_declarations
+      BCS   @parse_fail
+      LDA   #<asm_main_label
+      LDX   #>asm_main_label
+      JSR   p_emit_ax_text
+      long_bcs p_output_error
+      BRA   @parse_body
 @body:
       LDA   #<asm_code
       STA   p_word
@@ -368,6 +396,7 @@ pascal_compile:
       STA   p_word+1
       JSR   p_emit_text
       long_bcs p_output_error
+@parse_body:
       JSR   p_parse_statement_list
       BCS   @parse_fail
       LDA   #'.'
@@ -412,12 +441,146 @@ p_compile_fail:
       LDA   #1
       RTS
 
+; Pascal calls subroutines procedures; functions additionally return one Byte
+; in A. This slice keeps routine parameters out until a program needs them,
+; while globals provide enough structure to split Life into readable phases.
+p_is_routine_keyword:
+      LDA   #<kw_procedure
+      LDX   #>kw_procedure
+      JSR   p_ident_is
+      BCS   @yes
+      LDA   #<kw_function
+      LDX   #>kw_function
+      JSR   p_ident_is
+@yes:
+      RTS
+
+; routine-declarations = (procedure | function) name [()] [: Byte] ;
+;                        begin statements end ;
+; The current identifier is the first routine keyword. On return, BEGIN for
+; the program body has been consumed into p_ident.
+p_parse_routine_declarations:
+@routine:
+      LDA   #<kw_procedure
+      LDX   #>kw_procedure
+      JSR   p_ident_is
+      BCC   @function
+      STZ   p_digit
+      BRA   @name
+@function:
+      LDA   #<kw_function
+      LDX   #>kw_function
+      JSR   p_ident_is
+      long_bcc @fail
+      LDA   #2
+      STA   p_digit
+@name:
+      JSR   p_capture_identifier
+      long_bcs @fail
+      JSR   p_save_identifier
+      LDA   p_digit
+      BNE   @save_function
+      STZ   p_function_active
+      BRA   @parameters
+@save_function:
+      LDX   #2
+@hash:
+      LDA   p_saved_hash,X
+      STA   p_function_hash,X
+      DEX
+      BPL   @hash
+      LDA   #1
+      STA   p_function_active
+@parameters:
+      JSR   p_skip_ws
+      JSR   p_peek
+      long_bcc @fail
+      CMP   #'('
+      BNE   @return_type
+      JSR   p_next
+      LDA   #')'
+      JSR   p_expect_char
+      long_bcs @fail
+@return_type:
+      LDA   p_digit
+      BEQ   @header_end
+      LDA   #':'
+      JSR   p_expect_char
+      long_bcs @fail
+      JSR   p_capture_identifier
+      long_bcs @fail
+      LDA   #<kw_byte
+      LDX   #>kw_byte
+      JSR   p_ident_is
+      BCS   @header_end
+      LDA   #<kw_boolean
+      LDX   #>kw_boolean
+      JSR   p_ident_is
+      long_bcc @fail
+@header_end:
+      LDA   #';'
+      JSR   p_expect_char
+      BCS   @fail
+      JSR   p_capture_identifier
+      BCS   @fail
+      LDA   #<kw_begin
+      LDX   #>kw_begin
+      JSR   p_ident_is
+      BCC   @fail
+      LDA   p_digit
+      JSR   p_emit_local_signature
+      BCS   @output
+      JSR   p_emit_saved_label
+      BCS   @output
+      LDA   p_function_active
+      BEQ   @body
+      LDA   #<asm_function_entry
+      LDX   #>asm_function_entry
+      JSR   p_emit_ax_text
+      BCS   @output
+@body:
+      JSR   p_parse_statement_list
+      BCS   @fail
+      LDA   #';'
+      JSR   p_expect_char
+      BCS   @fail
+      LDA   p_function_active
+      BEQ   @procedure_end
+      LDA   #<asm_function_return
+      LDX   #>asm_function_return
+      BRA   @emit_end
+@procedure_end:
+      LDA   #<asm_rts
+      LDX   #>asm_rts
+@emit_end:
+      JSR   p_emit_ax_text
+      BCS   @output
+      STZ   p_function_active
+      JSR   p_capture_identifier
+      BCS   @fail
+      LDA   #<kw_begin
+      LDX   #>kw_begin
+      JSR   p_ident_is
+      BCS   @done
+      JSR   p_is_routine_keyword
+      long_bcs @routine
+@fail:
+      SEC
+      RTS
+@output:
+      INC   p_emit_error
+      SEC
+      RTS
+@done:
+      CLC
+      RTS
+
 ; Parse statements through END. The caller has already consumed BEGIN.
 p_parse_statement_list:
 @next:
       JSR   p_skip_ws
       JSR   p_peek
-      BCC   @fail
+      long_bcc @fail
       CMP   #';'
       BNE   :+
       JSR   p_next
@@ -476,43 +639,120 @@ p_parse_statement:
       long_bcs p_parse_writeln
 
       JSR   p_save_identifier
+      STZ   p_indexed
+      STZ   p_target_type
       JSR   p_skip_ws
       JSR   p_peek
-      BCC   @fail
+      long_bcc @fail
       CMP   #'('
-      BEQ   @call
+      long_beq @call
+      CMP   #'['
+      BEQ   @indexed
       CMP   #':'
-      BNE   @bare_call
+      long_bne @bare_call
+      JSR   p_symbol_find
+      BCC   @assignment
+      STX   p_target_symbol
+      STA   p_target_type
+      CMP   #TYPE_ARRAY_BYTE
+      long_beq @fail
+@assignment:
       JSR   p_next
+@equals:
       LDA   #'='
       JSR   p_expect_char
-      BCS   @fail
+      long_bcs @fail
       JSR   p_parse_expression
-      BCS   @fail
+      long_bcs @fail
       JSR   p_emit_store_saved
-      BCS   @output
+      long_bcs @output
       CLC
       RTS
+@indexed:
+      JSR   p_symbol_find
+      long_bcc @fail
+      CMP   #TYPE_ARRAY_BYTE
+      long_bne @fail
+      STX   p_target_symbol
+      STA   p_target_type
+      JSR   p_next
+      JSR   p_parse_expression
+      long_bcs @fail
+      LDA   p_expr_type
+      STA   p_index_type
+      LDA   #']'
+      JSR   p_expect_char
+      long_bcs @fail
+      LDA   p_index_type
+      CMP   #TYPE_WORD
+      BNE   :+
+      LDA   #<asm_phx_pha
+      LDX   #>asm_phx_pha
+      BRA   :++
+:
+      LDA   #<asm_pha
+      LDX   #>asm_pha
+:
+      JSR   p_emit_ax_text
+      long_bcs @output
+      INC   p_indexed
+      LDA   #':'
+      JSR   p_expect_char
+      long_bcs @fail
+      BRA   @equals
 @call:
-      STZ   p_started
+      STZ   p_argument_count
       JSR   p_next
       JSR   p_skip_ws
       JSR   p_peek
       BCC   @fail
       CMP   #')'
       BEQ   @call_close
+@argument:
       JSR   p_parse_expression
       BCS   @fail
-      LDA   #1
-      STA   p_started
+      INC   p_argument_count
+      LDA   p_argument_count
+      CMP   #9
+      BCS   @fail
+      JSR   p_skip_ws
+      JSR   p_peek
+      BCC   @fail
+      CMP   #','
+      BNE   @last_argument
+      LDA   #<asm_pha
+      LDX   #>asm_pha
+      JSR   p_emit_ax_text
+      BCS   @output
+      JSR   p_next
+      BRA   @argument
+@last_argument:
+      LDA   p_argument_count
+      CMP   #2
+      BCC   @call_close
+      LDA   #<asm_pha
+      LDX   #>asm_pha
+      JSR   p_emit_ax_text
+      BCS   @output
 @call_close:
       LDA   #')'
       JSR   p_expect_char
       BCS   @fail
-      LDA   p_started
+      LDA   p_argument_count
+      CMP   #2
+      BCS   @pascal_call
       JSR   p_emit_sig_saved
       BCS   @output
       JSR   p_emit_call_saved
+      BCS   @output
+      CLC
+      RTS
+@pascal_call:
+      JSR   p_emit_pascal_sig_saved
+      BCS   @output
+      JSR   p_emit_call_saved
+      BCS   @output
+      JSR   p_emit_drop_arguments
       BCS   @output
       CLC
       RTS
@@ -867,6 +1107,12 @@ p_parse_additive:
       JSR   p_parse_term
       BCS   @drop_fail
       JSR   p_pop_operator
+      LDA   p_left_type
+      CMP   #TYPE_WORD
+      BEQ   @wide
+      LDA   p_expr_type
+      CMP   #TYPE_WORD
+      BEQ   @wide
       LDA   p_operator
       CMP   #'+'
       BNE   @subtract
@@ -880,6 +1126,24 @@ p_parse_additive:
       JSR   p_emit_ax_text
       BCS   @fail
       LDA   #TYPE_BYTE
+      STA   p_expr_type
+      BRA   @operator
+@wide:
+      JSR   p_emit_wide_operands
+      BCS   @fail
+      LDA   p_operator
+      CMP   #'+'
+      BNE   @wide_subtract
+      LDA   #<asm_add_word
+      LDX   #>asm_add_word
+      BRA   @wide_emit
+@wide_subtract:
+      LDA   #<asm_subtract_word
+      LDX   #>asm_subtract_word
+@wide_emit:
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   #TYPE_WORD
       STA   p_expr_type
       BRA   @operator
 @ok:
@@ -905,10 +1169,20 @@ p_parse_term:
       STA   p_word+1
       JSR   p_expect_word
       BCS   @fail
+      LDA   #'M'
+      JSR   p_push_operator
+      BCS   @fail
       JSR   p_emit_binary_prep
-      BCS   @fail
+      BCS   @drop_fail
       JSR   p_parse_factor
-      BCS   @fail
+      BCS   @drop_fail
+      JSR   p_pop_operator
+      LDA   p_left_type
+      CMP   #TYPE_WORD
+      BEQ   @fail
+      LDA   p_expr_type
+      CMP   #TYPE_WORD
+      BEQ   @fail
       LDA   #<asm_mod
       LDX   #>asm_mod
       JSR   p_emit_ax_text
@@ -919,6 +1193,10 @@ p_parse_term:
 @ok:
       CLC
 @fail:
+      RTS
+@drop_fail:
+      DEC   p_operator_depth
+      SEC
       RTS
 
 p_parse_factor:
@@ -935,11 +1213,111 @@ p_parse_factor:
       RTS
 @value:
       JSR   p_parse_byte_value
-      BCS   @fail
-      LDA   #TYPE_BYTE
-      STA   p_expr_type
-      CLC
 @fail:
+      RTS
+
+; declaration-type = BYTE | BOOLEAN | CHAR | WORD |
+;                    ARRAY [ 0 .. ordinal-constant ] OF (BYTE | BOOLEAN)
+p_parse_decl_type:
+      JSR   p_capture_identifier
+      long_bcs @fail
+      LDA   #<kw_byte
+      LDX   #>kw_byte
+      JSR   p_ident_is
+      BCC   @boolean
+      LDA   #TYPE_BYTE
+      BRA   @scalar_byte
+@boolean:
+      LDA   #<kw_boolean
+      LDX   #>kw_boolean
+      JSR   p_ident_is
+      BCC   @char
+      LDA   #TYPE_BOOLEAN
+      BRA   @scalar_byte
+@char:
+      LDA   #<kw_char
+      LDX   #>kw_char
+      JSR   p_ident_is
+      BCC   @word
+      LDA   #TYPE_CHAR
+@scalar_byte:
+      STA   p_decl_type
+      LDA   #1
+      STA   p_array_len
+      STZ   p_array_len+1
+      CLC
+      RTS
+@word:
+      LDA   #<kw_word
+      LDX   #>kw_word
+      JSR   p_ident_is
+      BCC   @array
+      LDA   #TYPE_WORD
+      STA   p_decl_type
+      LDA   #2
+      STA   p_array_len
+      STZ   p_array_len+1
+      CLC
+      RTS
+@array:
+      LDA   #<kw_array
+      LDX   #>kw_array
+      JSR   p_ident_is
+      BCC   @fail
+      LDA   #'['
+      JSR   p_expect_char
+      BCS   @fail
+      JSR   p_parse_decimal_literal
+      BCS   @fail
+      LDA   p_decimal
+      ORA   p_decimal+1
+      BNE   @fail
+      LDA   #'.'
+      JSR   p_expect_char
+      BCS   @fail
+      LDA   #'.'
+      JSR   p_expect_char
+      BCS   @fail
+      JSR   p_parse_decimal_literal
+      BCS   @fail
+      INC   p_decimal
+      BNE   :+
+      INC   p_decimal+1
+:     LDA   p_decimal
+      ORA   p_decimal+1
+      BEQ   @fail
+      LDA   p_decimal
+      STA   p_array_len
+      LDA   p_decimal+1
+      STA   p_array_len+1
+      LDA   #']'
+      JSR   p_expect_char
+      BCS   @fail
+      JSR   p_capture_identifier
+      BCS   @fail
+      LDA   #<kw_of
+      LDX   #>kw_of
+      JSR   p_ident_is
+      BCC   @fail
+      JSR   p_capture_identifier
+      BCS   @fail
+      LDA   #<kw_byte
+      LDX   #>kw_byte
+      JSR   p_ident_is
+      BCC   @array_boolean
+      BRA   @array_done
+@array_boolean:
+      LDA   #<kw_boolean
+      LDX   #>kw_boolean
+      JSR   p_ident_is
+      BCC   @fail
+@array_done:
+      LDA   #TYPE_ARRAY_BYTE
+      STA   p_decl_type
+      CLC
+      RTS
+@fail:
+      SEC
       RTS
 
 ; Add the current identifier to the transient symbol table. Names remain in
@@ -965,8 +1343,11 @@ p_symbol_add:
       INY
       INY
       CMP   (p_word),Y
+      BEQ   @same
       PLY
-      BNE   @next
+      BRA   @next
+@same:
+      PLY
       INY
       BRA   @compare
 @next:
@@ -1026,8 +1407,8 @@ p_symbol_pointer:
       STA   p_word+1
       RTS
 
-; Finish all names in the current declaration group as Byte symbols and emit
-; their BSS definitions only after the type has been parsed successfully.
+; Finish all names in the current declaration group and emit their BSS
+; definitions only after the type has been parsed successfully.
 p_emit_symbol_group:
       LDX   p_symbol_group
 @symbol:
@@ -1036,8 +1417,100 @@ p_emit_symbol_group:
       STX   p_symbol_iter
       JSR   p_symbol_pointer
       LDY   #1
-      LDA   #TYPE_BYTE
+      LDA   p_decl_type
       STA   (p_word),Y
+      LDX   p_symbol_iter
+      JSR   p_emit_symbol_name
+      BCS   @fail
+@suffix:
+      LDA   p_decl_type
+      CMP   #TYPE_ARRAY_BYTE
+      BEQ   @array
+      CMP   #TYPE_WORD
+      BNE   @byte
+      LDA   #<asm_word_res
+      LDX   #>asm_word_res
+      JSR   p_emit_ax_text
+      BCS   @fail
+      BRA   @next
+@byte:
+      LDA   #<asm_byte_res
+      STA   p_word
+      LDA   #>asm_byte_res
+      STA   p_word+1
+      JSR   p_emit_text
+      BCS   @fail
+      BRA   @next
+@array:
+      LDA   #<asm_array_res
+      LDX   #>asm_array_res
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_array_len+1
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   p_array_len
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #$0A
+      JSR   p_emit
+      BCS   @fail
+@next:
+      LDX   p_symbol_iter
+      INX
+      BRA   @symbol
+@done:
+      CLC
+@fail:
+      RTS
+
+; Find p_ident in the declared-symbol table. Carry is set, X is the symbol
+; index, and A is its type. Unknown identifiers remain valid NDK symbols.
+p_symbol_find:
+      LDX   #0
+@symbol:
+      CPX   p_symbol_count
+      BCS   @missing
+      STX   p_symbol_iter
+      JSR   p_symbol_pointer
+      LDY   #0
+      LDA   (p_word),Y
+      CMP   p_ident_len
+      BNE   @next
+      LDY   #0
+@compare:
+      CPY   p_ident_len
+      BCS   @found
+      LDA   p_ident,Y
+      PHY
+      INY
+      INY
+      CMP   (p_word),Y
+      BEQ   @same
+      PLY
+      BRA   @next
+@same:
+      PLY
+      INY
+      BRA   @compare
+@found:
+      LDY   #1
+      LDA   (p_word),Y
+      LDX   p_symbol_iter
+      SEC
+      RTS
+@next:
+      LDX   p_symbol_iter
+      INX
+      BRA   @symbol
+@missing:
+      CLC
+      RTS
+
+; Emit the name of symbol X.
+p_emit_symbol_name:
+      STX   p_symbol_iter
+      JSR   p_symbol_pointer
       LDY   #0
       LDA   (p_word),Y
       STA   p_digit
@@ -1048,9 +1521,9 @@ p_emit_symbol_group:
       BCC   :+
       INC   p_word+1
 :
-@name:
+@char:
       LDA   p_digit
-      BEQ   @suffix
+      BEQ   @done
       LDY   #0
       LDA   (p_word),Y
       JSR   p_emit
@@ -1059,20 +1532,14 @@ p_emit_symbol_group:
       BNE   :+
       INC   p_word+1
 :     DEC   p_digit
-      BRA   @name
-@suffix:
-      LDA   #<asm_byte_res
-      STA   p_word
-      LDA   #>asm_byte_res
-      STA   p_word+1
-      JSR   p_emit_text
-      BCS   @fail
-      LDX   p_symbol_iter
-      INX
-      BRA   @symbol
+      BRA   @char
 @done:
+      LDX   p_symbol_iter
       CLC
+      RTS
 @fail:
+      LDX   p_symbol_iter
+      SEC
       RTS
 
 p_emit_ax_text:
@@ -1095,24 +1562,22 @@ p_pop_operator:
       LDX   p_operator_depth
       LDA   p_operator_stack,X
       STA   p_operator
-      RTS
-
-p_require_temp:
-      LDA   p_temp_emitted
-      BNE   @done
-      LDA   #<asm_temp_decl
-      LDX   #>asm_temp_decl
-      JSR   p_emit_ax_text
-      BCS   @fail
-      INC   p_temp_emitted
-@done:
-      CLC
-@fail:
+      LDA   p_operand_types,X
+      STA   p_left_type
       RTS
 
 p_emit_binary_prep:
-      JSR   p_require_temp
-      BCS   @fail
+      LDX   p_operator_depth
+      BEQ   @fail
+      DEX
+      LDA   p_expr_type
+      STA   p_operand_types,X
+      CMP   #TYPE_WORD
+      BNE   @byte
+      LDA   #<asm_phx_pha
+      LDX   #>asm_phx_pha
+      JMP   p_emit_ax_text
+@byte:
       LDA   #<asm_pha
       LDX   #>asm_pha
       JMP   p_emit_ax_text
@@ -1121,10 +1586,25 @@ p_emit_binary_prep:
 
 ; p_operator selects =, <>, <, <=, >, >= as 1..6.
 p_emit_compare:
+      LDA   p_left_type
+      CMP   #TYPE_WORD
+      BEQ   @wide
+      LDA   p_expr_type
+      CMP   #TYPE_WORD
+      BEQ   @wide
       LDA   #<asm_compare_start
       LDX   #>asm_compare_start
       JSR   p_emit_ax_text
       BCS   @fail
+      BRA   @suffix
+@wide:
+      JSR   p_emit_wide_operands
+      BCS   @fail
+      LDA   #<asm_compare_word_start
+      LDX   #>asm_compare_word_start
+      JSR   p_emit_ax_text
+      BCS   @fail
+@suffix:
       LDX   p_operator
       DEX
       BMI   @fail
@@ -1135,6 +1615,35 @@ p_emit_compare:
       LDA   compare_suffix_hi,X
       STA   p_word+1
       JMP   p_emit_text
+@fail:
+      SEC
+      RTS
+
+; Normalize a binary operation's right value into __NP_RHS and restore its
+; left value into A/X. Byte operands are zero-extended only on wide paths.
+p_emit_wide_operands:
+      LDA   p_expr_type
+      CMP   #TYPE_WORD
+      BNE   @right_byte
+      LDA   #<asm_rhs_word
+      LDX   #>asm_rhs_word
+      BRA   @right
+@right_byte:
+      LDA   #<asm_rhs_byte
+      LDX   #>asm_rhs_byte
+@right:
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_left_type
+      CMP   #TYPE_WORD
+      BNE   @left_byte
+      LDA   #<asm_lhs_word
+      LDX   #>asm_lhs_word
+      JMP   p_emit_ax_text
+@left_byte:
+      LDA   #<asm_lhs_byte
+      LDX   #>asm_lhs_byte
+      JMP   p_emit_ax_text
 @fail:
       SEC
       RTS
@@ -1837,6 +2346,44 @@ p_emit_call_saved:
       SEC
       RTS
 
+; Define the same signature marker used by precompiled unit interfaces, so
+; local and external calls share one validation path. A is $00 for a procedure
+; or $02 for a no-argument Byte function.
+p_emit_local_signature:
+      STA   p_argument_count
+      LDA   #<asm_local_sig_start
+      LDX   #>asm_local_sig_start
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDX   #<p_saved_hash
+      LDY   #>p_saved_hash
+      JSR   p_emit_hash
+      BCS   @fail
+      LDA   #<asm_local_sig_end
+      LDX   #>asm_local_sig_end
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_argument_count
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
+p_emit_saved_label:
+      JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #':'
+      JSR   p_emit
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
 p_emit_call_buffered:
       LDA   #<asm_jsr_prefix
       STA   p_word
@@ -1865,6 +2412,48 @@ p_emit_sig_saved:
       JMP   p_emit_sig_end
 @fail:
       SEC
+      RTS
+
+; Multi-byte Pascal unit procedures use caller-pushed byte arguments. The
+; compiled unit interface defines __P<hash> as its exact arity.
+p_emit_pascal_sig_saved:
+      LDA   #<asm_pascal_sig_start
+      LDX   #>asm_pascal_sig_start
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDX   #<p_saved_hash
+      LDY   #>p_saved_hash
+      JSR   p_emit_hash
+      BCS   @fail
+      LDA   #<asm_pascal_sig_end
+      LDX   #>asm_pascal_sig_end
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_argument_count
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
+p_emit_drop_arguments:
+      LDX   p_argument_count
+@argument:
+      CPX   #0
+      BEQ   @done
+      PHX
+      LDA   #<asm_pla
+      LDX   #>asm_pla
+      JSR   p_emit_ax_text
+      PLX
+      BCS   @fail
+      DEX
+      BRA   @argument
+@done:
+      CLC
+@fail:
       RTS
 
 p_emit_sig_call:
@@ -1954,7 +2543,124 @@ p_emit_load_identifier:
       SEC
       RTS
 
+p_emit_load_word_identifier:
+      LDA   #<asm_lda_direct
+      LDX   #>asm_lda_direct
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_identifier
+      BCS   @fail
+      LDA   #<asm_word_load_high
+      LDX   #>asm_word_load_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_identifier
+      BCS   @fail
+      LDA   #<asm_plus_one_end
+      LDX   #>asm_plus_one_end
+      JMP   p_emit_ax_text
+@fail:
+      SEC
+      RTS
+
+; Emit p_decimal as A=low, X=high.
+p_emit_load_word:
+      LDA   #<asm_lda
+      LDX   #>asm_lda
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #<asm_word_literal_high
+      LDX   #>asm_word_literal_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal+1
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
+p_is_function_result:
+      LDA   p_function_active
+      BEQ   @no
+      LDX   #2
+@byte:
+      LDA   p_saved_hash,X
+      CMP   p_function_hash,X
+      BNE   @no
+      DEX
+      BPL   @byte
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
 p_emit_store_saved:
+      JSR   p_is_function_result
+      BCC   :+
+      LDA   #<asm_function_store
+      LDX   #>asm_function_store
+      JMP   p_emit_ax_text
+:
+      LDA   p_indexed
+      BEQ   @direct
+      LDA   p_index_type
+      CMP   #TYPE_WORD
+      BNE   @index_byte
+      LDA   #<asm_array_set_word
+      LDX   #>asm_array_set_word
+      BRA   @array_store
+@index_byte:
+      LDA   #<asm_array_set_byte
+      LDX   #>asm_array_set_byte
+@array_store:
+      LDY   p_target_symbol
+      JMP   p_emit_array_operation
+@direct:
+      LDA   p_target_type
+      CMP   #TYPE_WORD
+      BNE   @direct_byte
+      LDA   p_expr_type
+      CMP   #TYPE_WORD
+      BNE   @word_from_byte
+      LDA   #<asm_sta_direct
+      LDX   #>asm_sta_direct
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #<asm_word_store_high
+      LDX   #>asm_word_store_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #<asm_plus_one_end
+      LDX   #>asm_plus_one_end
+      JMP   p_emit_ax_text
+@word_from_byte:
+      LDA   #<asm_sta_direct
+      LDX   #>asm_sta_direct
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #<asm_word_zero_high
+      LDX   #>asm_word_zero_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #<asm_plus_one_end
+      LDX   #>asm_plus_one_end
+      JMP   p_emit_ax_text
+@direct_byte:
       LDA   #<asm_sta_direct
       STA   p_word
       LDA   #>asm_sta_direct
@@ -1962,6 +2668,69 @@ p_emit_store_saved:
       JSR   p_emit_text
       BCS   @fail
       JSR   p_emit_saved_identifier
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
+; Parse [expression] for the declared array currently named by p_ident, then
+; emit a byte load through X. The small symbol-index stack supports nesting.
+p_parse_array_value:
+      JSR   p_symbol_find
+      long_bcc @fail
+      CMP   #TYPE_ARRAY_BYTE
+      long_bne @fail
+      STX   p_symbol_iter
+      LDX   p_array_depth
+      CPX   #8
+      BCS   @fail
+      LDA   p_symbol_iter
+      STA   p_array_symbols,X
+      INC   p_array_depth
+      JSR   p_next
+      JSR   p_parse_expression
+      BCS   @drop_fail
+      LDA   p_expr_type
+      STA   p_index_type
+      LDA   #']'
+      JSR   p_expect_char
+      BCS   @drop_fail
+      DEC   p_array_depth
+      LDX   p_array_depth
+      LDA   p_array_symbols,X
+      STA   p_symbol_iter
+      LDA   p_index_type
+      CMP   #TYPE_WORD
+      BEQ   :+
+      LDA   #<asm_index_high_zero
+      LDX   #>asm_index_high_zero
+      JSR   p_emit_ax_text
+      BCS   @fail
+:
+      LDA   #<asm_array_get
+      LDX   #>asm_array_get
+      LDY   p_symbol_iter
+      JSR   p_emit_array_operation
+      BCS   @fail
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
+      RTS
+@drop_fail:
+      DEC   p_array_depth
+@fail:
+      SEC
+      RTS
+
+; Emit a Pascal support macro named by A/X for array symbol Y.
+p_emit_array_operation:
+      STY   p_symbol_iter
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDX   p_symbol_iter
+      JSR   p_emit_symbol_name
       BCS   @fail
       LDA   #$0A
       JMP   p_emit
@@ -1986,15 +2755,41 @@ p_parse_byte_value:
 @identifier:
       JSR   p_capture_identifier
       long_bcs @bad
+      LDA   #<kw_true
+      LDX   #>kw_true
+      JSR   p_ident_is
+      BCC   @false
+      LDA   #1
+      JSR   p_emit_load_byte
+      long_bcs @bad
+      LDA   #TYPE_BOOLEAN
+      STA   p_expr_type
+      CLC
+      RTS
+@false:
+      LDA   #<kw_false
+      LDX   #>kw_false
+      JSR   p_ident_is
+      BCC   @byte_cast
+      LDA   #0
+      JSR   p_emit_load_byte
+      long_bcs @bad
+      LDA   #TYPE_BOOLEAN
+      STA   p_expr_type
+      CLC
+      RTS
+@byte_cast:
       LDA   #<kw_byte
       LDX   #>kw_byte
       JSR   p_ident_is
       BCS   @constant
       JSR   p_skip_ws
       JSR   p_peek
-      BCC   @load_identifier
+      long_bcc @load_identifier
+      CMP   #'['
+      BEQ   @array
       CMP   #'('
-      BNE   @load_identifier
+      long_bne @load_identifier
       LDA   p_in_argument
       long_bne @bad
       JSR   p_save_call_identifier
@@ -2021,6 +2816,13 @@ p_parse_byte_value:
       JSR   p_emit_sig_call
       long_bcs @bad
       JSR   p_emit_call_buffered
+      long_bcs @bad
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
+      RTS
+@array:
+      JSR   p_parse_array_value
       RTS
 @constant:
       LDA   #'('
@@ -2032,8 +2834,27 @@ p_parse_byte_value:
       JSR   p_expect_char
       long_bcs @bad
       JSR   p_emit_constant_identifier
+      long_bcs @bad
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
       RTS
 @load_identifier:
+      JSR   p_symbol_find
+      BCC   @unknown_identifier
+      CMP   #TYPE_ARRAY_BYTE
+      long_beq @bad
+      STA   p_expr_type
+      CMP   #TYPE_WORD
+      BNE   @known_byte
+      JSR   p_emit_load_word_identifier
+      RTS
+@known_byte:
+      JSR   p_emit_load_identifier
+      RTS
+@unknown_identifier:
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
       JSR   p_emit_load_identifier
       RTS
 @character:
@@ -2046,6 +2867,10 @@ p_parse_byte_value:
       long_bcs @bad
       LDA   p_char
       JSR   p_emit_load_byte
+      long_bcs @bad
+      LDA   #TYPE_CHAR
+      STA   p_expr_type
+      CLC
       RTS
 @hex:
       JSR   p_next
@@ -2058,7 +2883,7 @@ p_parse_byte_value:
       BCC   @hex_done
       LDX   p_digit
       CPX   #2
-      BCS   @bad
+      long_bcs @bad
       ASL   p_char
       ASL   p_char
       ASL   p_char
@@ -2070,13 +2895,42 @@ p_parse_byte_value:
       BRA   @hex_digit
 @hex_done:
       LDA   p_digit
-      BEQ   @bad
+      long_beq @bad
       LDA   p_char
       JSR   p_emit_load_byte
+      long_bcs @bad
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
       RTS
 @decimal:
+      JSR   p_parse_decimal_literal
+      long_bcs @bad
+      LDA   p_decimal+1
+      BEQ   @decimal_byte
+      JSR   p_emit_load_word
+      long_bcs @bad
+      LDA   #TYPE_WORD
+      STA   p_expr_type
+      CLC
+      RTS
+@decimal_byte:
+      LDA   p_decimal
+      JSR   p_emit_load_byte
+      long_bcs @bad
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; Parse one unsigned decimal byte literal into p_decimal without emitting code.
+p_parse_decimal_literal:
       STZ   p_decimal
       STZ   p_decimal+1
+      STZ   p_started
 @decimal_digit:
       JSR   p_peek
       BCC   @decimal_done
@@ -2087,18 +2941,23 @@ p_parse_byte_value:
       SEC
       SBC   #'0'
       STA   p_digit
+      INC   p_started
       LDA   p_decimal
       ASL
       STA   p_remainder
       LDA   p_decimal+1
       ROL
       STA   p_remainder+1
+      BCS   @bad
       ASL   p_decimal
       ROL   p_decimal+1
+      BCS   @bad
       ASL   p_decimal
       ROL   p_decimal+1
+      BCS   @bad
       ASL   p_decimal
       ROL   p_decimal+1
+      BCS   @bad
       CLC
       LDA   p_decimal
       ADC   p_remainder
@@ -2107,12 +2966,13 @@ p_parse_byte_value:
       LDA   p_decimal+1
       ADC   p_remainder+1
       STA   p_decimal+1
-      BNE   @bad
+      BCS   @bad
       JSR   p_next
       BRA   @decimal_digit
 @decimal_done:
-      LDA   p_decimal
-      JSR   p_emit_load_byte
+      LDA   p_started
+      BEQ   @bad
+      CLC
       RTS
 @bad:
       SEC
@@ -2287,6 +3147,15 @@ kw_begin:   .byte "BEGIN", 0
 kw_uses:    .byte "USES", 0
 kw_var:     .byte "VAR", 0
 kw_byte:    .byte "BYTE", 0
+kw_boolean: .byte "BOOLEAN", 0
+kw_word:    .byte "WORD", 0
+kw_char:    .byte "CHAR", 0
+kw_true:    .byte "TRUE", 0
+kw_false:   .byte "FALSE", 0
+kw_array:   .byte "ARRAY", 0
+kw_of:      .byte "OF", 0
+kw_procedure: .byte "PROCEDURE", 0
+kw_function:  .byte "FUNCTION", 0
 kw_writeln: .byte "WRITELN", 0
 kw_end:     .byte "END", 0
 kw_if:      .byte "IF", 0
@@ -2299,37 +3168,64 @@ hex_digits: .byte "0123456789ABCDEF"
 decimal_place_lo: .byte <10000, <1000, <100, <10, <1
 decimal_place_hi: .byte >10000, >1000, >100, >10, >1
 asm_comment: .byte "; ", 0
-asm_import:  .byte ".SEGMENT ", 34, "CODE", 34, $0A, ".IMPORT P_WRITE_CHAR", $0A, ".IMPORT P_WRITE_BYTE", $0A, ".IMPORT P_WRITE_BYTE_LN", $0A, ".IMPORT I_P_WRITE_LINE", $0A, 0
+asm_import:  .byte ".INCLUDE ", 34, "PASCAL.INC", 34, $0A, ".SEGMENT ", 34, "CODE", 34, $0A, ".IMPORT P_WRITE_CHAR", $0A, ".IMPORT P_WRITE_BYTE", $0A, ".IMPORT P_WRITE_BYTE_LN", $0A, ".IMPORT I_P_WRITE_LINE", $0A, 0
 asm_bss:    .byte ".SEGMENT ", 34, "BSS", 34, $0A, 0
 asm_code:   .byte ".SEGMENT ", 34, "CODE", 34, $0A, 0
+asm_code_with_routines: .byte ".SEGMENT ", 34, "CODE", 34, $0A, "JMP __NP_MAIN", $0A, 0
+asm_main_label: .byte "__NP_MAIN:", $0A, 0
 asm_byte_res: .byte ": .RES 1", $0A, 0
+asm_word_res: .byte ": .RES 2", $0A, 0
+asm_array_res: .byte ": .RES $", 0
 asm_lda:    .byte "LDA #$", 0
 asm_lda_direct: .byte "LDA ", 0
 asm_sta_direct: .byte "STA ", 0
+asm_word_load_high: .byte $0A, "LDX ", 0
+asm_word_store_high: .byte $0A, "STX ", 0
+asm_word_zero_high: .byte $0A, "STZ ", 0
+asm_plus_one_end: .byte "+1", $0A, 0
+asm_word_literal_high: .byte $0A, "LDX #$", 0
+asm_index_high_zero: .byte "LDX #$00", $0A, 0
+; Compact typed IR consumed by NPO2 before NAS sees the generated source.
+; Keeping these records shorter than their baseline lowering also recovers
+; scarce resident ROM while the optimizer itself runs from lower RAM.
+asm_array_get: .byte ".O2G ", 0
+asm_array_set_byte: .byte ".O2B ", 0
+asm_array_set_word: .byte ".O2W ", 0
 asm_jsr:    .byte "JSR P_WRITE_CHAR", $0A, 0
 asm_jsr_write_byte: .byte "JSR P_WRITE_BYTE", $0A, 0
 asm_jsr_write_byte_ln: .byte "JSR P_WRITE_BYTE_LN", $0A, 0
 asm_jsr_write_line: .byte "JSR I_P_WRITE_LINE", $0A, ".BYTE ", 0
 asm_line_end: .byte "$00", $0A, 0
 asm_rts:    .byte "RTS", $0A, 0
-asm_temp_decl: .byte ".SEGMENT ", 34, "BSS", 34, $0A, "__NP_RHS: .RES 1", $0A, ".SEGMENT ", 34, "CODE", 34, $0A, 0
+asm_function_entry: .byte "LDA #$00", $0A, "PHA", $0A, 0
+asm_function_store: .byte "TSX", $0A, "STA $0101,X", $0A, 0
+asm_function_return: .byte "PLA", $0A, "RTS", $0A, 0
 asm_pha:    .byte "PHA", $0A, 0
-asm_add:    .byte "STA __NP_RHS", $0A, "PLA", $0A, "CLC", $0A, "ADC __NP_RHS", $0A, 0
-asm_subtract: .byte "STA __NP_RHS", $0A, "PLA", $0A, "SEC", $0A, "SBC __NP_RHS", $0A, 0
-asm_mod:    .byte "STA __NP_RHS", $0A, "BNE :+", $0A, "PLA", $0A, "STP", $0A, ":", $0A, "PLA", $0A, ":", $0A, "CMP __NP_RHS", $0A, "BCC :+", $0A, "SEC", $0A, "SBC __NP_RHS", $0A, "BRA :-", $0A, ":", $0A, 0
-asm_compare_start: .byte "STA __NP_RHS", $0A, "PLA", $0A, "CMP __NP_RHS", $0A, 0
-asm_compare_eq: .byte "BNE :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-asm_compare_ne: .byte "BEQ :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-asm_compare_lt: .byte "BCS :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-asm_compare_le: .byte "BCC :+", $0A, "BEQ :+", $0A, "LDA #$00", $0A, "BRA :++", $0A, ":", $0A, "LDA #$01", $0A, ":", $0A, 0
-asm_compare_gt: .byte "BCC :+", $0A, "BEQ :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-asm_compare_ge: .byte "BCC :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
+asm_phx_pha: .byte "PHX", $0A, "PHA", $0A, 0
+asm_pla:    .byte "PLA", $0A, 0
+asm_add:    .byte "STA NVR0L", $0A, "PLA", $0A, "CLC", $0A, "ADC NVR0L", $0A, 0
+asm_subtract: .byte "STA NVR0L", $0A, "PLA", $0A, "SEC", $0A, "SBC NVR0L", $0A, 0
+asm_rhs_word: .byte "STA NVR0L", $0A, "STX NVR0H", $0A, 0
+asm_rhs_byte: .byte "STA NVR0L", $0A, "STZ NVR0H", $0A, 0
+asm_lhs_word: .byte "PLA", $0A, "PLX", $0A, 0
+asm_lhs_byte: .byte "PLA", $0A, "LDX #$00", $0A, 0
+asm_add_word: .byte ".O2A", $0A, 0
+asm_subtract_word: .byte ".O2S", $0A, 0
+asm_mod:    .byte "STA NVR0L", $0A, "BNE :+", $0A, "PLA", $0A, "STP", $0A, ":", $0A, "PLA", $0A, ":", $0A, "CMP NVR0L", $0A, "BCC :+", $0A, "SEC", $0A, "SBC NVR0L", $0A, "BRA :-", $0A, ":", $0A, 0
+asm_compare_start: .byte "STA NVR0L", $0A, "PLA", $0A, "CMP NVR0L", $0A, 0
+asm_compare_word_start: .byte ".O2X", $0A, 0
+asm_compare_eq: .byte ".O2C E", $0A, 0
+asm_compare_ne: .byte ".O2C N", $0A, 0
+asm_compare_lt: .byte ".O2C L", $0A, 0
+asm_compare_le: .byte ".O2C l", $0A, 0
+asm_compare_gt: .byte ".O2C G", $0A, 0
+asm_compare_ge: .byte ".O2C g", $0A, 0
 compare_suffix_lo: .byte <asm_compare_eq, <asm_compare_ne, <asm_compare_lt, <asm_compare_le, <asm_compare_gt, <asm_compare_ge
 compare_suffix_hi: .byte >asm_compare_eq, >asm_compare_ne, >asm_compare_lt, >asm_compare_le, >asm_compare_gt, >asm_compare_ge
 asm_label_prefix: .byte "__NP_L", 0
 asm_label_end: .byte ":", $0A, 0
-asm_branch_false: .byte "CMP #$00", $0A, "BNE :+", $0A, "JMP __NP_L", 0
-asm_branch_end: .byte $0A, ":", $0A, 0
+asm_branch_false: .byte ".O2F __NP_L", 0
+asm_branch_end: .byte $0A, 0
 asm_jump: .byte "JMP __NP_L", 0
 asm_include_start: .byte ".INCLUDE ", 34, 0
 asm_inc_end: .byte ".INC", 34, $0A, 0
@@ -2337,6 +3233,10 @@ asm_source_end: .byte ".S", 34, $0A, 0
 asm_pascal_end: .byte ".NPI", 34, $0A, 0
 asm_jsr_prefix: .byte "JSR ", 0
 asm_sig_start: .byte ".ASSERT (__S", 0
+asm_local_sig_start: .byte "__S", 0
+asm_local_sig_end: .byte " = $", 0
+asm_pascal_sig_start: .byte ".ASSERT __P", 0
+asm_pascal_sig_end: .byte " = $", 0
 asm_sig0_end: .byte " & $01) = $00", $0A, 0
 asm_sig1_end: .byte " & $01) = $01", $0A, 0
 asm_sig2_end: .byte ") = $02", $0A, 0

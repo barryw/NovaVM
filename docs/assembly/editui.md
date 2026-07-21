@@ -165,9 +165,10 @@ each defaulting to a no-op so the editor works standalone:
 | `EDITBUF_CHANGED_VECL/H` | after edits, save state changes, or active document metadata changes | Host syncs the active document model, usually by copying the RAM edit window back into XRAM-backed document state |
 
 When an XRAM-backed host loads only a slice of a larger document into RAM,
-editbuf sends `EDITUI_CMD_WINDOW_NEXT` or `EDITUI_CMD_WINDOW_PREVIOUS` through
-the command hook when cursor navigation/backspace crosses the loaded slice.
-Hosts that do not support windowed documents can ignore those commands.
+editbuf sends `EDITUI_CMD_WINDOW_NEXT`, `EDITUI_CMD_WINDOW_PREVIOUS`,
+`EDITUI_CMD_WINDOW_FIRST`, or `EDITUI_CMD_WINDOW_LAST` through the command hook
+as navigation crosses a window or moves to a document endpoint. Hosts that do
+not support windowed documents can ignore those commands.
 
 Usage:
 
@@ -196,14 +197,27 @@ dirty-exit dialog (`editbuf_dialog3`) is a true overlapping modal built on
 `editui_save_under` / `editui_restore_under` with three choices: Exit Anyway /
 Save First / Cancel.
 
-## EDITOR module hook table
+## EDITOR module
 
-The paged `EDITOR` module exposes one entry point in `libeditor.inc`:
+The paged, language-neutral `EDITOR` module exposes two entry points in
+`libeditor.inc`:
 
 - `EDITOR_FN_EDIT` uses the RAM-buffer editor contract. `ARG3` low word is the
   title pointer and `ARG3` high word is either zero for plain Text behavior or a
   caller-owned `EDITOR_HOOKS_*` table for save, syntax, menus, commands, and
   XRAM document sync.
+- `EDITOR_FN_EDIT_XRAM` keeps the canonical document in a caller-owned XRAM
+  allocation and pages complete-line windows through caller-owned RAM. The
+  module owns navigation, range replacement, text validation, and redraws;
+  callers only allocate/load before the call and save/release afterward. The
+  current ABI carries 16-bit lengths, so one document may contain up to 65,535
+  bytes without consuming an equally large lower-RAM buffer.
+
+For `EDITOR_FN_EDIT_XRAM`, pass the XRAM base in `ARG0` bytes 0..2, document
+length and RAM-window pointer in `ARG1`, XRAM capacity and RAM-window capacity
+in `ARG2`, and title/type pointers in `ARG3`. Final document length is returned
+in `ARG1`; `RESULT` uses the same exit-reason and save-request bytes as
+`EDITOR_FN_EDIT`. The editor preserves the caller's XMC window-3 mapping.
 
 `EDITOR_FN_EDIT` copies this 16-byte table into the matching `EDITBUF`
 configuration bytes before running the editor:

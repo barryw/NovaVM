@@ -5,9 +5,8 @@
       .include "nptool.inc"
       .include "libsystem.inc"
 
-OBJECT_CAP  = 2048
 LIBRARY_CAP = 1024
-OUTPUT_CAP  = 1024
+OUTPUT_CAP  = $1800
 CONFIG_CAP  = 512
 
 .macro long_bcs target
@@ -51,8 +50,6 @@ config_match_index:.res 1
 config_min:      .res 2
 config_max:      .res 2
 worker_loaded:   .res 1
-object_buf: .res OBJECT_CAP
-object2_buf:.res OBJECT_CAP
 library_buf:.res LIBRARY_CAP
 output_buf: .res OUTPUT_CAP
 config_buf: .res CONFIG_CAP
@@ -129,13 +126,13 @@ tool_main:
       LDX   #>NPTOOL_ARG2
       JSR   nptool_print_z
       JSR   nptool_newline
-      LDA   #<object_buf
+      LDA   #<NLW_OBJECT0
       STA   NPTOOL_IO_ADDR+0
-      LDA   #>object_buf
+      LDA   #>NLW_OBJECT0
       STA   NPTOOL_IO_ADDR+1
-      LDA   #<OBJECT_CAP
+      LDA   #<NLW_OBJECT0_CAP
       STA   NPTOOL_IO_CAP+0
-      LDA   #>OBJECT_CAP
+      LDA   #>NLW_OBJECT0_CAP
       STA   NPTOOL_IO_CAP+1
       JSR   nptool_load_arg0
       BEQ   :+
@@ -145,9 +142,9 @@ tool_main:
       STA   nlink_object_len_l+0
       LDA   NPTOOL_IO_LEN+1
       STA   nlink_object_len_h+0
-      LDA   #<object_buf
+      LDA   #<NLW_OBJECT0
       STA   nlink_object_ptr_l+0
-      LDA   #>object_buf
+      LDA   #>NLW_OBJECT0
       STA   nlink_object_ptr_h+0
       LDA   #1
       STA   nlink_object_count
@@ -161,13 +158,13 @@ tool_main:
       LDX   #>NPTOOL_ARG3
       JSR   nptool_print_z
       JSR   nptool_newline
-      LDA   #<object2_buf
+      LDA   #<NLW_OBJECT1
       STA   NPTOOL_IO_ADDR+0
-      LDA   #>object2_buf
+      LDA   #>NLW_OBJECT1
       STA   NPTOOL_IO_ADDR+1
-      LDA   #<OBJECT_CAP
+      LDA   #<NLW_OBJECT1_CAP
       STA   NPTOOL_IO_CAP+0
-      LDA   #>OBJECT_CAP
+      LDA   #>NLW_OBJECT1_CAP
       STA   NPTOOL_IO_CAP+1
       JSR   nptool_load_arg3
       BEQ   :+
@@ -177,9 +174,9 @@ tool_main:
       STA   nlink_object_len_l+1
       LDA   NPTOOL_IO_LEN+1
       STA   nlink_object_len_h+1
-      LDA   #<object2_buf
+      LDA   #<NLW_OBJECT1
       STA   nlink_object_ptr_l+1
-      LDA   #>object2_buf
+      LDA   #>NLW_OBJECT1
       STA   nlink_object_ptr_h+1
       INC   nlink_object_count
 
@@ -1086,11 +1083,11 @@ config_finish_layout:
       STA   config_size+1
 @configured_cap:
       LDA   config_size+1
-      CMP   #>1022
+      CMP   #>(OUTPUT_CAP-2)
       BCC   @small
       BNE   @too_wide
       LDA   config_size
-      CMP   #<1022
+      CMP   #<(OUTPUT_CAP-2)
       BCC   @small
       BEQ   @full
 @too_wide:

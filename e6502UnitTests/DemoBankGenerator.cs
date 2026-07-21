@@ -74,7 +74,7 @@ public class DemoBankGenerator
         ch.Animations.Add(anim);
         bank.Characters.Add(ch);
 
-        string root = AppContext.BaseDirectory;
+        string? root = AppContext.BaseDirectory;
         while (root is not null && !File.Exists(Path.Combine(root, "e6502.sln")))
             root = Directory.GetParent(root)?.FullName;
         string path = Path.Combine(root!, "software", "assembly", "apps", "spritebank_demo", "demo.nsp");

@@ -36,7 +36,8 @@ nasm_symbol_names_ptr = $0965         ; u16 resident regular-symbol name table
 nasm_reloc_buffer_ptr = $0967         ; u16 resident relocation buffer
 
 NASCORE_CONSTANT_CAP = $8000
-NASCORE_SYMBOL_NAMES_CAP = 64 * 32
-NASCORE_RELOC_CAP = 768
+NASCORE_SYMBOL_CAP = 168
+NASCORE_SYMBOL_NAMES_CAP = NASCORE_SYMBOL_CAP * 32
+NASCORE_RELOC_CAP = 4096
 
 .endif

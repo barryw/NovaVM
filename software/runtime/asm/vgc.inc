@@ -18,7 +18,7 @@ VGC_INC_INCLUDED = 1
 VGC_RESULT_OK    = $00
 VGC_RESULT_ERROR = $01
 
-.global vgc_cmd
+.global vgc_issue
 .global vgc_wait_cmd
 .global vgc_exec
 .global vgc_vsync

@@ -7,24 +7,50 @@ The shell and native Pascal compiler (NPC) remain resident in the
 `$C000-$FFFF` language ROM. NPC streams Pascal source into the NDK document
 XRAM slot, parses it there, and writes generated assembly to disk.
 
+O2 is a separate disk-loaded compiler stage, `NPO2.BIN`, so optimization does
+not consume scarce resident ROM and NAS/NL remain language-neutral. NPC emits a
+compact typed linear IR into the temporary `.S` stream. NPO2 uses two transient
+16 KiB XRAM buffers: pass 1 selects direct 65C02 branches and inline word/array
+operations; pass 2 folds constant stack temporaries and fuses constant word
+index arithmetic into relocatable array addresses such as
+`ADC #<(CELLS-$51)`. It overwrites the `.S` file with ordinary readable 65C02
+assembly before NAS runs; no `.O2` records reach NAS or user-visible output.
+Both `COMPILE` and `BUILD` print the optimizer banner and each pass as it runs.
+
 ## Executable language slice
 
-`FIZZBUZZ.PAS` and `FIZZBUZZ.NPP` are the current end-to-end compiler slice.
-They build and run on Nova through NPC, NAS, NL, and `PASCAL.NLIB`, printing the
-canonical sequence from 1 through 100.
+`FIZZBUZZ.PAS`/`FIZZBUZZ.NPP` and `LIFE.PAS`/`LIFE.NPP` are executable
+end-to-end compiler slices. Both build and run on Nova through NPC, NAS, NL,
+and `PASCAL.NLIB`. FizzBuzz exercises byte expressions and structured control
+flow. Life seeds a random, roughly half-full 80-by-25 Conway board, applies
+B3/S23 simultaneously through two 2,000-cell buffers, and renders across all
+320-by-200 pixels until Enter is pressed.
 
 NPC now uses recursive-descent statement and expression parsers rather than a
 single fixed statement loop. The implemented language core is case-insensitive
-and supports `Byte` variables, nested `begin`/`end`, assignment, `if`/`then`/
+and supports `Byte`, `Boolean`, `Char`, and unsigned 16-bit `Word` variables;
+nested `begin`/`end`; assignment; `if`/`then`/
 `else`, `while`/`do`, `+`, `-`, `mod`, parentheses, all six byte comparisons,
-string `writeln`, and decimal byte `writeln`. Duplicate variables are rejected.
+unsigned `Word` arithmetic and comparisons, zero-based `array[0..N] of Byte`
+and `array[0..N] of Boolean` storage with byte or word indices, Boolean
+literals, string `writeln`, decimal byte `writeln`, parameterless procedures,
+and parameterless `Byte`/`Boolean` functions. A function returns through
+standard Pascal assignment to its own name. Duplicate variables are rejected.
 Generated branches remain valid when a structured statement grows beyond the
 65C02 relative-branch range.
 
+Routine declarations appear after global variables and before the program's
+main `begin`. NPC emits one jump over their bodies, ordinary `JSR`/`RTS` calls,
+and a stack-resident function-result byte, so nested calls do not share a global
+return slot. Life uses `RandomCell`, `Seed`, `Draw`, `CountNeighbors`,
+`NextCell`, `Evolve`, and `Commit` instead of one monolithic main block.
+
 The resident driver reuses `$2000-$6FFF` as transient compiler workspace before
 NAS or NL is loaded: generated assembly occupies `$2000-$5FFF`, and a 64-entry
-typed symbol table starts at `$6000`. Expression scratch is emitted only when a
-program uses a binary expression. Decimal byte output is a separate
+typed symbol table starts at `$6000`. Generated arithmetic uses the canonical
+NDK pseudo-register mailbox declared by `NVR.INC`; compact word, comparison,
+and indexed-array helpers are ordinary members of `PASCAL.NLIB`, so NL extracts
+them only when referenced. Decimal byte output is a separate
 `P_WRITE_BYTE` archive member, so NL omits it from programs that only print
 strings. NPC emits zero-, one-, and two-character `writeln` literals as direct
 character calls. Longer literals use Nova's inline-parameter ABI:
@@ -39,11 +65,55 @@ the bytes and advances the saved return address past them before returning;
 NAS and NL require no special handling. Syntax failures are reported as
 `file:line:column` diagnostics.
 
-This is still intentionally a byte-sized slice. Procedures/functions, wider
-integer types, constants, arrays, records, and Pascal units are subsequent
-compiler work rather than accepted-but-partial syntax.
+`Word` is currently unsigned and uses A for its low byte and X for its high
+byte. `Boolean` and `Char` occupy one byte, as do Boolean array elements.
+Routine parameters and local declarations, signed `Integer`, wider integer
+types, `Real`, sets, records, pointers, word arrays, word output, and compilation
+of user-authored units remain subsequent work rather than accepted-but-partial
+syntax.
 
-## Pascal NDK units
+## Pascal standard units
+
+Pascal programs consume Nova hardware through typed Pascal units, not raw NDK
+registers or assembly calling conventions. The first native adapter is
+`NovaGraphics`:
+
+```pascal
+uses NovaGraphics;
+
+GraphicsOpen;
+GraphicsClear(0);
+GraphicsColor(10);
+GraphicsFill(96, 36, 102, 42);
+GraphicsWait(30);
+GraphicsClose;
+```
+
+`GraphicsTile16(Column, Row)` fills a 16-pixel cell in a full-width 20-by-12
+grid. `GraphicsTile4x8(Column, Row)` maps an 80-by-25 logical grid onto the
+entire 320-by-200 plane, including horizontal coordinates that a Pascal `Byte`
+cannot express directly. `NovaInput.PollKey()` provides nonblocking native key input. Life
+waits for vertical sync before each generation and repaints only changed cells,
+so it never clears the visible plane between generations.
+
+`NOVAGFX.PAS` is the human-readable unit contract. Its precompiled
+`GRAPHICS.NPI` interface supplies NPC's checked signatures, while
+`GRAPHICS.INC` and `GRAPHICS.S` implement those Pascal procedures over the
+canonical `vgc.inc` and `vgc.s` NDK sources. Only the adapter knows the VGC
+parameter layout and wait protocol. `Life` consequently contains no MMIO
+addresses, NDK pseudo-registers, or assembly calls. Multi-argument unit
+procedures use a byte-stack ABI; NPC emits an exact arity assertion and removes
+the arguments after the call.
+
+`NovaRandom` follows the same model. Its Pascal-facing `RandomByte(): Byte`
+function adapts the canonical `rng_get8`, `RNG_VALUE0`, and FIO implementation;
+Life neither invents a private pseudo-random generator nor sees their ABI.
+Stable, Pascal-shaped unit APIs backed by canonical NDK implementations remain
+the model for the rest of the NDK. A standard unit is currently a precompiled
+platform component; NPC does not yet compile arbitrary user-authored unit
+implementations.
+
+## Low-level NDK bindings
 
 NPC accepts a standard `USES` clause for canonical NDK source units. A unit
 named `NovaFoo` maps mechanically to `FOO.INC` and `FOO.S`; NPC embeds neither
@@ -90,7 +160,10 @@ X/Y and wider-value ABIs remain unsupported.
 Commands load these ordinary Nova load-address-prefixed binaries from disk
 into the shared `$2000-$6FFF` tool slot, one at a time:
 
-- `NPEDIT.BIN` — text editor (`Alt-X` or `Ctrl-Q` returns to the shell)
+- `NPEDIT.BIN` — thin file/type adapter for the shared editor (`Alt-X` or
+  `Ctrl-Q` returns to the shell). It streams documents into transient XRAM;
+  generic Editor-module paging keeps only the current window in lower RAM.
+- `NPO2.BIN` — Pascal-specific typed instruction selection and O2 peepholes
 - `NAS.BIN` — Nova assembler
 - `NL.BIN` — Nova linker
 
@@ -110,7 +183,9 @@ opcode matrix therefore consume the overlay slot rather than lower RAM.
 
 Linked programs default to `$7000`, outside the tool slot. `RUN` reads the
 binary's load-address prefix, validates that the payload fits writable
-application RAM below Nova MMIO, and invokes that address.
+application RAM below Nova MMIO, streams the payload directly from FIO to that
+address, and invokes it. Executable size is therefore independent of the
+shell's 4 KiB source/project buffer.
 NAS allocates its source text in XRAM for each invocation and releases it on
 exit; lower RAM is reserved for the object, symbol, and relocation working set.
 
@@ -202,8 +277,14 @@ emission directly: ordinary operand references seed the live set, `.REFTO`
 propagates dependencies, and inactive routines never enter the NOBJ. The
 end-to-end test assembles canonical `rng.s` and `fio.s`, proves an unrelated FIO
 routine is absent, links with NL unchanged, and runs the resulting executable.
-NAS and NL each reserve 2 KB for an NOBJ input/output, leaving lower-RAM
-headroom while accommodating canonical NDK code plus generated Pascal checks.
+NAS can emit a 6.5 KiB NOBJ and tracks 168 case-insensitive symbols plus 512
+relocations. NL stages a 6.5 KiB primary object and an optional 3.3 KiB
+secondary object in the otherwise-unused linker-worker band, then writes
+binaries or reports up to 6 KiB. These language-neutral limits accommodate
+selective canonical NDK code without giving either tool Pascal-specific
+behavior. NAS reuses its project-option buffer for object output after the
+manifest has been consumed, so the larger object ceiling does not increase its
+resident lower-RAM footprint.
 Direct `ASSEMBLE file.s [-Dname=value] [-o file.obj]` seeds one case-insensitive
 preprocessor definition and optionally selects the object filename. Options may
 appear in either order.
@@ -295,7 +376,7 @@ Keywords and names are case-insensitive. Each `start`/`size` pair defines a
 non-overlapping writable application-RAM region from `$7000` through `$9FFF`;
 `SEGMENTS` maps each NOBJ section into one of those regions. NL aligns sections,
 relocates across regions, zero-fills gaps and BSS, and rejects missing mappings,
-overlap, overflow, and output spans larger than its current 1 KB buffer.
+overlap, overflow, and output spans larger than its current 6 KB buffer.
 An optional `SYMBOLS` block after `SEGMENTS` defines up to four absolute linker
 symbols. NAS sources import them normally; NL resolves them case-insensitively
 at the exact configured value without load-address rebasing and rejects any
@@ -306,7 +387,7 @@ Direct `LINK main.obj [more.obj] [-C file.cfg] [-M file.map] [-Ln file.lbl]`
 uses the same config, map, and label paths as project builds. NL loads
 `NLWORK.OVL` at `$7000` after saving the binary to generate each requested
 report through the same fixed language-neutral mailbox, then unloads it and
-saves the report. Reports share NL's 1 KB output buffer and fail loudly if they
+saves the report. Reports share NL's 6 KB output buffer and fail loudly if they
 do not fit.
 
 `BUILD HELLO.NPP` visibly runs resident NPC, then loads NAS, then loads NL.
@@ -321,7 +402,7 @@ text while labeling the active type in the status bar. `TYPE` uses the same
 ASCII validation and refuses binary files.
 
 NPP 1 intentionally accepts one `MAIN` plus one optional prebuilt `OBJECT` or
-one `ASM` source. NDK source units are selected inside Pascal with `USES`, but
-user-authored Pascal units, repeated project inputs, and their initialization
-semantics still need expanded NPP syntax; the project parser will not pretend
-source concatenation is linking.
+one `ASM` source. Precompiled Pascal standard units are selected inside Pascal
+with `USES`, but user-authored Pascal units, repeated project inputs, and their
+initialization semantics still need expanded NPP syntax; the project parser
+will not pretend source concatenation is linking.

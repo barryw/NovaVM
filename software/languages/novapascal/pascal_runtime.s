@@ -7,7 +7,7 @@
 
       .segment "LIBRARY"
       .byte NLIB_MAGIC0, NLIB_MAGIC1, NLIB_MAGIC2, NLIB_MAGIC3
-      .byte NLIB_VERSION, 5
+      .byte NLIB_VERSION, 7
 
       ; P_WRITE_CHAR deliberately imports P_CHAR_DEVICE from the next member.
       ; This keeps the Pascal-facing routine independent of the hardware shim
@@ -175,3 +175,200 @@ unused_symbols:
       .word 0
       .byte 0, NOBJ_SYM_GLOBAL, 8, "P_UNUSED"
 unused_object_end:
+
+      ; Byte arrays use A/X as a 16-bit index. The I_ helpers consume the
+      ; following base-address word and, for stores, remove the saved index
+      ; from beneath the return address.
+      .word array_object_end-array_object
+array_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 3
+      .word array_symbols-array_object
+      .word 0
+      .word array_object_end-array_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word array_code_end-array_code
+      .word array_code_end-array_code
+      .byte "CODE"
+array_code:
+array_get:
+      STA   NVR1L
+      STX   NVR1H
+      STZ   NVR4L
+      BRA   array_inline
+
+array_set_byte:
+      STA   NVR0L
+      TSX
+      LDA   $0103,X
+      STA   NVR1L
+      STZ   NVR1H
+      LDA   $0102,X
+      STA   $0103,X
+      LDA   $0101,X
+      STA   $0102,X
+      INX
+      TXS
+      LDA   #1
+      STA   NVR4L
+      BRA   array_inline
+
+array_set_word:
+      STA   NVR0L
+      TSX
+      LDA   $0103,X
+      STA   NVR1L
+      LDA   $0104,X
+      STA   NVR1H
+      LDA   $0102,X
+      STA   $0104,X
+      LDA   $0101,X
+      STA   $0103,X
+      INX
+      INX
+      TXS
+      LDA   #1
+      STA   NVR4L
+
+array_inline:
+      TSX
+      CLC
+      LDA   $0101,X
+      ADC   #1
+      STA   NVR2L
+      LDA   $0102,X
+      ADC   #0
+      STA   NVR2H
+      LDY   #0
+      LDA   (NVR2L),Y
+      STA   NVR3L
+      INY
+      LDA   (NVR2L),Y
+      STA   NVR3H
+      CLC
+      LDA   $0101,X
+      ADC   #2
+      STA   $0101,X
+      LDA   $0102,X
+      ADC   #0
+      STA   $0102,X
+      CLC
+      LDA   NVR1L
+      ADC   NVR3L
+      STA   NVR1L
+      LDA   NVR1H
+      ADC   NVR3H
+      STA   NVR1H
+      LDA   NVR4L
+      BNE   array_store
+      LDA   (NVR1L)
+      RTS
+array_store:
+      LDA   NVR0L
+      STA   (NVR1L)
+      RTS
+array_code_end:
+
+array_symbols:
+      .word array_get-array_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "I_P_AGET"
+      .word array_set_byte-array_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "I_P_ASETB"
+      .word array_set_word-array_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "I_P_ASETW"
+array_object_end:
+
+      ; Word arithmetic and comparison materialization share one compact
+      ; member. JSR and RTS preserve the incoming comparison flags.
+      .word ordinal_object_end-ordinal_object
+ordinal_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 9
+      .word ordinal_symbols-ordinal_object
+      .word 0
+      .word ordinal_object_end-ordinal_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word ordinal_code_end-ordinal_code
+      .word ordinal_code_end-ordinal_code
+      .byte "CODE"
+ordinal_code:
+ordinal_add:
+      CLC
+      ADC   NVR0L
+      STA   NVR0L
+      TXA
+      ADC   NVR0H
+      TAX
+      LDA   NVR0L
+      RTS
+ordinal_subtract:
+      SEC
+      SBC   NVR0L
+      STA   NVR0L
+      TXA
+      SBC   NVR0H
+      TAX
+      LDA   NVR0L
+      RTS
+ordinal_compare:
+      CPX   NVR0H
+      BNE   ordinal_compare_done
+      CMP   NVR0L
+ordinal_compare_done:
+      RTS
+ordinal_eq:
+      BEQ   ordinal_true
+      BRA   ordinal_false
+ordinal_ne:
+      BNE   ordinal_true
+      BRA   ordinal_false
+ordinal_lt:
+      BCC   ordinal_true
+      BRA   ordinal_false
+ordinal_le:
+      BCC   ordinal_true
+      BEQ   ordinal_true
+      BRA   ordinal_false
+ordinal_gt:
+      BCC   ordinal_false
+      BEQ   ordinal_false
+      BRA   ordinal_true
+ordinal_ge:
+      BCS   ordinal_true
+      BRA   ordinal_false
+ordinal_true:
+      LDA   #1
+      RTS
+ordinal_false:
+      LDA   #0
+      RTS
+ordinal_code_end:
+
+ordinal_symbols:
+      .word ordinal_add-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "P_ADDW"
+      .word ordinal_subtract-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "P_SUBW"
+      .word ordinal_compare-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "P_CMPW"
+      .word ordinal_eq-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_EQ"
+      .word ordinal_ne-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_NE"
+      .word ordinal_lt-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_LT"
+      .word ordinal_le-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_LE"
+      .word ordinal_gt-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_GT"
+      .word ordinal_ge-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "P_GE"
+ordinal_object_end:

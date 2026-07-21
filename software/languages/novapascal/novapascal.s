@@ -13,7 +13,7 @@
 
       .import npc_compile_file
 
-SHELL_BUFFER_CAP = 2048
+SHELL_BUFFER_CAP = $1000
 OUTPUT_BASE      = $7000
 
       .segment "ZEROPAGE"

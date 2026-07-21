@@ -201,23 +201,43 @@ nova dir software/languages/novapascal/novapascal.ndi
 
 The disk boots to `NovaPascal Shell v1.0`. `NEW name` creates `name.PAS` and a
 single end-to-end `name.NPP` manifest. `BUILD name.NPP` validates that manifest,
-runs resident NPC, disk-loaded NAS and NL, and writes the generated assembly,
-object, map, labels, and load-address-prefixed binary. `RUN name.BIN` executes
-the result. Pascal `USES NovaRng, NovaFio;` selects canonical NDK declaration
-and implementation sources. `Byte` variables live in zero-fill `BSS`,
+runs resident NPC, disk-loaded NPO2, NAS, and NL, and writes the generated
+assembly, object, map, labels, and load-address-prefixed binary. NPO2 performs
+typed 65C02 instruction selection followed by constant peepholes, including
+direct comparison branches, inline word/array operations, and relocation-aware
+fusion of constant index arithmetic into array addresses. The final `.S` is
+ordinary readable assembly; NAS and NL contain no Pascal-specific logic.
+`RUN name.BIN` executes the result. Pascal `uses NovaGraphics;` exposes native Pascal graphics
+procedures while its precompiled unit adapter alone handles the canonical VGC
+NDK parameter layout and command protocol. `uses NovaInput;` provides
+nonblocking `PollKey()` input without exposing MMIO. `uses NovaRandom;` similarly exposes
+`RandomByte(): Byte` while its adapter reuses the canonical RNG and FIO NDK
+sources. `uses NovaRng, NovaFio;` remains the lower-level binding path for those
+canonical declarations and implementations. `Byte` variables live in zero-fill `BSS`,
 `status := rng_get8();` receives A, `fio_issue(status);` passes A, and named
 pseudo-register assignments remain symbolic through NPC, NAS, and NL.
 Generated `.NPI` bindings validate byte call signatures, while
 `Byte(FIO_CMD_RNG)` uses a generated canonical byte constant. `EDIT` opens text
-files and `Alt-X` or `Ctrl-Q` returns to the shell.
-The disk also includes `FIZZBUZZ.PAS` and `FIZZBUZZ.NPP`. That executable slice
+files and `Alt-X` or `Ctrl-Q` returns to the shell. The language-neutral Editor
+module keeps large documents in XRAM and pages complete-line windows through
+lower RAM as navigation crosses them; NPEDIT only supplies disk I/O and the
+file-type label.
+The disk also includes FizzBuzz and Conway's Game of Life projects. FizzBuzz
 uses nested structured statements, byte expressions, `mod`, comparisons,
-`while`, `if`/`else`, and numeric `writeln`; NPC reports syntax failures with
-the source filename, line, and column. String `writeln` keeps literals of at
-most two characters as direct writes. Longer literals compile to a single
-`JSR I_P_WRITE_LINE` followed by zero-terminated inline bytes. Nova reserves
-the `I_` prefix for routines whose immutable parameters immediately follow the
-call; the callee advances the saved return address over those parameters.
+`while`, `if`/`else`, and numeric `writeln`. Life adds zero-based
+Boolean arrays, unsigned 16-bit `Word` values and indices, checked
+multi-argument unit procedure calls, parameterless procedures, and
+parameterless `Byte`/`Boolean` functions. It seeds a random, roughly half-full
+80-by-25 board, applies B3/S23 simultaneously through two arrays, and draws a
+full-screen, vsync-paced differential display on Nova's native 320-by-200
+graphics plane until Enter is pressed. Functions return through assignment to their own
+name; NPC keeps that result on the 65C02 stack so nested calls do not share a
+global result byte. NPC reports syntax failures with the source filename, line,
+and column. String `writeln` keeps literals of at most two characters as direct
+writes. Longer literals compile to a single `JSR I_P_WRITE_LINE` followed by
+zero-terminated inline bytes. Nova reserves the `I_` prefix for routines whose
+immutable parameters immediately follow the call; the callee advances the
+saved return address over those parameters.
 See `software/languages/novapascal/README.md` for the NPP format and complete
 native toolchain surface.
 

@@ -1394,7 +1394,7 @@ editbuf_move_left:
       ORA   EDITBUF_CURH
       BEQ   @done
       JSR   editbuf_cursor_dec
-      JMP   editbuf_after_move
+      JMP   editbuf_after_host_command
 @local:
       JSR   editbuf_cursor_dec
       JSR   editbuf_update_goalcol
@@ -1455,19 +1455,23 @@ editbuf_move_end:
 
 editbuf_move_file_start:
       JSR   editbuf_begin_move
+      LDA   #EDITUI_CMD_WINDOW_FIRST
+      JSR   editbuf_call_command
       STZ   EDITBUF_CURL
       STZ   EDITBUF_CURH
       STZ   EB_GOALCOL
-      JMP   editbuf_after_move
+      JMP   editbuf_after_host_command
 
 editbuf_move_file_end:
       JSR   editbuf_begin_move
+      LDA   #EDITUI_CMD_WINDOW_LAST
+      JSR   editbuf_call_command
       LDA   EDITBUF_LENL
       STA   EDITBUF_CURL
       LDA   EDITBUF_LENH
       STA   EDITBUF_CURH
       JSR   editbuf_update_goalcol
-      JMP   editbuf_after_move
+      JMP   editbuf_after_host_command
 
 editbuf_move_up:
       JSR   editbuf_begin_move
@@ -3031,6 +3035,7 @@ editbuf_parse_goto_line:
 ; =====================================================================
 editbuf_do_host_command:
       JSR   editbuf_call_command
+editbuf_after_host_command:
       JSR   editbuf_clamp_cursor_len
       JSR   editbuf_build_title
       JSR   editbuf_compute_linecol

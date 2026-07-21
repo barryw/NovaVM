@@ -293,7 +293,8 @@ public class RuntimeLibraryAbiTests
         string profilePrefix = "EDITOR_EDIT" + "_PROFILE";
 
         AssertConstant("EDITOR_FN_EDIT", 0x00);
-        AssertConstant("EDITOR_FN_COUNT", 0x01);
+        AssertConstant("EDITOR_FN_EDIT_XRAM", 0x01);
+        AssertConstant("EDITOR_FN_COUNT", 0x02);
         Assert.IsFalse(constants.ContainsKey(editEx), "The editor ABI must not keep a legacy extended edit function.");
         Assert.IsFalse(constants.Keys.Any(name => name.StartsWith(profilePrefix, StringComparison.Ordinal)), "Editor profiles must be removed; callers pass hook tables.");
 

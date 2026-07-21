@@ -176,6 +176,12 @@ nptool_load:
       BEQ   :+
       JMP   io_fail_close
 :
+      ; Always publish the low 16-bit size, including capacity failures. A
+      ; paged caller can use it to stream the file into XRAM instead of RAM.
+      LDA   LIB_RESULT+0
+      STA   NPTOOL_IO_LEN+0
+      LDA   LIB_RESULT+1
+      STA   NPTOOL_IO_LEN+1
       LDA   LIB_RESULT+2
       ORA   LIB_RESULT+3
       BNE   @too_large
@@ -192,10 +198,7 @@ nptool_load:
       STA   io_saved_error
       JMP   io_fail_close_saved
 @fits:
-      LDA   LIB_RESULT+0
-      STA   NPTOOL_IO_LEN+0
-      LDA   LIB_RESULT+1
-      STA   NPTOOL_IO_LEN+1
+      LDA   NPTOOL_IO_LEN+1
       ORA   NPTOOL_IO_LEN+0
       BEQ   @close
       JSR   io_clear_args

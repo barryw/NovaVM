@@ -40,17 +40,30 @@ public class NovaPascalTests
             var disk = bus.DeviceManager.GetDevice("FD0");
             Assert.IsFalse(disk.FileExists("NPC", ".BIN"), "NPC must remain resident at $C000, not be a disk tool.");
             Assert.IsTrue(disk.FileExists("NPEDIT", ".BIN"), "The editor must be a standard disk-loaded binary.");
+            Assert.IsTrue(disk.FileExists("NPO2", ".BIN"), "O2 passes must run from lower RAM without displacing resident NPC.");
             Assert.IsTrue(disk.FileExists("NAS", ".BIN"), "NAS must be a standard, language-neutral binary.");
             Assert.IsTrue(disk.FileExists("NASPP", ".OVL"), "NAS preprocessing must live in its disk-loaded overlay.");
             Assert.IsTrue(disk.FileExists("NASBE", ".OVL"), "NAS assembly core and opcode tables must live in its disk-loaded backend overlay.");
             Assert.IsTrue(disk.FileExists("NL", ".BIN"), "NL must be a standard, language-neutral binary.");
             Assert.IsTrue(disk.FileExists("NLWORK", ".OVL"), "NL map/GC work must live in its disk-loaded overlay.");
             Assert.IsTrue(disk.FileExists("PASCAL", ".NLIB"), "Pascal runtime APIs belong in an ordinary linker library.");
+            Assert.IsTrue(disk.FileExists("PASCAL", ".INC"), "Generated code must use the declared Pascal compiler ABI.");
+            Assert.IsTrue(disk.FileExists("NVR", ".INC"), "Compiler scratch registers must come from the canonical NDK mailbox include.");
             Assert.IsTrue(disk.FileExists("NOVA", ".INC"), "Pascal NDK units must use the canonical hardware declarations.");
             Assert.IsTrue(disk.FileExists("NOVA", ".NPI"), "Pascal bindings must be generated from canonical NDK metadata.");
             Assert.IsTrue(disk.FileExists("RNG", ".NPI"), "Each Pascal NDK unit must carry generated ABI signatures.");
             Assert.IsTrue(disk.FileExists("RNG", ".S"), "The Pascal disk must carry canonical NDK implementation sources.");
             Assert.IsTrue(disk.FileExists("FIO", ".S"), "Dependent canonical NDK implementations must remain available to NAS.");
+            Assert.IsTrue(disk.FileExists("NOVAGFX", ".PAS"), "Graphics must be exposed as a native Pascal unit.");
+            Assert.IsTrue(disk.FileExists("GRAPHICS", ".NPI"), "The graphics unit must carry its compiled Pascal interface.");
+            Assert.IsTrue(disk.FileExists("GRAPHICS", ".S"), "The graphics unit adapter must be available to NAS.");
+            Assert.IsTrue(disk.FileExists("NOVAINPUT", ".PAS"), "Input must be exposed as a native Pascal unit.");
+            Assert.IsTrue(disk.FileExists("INPUT", ".NPI"), "The input unit must carry its compiled Pascal interface.");
+            Assert.IsTrue(disk.FileExists("INPUT", ".S"), "The input unit must adapt Nova's canonical input register.");
+            Assert.IsTrue(disk.FileExists("VGC", ".S"), "The graphics unit must reuse the canonical VGC NDK implementation.");
+            Assert.IsTrue(disk.FileExists("NOVARAND", ".PAS"), "Randomness must be exposed as a native Pascal unit.");
+            Assert.IsTrue(disk.FileExists("RANDOM", ".NPI"), "The random unit must carry its compiled Pascal interface.");
+            Assert.IsTrue(disk.FileExists("RANDOM", ".S"), "The random unit must adapt the canonical RNG implementation.");
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NAS", ".BIN")[..2]);
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NL", ".BIN")[..2]);
 
@@ -101,7 +114,7 @@ public class NovaPascalTests
                 "generated project build");
             string generatedBuildScreen = Snapshot(bus);
             Assert.IsTrue(generatedBuildScreen.Contains("Build complete: DEMO.BIN", StringComparison.Ordinal),
-                generatedBuildScreen);
+                $"{generatedBuildScreen}\nTool status ${bus.Read(0x0275):X2}, detail ${bus.Read(0x0276):X2}");
             Assert.IsTrue(
                 generatedBuildScreen.IndexOf("Configuration valid", StringComparison.Ordinal) <
                 generatedBuildScreen.IndexOf("Compiling DEMO.PAS", StringComparison.Ordinal),
@@ -113,6 +126,8 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Hello, world!", StringComparison.Ordinal),
                 "generated project executable");
             RunSteps(cpu, bus, 100_000);
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP", ".LBL" })
+                disk.Delete("DEMO", extension);
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
 
             QueueLine(editor, "BUILD HELLO.NPP");
@@ -196,7 +211,13 @@ public class NovaPascalTests
                 $"{(disk.FileExists("FIZZBUZZ", ".OBJ") ? disk.Load("FIZZBUZZ", ".OBJ").Length : 0)} bytes, " +
                 $"worker=${bus.Read(0x0903):X2}, objects={bus.Read(0x0901)}, roots={bus.Read(0x0902)}\n{Snapshot(bus)}");
             string fizzBuzzAssembly = Encoding.ASCII.GetString(disk.Load("FIZZBUZZ", ".S"));
-            StringAssert.Contains(fizzBuzzAssembly, "__NP_RHS: .RES 1");
+            StringAssert.Contains(fizzBuzzAssembly, ".INCLUDE \"PASCAL.INC\"");
+            StringAssert.Contains(fizzBuzzAssembly, "STA NVR0L");
+            StringAssert.Contains(fizzBuzzAssembly, "CMP #$64");
+            Assert.IsFalse(fizzBuzzAssembly.Contains("JSR P_LE", StringComparison.Ordinal),
+                "O2 must branch directly from comparison flags instead of materializing a Boolean helper result.");
+            Assert.IsFalse(fizzBuzzAssembly.Contains(".O2", StringComparison.Ordinal),
+                "Internal optimizer IR must never reach NAS or the user-visible generated assembly.");
             StringAssert.Contains(fizzBuzzAssembly, "JSR P_WRITE_BYTE_LN");
             StringAssert.Contains(fizzBuzzAssembly, "JSR I_P_WRITE_LINE");
             StringAssert.Contains(fizzBuzzAssembly, ".BYTE $46,$69,$7A,$7A,$42,$75,$7A,$7A,$00");
@@ -212,6 +233,121 @@ public class NovaPascalTests
             StringAssert.Contains(fizzBuzzOutput,
                 "91\n92\nFizz\n94\nBuzz\nFizz\n97\n98\nFizz\nBuzz",
                 "FizzBuzz must execute all numeric, MOD, nested IF/ELSE, and WHILE paths through 100.");
+
+            Assert.IsTrue(disk.FileExists("LIFE", ".PAS"),
+                "The development disk must carry the graphics language slice.");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD LIFE.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: LIFE.BIN", StringComparison.Ordinal)
+                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase)
+                                    || s.Contains("File is too large", StringComparison.Ordinal),
+                "Life compile, assemble, and link");
+            string lifeAssembly = disk.FileExists("LIFE", ".S")
+                ? Encoding.ASCII.GetString(disk.Load("LIFE", ".S"))
+                : string.Empty;
+            byte[] lifeObject = disk.FileExists("LIFE", ".OBJ")
+                ? disk.Load("LIFE", ".OBJ")
+                : [];
+            Assert.IsTrue(disk.FileExists("LIFE", ".BIN"),
+                $"detail=${bus.Read(0x0276):X2}, object={lifeObject.Length} bytes, " +
+                $"sections={(lifeObject.Length > 6 ? lifeObject[6] : 0)}, " +
+                $"symbols={(lifeObject.Length > 11 ? lifeObject[10] | lifeObject[11] << 8 : 0)}, " +
+                $"relocations={(lifeObject.Length > 15 ? lifeObject[14] | lifeObject[15] << 8 : 0)}\n{Snapshot(bus)}");
+            byte[] lifeExecutable = disk.Load("LIFE", ".BIN");
+            CollectionAssert.AreEqual(new byte[] { 0x00, 0x80 }, lifeExecutable[..2]);
+            Assert.IsTrue(lifeExecutable.Length <= 5600,
+                $"Life O2 output regressed beyond 5,600 bytes; got {lifeExecutable.Length} bytes.");
+            string lifeMap = Encoding.ASCII.GetString(disk.Load("LIFE", ".MAP"));
+            StringAssert.Contains(lifeMap, "GRAPHICSTILE4X8");
+            StringAssert.Contains(lifeMap, "VGC_FILL");
+            StringAssert.Contains(lifeMap, "VGC_ISSUE");
+            StringAssert.Contains(lifeMap, "RANDOMBYTE");
+            StringAssert.Contains(lifeMap, "RNG_GET8");
+            StringAssert.Contains(lifeMap, "POLLKEY");
+            StringAssert.Contains(lifeMap, "FIO_EXEC");
+            Assert.IsFalse(lifeMap.Contains("VGC_PLOT", StringComparison.Ordinal),
+                "Selective canonical VGC emission must omit unused primitives.");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"GRAPHICS.INC\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"GRAPHICS.NPI\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"GRAPHICS.S\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"INPUT.INC\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"INPUT.NPI\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"INPUT.S\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"RANDOM.INC\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"RANDOM.NPI\"");
+            StringAssert.Contains(lifeAssembly, ".INCLUDE \"RANDOM.S\"");
+            StringAssert.Contains(lifeAssembly, "CELLS: .RES $07D0");
+            StringAssert.Contains(lifeAssembly, "NEXT: .RES $07D0");
+            StringAssert.Contains(lifeAssembly, "ADC #<CELLS");
+            StringAssert.Contains(lifeAssembly, "ADC #>CELLS");
+            StringAssert.Contains(lifeAssembly, "STA (NVR1L)");
+            StringAssert.Contains(lifeAssembly, "CMP #$19");
+            StringAssert.Contains(lifeAssembly, "ADC #$01");
+            StringAssert.Contains(lifeAssembly, "ADC #<(CELLS-$51)",
+                "O2 must fuse constant index arithmetic into the relocated array address.");
+            StringAssert.Contains(lifeAssembly, "ADC #>(CELLS+$51)",
+                "O2 must fuse positive constant index arithmetic into the relocated array address.");
+            foreach (string helper in new[]
+                     {
+                         "JSR I_P_AGET", "JSR I_P_ASETB", "JSR I_P_ASETW",
+                         "JSR P_ADDW", "JSR P_SUBW", "JSR P_CMPW",
+                         "JSR P_EQ", "JSR P_NE", "JSR P_LT", "JSR P_LE", "JSR P_GT", "JSR P_GE"
+                     })
+                Assert.IsFalse(lifeAssembly.Contains(helper, StringComparison.Ordinal),
+                    $"O2 must remove generic hot-path helper call: {helper}");
+            Assert.IsFalse(lifeAssembly.Contains(".O2", StringComparison.Ordinal),
+                "Internal optimizer IR must be fully lowered before NAS.");
+            StringAssert.Contains(lifeAssembly, "JMP __NP_MAIN");
+            StringAssert.Contains(lifeAssembly, "RANDOMCELL:");
+            StringAssert.Contains(lifeAssembly, "SEED:");
+            StringAssert.Contains(lifeAssembly, "DRAW:");
+            StringAssert.Contains(lifeAssembly, "COUNTNEIGHBORS:");
+            StringAssert.Contains(lifeAssembly, "NEXTCELL:");
+            StringAssert.Contains(lifeAssembly, "EVOLVE:");
+            StringAssert.Contains(lifeAssembly, "COMMIT:");
+            StringAssert.Contains(lifeAssembly, "JSR RANDOMBYTE");
+            StringAssert.Contains(lifeAssembly, "JSR COUNTNEIGHBORS");
+            StringAssert.Contains(lifeAssembly, "JSR NEXTCELL");
+            StringAssert.Contains(lifeAssembly, "STA $0101,X");
+            StringAssert.Contains(lifeAssembly, ".ASSERT __PA02FE8 = $02");
+            StringAssert.Contains(lifeAssembly, "JSR GRAPHICSTILE4X8");
+            StringAssert.Contains(lifeAssembly, "JSR POLLKEY");
+
+            string lifeSource = Encoding.ASCII.GetString(disk.Load("LIFE", ".PAS"));
+            StringAssert.Contains(lifeSource, "RandomByte() < 128",
+                "Life must begin from a random, roughly half-full soup rather than one canned organism.");
+            StringAssert.Contains(lifeSource, "if Neighbors < 2");
+            StringAssert.Contains(lifeSource, "else if Neighbors > 3");
+            StringAssert.Contains(lifeSource, "else if Neighbors = 3",
+                "Life must encode survival on two or three neighbors and birth on exactly three.");
+            StringAssert.Contains(lifeSource, "array[0..1999] of Boolean");
+            StringAssert.Contains(lifeSource, "I: Word");
+            StringAssert.Contains(lifeSource, "while Row < 25");
+            StringAssert.Contains(lifeSource, "while Col < 80");
+            StringAssert.Contains(lifeSource, "GraphicsWait(1)");
+            StringAssert.Contains(lifeSource, "if Cells[I] <> Next[I]",
+                "Life must update changed cells instead of blanking the visible plane.");
+            Assert.IsFalse(lifeSource.Contains("GraphicsClear", StringComparison.Ordinal),
+                "Life must not flicker by clearing between generations.");
+            StringAssert.Contains(lifeSource, "while Key <> 13");
+
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN LIFE.BIN");
+            int initialPopulation = WaitForStableLifePopulation(
+                cpu, bus, minimum: 400, "a random Life soup across the graphics plane");
+            int evolvedPopulation = 0;
+            RunUntil(cpu, bus, _ =>
+            {
+                evolvedPopulation = CountLifeCells(bus);
+                return evolvedPopulation > 0 && evolvedPopulation != initialPopulation;
+            }, "an evolved Life generation without a blank frame");
+            Assert.AreNotEqual(initialPopulation, evolvedPopulation,
+                "Applying B3/S23 to a random soup must change its population.");
+            editor.QueueInput(0x0D);
+            RunUntil(cpu, bus, s =>
+                    bus.Read((ushort)VgcConstants.RegMode) == VgcConstants.ModeTextOnly
+                    && s.Contains("NP> ", StringComparison.Ordinal),
+                "Life return to the Pascal shell");
 
             disk.Save("BADPAS", Encoding.ASCII.GetBytes(
                 "program BadPas;\nbegin\n  writeln(\nend.\n"), ".PAS");
@@ -886,11 +1022,14 @@ public class NovaPascalTests
             disk.Save("INCLUDE", Encoding.ASCII.GetBytes(
                 ".export Start\nStart:\njsr Included\nrts\n" +
                 ".include \"LEVEL1.INC\"\n"), ".S");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "ASSEMBLE INCLUDE.S");
             RunUntil(cpu, bus, s => s.Contains("Writing INCLUDE.OBJ", StringComparison.Ordinal)
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "nested include assembly result");
             RunSteps(cpu, bus, 500_000);
+            Assert.IsTrue(disk.FileExists("INCLUDE", ".OBJ"),
+                $"NAS nested include failed with detail ${bus.Read(0x0276):X2}:\n{Snapshot(bus)}");
             byte[] includeObject = disk.Load("INCLUDE", ".OBJ");
             CollectionAssert.AreEqual(new byte[]
             {
@@ -1226,6 +1365,8 @@ public class NovaPascalTests
                 0x78, 0xDB, 0xAA, 0xA8, 0xBA, 0x8A, 0x9A, 0x98,
                 0xCB
             }, impliedObject[32..65], "NAS must cover every implied W65C02 mnemonic.");
+            disk.Delete("IMPLIED", ".S");
+            disk.Delete("IMPLIED", ".OBJ");
 
             disk.Save("IMMEDIATE", Encoding.ASCII.GetBytes(
                 "adc #$01\nAnD #$02\nBIT #$03\ncmp #$04\nCPx #$05\ncpy #$06\n" +
@@ -1356,6 +1497,9 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Writing BITOPS.OBJ", StringComparison.Ordinal),
                 "complete bit-opcode assembly result");
             RunSteps(cpu, bus, 500_000);
+            Assert.IsTrue(disk.FileExists("BITOPS", ".OBJ"),
+                $"NAS did not write BITOPS.OBJ (status ${bus.Read(0x0275):X2}, " +
+                $"detail ${bus.Read(0x0276):X2}):\n{Snapshot(bus)}");
             byte[] bitObject = disk.Load("BITOPS", ".OBJ");
             CollectionAssert.AreEqual(new byte[]
             {
@@ -1370,6 +1514,8 @@ public class NovaPascalTests
                 0x60
             }, bitObject[32..113],
                 "NAS must encode all RMB/SMB and checked BBR/BBS forms.");
+            disk.Delete("BITOPS", ".S");
+            disk.Delete("BITOPS", ".OBJ");
 
             disk.Save("BRANCHES", Encoding.ASCII.GetBytes(
                 "BCC target\nBCS target\nBEQ target\nBMI target\nBNE target\n" +
@@ -1431,6 +1577,58 @@ public class NovaPascalTests
         }
     }
 
+    [TestMethod]
+    public void GenericEditorPagesAndSavesLargeXramDocuments()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-editor-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            string bigText = "FIRST-XRAM-PAGE\n" + string.Concat(
+                Enumerable.Range(0, 300).Select(i => $"line {i:D3}: paging belongs to the generic editor\n"))
+                + "END-OF-XRAM-DOCUMENT";
+            Assert.IsTrue(bigText.Length > 4096, "The fixture must exceed NPEDIT's RAM window.");
+            disk.Save("BIGTEXT", Encoding.ASCII.GetBytes(bigText), ".TXT");
+
+            QueueLine(editor, "EDIT BIGTEXT.TXT");
+            RunUntil(cpu, bus, s => s.Contains("FIRST-XRAM-PAGE", StringComparison.Ordinal)
+                                    && s.Contains("T:Text", StringComparison.Ordinal),
+                "first XRAM-backed editor page");
+            editor.QueueInput(0x81); // Ctrl-End
+            RunUntil(cpu, bus, s => s.Contains("END-OF-XRAM-DOCUMENT", StringComparison.Ordinal),
+                "last XRAM-backed editor page");
+            editor.QueueInput((byte)'!');
+            editor.QueueInput(0x13); // Ctrl-S
+            editor.QueueInput(0x11); // Ctrl-Q
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal),
+                "shell after saving a paged document");
+
+            CollectionAssert.AreEqual(Encoding.ASCII.GetBytes(bigText + "!"), disk.Load("BIGTEXT", ".TXT"),
+                "The generic editor must commit and save an edit made in a nonresident XRAM window.");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
     private static void QueueLine(ScreenEditor editor, string line)
     {
         foreach (char ch in line)
@@ -1460,6 +1658,46 @@ public class NovaPascalTests
             cpu.ExecuteNext();
             bus.AdvanceCycles(cycles);
         }
+    }
+
+    private static int WaitForStableLifePopulation(
+        Cpu cpu, CompositeBusDevice bus, int minimum, string expected)
+    {
+        int previous = -1;
+        int stableChecks = 0;
+        int population = 0;
+        RunUntil(cpu, bus, _ =>
+        {
+            if (bus.Read((ushort)VgcConstants.RegMode) != VgcConstants.ModeGfxOnly)
+                return false;
+
+            population = CountLifeCells(bus);
+            if (population < minimum)
+            {
+                previous = population;
+                stableChecks = 0;
+                return false;
+            }
+
+            stableChecks = population == previous ? stableChecks + 1 : 0;
+            previous = population;
+            return stableChecks >= 3;
+        }, expected);
+        return population;
+    }
+
+    private static int CountLifeCells(CompositeBusDevice bus)
+    {
+        int population = 0;
+        for (int row = 0; row < 25; row++)
+        {
+            for (int col = 0; col < 80; col++)
+            {
+                if (bus.Vgc.GetGfxPixelColor(2 + col * 4, 4 + row * 8) == 10)
+                    population++;
+            }
+        }
+        return population;
     }
 
     private static string Snapshot(CompositeBusDevice bus)

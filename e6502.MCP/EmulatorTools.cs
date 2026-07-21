@@ -6,7 +6,7 @@ using ModelContextProtocol.Server;
 namespace e6502.MCP;
 
 [McpServerToolType]
-public static class EmulatorTools
+public sealed class EmulatorTools
 {
     [McpServerTool, Description("Enter a BASIC line, sends Enter, waits for Ready prompt.")]
     public static async Task<string> EnterBasicLine(
@@ -318,7 +318,7 @@ public static class EmulatorTools
         [Description("8 bytes of pixel data (each byte = 2 pixels: high nibble left, low nibble right)")] int[] data)
     {
         var arr = new JsonArray();
-        foreach (var b in data) arr.Add(b);
+        foreach (var b in data) arr.Add((JsonNode?)JsonValue.Create(b));
         var result = await client.SendAsync(new JsonObject
         {
             ["command"] = "sprite_define_row",

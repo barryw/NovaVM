@@ -64,7 +64,7 @@ $(NASBE): $(NASBE_PAYLOAD) $(OVERLAY_PACKER_DLL)
 	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NASBE_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x3000 --sym "$(BUILD_DIR)/nasbe.sym" --main nasm_assemble --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nasbe.sym")" --module-id 0x4E42 --module-version 1
 
 $(NLWORK): $(NLWORK_PAYLOAD) $(OVERLAY_PACKER_DLL)
-	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NLWORK_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x3000 --sym "$(BUILD_DIR)/nlwork.sym" --main nlw_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nlwork.sym")" --module-id 0x4E4C --module-version 1
+	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NLWORK_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x08C0 --sym "$(BUILD_DIR)/nlwork.sym" --main nlw_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nlwork.sym")" --module-id 0x4E4C --module-version 1
 
 clean:
 	rm -rf $(BUILD_DIR)

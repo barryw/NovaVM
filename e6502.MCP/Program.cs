@@ -19,6 +19,6 @@ builder.Services.AddSingleton(new EmulatorClient(host, port));
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithTools<EmulatorTools>();
 
 await builder.Build().RunAsync();

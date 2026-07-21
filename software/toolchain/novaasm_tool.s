@@ -16,7 +16,7 @@ INCLUDE_CAP  = $D000
 INCLUDE_LOAD_CAP = INCLUDE_CAP + 1
 INCLUDE_SMALL_CAP = $1000
 INCLUDE_SMALL_LOAD_CAP = INCLUDE_SMALL_CAP + 1
-OBJECT_CAP   = 2048
+OBJECT_CAP   = $1A00
 EXPANDED_CAP = $8000
 PROJECT_CAP  = 2048
 
@@ -42,7 +42,9 @@ include_names:   .res NASM_INCLUDE_DEPTH * NASM_FILENAME_CAP
 object_buf:      .res OBJECT_CAP
 core_symbol_names:.res NASCORE_SYMBOL_NAMES_CAP
 core_reloc_buffer:.res NASCORE_RELOC_CAP
-project_buf:     .res PROJECT_CAP
+; Project options are consumed before assembly, so the object output can reuse
+; the same lower-RAM workspace without growing NAS's resident footprint.
+project_buf      = object_buf
 project_left:    .res 2
 project_found:   .res 1
 project_expected:.res 1

@@ -23,7 +23,7 @@ editor.o: editor.s \
             $(NOVA_ASM)/editui.inc $(NOVA_ASM)/editui.s \
             $(NOVA_ASM)/vtext.inc $(NOVA_ASM)/vtext.s \
             $(NOVA_ASM)/blitter.inc $(NOVA_ASM)/blitter.s \
-            $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s
+            $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editbuf.s $(NOVA_ASM)/editpager.s
 	$(CA65) editor.s -o editor.o
 
 editor.bin: editor.o editor.cfg $(NOVA_LIB_FILE)

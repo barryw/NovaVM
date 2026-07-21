@@ -37,7 +37,13 @@ NLW_ERROR_COMMAND = 1
 NLW_ERROR_OUTPUT  = 2
 NLW_ERROR_OBJECT  = 3
 NLW_LOAD          = $7000
-NLW_MAX           = $3000
+; NLWORK's packed payload and BSS occupy exactly $7000-$78BF. The remainder
+; of its fixed band stages two language-neutral NOBJ inputs while it runs.
+NLW_MAX           = $08C0
+NLW_OBJECT0       = NLW_LOAD + NLW_MAX
+NLW_OBJECT0_CAP   = $1A00
+NLW_OBJECT1       = NLW_OBJECT0 + NLW_OBJECT0_CAP
+NLW_OBJECT1_CAP   = $0D40
 NLW_NAME_LEN      = 10
 
 .endif

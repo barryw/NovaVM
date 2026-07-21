@@ -22,7 +22,7 @@ public class NovaConnectionTests
         NovaStatus? pushed = null;
         conn.StatusUpdated += s => pushed = s;
 
-        await conn.PollOnceAsync();
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { ConnectionState.Connecting, ConnectionState.Connected }, states);
         Assert.Equal(ConnectionState.Connected, conn.State);
@@ -37,9 +37,9 @@ public class NovaConnectionTests
         var conn = new NovaConnection(_ => Task.FromResult(SampleStatus()));
         conn.StateChanged += states.Add;
 
-        await conn.PollOnceAsync(); // Disconnected -> Connecting -> Connected
-        await conn.PollOnceAsync(); // already Connected: must emit nothing
-        await conn.PollOnceAsync();
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken); // Disconnected -> Connecting -> Connected
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken); // already Connected: must emit nothing
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { ConnectionState.Connecting, ConnectionState.Connected }, states);
         Assert.Equal(ConnectionState.Connected, conn.State);
@@ -56,9 +56,9 @@ public class NovaConnectionTests
             : Task.FromResult(SampleStatus()));
         conn.StateChanged += states.Add;
 
-        await conn.PollOnceAsync();          // Connecting -> Error
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken); // Connecting -> Error
         fail = false;
-        await conn.PollOnceAsync();          // Error -> Connecting -> Connected
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken); // Error -> Connecting -> Connected
 
         Assert.Equal(new[]
         {
@@ -74,7 +74,7 @@ public class NovaConnectionTests
         var conn = new NovaConnection(_ => throw new InvalidOperationException("boom"));
         conn.StateChanged += states.Add;
 
-        await conn.PollOnceAsync();
+        await conn.PollOnceAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(new[] { ConnectionState.Connecting, ConnectionState.Error }, states);
         Assert.Equal(ConnectionState.Error, conn.State);
@@ -85,7 +85,7 @@ public class NovaConnectionTests
     public async Task Action_without_management_client_returns_not_connected()
     {
         var conn = new NovaConnection(_ => Task.FromResult(SampleStatus()));
-        (bool ok, string? error) = await conn.VmResetAsync();
+        (bool ok, string? error) = await conn.VmResetAsync(TestContext.Current.CancellationToken);
         Assert.False(ok);
         Assert.Equal("not connected", error);
     }

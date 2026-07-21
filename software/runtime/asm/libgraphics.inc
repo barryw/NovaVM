@@ -31,7 +31,7 @@ LIBGRAPHICS_INC = 1
 
 ; =====================================================================
 ; $00-$0F  draw  (driver: vgc.s — vgc_gcls/gcolor/plot/unplot/line/circle/
-;                 rect/fill/paint/gtext; primitives issue VCMD_* via vgc_cmd
+;                 rect/fill/paint/gtext; primitives issue VCMD_* via vgc_issue
 ;                 and the wrapper waits via vgc_wait_cmd)
 ; =====================================================================
 GFN_GCLS      = $00   ; ()                                  -> vgc_gcls

@@ -11,7 +11,7 @@ public class NovaDebugClientTests
         await using var server = new FakeTcpServer();
         using var client = new NovaDebugClient("127.0.0.1", server.Port);
 
-        await client.SendKeyAsync("ENTER");
+        await client.SendKeyAsync("ENTER", TestContext.Current.CancellationToken);
 
         Assert.Single(server.Received);
         Assert.Equal("{\"command\":\"send_key\",\"key\":\"ENTER\"}", server.Received[0]);
@@ -23,7 +23,7 @@ public class NovaDebugClientTests
         await using var server = new FakeTcpServer();
         using var client = new NovaDebugClient("127.0.0.1", server.Port);
 
-        await client.TypeTextAsync("hi");
+        await client.TypeTextAsync("hi", TestContext.Current.CancellationToken);
 
         Assert.Equal("{\"command\":\"type_text\",\"text\":\"hi\"}", server.Received[0]);
     }

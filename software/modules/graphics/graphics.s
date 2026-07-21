@@ -1239,7 +1239,7 @@ copy_args_to_p:
       rts
 
 ; finish_ok — common tail: wait for the VGC command to complete, then STATUS=OK.
-; For ops that issue a VCMD_* via vgc_cmd (the draw primitives).
+; For ops that issue a VCMD_* via vgc_issue (the draw primitives).
 finish_ok:
       jsr     vgc_wait_cmd
       ; fall through to finish_ok_nowait

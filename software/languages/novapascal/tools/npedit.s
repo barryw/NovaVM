@@ -2,14 +2,18 @@
 
       .setcpu "w65c02"
       .include "libeditor.inc"
+      .include "libmemory.inc"
       .include "nptool.inc"
 
-SOURCE_CAP = 2048
+SOURCE_CAP = $1000
+DOCUMENT_CAP = $FFFF
 
       .segment "BSS"
-source_buf:   .res SOURCE_CAP
-source_len:   .res 2
-editor_hooks: .res EDITOR_HOOKS_SIZE
+source_buf:         .res SOURCE_CAP
+source_len:         .res 2
+document_xaddr:     .res 3
+document_allocated: .res 1
+editor_type_ptr:    .res 2
 
       .segment "CODE"
       .export tool_main
@@ -31,9 +35,34 @@ tool_main:
       LDA   #>SOURCE_CAP
       STA   NPTOOL_IO_CAP+1
       JSR   nptool_load_arg0
+      BEQ   @loaded_ram
+      LDA   NPTOOL_STATUS
+      CMP   #NPTOOL_ERR_IO
       BEQ   :+
       JMP   @fail
 :
+      LDA   NPTOOL_DETAIL
+      CMP   #NPTOOL_IO_TOO_LARGE
+      BEQ   :+
+      JMP   @fail
+:
+      LDA   NPTOOL_IO_LEN+0
+      STA   source_len+0
+      LDA   NPTOOL_IO_LEN+1
+      STA   source_len+1
+      STZ   NPTOOL_STATUS
+      STZ   NPTOOL_DETAIL
+      JSR   tool_alloc_document
+      BEQ   :+
+      JMP   @memory_error
+:
+      JSR   tool_load_document
+      BEQ   :+
+      JMP   @memory_error
+:
+      BRA   @edit
+
+@loaded_ram:
       JSR   nptool_validate_text
       BEQ   :+
       LDA   #NPTOOL_ERR_NOT_TEXT
@@ -44,37 +73,51 @@ tool_main:
       STA   source_len+0
       LDA   NPTOOL_IO_LEN+1
       STA   source_len+1
+      JSR   tool_alloc_document
+      BEQ   :+
+      JMP   @memory_error
+:
+      JSR   tool_copy_document
+      BEQ   :+
+      JMP   @memory_error
+:
 
+@edit:
       JSR   editor_select_type
-      LDA   #<source_buf
+      LDA   document_xaddr+0
       STA   LIB_ARG0+0
-      LDA   #>source_buf
+      LDA   document_xaddr+1
       STA   LIB_ARG0+1
-      STZ   LIB_ARG0+2
+      LDA   document_xaddr+2
+      STA   LIB_ARG0+2
       STZ   LIB_ARG0+3
       LDA   source_len+0
       STA   LIB_ARG1+0
       LDA   source_len+1
       STA   LIB_ARG1+1
-      STZ   LIB_ARG1+2
-      STZ   LIB_ARG1+3
-      LDA   #<SOURCE_CAP
+      LDA   #<source_buf
+      STA   LIB_ARG1+2
+      LDA   #>source_buf
+      STA   LIB_ARG1+3
+      LDA   #<DOCUMENT_CAP
       STA   LIB_ARG2+0
-      LDA   #>SOURCE_CAP
+      LDA   #>DOCUMENT_CAP
       STA   LIB_ARG2+1
-      STZ   LIB_ARG2+2
-      STZ   LIB_ARG2+3
+      LDA   #<SOURCE_CAP
+      STA   LIB_ARG2+2
+      LDA   #>SOURCE_CAP
+      STA   LIB_ARG2+3
       LDA   #<NPTOOL_ARG0
       STA   LIB_ARG3+0
       LDA   #>NPTOOL_ARG0
       STA   LIB_ARG3+1
-      LDA   #<editor_hooks
+      LDA   editor_type_ptr+0
       STA   LIB_ARG3+2
-      LDA   #>editor_hooks
+      LDA   editor_type_ptr+1
       STA   LIB_ARG3+3
       LDA   #MODULE_ID_EDITOR
       STA   LIB_MOD_ID
-      LDA   #EDITOR_FN_EDIT
+      LDA   #EDITOR_FN_EDIT_XRAM
       STA   LIB_FN_ID
       JSR   LIB_LOADER_BAND
       LDA   LIB_STATUS
@@ -87,27 +130,42 @@ tool_main:
       BEQ   @ok
       LDA   #1
       STA   NPTOOL_DETAIL
-      LDA   #<source_buf
-      STA   NPTOOL_IO_ADDR+0
-      LDA   #>source_buf
-      STA   NPTOOL_IO_ADDR+1
       LDA   source_len+0
-      STA   NPTOOL_IO_LEN+0
-      LDA   source_len+1
-      STA   NPTOOL_IO_LEN+1
+      ORA   source_len+1
+      BEQ   @save_empty
+      JSR   tool_save_document
+      BNE   @memory_error
+      BRA   @ok
+@save_empty:
+      STZ   NPTOOL_IO_LEN+0
+      STZ   NPTOOL_IO_LEN+1
       JSR   nptool_save_arg0
       BNE   @fail
 @ok:
+      JSR   tool_release_document
       LDA   #0
       RTS
 
 @editor_error:
+      CMP   #LERR_EDITOR_NOT_TEXT
+      BNE   :+
+      LDA   #NPTOOL_ERR_NOT_TEXT
+      STA   NPTOOL_STATUS
+      BRA   @fail
+:
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_EDITOR
       STA   NPTOOL_STATUS
 @fail:
+      JSR   tool_release_document
       LDA   #1
       RTS
+
+@memory_error:
+      STA   NPTOOL_DETAIL
+      LDA   #NPTOOL_ERR_MEMORY
+      STA   NPTOOL_STATUS
+      BRA   @fail
 
 tool_bad_args:
       LDA   #NPTOOL_ERR_ARGS
@@ -115,9 +173,133 @@ tool_bad_args:
       LDA   #1
       RTS
 
+tool_clear_lib_args:
+      LDX   #15
+@loop:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @loop
+      RTS
+
+tool_mem_call:
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+tool_alloc_document:
+      JSR   tool_clear_lib_args
+      LDA   #<DOCUMENT_CAP
+      STA   LIB_ARG2+0
+      LDA   #>DOCUMENT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   document_xaddr,X
+      DEX
+      BPL   @copy
+      INC   document_allocated
+      LDA   #0
+@done:
+      RTS
+
+tool_copy_document:
+      LDA   source_len+0
+      ORA   source_len+1
+      BEQ   @done
+      JSR   tool_clear_lib_args
+      LDX   #2
+@address:
+      LDA   document_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<source_buf
+      STA   LIB_ARG1+0
+      LDA   #>source_buf
+      STA   LIB_ARG1+1
+      LDA   source_len+0
+      STA   LIB_ARG2+0
+      LDA   source_len+1
+      STA   LIB_ARG2+1
+      LDA   #MEM_COPY_FROM_RAM
+      JMP   tool_mem_call
+@done:
+      LDA   #0
+      RTS
+
+tool_load_document:
+      JSR   tool_clear_lib_args
+      LDA   #<NPTOOL_ARG0
+      STA   LIB_ARG0+0
+      LDA   #>NPTOOL_ARG0
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG0_LEN
+      STA   LIB_ARG1+0
+      LDX   #2
+@address:
+      LDA   document_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      LDA   source_len+0
+      STA   LIB_ARG3+0
+      LDA   source_len+1
+      STA   LIB_ARG3+1
+      LDA   #MEM_XLOAD
+      JMP   tool_mem_call
+
+tool_save_document:
+      JSR   tool_clear_lib_args
+      LDA   #<NPTOOL_ARG0
+      STA   LIB_ARG0+0
+      LDA   #>NPTOOL_ARG0
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG0_LEN
+      STA   LIB_ARG1+0
+      LDX   #2
+@address:
+      LDA   document_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      LDA   source_len+0
+      STA   LIB_ARG3+0
+      LDA   source_len+1
+      STA   LIB_ARG3+1
+      LDA   #MEM_XSAVE
+      JMP   tool_mem_call
+
+tool_release_document:
+      LDA   document_allocated
+      BEQ   @done
+      STZ   document_allocated
+      JSR   tool_clear_lib_args
+      LDX   #2
+@address:
+      LDA   document_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<DOCUMENT_CAP
+      STA   LIB_ARG2+0
+      LDA   #>DOCUMENT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JMP   tool_mem_call
+@done:
+      LDA   #0
+      RTS
+
 editor_set_type:
-      STA   editor_hooks+EDITOR_HOOKS_TYPEL
-      STX   editor_hooks+EDITOR_HOOKS_TYPEH
+      STA   editor_type_ptr+0
+      STX   editor_type_ptr+1
       RTS
 
 editor_select_type:

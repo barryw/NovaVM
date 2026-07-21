@@ -1,0 +1,15 @@
+NPP 1
+MAIN LIFE.PAS
+OUTPUT LIFE.BIN
+OPTIMIZE O2
+CONFIG INLINE
+MAP LIFE.MAP
+LABEL LIFE.LBL
+MEMORY {
+    RAM: start = $8000, size = $17FE, file = %O;
+}
+
+SEGMENTS {
+    CODE: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
+}

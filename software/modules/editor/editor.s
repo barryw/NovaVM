@@ -53,6 +53,19 @@ SE_DSTH  = LIB_ZP+3
 ;@effect Snapshots and restores the caller's full VGC display state; owns the
 ;@effect whole 80x25 text screen while running. Blocks until the user exits.
 ;@status LERR_OK
+;
+;@fn EDITOR_FN_EDIT_XRAM
+;@brief Edit a generic XRAM-backed document through a movable 4 KiB RAM window.
+;@arg xaddr u24 document base (ARG0 byte0..2)
+;@arg length u16 current document length (ARG1 low word)
+;@arg window u16 caller scratch pointer (ARG1 high word)
+;@arg capacity u16 allocated document capacity (ARG2 low word)
+;@arg window-size u16 caller scratch capacity (ARG2 high word)
+;@arg title u16 NUL-terminated title pointer (ARG3 low word)
+;@arg type u16 NUL-terminated type-name pointer (ARG3 high word)
+;@ret u8 exit reason and save flag as EDITOR_FN_EDIT; final length in ARG1
+;@effect Pages complete-line windows as navigation crosses XRAM boundaries.
+;@status LERR_OK
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
@@ -76,6 +89,7 @@ dispatch:
 
 sys_jtable:
       .word   sys_edit-1               ; $00 EDITOR_FN_EDIT
+      .word   sys_edit_xram-1          ; $01 EDITOR_FN_EDIT_XRAM
 
 ; ===========================================================================
 ; EDITOR_FN_EDIT — port of the extension's ext_edit, reading the canonical lib_call
@@ -332,6 +346,8 @@ se_saved_flag:    .res 1               ; nonzero once the SAVE hook fires
 se_hook_saveL:     .res 1               ; caller save hook from EDITOR_HOOKS_*
 se_hook_saveH:     .res 1
       .segment "CODE"
+
+      .include "editpager.s"
 
 ; ===========================================================================
 ; Shared driver + editor bodies (all include-guarded).

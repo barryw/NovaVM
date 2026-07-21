@@ -3323,7 +3323,7 @@ Clear the text screen through the VGC character output register and wait for com
 Issue a raw VGC command without waiting for completion.
 
 - Kind: `routine`
-- Symbol: `vgc_cmd`
+- Symbol: `vgc_issue`
 
 Inputs:
 - `A`: VGC command byte.

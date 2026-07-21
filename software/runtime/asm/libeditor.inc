@@ -33,6 +33,20 @@ LIBEDITOR_INC = 1
 ; module wraps SAVE so RESULT byte1 still records that the user requested save.
 EDITOR_FN_EDIT = $00
 
+; EDITOR_FN_EDIT_XRAM — edit a paged document stored in XRAM.
+;   In:  ARG0 b0..b2 = document XRAM base
+;        ARG1 lo word = current document length, hi word = RAM window pointer
+;        ARG2 lo word = allocated document capacity, hi word = RAM window size
+;        ARG3 lo word = title pointer, hi word = type-name pointer
+;   Out: RESULT and ARG1 match EDITOR_FN_EDIT; the XRAM document is updated.
+; The editor pages complete-line slices through caller-owned scratch RAM as
+; navigation crosses them. The host remains responsible for file load/save.
+EDITOR_FN_EDIT_XRAM = $01
+
+; EDITOR-specific status values returned through LIB_STATUS.
+LERR_EDITOR_FAIL = $8E
+LERR_EDITOR_NOT_TEXT = $8F
+
 ; EDITOR_FN_EDIT hook table offsets. The layout intentionally mirrors the
 ; contiguous EDITBUF config bytes so the module can apply it cheaply.
 EDITOR_HOOKS_TYPEL        = 0
@@ -73,6 +87,6 @@ EDITOR_HOOK_ABI_CURL          = $044D
 EDITOR_HOOK_ABI_HL_LEN        = $055C
 EDITOR_HOOK_ABI_HL_COLORS     = $055D
 
-EDITOR_FN_COUNT = $01
+EDITOR_FN_COUNT = $02
 
 .endif
