@@ -4580,7 +4580,7 @@ void FioDispatcher::handle_xpage() {
     uint32_t dest = (target == PAGE_TARGET_XRAM) ? xram_addr() : gaddr();
     uint32_t src = file_offset();
     uint32_t requested = transfer_len();
-    if (requested == 0 || src >= e.size_bytes) {
+    if (requested == 0 || src > e.size_bytes) {
         respond_err(ERR_IO);
         return;
     }

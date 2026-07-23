@@ -1452,7 +1452,7 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
-    public void XPage_OffsetPastEof_SetsIoError()
+    public void XPage_OffsetAtEof_ReturnsEmptyPage()
     {
         string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -1464,6 +1464,39 @@ public class FileIoControllerTests
 
             SetFilename(fio, "story.bin");
             fio.Write((ushort)VgcConstants.FioSrcL, 0x00); // offset 256 == EOF
+            fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
+            fio.Write((ushort)VgcConstants.FioEndL, 0x00);
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);
+            fio.Write((ushort)VgcConstants.FioGSpace, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 0x00);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0x00);
+            fio.Write((ushort)VgcConstants.FioGLenL, 16);
+            fio.Write((ushort)VgcConstants.FioGLenH, 0x00);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdXPage);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus),
+                "A zero-byte result at exact EOF lets every Nova app stream full-sized pages without a separate size query.");
+            Assert.AreEqual(0, ReadSize(fio));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [TestMethod]
+    public void XPage_OffsetPastEof_SetsIoError()
+    {
+        string dir = Path.Combine(Path.GetTempPath(), $"e6502-fio-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "story.bin"), new byte[256]);
+            var xram = new byte[1024];
+            var fio = MakeControllerWithXram(dir, xram);
+
+            SetFilename(fio, "story.bin");
+            fio.Write((ushort)VgcConstants.FioSrcL, 0x01); // offset 257, one byte past EOF
             fio.Write((ushort)VgcConstants.FioSrcH, 0x01);
             fio.Write((ushort)VgcConstants.FioEndL, 0x00);
             fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioPageTargetXram);

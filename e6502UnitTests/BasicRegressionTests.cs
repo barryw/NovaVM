@@ -865,10 +865,11 @@ public class BasicRegressionTests
             $"Expected styled output at the top-left of the Avalonia text layer.\n{screen}");
 
         AssertTextCell(bus.Vgc, 0, 'R', color: 0x24, attr: 0x00); // default reverse swaps fg/bg
-        AssertTextCell(bus.Vgc, 1, 'N', color: 0x42, attr: 0x00); // normal fg/bg
+        AssertTextCell(bus.Vgc, 1, 'N', color: 0x42, attr: VgcConstants.TextAttrBgTransparent); // normal fg/live bg
         AssertTextCell(bus.Vgc, 2, 'E', color: 0x61, attr: 0x00); // explicit reverse fg/bg
-        AssertTextCell(bus.Vgc, 3, 'F', color: 0x42, attr: VgcConstants.TextAttrFlash);
-        AssertTextCell(bus.Vgc, 4, 'S', color: 0x42, attr: 0x00);
+        AssertTextCell(bus.Vgc, 3, 'F', color: 0x42,
+            attr: VgcConstants.TextAttrFlash | VgcConstants.TextAttrBgTransparent);
+        AssertTextCell(bus.Vgc, 4, 'S', color: 0x42, attr: VgcConstants.TextAttrBgTransparent);
 
         Assert.AreEqual(0x00, bus.Read((ushort)VgcConstants.RegTextFlags),
             "REVERSEOFF/FLASHOFF should leave subsequent BASIC output normal.");
@@ -944,8 +945,9 @@ public class BasicRegressionTests
         Assert.IsTrue(screen.StartsWith("FS", StringComparison.Ordinal),
             $"Expected text flash output at the top-left of the Avalonia text layer.\n{screen}");
 
-        AssertTextCell(bus.Vgc, 0, 'F', color: 0x42, attr: VgcConstants.TextAttrFlash);
-        AssertTextCell(bus.Vgc, 1, 'S', color: 0x42, attr: 0x00);
+        AssertTextCell(bus.Vgc, 0, 'F', color: 0x42,
+            attr: VgcConstants.TextAttrFlash | VgcConstants.TextAttrBgTransparent);
+        AssertTextCell(bus.Vgc, 1, 'S', color: 0x42, attr: VgcConstants.TextAttrBgTransparent);
     }
 
     [TestMethod]

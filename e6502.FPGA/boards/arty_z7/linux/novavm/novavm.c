@@ -14,13 +14,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/file.h>       /* flock: single-instance guard */
+#include <sys/random.h>
 #include <pthread.h>
 #include "loader_bin.h"     /* LOADER_BIN[248]: resident lib_call loader, staged @ $0320 */
-#include "modules_embedded.h" /* EMBEDDED_MOD[1..8], 16KB each (3=MOD_SYSTEM: line input) */
+#include "modules_embedded.h" /* EMBEDDED_MOD[1..], 16KB each (3=MOD_SYSTEM: line input) */
 #include "nfio.h"            /* XRAM/file/.ndi-drive FIO commands */
 #include "nosd.h"            /* OSD config menu: buttons + mount/unmount UI */
 
@@ -86,8 +88,10 @@
 #define FIO_CMD_MIDSTOP 0x14   /* -> naudio fio_midstop */
 #define FIO_CMD_SFLOAD  0x15   /* -> naudio fio_sfload  */
 #define FIO_CMD_XLOAD       0x18   /* -> nfio (file -> XRAM)              */
+#define FIO_CMD_XSAVE       0x19   /* -> nfio (XRAM -> file)              */
 #define FIO_CMD_LOADRUNTIME 0x28   /* -> nfio (16KB ROM -> $C000)         */
 #define FIO_CMD_XPAGE       0x29   /* -> nfio (file slice -> XRAM/CPU RAM)*/
+#define FIO_CMD_RNG         0x2A   /* kernel entropy -> FIO_SRC/FIO_END   */
 #define FIO_CMD_FOPEN       0x2D   /* -> nfio file handles               */
 #define FIO_CMD_FCREATE     0x2E
 #define FIO_CMD_FCLOSE      0x2F
@@ -96,6 +100,11 @@
 #define FIO_CMD_FSEEK       0x32
 #define FIO_CMD_FTELL       0x33
 #define FIO_CMD_FSIZE       0x34
+#define FIO_CMD_FRESIZE     0x35
+#define FIO_CMD_FFLUSH      0x36
+#define FIO_CMD_FSTATUS     0x37
+#define FIO_CMD_FDELETE     0x38
+#define FIO_CMD_FRENAME     0x39
 #define FIO_CMD_DEVSTATUS   0x3A
 #define FIO_ERR_NOTFOUND 1
 #define FIO_ERR_IO 2
@@ -186,6 +195,23 @@ static void fio_delete(void) {
     nfio_disk_delete();
 }
 
+static void fio_rng(void) {
+    uint32_t value;
+    unsigned char *out = (unsigned char *)&value;
+    size_t done = 0;
+    while (done < sizeof value) {
+        ssize_t n = getrandom(out + done, sizeof value - done, 0);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) { fio_fail(FIO_ERR_IO); return; }
+        done += (size_t)n;
+    }
+    poke(FIO_SRC_LO, value & 0xFF);
+    poke(FIO_SRC_HI, (value >> 8) & 0xFF);
+    poke(FIO_END_LO, (value >> 16) & 0xFF);
+    poke(FIO_END_HI, (value >> 24) & 0xFF);
+    fio_ok();
+}
+
 static void dump_screen(void) {
     for (int row = 0; row < 50; row++) {
         char line[81]; int any = 0;
@@ -240,12 +266,13 @@ static void clear_cold_xram(void) {
 /* Load an embedded 16KB module into the requested XRAM shelf slot. Also mirror
  * it into bank-1 for the Arty page-in-bypass bitstream. */
 static int load_module(int id, int slot) {
-    if (id < 1 || id > 8 || !EMBEDDED_MOD[id] || slot < 0 || slot >= SHELF_N || !g_xram) {
+    if (id < 1 || id >= EMBEDDED_MOD_COUNT || !EMBEDDED_MOD[id] || slot < 0 || slot >= SHELF_N || !g_xram) {
         fprintf(stderr, "[novavm] module %d not embedded\n", id);
         return -1;
     }
     const unsigned char *img = EMBEDDED_MOD[id];
     memcpy((void *)(g_xram + SHELF_BASE + (unsigned)slot * SHELF_SLOT), img, MODULE_BYTES);
+    __sync_synchronize();
     for (unsigned a = 0; a < MODULE_BYTES; a++)
         wr(R_ROMW, (1u << 22) | (a << 8) | img[a]);   /* idx=1 -> ext_rom bank */
     printf("[novavm] module %d -> XRAM slot %d + bank-1 (%u bytes)\n", id, slot, MODULE_BYTES);
@@ -428,8 +455,10 @@ int main(int argc, char **argv) {
             case FIO_CMD_MIDSTOP: fio_midstop(); break;
             case FIO_CMD_SFLOAD:  fio_sfload();  break;
             case FIO_CMD_XLOAD:       fio_xload();        break;   /* nfio: XRAM/file/.ndi */
+            case FIO_CMD_XSAVE:       fio_xsave();        break;
             case FIO_CMD_LOADRUNTIME: fio_load_runtime(); break;
             case FIO_CMD_XPAGE:       fio_xpage();        break;
+            case FIO_CMD_RNG:         fio_rng();          break;
             case FIO_CMD_FOPEN:       fio_fopen();        break;
             case FIO_CMD_FCREATE:     fio_fcreate();      break;
             case FIO_CMD_FCLOSE:      fio_fclose();       break;
@@ -438,6 +467,11 @@ int main(int argc, char **argv) {
             case FIO_CMD_FSEEK:       fio_fseek();        break;
             case FIO_CMD_FTELL:       fio_ftell();        break;
             case FIO_CMD_FSIZE:       fio_fsize();        break;
+            case FIO_CMD_FRESIZE:     fio_fresize();      break;
+            case FIO_CMD_FFLUSH:      fio_fflush();       break;
+            case FIO_CMD_FSTATUS:     fio_fstatus();      break;
+            case FIO_CMD_FDELETE:     fio_fdelete();      break;
+            case FIO_CMD_FRENAME:     fio_frename();      break;
             case FIO_CMD_DEVSTATUS:   nfio_devstatus();   break;
             case 0: break;
             default: fio_fail(FIO_ERR_NOTFOUND); break;

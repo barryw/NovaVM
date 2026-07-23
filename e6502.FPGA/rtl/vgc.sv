@@ -1206,7 +1206,8 @@ module vgc (
     // bit when VGC_TEXT_BG selects transparent (bit4 set).
     function automatic logic [7:0] emit_style_attr(input logic [7:0] flags, input logic [7:0] tbg);
         emit_style_attr = active_text_style_attr(flags) |
-                          (((tbg & TEXT_BG_TRANS) != 0) ? TATTR_BGTRANS : 8'h00);
+                          ((((tbg & TEXT_BG_TRANS) != 0) && ((flags & TXF_REVERSE) == 0))
+                              ? TATTR_BGTRANS : 8'h00);
     endfunction
 
     function automatic logic text_glyph_pixel(
@@ -2039,7 +2040,9 @@ module vgc (
                         cmd_char_din <= 8'h20;
                         cmd_char_we <= 1;
                         cmd_color_addr <= reset_clear_addr[11:0];
-                        cmd_color_din <= pack_text_color(text_bg[3:0], fg_color);
+                        cmd_color_din <= pack_text_color(
+                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0],
+                            fg_color);
                         cmd_color_we <= 1;
                         cmd_attr_addr <= reset_clear_addr[11:0];
                         cmd_attr_din <= emit_style_attr(text_flags, text_bg);
@@ -2106,7 +2109,9 @@ module vgc (
                     cmd_char_din <= 8'h20;
                     cmd_char_we <= 1;
                     cmd_color_addr <= screen_addr(scroll_col, ROWS - 1);
-                    cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, text_bg[3:0]);
+                    cmd_color_din <= active_text_color_attr(
+                        text_flags, text_reverse_attr, fg_color,
+                        ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                     cmd_color_we <= 1;
                     cmd_attr_addr <= screen_addr(scroll_col, ROWS - 1);
                     cmd_attr_din <= emit_style_attr(text_flags, text_bg);
@@ -2412,7 +2417,9 @@ module vgc (
                         cmd_char_din <= 8'h20;
                         cmd_char_we <= 1;
                         cmd_color_addr <= text_linear_addr(cmd_cy[5:0], cmd_cx[6:0]);
-                        cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, text_bg[3:0]);
+                        cmd_color_din <= active_text_color_attr(
+                            text_flags, text_reverse_attr, fg_color,
+                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                         cmd_color_we <= 1;
                         cmd_attr_addr <= text_linear_addr(cmd_cy[5:0], cmd_cx[6:0]);
                         cmd_attr_din <= emit_style_attr(text_flags, text_bg);
@@ -2669,7 +2676,9 @@ module vgc (
                                         cmd_char_din <= r_cpu_wdata_w;
                                         cmd_char_we <= 1;
                                         cmd_color_addr <= screen_addr(cursor_x, cursor_y);
-                                        cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, text_bg[3:0]);
+                                        cmd_color_din <= active_text_color_attr(
+                                            text_flags, text_reverse_attr, fg_color,
+                                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                                         cmd_color_we <= 1;
                                         cmd_attr_addr <= screen_addr(cursor_x, cursor_y);
                                         cmd_attr_din <= emit_style_attr(text_flags, text_bg);

@@ -2,9 +2,10 @@
 ;  Nova NDK — math_copro.inc
 ;
 ;  Math coprocessor macros: signed 16x16 and Q8.8 multiply, 32/16 divide,
-;  sin/cos, atan2, distance approximations, and 2D vector ops. Keep call
-;  sites at this operation level so the register protocol can change later
-;  without forcing every caller to know the hardware layout.
+;  integer square root, sin/cos, atan2, distance approximations, and 2D
+;  vector ops. Keep call sites at this operation level so the register
+;  protocol can change later without forcing every caller to know the
+;  hardware layout.
 ;
 ;  Copyright (C) 2026 Barry Walker
 ;  SPDX-License-Identifier: MIT
@@ -86,6 +87,18 @@ MATH_COPRO_INC_INCLUDED = 1
         sta sin_dst
         lda MATH_RES1
         sta cos_dst
+.endmacro
+
+; Unsigned 16-bit integer square root. The result is floor(sqrt(value)).
+.macro MATHC_SQRT_U16 value_lo, value_hi, dst_lo, dst_hi
+        lda value_lo
+        sta MATH_SQRT_LO
+        lda value_hi
+        sta MATH_SQRT_HI
+        lda MATH_RES0
+        sta dst_lo
+        lda MATH_RES1
+        sta dst_hi
 .endmacro
 
 ; ATAN2 for signed 16-bit dy/dx.

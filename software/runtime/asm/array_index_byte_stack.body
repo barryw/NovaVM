@@ -1,0 +1,26 @@
+; Shared implementation used by nova.lib and the NOBJ Pascal runtime archive.
+; A/X is an unsigned byte offset; the stack holds base high then base low below
+; the JSR return address. Return A/X = base + offset with the base consumed.
+
+i_array_index_byte_stack:
+      STA   NVR1L
+      STX   NVR1H
+      TSX
+      CLC
+      LDA   $0103,X
+      ADC   NVR1L
+      STA   NVR0L
+      LDA   $0104,X
+      ADC   NVR1H
+      TAY
+      LDA   $0102,X
+      STA   $0104,X
+      LDA   $0101,X
+      STA   $0103,X
+      INX
+      INX
+      TXS
+      TYA
+      TAX
+      LDA   NVR0L
+      RTS

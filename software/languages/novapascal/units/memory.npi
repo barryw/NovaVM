@@ -1,0 +1,29 @@
+; Compiled interface for NOVAMEMORY.PAS.
+.ifndef NPI_MEMORY
+NPI_MEMORY = 1
+.include "NOVA.NPI"
+; RAMALLOC(Block, Size)
+__PB352D0 = $02
+; RAMFREE(Block)
+__S1F8B67 = $01
+; RAMREAD(Block, Offset, Destination, Count)
+__P25E821 = $04
+; RAMWRITE(Block, Offset, Source, Count)
+__P44AC10 = $04
+; RAMALLOCATED(Block)
+__SE54DEE = $03
+; RAMSTATUS()
+__SA55BE9 = $02
+; XRAMALLOC(Block, Size)
+__PE36BC8 = $02
+; XRAMFREE(Block)
+__SB4655F = $01
+; XRAMREAD(Block, Offset, Destination, Count)
+__PBAC219 = $04
+; XRAMWRITE(Block, Offset, Source, Count)
+__P74C508 = $04
+; XRAMALLOCATED(Block)
+__SE922E6 = $03
+; XRAMSTATUS()
+__SD893E1 = $02
+.endif

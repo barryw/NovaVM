@@ -15,10 +15,11 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($1C  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($1D  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
 ///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE +
-///                              NUI save-under/picker/full save-under/style/file picker/text input/drain)
+///                              NUI save-under/picker/full save-under/style/file picker/text input/drain +
+///                              console clear-to-end-of-line)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging SYSTEM.
 /// </summary>
@@ -36,7 +37,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x1C, img[7]);   // SYS_FN_COUNT (retired EDIT slot + WAIT/WAITVBL/TIMER + RNG + DIALOG + OVL + ADDR_LOOKUP + SCREEN_READLINE + NUI save-under + picker + full save-under + style + file picker + text input + drain)
+        Assert.AreEqual(0x1D, img[7]);   // SYS_FN_COUNT (through SYS_CONSOLE_CLEAR_EOL)
     }
 
     // =====================================================================
@@ -59,6 +60,7 @@ public class SystemModuleTests
     private const byte   SYS_NUI_SAVE_UNDER_FULL = 0x16, SYS_NUI_RESTORE_UNDER_FULL = 0x17;
     private const byte   SYS_NUI_SET_STYLE = 0x18;
     private const byte   SYS_NUI_FILE_PICKER = 0x19, SYS_NUI_TEXT_INPUT = 0x1A, SYS_NUI_DRAIN_KEYS = 0x1B;
+    private const byte   SYS_CONSOLE_CLEAR_EOL = 0x1C;
     private const byte   LERR_OK = 0x00;
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
@@ -100,7 +102,11 @@ public class SystemModuleTests
                                       s.Nf, s.Vf, s.Df, true /*I*/, s.Zf, s.Cf));
 
         for (int guard = 0; guard < 4_000_000 && cpu.Pc != Sentinel; guard++)
+        {
+            int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+        }
         Assert.AreEqual(Sentinel, cpu.Pc, $"fn ${fn:X2} dispatch did not RTS back to the sentinel");
         Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), $"fn ${fn:X2} must set LIB_STATUS = OK");
     }
@@ -199,6 +205,26 @@ public class SystemModuleTests
         Assert.AreEqual(LERR_OK, bus.ReadRam(STATUS), "drain_keys must report success.");
         Assert.IsFalse(editor.HasQueuedInput,
             "drain_keys must consume pending modal-transition keys before the next control receives focus.");
+    }
+
+    /// <summary>
+    /// Clear-to-EOL must use a bounded cell count: CHAROUT wraps column 79 to
+    /// zero, so polling the cursor for column 80 would never terminate.
+    /// </summary>
+    [TestMethod]
+    public void ConsoleClearEol_ClearsRemainderAndPreservesCursor()
+    {
+        using var bus = MakeSystemBus();
+        WriteScreenWindowRow(bus, 7, 0, new string('X', ScreenCols));
+        bus.Write(VGC_CURSX, 5);
+        bus.Write(VGC_CURSY, 7);
+
+        RunFn(bus, SYS_CONSOLE_CLEAR_EOL);
+
+        Assert.AreEqual("XXXXX" + new string(' ', ScreenCols - 5),
+            ReadScreenWindowRow(bus, 7, 0, ScreenCols));
+        Assert.AreEqual(5, bus.Read(VGC_CURSX));
+        Assert.AreEqual(7, bus.Read(VGC_CURSY));
     }
 
     private static void WriteRamBytes(CompositeBusDevice bus, ushort address, ReadOnlySpan<byte> bytes)
@@ -632,9 +658,9 @@ public class SystemModuleTests
             SetArg(bus, ARG0, config);
             RunFn(bus, SYS_NUI_FILE_PICKER);
 
-            Assert.AreEqual(4, bus.ReadRam(RESULT), "picker must return selected filename length");
+            Assert.AreEqual(8, bus.ReadRam(RESULT), "picker must return selected filename length");
             Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
-            Assert.AreEqual("ROOT", ReadRamAscii(bus, output, 4), "picker must copy the selected filename to caller RAM");
+            Assert.AreEqual("ROOT.4th", ReadRamAscii(bus, output, 8), "picker must copy the selected filename to caller RAM");
             Assert.AreEqual((char)0xC9, ReadScreenWindowRow(bus, 10, 20, 1)[0],
                 "picker must draw a double-line CP437 dialog frame instead of a bare floating list");
             Assert.AreEqual("Filename", ReadScreenWindowRow(bus, 13, 22, 8),
@@ -654,9 +680,9 @@ public class SystemModuleTests
                 "drive rows must not clutter the current directory listing");
             Assert.AreEqual("SRC/", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 4),
                 "directories must remain visible even when filtering files by type");
-            Assert.AreEqual("ROOT", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 4),
+            Assert.AreEqual("ROOT.4th", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 8),
                 "matching files must be listed after parent/directory rows");
-            Assert.AreNotEqual("SKIP", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 4),
+            Assert.AreNotEqual("SKIP.bas", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 8),
                 "non-matching file types must not consume picker rows");
         }
         finally
@@ -712,23 +738,23 @@ public class SystemModuleTests
             SetArg(bus, ARG0, config);
             RunFn(bus, SYS_NUI_FILE_PICKER);
 
-            Assert.AreEqual(5, bus.ReadRam(RESULT), "picker must return selected Pascal filename length.");
+            Assert.AreEqual(9, bus.ReadRam(RESULT), "picker must return selected Pascal filename length.");
             Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK.");
-            Assert.AreEqual("UNIT1", ReadRamAscii(bus, output, 5),
+            Assert.AreEqual("UNIT1.pas", ReadRamAscii(bus, output, 9),
                 "a mask containing Pascal, Logo, Forth, and Assembly must allow selecting Pascal source.");
             Assert.AreEqual("..", ReadRamAscii(bus, rows, 2),
                 "source-filtered file lists must keep parent navigation visible.");
-            Assert.AreEqual("MAIN", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 4),
+            Assert.AreEqual("MAIN.asm", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 8),
                 "Assembly source must be visible with the source file mask.");
-            Assert.AreEqual("TURTLE", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 6),
+            Assert.AreEqual("TURTLE.logo", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 11),
                 "Logo source must be visible with the source file mask.");
-            Assert.AreEqual("UNIT1", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 5),
+            Assert.AreEqual("UNIT1.pas", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 9),
                 "Pascal source must be visible with the high mask byte.");
-            Assert.AreEqual("WORDS", ReadRamAscii(bus, (ushort)(rows + 4 * rowWidth), 5),
+            Assert.AreEqual("WORDS.4th", ReadRamAscii(bus, (ushort)(rows + 4 * rowWidth), 9),
                 "Forth source must remain visible with the source file mask.");
-            Assert.AreNotEqual("SKIP", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 4),
+            Assert.AreNotEqual("SKIP.bas", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 8),
                 "BASIC files must not consume source-filtered picker rows.");
-            Assert.AreNotEqual("TUNE", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 4),
+            Assert.AreNotEqual("TUNE.sid", ReadRamAscii(bus, (ushort)(rows + 5 * rowWidth), 8),
                 "SID files must not consume source-filtered picker rows.");
         }
         finally
@@ -780,15 +806,15 @@ public class SystemModuleTests
             SetArg(bus, ARG0, config);
             RunFn(bus, SYS_NUI_FILE_PICKER);
 
-            Assert.AreEqual(5, bus.ReadRam(RESULT), "picker must return selected filename length.");
+            Assert.AreEqual(9, bus.ReadRam(RESULT), "picker must return selected filename length.");
             Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK.");
-            Assert.AreEqual("ALPHA", ReadRamAscii(bus, output, 5),
+            Assert.AreEqual("ALPHA.bas", ReadRamAscii(bus, output, 9),
                 "a zero type mask must allow selecting any file type.");
-            Assert.AreEqual("ALPHA", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 5),
+            Assert.AreEqual("ALPHA.bas", ReadRamAscii(bus, (ushort)(rows + 1 * rowWidth), 9),
                 "BASIC files must be listed when the mask is zero.");
-            Assert.AreEqual("BETA", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 4),
+            Assert.AreEqual("BETA.sid", ReadRamAscii(bus, (ushort)(rows + 2 * rowWidth), 8),
                 "SID files must be listed when the mask is zero.");
-            Assert.AreEqual("MAIN", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 4),
+            Assert.AreEqual("MAIN.asm", ReadRamAscii(bus, (ushort)(rows + 3 * rowWidth), 8),
                 "Assembly files must be listed when the mask is zero.");
         }
         finally
@@ -889,9 +915,9 @@ public class SystemModuleTests
             SetArg(bus, ARG0, config);
             RunFn(bus, SYS_NUI_FILE_PICKER);
 
-            Assert.AreEqual(4, bus.ReadRam(RESULT), "picker must return nested filename length");
+            Assert.AreEqual(8, bus.ReadRam(RESULT), "picker must return nested filename length");
             Assert.AreEqual(0, bus.ReadRam((ushort)(RESULT + 1)), "ENTER must report NUI_RESULT_OK");
-            Assert.AreEqual("NEST", ReadRamAscii(bus, output, 4),
+            Assert.AreEqual("NEST.4th", ReadRamAscii(bus, output, 8),
                 "entering a directory must show and select files from that directory");
         }
         finally

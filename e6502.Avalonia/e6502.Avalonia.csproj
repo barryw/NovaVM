@@ -72,6 +72,7 @@
         <Exec Command="make -C $(ProjectDir)../software/modules/memory memory.bin" />
         <Exec Command="make -C $(ProjectDir)../software/modules/net net.bin" />
         <Exec Command="make -C $(ProjectDir)../software/modules/turtle turtle.bin" />
+        <Exec Command="make -C $(ProjectDir)../software/modules/langrt langrt.bin" />
         <Exec Command="make -C $(ProjectDir)../software/assembly editbuf-demo" />
         <Exec Command="make -C $(ProjectDir)../software/languages/novaforth" />
         <Exec Command="make -C $(ProjectDir)../software/languages/novalogo" />
@@ -83,6 +84,7 @@
         <Copy SourceFiles="$(ProjectDir)../software/modules/memory/memory.bin" DestinationFiles="$(ProjectDir)Resources/memory.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/net/net.bin" DestinationFiles="$(ProjectDir)Resources/net.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/modules/turtle/turtle.bin" DestinationFiles="$(ProjectDir)Resources/turtle.bin" />
+        <Copy SourceFiles="$(ProjectDir)../software/modules/langrt/langrt.bin" DestinationFiles="$(ProjectDir)Resources/langrt.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/assembly/apps/editbuf_demo/editbuf_demo.bin" DestinationFiles="$(ProjectDir)Resources/editbuf_demo.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/novaforth/novaforth.bin" DestinationFiles="$(ProjectDir)Resources/novaforth.bin" />
         <Copy SourceFiles="$(ProjectDir)../software/languages/novalogo/novalogo.bin" DestinationFiles="$(ProjectDir)Resources/novalogo.bin" />
@@ -130,6 +132,7 @@
         <Copy SourceFiles="Resources/memory.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/memory.bin')" />
         <Copy SourceFiles="Resources/net.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/net.bin')" />
         <Copy SourceFiles="Resources/turtle.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/turtle.bin')" />
+        <Copy SourceFiles="Resources/langrt.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/langrt.bin')" />
         <Copy SourceFiles="Resources/editbuf_demo.bin" DestinationFolder="$(OutputPath)Resources" Condition="Exists('Resources/editbuf_demo.bin')" />
     </Target>
 
@@ -184,6 +187,9 @@
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\turtle.bin">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </None>
+        <None Update="Resources\langrt.bin">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
         <None Update="Resources\editbuf_demo.bin">

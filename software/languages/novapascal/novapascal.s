@@ -7,6 +7,7 @@
       .include "nova.inc"
       .include "libabi.inc"
       .include "libfiles.inc"
+      .include "libmemory.inc"
       .include "fio.inc"
       .include "replline.inc"
       .include "nptool.inc"

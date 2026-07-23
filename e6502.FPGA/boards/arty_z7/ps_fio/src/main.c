@@ -24,7 +24,7 @@
 #include "ff.h"
 #include "xuartps_hw.h"
 #include "loader_bin.h"
-#include "modules_embedded.h"   // EMBEDDED_MOD[1..8], 16KB each
+#include "modules_embedded.h"   // EMBEDDED_MOD[1..], 16KB each
 #include "ehbasic_rom.h"        // EHBASIC_ROM[16384] -> basic_rom (idx=0) at boot
 #include "boot_logo_nvg.h"      // embedded fallback for JTAG/no-SD splash validation
 #include "ndi.h"                // read-only .ndi image reader
@@ -361,7 +361,7 @@ static int scan_load(const char *dir, const char *pfx, int slot) {
 // Reliable GP0 single-writes -- avoids the flaky HP0 burst-read DMA entirely.
 static int load_module(int id, int slot) {
     (void)slot;
-    if (id < 1 || id > 8 || !EMBEDDED_MOD[id]) {
+    if (id < 1 || id >= EMBEDDED_MOD_COUNT || !EMBEDDED_MOD[id]) {
         xil_printf("[fio] module %d not embedded\r\n", id);
         return -1;
     }
@@ -690,7 +690,7 @@ static void fio_xpage(void) {
     unsigned char target = peek(FIO_DIRTYPE);
     unsigned reqlen = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
     unsigned foff   = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8) | (peek(FIO_END_LO) << 16);
-    if (reqlen == 0 || foff >= e.size) { fio_fail(FIO_ERR_IO); return; }
+    if (reqlen == 0 || foff > e.size) { fio_fail(FIO_ERR_IO); return; }
     unsigned len = reqlen;
     if (len > e.size - foff) len = e.size - foff;
 

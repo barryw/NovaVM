@@ -53,6 +53,7 @@ EDITBUF_VIEW_ROWS   = EDITUI_SCREEN_ROWS - 2          ; 48 (menu bar + status ba
 EDITBUF_EXIT_QUIT    = $00      ; Alt-X while clean
 EDITBUF_EXIT_SAVED   = $01      ; left via dialog "Save First" after a clean save
 EDITBUF_EXIT_DISCARD = $02      ; left via dialog "Exit Anyway" (draft preserved)
+EDITBUF_EXIT_COMMAND = $03      ; host requested an outer document command
 
 ; ---------------------------------------------------------------------
 ; SAVE hook contract.

@@ -1956,7 +1956,7 @@ public sealed partial class FileIoController
                 SetError(notFound ? VgcConstants.FioErrNotFound : VgcConstants.FioErrIo);
                 return;
             }
-            if (fileOffset >= data.Length)
+            if (fileOffset > data.Length)
             {
                 SetError(VgcConstants.FioErrIo);
                 return;

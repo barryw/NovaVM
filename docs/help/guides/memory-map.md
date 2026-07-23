@@ -191,6 +191,7 @@ the FPGA holds RDY low until the result is available.
 | $BB3E | MathStatus | R | Last operation status: bit 0=divide by zero, bit 1=overflow/saturation, bit 7=unimplemented operation. |
 | $BB3F | MathVersion | R | Math coprocessor ABI version; v2 reads $02. |
 | $BB40--$BB49 | MathVecA/B/Scalar | R/W | Vector operand bank: AX, AY, BX, BY, and scalar, all signed 16-bit values. |
+| $BB4A--$BB4B | MathSqrt | R/W | Unsigned 16-bit integer square root. Write $BB4B to trigger; the floor root is in $BB38--$BB39. |
 | $BB4E | MathVecOp | W | Write operation code to trigger: 1=DOT_S16, 2=DOT_FX, 3=CROSS_S16, 4=LEN2, 5=SCALE_FX. Results use $BB38--$BB3B. |
 
 ## VGC Register Map

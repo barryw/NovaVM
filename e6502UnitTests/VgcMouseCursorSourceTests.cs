@@ -65,6 +65,8 @@ public class VgcMouseCursorSourceTests
             "Hardware mode 2 uses a per-cell attr bit for transparent text backgrounds.");
         StringAssert.Contains(vgc, "text_bgtrans_d2 = attr_b_dout[3]",
             "The HDMI path must fetch the transparent-background bit from text-attr RAM.");
+        StringAssert.Contains(vgc, "resolved_bg_d2 = text_bgtrans_d2 ? bg_color : cur_bg_d2",
+            "Transparent text cells must resolve against the live screen background in every text mode.");
         StringAssert.Contains(vgc, "&& text_bgtrans_d2 && !text_reverse_d2",
             "Mode 2 should reveal graphics only for non-reverse cells with the transparent-background attr set.");
         StringAssert.Contains(vgc, "!text_reverse_d2",
@@ -75,12 +77,27 @@ public class VgcMouseCursorSourceTests
             "The simulator copy must use the same transparent-background attr bit.");
         StringAssert.Contains(vgcSim, "text_bgtrans_d2 = attr_b_dout[3]",
             "The simulator copy must fetch the same transparent-background bit.");
+        StringAssert.Contains(vgcSim, "TEXT_BG_ADDR = 16'hA0C0",
+            "The simulator copy must expose the dedicated text-background register.");
+        StringAssert.Contains(vgcSim, "resolved_bg_d2 = text_bgtrans_d2 ? bg_color : cur_bg_d2",
+            "The simulator copy must resolve transparent cells against the live background too.");
         Assert.IsFalse(vgcSim.Contains("cur_bg_d2 == bg_color", StringComparison.Ordinal),
             "The simulator copy must not preserve the old background-colour matching rule.");
         StringAssert.Contains(novaCli, "textAttr & 0x08",
             "CLI screenshots must composite mode 2 using the same transparent-background attr bit as HDMI.");
         Assert.IsFalse(novaCli.Contains("cellBg == bgColor", StringComparison.Ordinal),
             "CLI screenshots must not preserve the old background-colour matching rule.");
+    }
+
+    [TestMethod]
+    public void Rtl_TextBackgroundRegisterIsRoutedByBothTopLevelMemoryModels()
+    {
+        string top = File.ReadAllText(RepoPath("e6502.FPGA", "rtl", "top.sv"));
+
+        StringAssert.Contains(top, "(mem_addr == 16'hA0C0)",
+            "The synthesized memory bus must route the text-background register to the VGC.");
+        StringAssert.Contains(top, "(cpu_addr == 16'hA0C0)",
+            "The simulation memory bus must route the same register to the VGC.");
     }
 
     [TestMethod]

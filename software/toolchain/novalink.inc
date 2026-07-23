@@ -11,7 +11,7 @@ NLINK_ERR_OBJECT     = 1
 NLINK_ERR_OUTPUT     = 2
 NLINK_ERR_RELOCATION = 3
 NLINK_ERR_CONFIG     = 4
-NLINK_OBJECT_CAP     = 8
+NLINK_OBJECT_CAP     = NLW_OBJECT_CAP
 NLINK_REGION_CAP     = 4
 NLINK_RULE_CAP       = 8
 NLINK_SYMBOL_CAP     = 4
@@ -26,12 +26,19 @@ NLINK_NAME_CAP       = 16
 .global nlink_object_ptr_h
 .global nlink_object_len_l
 .global nlink_object_len_h
+.global nlink_object_xram
+.global nlink_object_xaddr_l
+.global nlink_object_xaddr_m
+.global nlink_object_xaddr_h
 .global nlink_library_ptr
 .global nlink_library_len
 .global nlink_output_ptr
+.global nlink_output_xram
+.global nlink_output_xaddr
 .global nlink_output_cap
 .global nlink_load_base
 .global nlink_output_len
+.global nlink_memory_len
 .global nlink_entry
 .global nlink_error
 .global nlink_config_enabled

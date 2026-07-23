@@ -90,7 +90,7 @@ FILE_RNG       = $0D   ; ()              -> RESULT = 32 host-backed random bits 
 FILE_PAGE      = $0E   ; (nameptr:ARG0 b0.b1, namelen:ARG0 b2,
                        ;  offset:ARG1 u24 b0.b1.b2, target:ARG1 b3,
                        ;  destaddr:ARG2 u24 b0.b1.b2, len:ARG3 u16 b0.b1)
-                       ;  -> stream len bytes of a file slice into the target
+                       ;  -> RESULT=actual bytes streamed; zero at exact EOF
 
 ; =====================================================================
 ; Low-level byte-stream file handles (fio.s)

@@ -19,6 +19,7 @@ $(NOVA_CLI_BIN): FORCE
 memory.o: memory.s \
             $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmod.inc $(NOVA_ASM)/libmemory.inc \
             $(NOVA_ASM)/nova.inc \
+            $(NOVA_ASM)/novaexec.inc \
             $(NOVA_ASM)/xram.inc $(NOVA_ASM)/xram.s \
             $(NOVA_ASM)/xmc.s \
             $(NOVA_ASM)/dma.inc $(NOVA_ASM)/dma.s \

@@ -11,6 +11,7 @@
  * ===========================================================================
  * FIO_CMD_* -> handler map (add these cases to novavm.c's FIO switch):
  *   FIO_CMD_XLOAD       0x18 -> fio_xload()         (stream image file -> XRAM)
+ *   FIO_CMD_XSAVE       0x19 -> fio_xsave()         (stream XRAM -> image file)
  *   FIO_CMD_LOADRUNTIME 0x28 -> fio_load_runtime()  (16KB ROM -> $C000 bank)
  *   FIO_CMD_XPAGE       0x29 -> fio_xpage()         (file slice -> XRAM/CPU RAM)
  *   FIO_CMD_FOPEN       0x2D -> fio_fopen()
@@ -21,6 +22,11 @@
  *   FIO_CMD_FSEEK       0x32 -> fio_fseek()
  *   FIO_CMD_FTELL       0x33 -> fio_ftell()
  *   FIO_CMD_FSIZE       0x34 -> fio_fsize()
+ *   FIO_CMD_FRESIZE     0x35 -> fio_fresize()
+ *   FIO_CMD_FFLUSH      0x36 -> fio_fflush()
+ *   FIO_CMD_FSTATUS     0x37 -> fio_fstatus()
+ *   FIO_CMD_FDELETE     0x38 -> fio_fdelete()
+ *   FIO_CMD_FRENAME     0x39 -> fio_frename()
  * (FIO_CMD_LOAD 0x02 stays in novavm.c — mounted NDI disks only.)
  * ===========================================================================
  *
@@ -54,6 +60,7 @@
 #define FIO_GLEN_HI   0xB9AE   /* transfer length high                            */
 
 #define FIO_CMD_XLOAD       0x18
+#define FIO_CMD_XSAVE       0x19
 #define FIO_CMD_LOADRUNTIME 0x28
 #define FIO_CMD_XPAGE       0x29
 #define FIO_CMD_FOPEN       0x2D
@@ -64,6 +71,11 @@
 #define FIO_CMD_FSEEK       0x32
 #define FIO_CMD_FTELL       0x33
 #define FIO_CMD_FSIZE       0x34
+#define FIO_CMD_FRESIZE     0x35
+#define FIO_CMD_FFLUSH      0x36
+#define FIO_CMD_FSTATUS     0x37
+#define FIO_CMD_FDELETE     0x38
+#define FIO_CMD_FRENAME     0x39
 
 #define FIO_PAGE_XRAM   0x00   /* XPAGE target: flat XRAM       */
 #define FIO_PAGE_RAM    0x01   /* XPAGE target: CPU RAM         */
@@ -86,6 +98,7 @@
 #define DT_LOGO 7
 #define DT_PASCAL 8
 #define DT_ASM 9
+#define DT_PASCAL_PROJECT 10
 
 /* XRAM shelf offsets (within the 1 MB g_xram window). Preserved from bare-metal
  * (SHELF_BASE/SHELF_SLOT used by the module loader; config page at +0x80000). */
@@ -101,8 +114,12 @@
  * =========================================================================== */
 static void xram_write(unsigned off, const void *src, unsigned n) {
     memcpy((void *)(g_xram + off), src, n);
+    /* Publish every DDR store before FIO_OK lets the 6502 consume it. */
+    __sync_synchronize();
 }
 static void xram_read(unsigned off, void *dst, unsigned n) {
+    /* Observe every PL write before the ARM copies shared DDR out. */
+    __sync_synchronize();
     memcpy(dst, (const void *)(g_xram + off), n);
 }
 
@@ -679,6 +696,7 @@ static unsigned char g_fbuf[65536];     /* file <-> 6502-RAM / XRAM staging     
 #define FH_MAX 8
 static struct {
     int      used;
+    int      slot;           /* mounted drive that owns idx/wparent              */
     int      idx;            /* NDI dir index (read handles)                     */
     uint32_t pos;
     uint32_t size;
@@ -701,6 +719,15 @@ static int fio_read_name(char *out, int maxlen) {
     while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == 0)) out[--n] = 0;
     return n;
 }
+static int fio_read_cpu_name(char *out, int maxlen) {
+    int n = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
+    unsigned addr = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
+    if (n < 1 || n > 63 || n >= maxlen || addr + (unsigned)n > 0x10000u) return -1;
+    for (int i = 0; i < n; i++) out[i] = (char)peek(addr + (unsigned)i);
+    out[n] = 0;
+    while (n > 0 && (out[n - 1] == ' ' || out[n - 1] == 0)) out[--n] = 0;
+    return n > 0 ? n : -1;
+}
 static uint8_t fio_name_type(const char *name) {
     const char *d = strrchr(name, '.');
     if (!d) return DT_BIN;
@@ -710,6 +737,7 @@ static uint8_t fio_name_type(const char *name) {
     if (!strncasecmp(d, ".mid", 5)) return DT_MID;
     if (!strncasecmp(d, ".gfx", 5)) return DT_GFX;
     if (!strncasecmp(d, ".4th", 5)) return DT_FORTH;
+    if (!strncasecmp(d, ".npp", 5)) return DT_PASCAL_PROJECT;
     if (!strncasecmp(d, ".logo", 6)) return DT_LOGO;
     if (!strncasecmp(d, ".lgo", 5)) return DT_LOGO;
     if (!strncasecmp(d, ".s", 3)) return DT_ASM;
@@ -829,7 +857,8 @@ static void ndi_path_normalize(char *path) {
 }
 
 /* Resolve a 6502 name ("fd0:dir/file" | "dir/file" | "file") to a drive slot +
- * an in-image path. Relative names hang off the CWD subdir. slot>=0, or -1. */
+ * an in-image path. Slash-qualified paths are disk-rooted like desktop Nova;
+ * bare names hang off the CWD subdir. slot>=0, or -1. */
 static int nfio_resolve(const char *in, char *path, int psz) {
     const char *colon = strchr(in, ':');
     if (colon) {
@@ -845,8 +874,11 @@ static int nfio_resolve(const char *in, char *path, int psz) {
     }
     int slot = nfio_cwd_slot();
     if (slot < 0) return -1;
-    if (g_cwd_dir[0]) snprintf(path, psz, "%s/%s", g_cwd_dir, in);
-    else              snprintf(path, psz, "%s", in);
+    int rooted = (*in == '/');
+    while (*in == '/') in++;
+    if (rooted || strchr(in, '/')) snprintf(path, psz, "%s", in);
+    else if (g_cwd_dir[0]) snprintf(path, psz, "%s/%s", g_cwd_dir, in);
+    else                   snprintf(path, psz, "%s", in);
     return slot;
 }
 
@@ -857,6 +889,22 @@ static int nfio_resolve_dir(ndi_t *img, const char *path, uint16_t *parent_out) 
     char dpath[210]; snprintf(dpath, sizeof dpath, "%s/.", pp);  /* descend into last comp */
     char dummy[NDI_MAX_NAME + 1];
     return ndi_walk(img, dpath, 0, parent_out, dummy, sizeof dummy);
+}
+
+/* Resolve a file through the current drive/directory. Returns its NDI index,
+ * -2 when no drive is mounted, or -1 when the path/file does not exist. */
+static int nfio_resolve_file(const char *name, int *slot_out, ndi_t **img_out) {
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) return -2;
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) return -1;
+    int idx = ndi_find(img, fname, parent);
+    if (idx < 0) return -1;
+    *slot_out = slot;
+    *img_out = img;
+    return idx;
 }
 
 /* Is the current working drive a mounted disk? (Routing gate for novavm.c.) */
@@ -1025,13 +1073,13 @@ void nfio_cd(void) {
     fio_ok();
 }
 
-/* PWD: write "fd0:dir/sub" into FIO_NAME / FIO_NAMELEN. */
+/* PWD: write "fd0:/dir/sub" into FIO_NAME / FIO_NAMELEN. */
 void nfio_pwd(void) {
     int slot = nfio_cwd_slot();
     char out[200];
     const char *dn = (slot >= 0) ? drive_slot_name(slot) : "??";
-    if (g_cwd_dir[0]) snprintf(out, sizeof out, "%s:%s", dn, g_cwd_dir);
-    else              snprintf(out, sizeof out, "%s:", dn);
+    if (g_cwd_dir[0]) snprintf(out, sizeof out, "%s:/%s", dn, g_cwd_dir);
+    else              snprintf(out, sizeof out, "%s:/", dn);
     int n = (int)strlen(out); if (n > 63) n = 63;
     poke(FIO_NAMELEN, n);
     for (int i = 0; i < n; i++) poke(FIO_NAME + i, out[i]);
@@ -1263,10 +1311,9 @@ void fio_xload(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
     if (!g_xram) { fio_fail(FIO_ERR_IO); return; }
-    ndi_t *img = boot_image();
-    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
-    int idx = img_find(img, name);
-    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
     ndi_entry_t e; ndi_get(img, idx, &e);
     unsigned xaddr  = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
     unsigned reqlen = peek(FIO_GLEN_LO)  | (peek(FIO_GLEN_HI) << 8);
@@ -1289,22 +1336,62 @@ void fio_xload(void) {
     fio_ok();
 }
 
+/* FIO_CMD_XSAVE (0x19): stream an XRAM range into a raw file on the mounted
+ * image. The filename follows the same drive/CWD rules as the file handles. */
+void fio_xsave(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    if (!g_xram) { fio_fail(FIO_ERR_IO); return; }
+
+    unsigned xaddr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
+    unsigned len = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
+    if (len == 0 || xaddr >= XRAM_BYTES || len > XRAM_BYTES - xaddr) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) {
+        fio_fail(FIO_ERR_NOTFOUND); return;
+    }
+
+    int existing = ndi_find(img, fname, parent);
+    if (existing >= 0 && ndi_delete(img, fname, parent) != 0) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+    int idx = ndi_create(img, fname, fio_name_type(fname), parent, len);
+    if (idx < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
+
+    xram_read(xaddr, g_fbuf, len);
+    if (ndi_write(img, idx, 0, g_fbuf, len) != 0 || ndi_zero_tail(img, idx) != 0) {
+        ndi_delete(img, fname, parent);
+        fio_fail(FIO_ERR_IO);
+        return;
+    }
+    ndi_flush(img);
+    poke(FIO_SIZE_LO, len & 0xFF); poke(FIO_SIZE_HI, (len >> 8) & 0xFF); poke(FIO_SIZE2, 0);
+    printf("[fio] XSAVE XRAM $%06x -> %s:%s (%u bytes)\n", xaddr, drive_slot_name(slot), path, len);
+    fio_ok();
+}
+
 /* FIO_CMD_XPAGE (0x29): stream a SLICE (file offset + length) of a mounted file
  * into XRAM or CPU RAM. File offset = FIO_SRC | FIO_END_LO<<16; length = FIO_GLEN;
  * target = FIO_DIRTYPE (0=XRAM @ FIO_GSPACE/GADDR, 1=CPU RAM @ FIO_GADDR). */
 void fio_xpage(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    ndi_t *img = boot_image();
-    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
-    int idx = img_find(img, name);
-    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
     ndi_entry_t e; ndi_get(img, idx, &e);
 
     unsigned char target = peek(FIO_DIRTYPE);
     unsigned reqlen = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
     unsigned foff   = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8) | (peek(FIO_END_LO) << 16);
-    if (reqlen == 0 || foff >= e.size_bytes) { fio_fail(FIO_ERR_IO); return; }
+    if (reqlen == 0 || foff > e.size_bytes) { fio_fail(FIO_ERR_IO); return; }
     unsigned len = reqlen;
     if (len > e.size_bytes - foff) len = e.size_bytes - foff;
 
@@ -1356,15 +1443,14 @@ void fio_xpage(void) {
 void fio_fopen(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    ndi_t *img = boot_image();
-    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
-    int idx = img_find(img, name);
-    if (idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
     ndi_entry_t e; ndi_get(img, idx, &e);
     int h = -1;
     for (int i = 0; i < FH_MAX; i++) if (!g_fh[i].used) { h = i; break; }
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
-    g_fh[h].used = 1; g_fh[h].idx = idx; g_fh[h].pos = 0; g_fh[h].size = e.size_bytes;
+    g_fh[h].used = 1; g_fh[h].slot = slot; g_fh[h].idx = idx; g_fh[h].pos = 0; g_fh[h].size = e.size_bytes;
     g_fh[h].writing = 0;
     poke(FIO_SRC_LO, (h + 1) & 0xFF); poke(FIO_SRC_HI, 0);   /* handle = slot+1 */
     poke(FIO_SIZE_LO, e.size_bytes & 0xFF); poke(FIO_SIZE_HI, (e.size_bytes >> 8) & 0xFF); poke(FIO_SIZE2, (e.size_bytes >> 16) & 0xFF);
@@ -1385,19 +1471,23 @@ static int fh_from_regs(void) {
 void fio_fcreate(void) {
     char name[80];
     if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
-    ndi_t *img = boot_image();
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
     if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
     if (g_wbuf_handle >= 0) { fio_fail(FIO_ERR_IO); return; }   /* one writer at a time */
     int h = -1;
     for (int i = 0; i < FH_MAX; i++) if (!g_fh[i].used) { h = i; break; }
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
-    g_fh[h].used = 1; g_fh[h].idx = -1; g_fh[h].pos = 0; g_fh[h].size = 0;
-    g_fh[h].writing = 1; g_fh[h].wtype = fio_name_type(name); g_fh[h].wparent = NDI_ROOT;
+    g_fh[h].used = 1; g_fh[h].slot = slot; g_fh[h].idx = -1; g_fh[h].pos = 0; g_fh[h].size = 0;
+    g_fh[h].writing = 1; g_fh[h].wtype = fio_name_type(fname); g_fh[h].wparent = parent;
     /* NDI names are capped at NDI_MAX_NAME (32) chars; copy bounded + NUL-term. */
     {
-        size_t nl = strlen(name);
+        size_t nl = strlen(fname);
         if (nl > sizeof g_fh[h].wname - 1) nl = sizeof g_fh[h].wname - 1;
-        memcpy(g_fh[h].wname, name, nl);
+        memcpy(g_fh[h].wname, fname, nl);
         g_fh[h].wname[nl] = 0;
     }
     g_wbuf_handle = h;
@@ -1434,11 +1524,11 @@ void fio_fwrite(void) {
 /* Commit a write handle's staged bytes into the mounted .ndi (replace if the
  * name already exists). Returns 0 on success. Port of main.c fio_commit_write. */
 static int fio_commit_write(int h) {
-    ndi_t *img = boot_image();
+    ndi_t *img = slot_image(g_fh[h].slot);
     if (!img) return -1;
     uint32_t total = g_fh[h].size;
     ndi_delete(img, g_fh[h].wname, g_fh[h].wparent);           /* overwrite existing slot */
-    int idx = ndi_create(img, g_fh[h].wname, g_fh[h].wtype, g_fh[h].wparent, total ? total : 1);
+    int idx = ndi_create(img, g_fh[h].wname, g_fh[h].wtype, g_fh[h].wparent, total);
     if (idx < 0) return -1;
     uint32_t off = 0;
     while (off < total) {
@@ -1448,7 +1538,9 @@ static int fio_commit_write(int h) {
         }
         off += chunk;
     }
-    ndi_zero_tail(img, idx);
+    if (ndi_zero_tail(img, idx) != 0) {
+        ndi_delete(img, g_fh[h].wname, g_fh[h].wparent); return -1;
+    }
     ndi_flush(img);
     return 0;
 }
@@ -1474,7 +1566,7 @@ void fio_fclose(void) {
 void fio_fread(void) {
     int h = fh_from_regs();
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
-    ndi_t *img = boot_image();
+    ndi_t *img = slot_image(g_fh[h].slot);
     if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
     unsigned want = peek(FIO_GLEN_LO) | (peek(FIO_GLEN_HI) << 8);
     if (want == 0 || want > sizeof g_fbuf) want = sizeof g_fbuf;
@@ -1520,6 +1612,97 @@ void fio_fsize(void) {
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
     unsigned s = g_fh[h].size;
     poke(FIO_SIZE_LO, s & 0xFF); poke(FIO_SIZE_HI, (s >> 8) & 0xFF); poke(FIO_SIZE2, (s >> 16) & 0xFF);
+    fio_ok();
+}
+
+/* FIO_CMD_FRESIZE (0x35): resize a writable handle, zero-extending it. */
+void fio_fresize(void) {
+    int h = fh_from_regs();
+    if (h < 0 || !g_fh[h].writing || g_wbuf_handle != h) { fio_fail(FIO_ERR_IO); return; }
+    unsigned size = peek(FIO_SIZE_LO) | (peek(FIO_SIZE_HI) << 8) | (peek(FIO_SIZE2) << 16);
+    if (size > WBUF_BYTES) { fio_fail(FIO_ERR_IO); return; }
+    if (size > g_fh[h].size) memset(g_wbuf + g_fh[h].size, 0, size - g_fh[h].size);
+    g_fh[h].size = size;
+    if (g_fh[h].pos > size) g_fh[h].pos = size;
+    fio_ok();
+}
+
+/* FIO_CMD_FFLUSH (0x36): persist a dirty write handle without closing it. */
+void fio_fflush(void) {
+    int h = fh_from_regs();
+    if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    if (g_fh[h].writing && fio_commit_write(h) != 0) { fio_fail(FIO_ERR_IO); return; }
+    fio_ok();
+}
+
+/* FIO_CMD_FSTATUS (0x37): report readable+writable for an exact file. */
+void fio_fstatus(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t e; ndi_get(img, idx, &e);
+    if (e.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    poke(FIO_SRC_LO, 3); poke(FIO_SRC_HI, 0);
+    fio_ok();
+}
+
+/* FIO_CMD_FDELETE (0x38): delete the exact named file without default suffixes. */
+void fio_fdelete(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    char path[200];
+    int slot = nfio_resolve(name, path, sizeof path);
+    ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
+    if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    uint16_t parent; char fname[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0 ||
+        ndi_delete(img, fname, parent) != 0) {
+        fio_fail(FIO_ERR_NOTFOUND); return;
+    }
+    printf("[fio] FDELETE %s:%s\n", drive_slot_name(slot), path);
+    fio_ok();
+}
+
+/* FIO_CMD_FRENAME (0x39): replace an exact file name in the same directory.
+ * Renaming the directory entry in place keeps large optimizer output off RAM. */
+void fio_frename(void) {
+    char old_name[80], new_name[80];
+    if (fio_read_name(old_name, sizeof old_name) < 0 ||
+        fio_read_cpu_name(new_name, sizeof new_name) < 0) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+
+    char old_path[200], new_path[200];
+    int old_slot = nfio_resolve(old_name, old_path, sizeof old_path);
+    int new_slot = nfio_resolve(new_name, new_path, sizeof new_path);
+    ndi_t *img = (old_slot >= 0) ? slot_image(old_slot) : NULL;
+    if (!img || new_slot < 0) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
+    if (old_slot != new_slot) { fio_fail(FIO_ERR_IO); return; }
+
+    uint16_t old_parent, new_parent;
+    char old_leaf[NDI_MAX_NAME + 1], new_leaf[NDI_MAX_NAME + 1];
+    if (ndi_walk(img, old_path, 0, &old_parent, old_leaf, sizeof old_leaf) != 0 ||
+        ndi_walk(img, new_path, 0, &new_parent, new_leaf, sizeof new_leaf) != 0 ||
+        old_parent != new_parent) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+
+    int old_idx = ndi_find(img, old_leaf, old_parent);
+    if (old_idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t old_entry; ndi_dir_read_entry(img, old_idx, &old_entry);
+    if (old_entry.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_IO); return; }
+
+    int existing = ndi_find(img, new_leaf, new_parent);
+    if (existing >= 0 && existing != old_idx && ndi_delete(img, new_leaf, new_parent) != 0) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+    ndi_dir_write_entry(img, old_idx, old_entry.flags, fio_name_type(new_leaf),
+                        new_parent, old_entry.start_sector, old_entry.size_bytes,
+                        new_leaf, old_entry.sector_count);
+    if (ndi_flush_metadata(img) != 0) { fio_fail(FIO_ERR_IO); return; }
+    printf("[fio] FRENAME %s:%s -> %s\n", drive_slot_name(old_slot), old_path, new_path);
     fio_ok();
 }
 

@@ -72,6 +72,9 @@ VGC_EMIT_ALL = 0
 .if VGC_EMIT_ALL .OR .referenced(vgc_cls)
       .export vgc_cls
 .endif
+.if VGC_EMIT_ALL .OR .referenced(vgc_clear_eol)
+      .export vgc_clear_eol
+.endif
 .if VGC_EMIT_ALL .OR .referenced(vgc_set_fg)
       .export vgc_set_fg
 .endif
@@ -263,6 +266,37 @@ vgc_cls:
       STA   VGC_CHAROUT
       JMP   vgc_wait_cmd
 .endif
+.endif
+
+; @label VGC.CLEAR_EOL
+; @kind routine
+; @symbol vgc_clear_eol
+; @summary Clear from the current text cursor through the end of its row, preserving the cursor.
+; @out A: VGC_RESULT_OK.
+.if VGC_EMIT_ALL .OR .referenced(vgc_clear_eol)
+vgc_clear_eol:
+      LDA   VGC_CURSX
+      CMP   #NOVA_SCREEN_COLS
+      BCS   @done
+      PHA
+      LDA   VGC_CURSY
+      PHA
+      LDA   #NOVA_SCREEN_COLS
+      SEC
+      SBC   VGC_CURSX
+      TAX
+@clear:
+      LDA   #' '
+      STA   VGC_CHAROUT
+      DEX
+      BNE   @clear
+      PLA
+      STA   VGC_CURSY
+      PLA
+      STA   VGC_CURSX
+@done:
+      LDA   #VGC_RESULT_OK
+      RTS
 .endif
 
 ; @label VGC.SET_FG

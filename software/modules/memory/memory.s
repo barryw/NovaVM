@@ -22,6 +22,8 @@
       .include "libmemory.inc"
       .include "nova.inc"              ; NVR* scratch + XMC MMIO registers
       .include "xram.inc"            ; XRAM_* ZP pseudo-register aliases
+      .include "dma.inc"
+      .include "novaexec.inc"
 
       .segment "CODE"
       lib_module_header MODULE_ID_MEMORY, LIB_ABI_VERSION, MEM_FN_COUNT
@@ -229,6 +231,23 @@
 ;@ndk xmc_command_status
 ;@ret u8 0 on XMC_OK else 1 (RESULT byte0); processes the preloaded XMC_CMD register
 ;@status LERR_OK
+;
+;@fn MEM_EXEC_IMAGE
+;@brief Launch an allocator-backed Nova executable staged in XRAM.
+;@arg xaddr u24 allocation base containing the two-byte Nova load/entry header (ARG0 byte0,1,2)
+;@arg len u16 complete image length including the header (ARG1 byte0,1)
+;@arg restart u16 stable cold-start vector used when the application returns (ARG2 byte0,1)
+;@ret void on failure; success transfers control and does not return to the caller
+;@effect Validates the image against NOVA_APP_RAM_START..NOVA_APP_RAM_END.
+;@effect Copies initialized bytes, zero-fills a validated NL tail-BSS trailer, and releases the allocation.
+;@effect On application RTS, restores the caller's ROM bank and returns through restart.
+;@status LERR_OK, LERR_MEM_FAIL (RESULT byte1 = MEM_EXEC_ERR_*)
+;
+;@fn MEM_EXIT_IMAGE
+;@brief Exit the active standalone executable from any hardware-stack depth.
+;@ret void; success transfers through the restart vector supplied to MEM_EXEC_IMAGE
+;@effect Discards application call frames and resumes the launching runtime.
+;@status LERR_OK, LERR_MEM_FAIL (RESULT byte1 = MEM_EXEC_ERR_INACTIVE)
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router (RTS-trick). MEM_FN_COUNT is small so fn*2 < 256.
@@ -277,6 +296,8 @@ mem_jtable:
       .word   mem_map_window-1         ; $18 MEM_MAP_WINDOW
       .word   mem_unmap_window-1       ; $19 MEM_UNMAP_WINDOW
       .word   mem_command_status-1     ; $1A MEM_COMMAND_STATUS
+      .word   mem_exec_image-1         ; $1B MEM_EXEC_IMAGE
+      .word   mem_exit_image-1         ; $1C MEM_EXIT_IMAGE
 
 ; ===========================================================================
 ; Shared epilogues. mem_finish_status maps the NDK A result (0=OK / nonzero=err)
@@ -679,6 +700,401 @@ mem_command_status:
       STZ   LIB_RESULT+2
       STZ   LIB_RESULT+3
       LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
+
+; ===========================================================================
+; Destructive executable transfer. The caller must enter through lib_call:
+; beneath the module-return address, its saved status byte and caller-return
+; address form a stable stack frame. Replacing that caller return with ARG2-1
+; makes a normal application RTS flow through lib_call's bank/flag restoration
+; and then into the host cold-start vector.
+;
+; ARG0 is preserved as the allocation base. ARG3 receives the full allocation
+; length for release; ARG1 becomes the payload length; RESULT receives the load
+; address. The nine-byte RAM trampoline performs the ROM-bank switch because a
+; module cannot execute its next instruction from $C000 after changing banks.
+; ===========================================================================
+
+      .segment "BSS"
+mem_exec_trampoline: .res 9
+      .segment "CODE"
+
+mem_exec_image:
+      LDA   LIB_ARG1+0
+      STA   LIB_ARG3+0
+      LDA   LIB_ARG1+1
+      STA   LIB_ARG3+1
+      BNE   @length_ok
+      LDA   LIB_ARG1+0
+      CMP   #3
+      BCS   :+
+      JMP   @bad_image
+:
+@length_ok:
+      JSR   mem_marshal_xaddr
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      STA   LIB_RESULT+0
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      STA   LIB_RESULT+1
+      STZ   LIB_SCRATCH+3
+      STZ   LIB_SCRATCH+4
+      SEC
+      LDA   LIB_ARG1+0
+      SBC   #2
+      STA   LIB_ARG1+0
+      LDA   LIB_ARG1+1
+      SBC   #0
+      STA   LIB_ARG1+1
+
+      ; Legacy images are [load:u16, payload]. NL appends NBS1 plus a
+      ; length/complement pair only when omitting a larger zero-filled tail.
+      LDA   LIB_ARG3+1
+      BNE   @check_trailer
+      LDA   LIB_ARG3
+      CMP   #2+NOVA_EXEC_BSS_TRAILER_SIZE
+      BCS   @check_trailer
+      JMP   @source_ready
+@check_trailer:
+      SEC
+      LDA   LIB_ARG3
+      SBC   #NOVA_EXEC_BSS_TRAILER_SIZE
+      STA   LIB_SCRATCH+0
+      LDA   LIB_ARG3+1
+      SBC   #0
+      STA   LIB_SCRATCH+1
+      CLC
+      LDA   LIB_ARG0+0
+      ADC   LIB_SCRATCH+0
+      STA   XRAM_ADDRL
+      LDA   LIB_ARG0+1
+      ADC   LIB_SCRATCH+1
+      STA   XRAM_ADDRM
+      LDA   LIB_ARG0+2
+      ADC   #0
+      STA   XRAM_ADDRH
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      CMP   #NOVA_EXEC_BSS_MAGIC0
+      BEQ   :+
+      JMP   @source_ready
+:
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      CMP   #NOVA_EXEC_BSS_MAGIC1
+      BEQ   :+
+      JMP   @source_ready
+:
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      CMP   #NOVA_EXEC_BSS_MAGIC2
+      BEQ   :+
+      JMP   @source_ready
+:
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      CMP   #NOVA_EXEC_BSS_MAGIC3
+      BEQ   :+
+      JMP   @source_ready
+:
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      STA   LIB_SCRATCH+3
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      STA   LIB_SCRATCH+4
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      EOR   #$FF
+      CMP   LIB_SCRATCH+3
+      BEQ   :+
+      JMP   @bad_image
+:
+      JSR   mem_exec_read_next
+      BCC   :+
+      JMP   @xram_error
+:
+      EOR   #$FF
+      CMP   LIB_SCRATCH+4
+      BEQ   :+
+      JMP   @bad_image
+:
+      LDA   LIB_SCRATCH+4
+      BNE   @trailer_size_ok
+      LDA   LIB_SCRATCH+3
+      CMP   #NOVA_EXEC_BSS_TRAILER_SIZE+1
+      BCS   @trailer_size_ok
+      JMP   @bad_image
+@trailer_size_ok:
+      SEC
+      LDA   LIB_ARG1
+      SBC   #NOVA_EXEC_BSS_TRAILER_SIZE
+      STA   LIB_ARG1
+      LDA   LIB_ARG1+1
+      SBC   #0
+      STA   LIB_ARG1+1
+      BCS   @source_ready
+      JMP   @bad_image
+
+@source_ready:
+      JSR   mem_marshal_xaddr
+      INC   XRAM_ADDRL
+      BNE   :+
+      INC   XRAM_ADDRM
+      BNE   :+
+      INC   XRAM_ADDRH
+:
+      INC   XRAM_ADDRL
+      BNE   :+
+      INC   XRAM_ADDRM
+      BNE   :+
+      INC   XRAM_ADDRH
+:
+
+      LDA   LIB_RESULT+1
+      CMP   #>NOVA_APP_RAM_START
+      BCS   :+
+      JMP   @bad_range
+:
+      BNE   @start_ok
+      LDA   LIB_RESULT+0
+      CMP   #<NOVA_APP_RAM_START
+      BCS   @start_ok
+      JMP   @bad_range
+@start_ok:
+      CLC
+      LDA   LIB_RESULT+0
+      ADC   LIB_ARG1+0
+      STA   LIB_SCRATCH+0
+      LDA   LIB_RESULT+1
+      ADC   LIB_ARG1+1
+      STA   LIB_SCRATCH+1
+      BCC   :+
+      JMP   @bad_range
+:
+      CLC
+      LDA   LIB_SCRATCH+0
+      ADC   LIB_SCRATCH+3
+      STA   LIB_SCRATCH+0
+      LDA   LIB_SCRATCH+1
+      ADC   LIB_SCRATCH+4
+      STA   LIB_SCRATCH+1
+      BCC   :+
+      JMP   @bad_range
+:
+      CMP   #>NOVA_APP_RAM_END
+      BCC   @copy
+      BEQ   :+
+      JMP   @bad_range
+:
+      LDA   LIB_SCRATCH+0
+      BEQ   @copy
+      JMP   @bad_range
+
+@copy:
+      LDA   LIB_RESULT+0
+      STA   XRAM_RAML
+      LDA   LIB_RESULT+1
+      STA   XRAM_RAMH
+      LDA   LIB_ARG1+0
+      STA   XRAM_LENL
+      LDA   LIB_ARG1+1
+      STA   XRAM_LENH
+      JSR   xram_copy_to_ram
+      BEQ   :+
+      JMP   @copy_error
+:
+      LDA   LIB_SCRATCH+3
+      ORA   LIB_SCRATCH+4
+      BEQ   @release
+      LDA   #DMA_SPACE_CPU
+      STA   DMA_DSTSPACE
+      CLC
+      LDA   LIB_RESULT
+      ADC   LIB_ARG1
+      STA   DMA_DSTL
+      LDA   LIB_RESULT+1
+      ADC   LIB_ARG1+1
+      STA   DMA_DSTM
+      STZ   DMA_DSTH
+      LDA   LIB_SCRATCH+3
+      STA   DMA_LENL
+      LDA   LIB_SCRATCH+4
+      STA   DMA_LENM
+      STZ   DMA_LENH
+      STZ   DMA_FILLVALUE
+      JSR   dma_fill
+      BEQ   @release
+      JMP   @copy_error
+@release:
+      JSR   mem_exec_release
+
+      ; LDA LIB_HOME_BANK / STA REG_ROMSWAP / JMP (LIB_RESULT)
+      LDA   #$AD
+      STA   mem_exec_trampoline+0
+      LDA   #<LIB_HOME_BANK
+      STA   mem_exec_trampoline+1
+      LDA   #>LIB_HOME_BANK
+      STA   mem_exec_trampoline+2
+      LDA   #$8D
+      STA   mem_exec_trampoline+3
+      LDA   #<REG_ROMSWAP
+      STA   mem_exec_trampoline+4
+      LDA   #>REG_ROMSWAP
+      STA   mem_exec_trampoline+5
+      LDA   #$6C
+      STA   mem_exec_trampoline+6
+      LDA   #<LIB_RESULT
+      STA   mem_exec_trampoline+7
+      LDA   #>LIB_RESULT
+      STA   mem_exec_trampoline+8
+
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      SEC
+      LDA   LIB_ARG2+0
+      SBC   #1
+      STA   LIB_SCRATCH+0
+      LDA   LIB_ARG2+1
+      SBC   #0
+      STA   LIB_SCRATCH+1
+      TSX
+      LDA   LIB_SCRATCH+0
+      STA   $0104,X
+      LDA   LIB_SCRATCH+1
+      STA   $0105,X
+      INX
+      STX   LIB_EXEC_SP
+      DEX
+      LDA   $0103,X
+      PHA
+      PLP
+      JMP   mem_exec_trampoline
+
+@bad_image:
+      LDA   #MEM_EXEC_ERR_IMAGE
+      BRA   @fail
+@bad_range:
+      LDA   #MEM_EXEC_ERR_RANGE
+      BRA   @fail
+@xram_error:
+      LDA   #MEM_EXEC_ERR_XRAM
+@fail:
+      STA   LIB_SCRATCH+2
+      JSR   mem_exec_release
+      STZ   LIB_RESULT+0
+      LDA   LIB_SCRATCH+2
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_MEM_FAIL
+      STA   LIB_STATUS
+      RTS
+
+; A failed DMA may have modified application RAM, including the host's BSS.
+; Consume the staging allocation and return through the cold-start vector
+; without attempting to resume that state.
+@copy_error:
+      JSR   mem_exec_release
+      SEC
+      LDA   LIB_ARG2+0
+      SBC   #1
+      STA   LIB_SCRATCH+0
+      LDA   LIB_ARG2+1
+      SBC   #0
+      STA   LIB_SCRATCH+1
+      TSX
+      LDA   LIB_SCRATCH+0
+      STA   $0104,X
+      LDA   LIB_SCRATCH+1
+      STA   $0105,X
+      RTS
+
+mem_exec_release:
+      JSR   mem_marshal_xmc_xaddr
+      LDA   LIB_ARG3+0
+      STA   XMC_LENL
+      LDA   LIB_ARG3+1
+      STA   XMC_LENH
+      JSR   xmc_release
+      RTS
+
+mem_exec_read_next:
+      JSR   xram_read8
+      BNE   @bad
+      LDA   XRAM_DATA
+      PHA
+      INC   XRAM_ADDRL
+      BNE   :+
+      INC   XRAM_ADDRM
+      BNE   :+
+      INC   XRAM_ADDRH
+:
+      PLA
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; --- $1C MEM_EXIT_IMAGE: discard application frames and return to host ---
+; LIB_EXEC_SP stores launch S+1 so zero remains an unambiguous inactive marker.
+; Rebuild the RAM trampoline because another paged module may have reused the
+; shared module-BSS band while the application was running.
+mem_exit_image:
+      LDX   LIB_EXEC_SP
+      BEQ   @inactive
+      STZ   LIB_EXEC_SP
+      DEX
+
+      ; LDA LIB_HOME_BANK / STA REG_ROMSWAP / RTS
+      LDA   #$AD
+      STA   mem_exec_trampoline+0
+      LDA   #<LIB_HOME_BANK
+      STA   mem_exec_trampoline+1
+      LDA   #>LIB_HOME_BANK
+      STA   mem_exec_trampoline+2
+      LDA   #$8D
+      STA   mem_exec_trampoline+3
+      LDA   #<REG_ROMSWAP
+      STA   mem_exec_trampoline+4
+      LDA   #>REG_ROMSWAP
+      STA   mem_exec_trampoline+5
+      LDA   #$60
+      STA   mem_exec_trampoline+6
+
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      TXS
+      JMP   mem_exec_trampoline
+
+@inactive:
+      STZ   LIB_RESULT+0
+      LDA   #MEM_EXEC_ERR_INACTIVE
+      STA   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #LERR_MEM_FAIL
       STA   LIB_STATUS
       RTS
 

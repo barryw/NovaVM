@@ -19,6 +19,7 @@
       .include "longbranch.inc"
       .include "wordmath.inc"
       .include "xram.inc"
+      .include "libfiles.inc"
       .include "nas_backend.inc"
 
 NASM_SYMBOL_CAP       = 32
@@ -35,6 +36,7 @@ NASM_DECL_EXPORT      = $02
 NASM_DECL_GLOBAL      = $04
 NASM_DECL_REFERENCED  = $08
 NASM_DECL_ZP          = $10
+NASM_DECL_RELOC       = $20
 NASM_SECTION_CAP      = 8
 NASM_SECTION_NAME_CAP = 16
 
@@ -58,6 +60,24 @@ EXPR_LE = 17
 EXPR_GT = 18
 EXPR_GE = 19
 EXPR_DOT_OR = 20
+
+.macro sym_load table
+      LDA   #<table
+      LDY   #>table
+      JSR   a_sym_load
+.endmacro
+
+.macro sym_store table
+      STA   a_sym_transfer
+      LDA   #<table
+      LDY   #>table
+      JSR   a_sym_store
+.endmacro
+
+.macro sym_clear table
+      LDA   #0
+      sym_store table
+.endmacro
 
 .ifdef NASM_CORE_OVERLAY
 a_src             = NASCORE_ZP_BASE+0
@@ -106,19 +126,34 @@ a_tmp1:           .res 1
 
       .segment "BSS"
 a_symbol:       .res NASM_IDENTIFIER_CAP
+a_symbol_count_h:.res 1
+a_symbol_index_h:.res 1
+a_output_symbol_count:.res 2
 a_scope:        .res NASM_SYMBOL_CAP
 a_scope_len:    .res 1
 a_symbol_local: .res 1
 a_local_total:  .res 1
-a_anon_count:   .res 1
-a_anon_target:  .res 1
-a_sym_name_len: .res NASM_SYMBOL_TABLE_CAP
-a_sym_value_l:  .res NASM_SYMBOL_TABLE_CAP
-a_sym_value_h:  .res NASM_SYMBOL_TABLE_CAP
-a_sym_section:  .res NASM_SYMBOL_TABLE_CAP
-a_sym_flags:    .res NASM_SYMBOL_TABLE_CAP
-a_sym_decl:     .res NASM_SYMBOL_TABLE_CAP
-a_sym_forward:  .res NASM_SYMBOL_TABLE_CAP
+a_anon_count:   .res 2
+a_anon_target:  .res 2
+a_sym_name_len = NASM_SYMBOL_TABLE_CAP * 0
+a_sym_value_l  = NASM_SYMBOL_TABLE_CAP * 1
+a_sym_value_h  = NASM_SYMBOL_TABLE_CAP * 2
+a_sym_section  = NASM_SYMBOL_TABLE_CAP * 3
+a_sym_flags    = NASM_SYMBOL_TABLE_CAP * 4
+a_sym_decl     = NASM_SYMBOL_TABLE_CAP * 5
+a_sym_forward  = NASM_SYMBOL_TABLE_CAP * 6
+a_sym_next_l   = NASM_SYMBOL_TABLE_CAP * 7
+a_sym_next_h   = NASM_SYMBOL_TABLE_CAP * 8
+a_sym_bucket_l = NASM_SYMBOL_TABLE_CAP * 9
+a_sym_bucket_h = a_sym_bucket_l + 256
+a_sym_transfer: .res 1
+a_hash_symbol_l:.res 1
+a_hash_symbol_h:.res 1
+a_name_xaddr:   .res 3
+a_metadata_xaddr:.res 3
+a_object_xaddr: .res 3
+a_reloc_xaddr:  .res 3
+a_store_value:  .res 1
 a_mnemonic:     .res NASM_IDENTIFIER_CAP
 a_mnemonic_len: .res 1
 a_operand_symbol: .res 1
@@ -133,6 +168,7 @@ a_expr_rhs_l:     .res 1
 a_expr_rhs_h:     .res 1
 a_expr_rhs_sym:   .res 1
 a_expr_rhs_index: .res 1
+a_expr_rhs_index_h:.res 1
 a_expr_acc_l:     .res 1
 a_expr_acc_h:     .res 1
 a_expr_rem_l:     .res 1
@@ -145,6 +181,7 @@ a_expr_lhs_l:     .res NASM_EXPR_DEPTH
 a_expr_lhs_h:     .res NASM_EXPR_DEPTH
 a_expr_lhs_sym:   .res NASM_EXPR_DEPTH
 a_expr_lhs_index: .res NASM_EXPR_DEPTH
+a_expr_lhs_index_h:.res NASM_EXPR_DEPTH
 a_repeat_l:       .res 1
 a_repeat_h:       .res 1
 a_repeat_value:   .res 1
@@ -165,8 +202,19 @@ a_sec_data_l:     .res NASM_SECTION_CAP
 a_sec_data_h:     .res NASM_SECTION_CAP
 a_include_depth:  .res 1
 a_include_error:  .res 1
+a_root_stream:    .res 1
+a_source_stream:  .res 1
+a_stream_pos:     .res 3
+a_stream_base:    .res 3
+a_stream_ptr:     .res 3
+a_stream_cache_len:.res 2
+a_stream_cap:     .res 2
+a_stream_cache_valid:.res 1
+a_stream_extra:   .res 1
+a_stream_offset:  .res 2
 a_binary_ptr:     .res 3
 a_binary_left:    .res 2
+a_binary_pos:     .res 3
 a_file_ptr:       .res 2
 a_file_len:       .res 1
 a_stack_src_l:    .res NASM_INCLUDE_DEPTH
@@ -182,6 +230,15 @@ a_stack_file_l:   .res NASM_INCLUDE_DEPTH
 a_stack_file_h:   .res NASM_INCLUDE_DEPTH
 a_stack_file_len: .res NASM_INCLUDE_DEPTH
 a_stack_cond_depth:.res NASM_INCLUDE_DEPTH
+a_stack_stream:   .res NASM_INCLUDE_DEPTH
+a_stack_stream_pos_l:.res NASM_INCLUDE_DEPTH
+a_stack_stream_pos_m:.res NASM_INCLUDE_DEPTH
+a_stack_stream_pos_h:.res NASM_INCLUDE_DEPTH
+a_stack_stream_ptr_l:.res NASM_INCLUDE_DEPTH
+a_stack_stream_ptr_m:.res NASM_INCLUDE_DEPTH
+a_stack_stream_ptr_h:.res NASM_INCLUDE_DEPTH
+a_stack_stream_cap_l:.res NASM_INCLUDE_DEPTH
+a_stack_stream_cap_h:.res NASM_INCLUDE_DEPTH
 a_const_used_l:  .res 1
 a_const_used_h:  .res 1
 a_const_scan:    .res 3
@@ -218,6 +275,7 @@ a_skip_depth:    .res 1
       .export nasm_include_ptr
       .export nasm_include_len
       .export nasm_include_display_ptr
+      .export nasm_include_display_len
       .export nasm_error_name_ptr
       .export nasm_error_name_len
 nasm_source_ptr: .res 3
@@ -235,6 +293,7 @@ nasm_include_name_len:.res 1
 nasm_include_ptr:.res 3
 nasm_include_len:.res 2
 nasm_include_display_ptr:.res 2
+nasm_include_display_len:.res 1
 nasm_error_name_ptr:.res 2
 nasm_error_name_len:.res 1
 .endif
@@ -251,6 +310,39 @@ nasm_assemble:
       STZ   nasm_object_len
       STZ   nasm_object_len+1
       STZ   a_symbol_count
+      STZ   a_symbol_count_h
+      STZ   a_root_stream
+      LDA   nasm_object_ptr
+      STA   a_object_xaddr
+      LDA   nasm_object_ptr+1
+      STA   a_object_xaddr+1
+      LDA   nasm_object_ptr_h
+      STA   a_object_xaddr+2
+      LDA   nasm_reloc_buffer_ptr
+      STA   a_reloc_xaddr
+      LDA   nasm_reloc_buffer_ptr+1
+      STA   a_reloc_xaddr+1
+      LDA   nasm_reloc_buffer_ptr_h
+      STA   a_reloc_xaddr+2
+      LDA   nasm_symbol_names_ptr
+      CLC
+      ADC   #<NASCORE_SYMBOL_NAMES_CAP
+      STA   a_metadata_xaddr
+      LDA   nasm_symbol_names_ptr+1
+      ADC   #>NASCORE_SYMBOL_NAMES_CAP
+      STA   a_metadata_xaddr+1
+      LDA   nasm_symbol_names_ptr_h
+      ADC   #0
+      STA   a_metadata_xaddr+2
+      LDA   nasm_source_len
+      CMP   #<NASCORE_STREAM_SENTINEL
+      BNE   :+
+      LDA   nasm_source_len+1
+      CMP   #>NASCORE_STREAM_SENTINEL
+      BNE   :+
+      INC   a_root_stream
+:
+      JSR   a_init_symbol_hash
       JSR   a_init_sections
       LDA   #NASM_PASS_DEFINE
       STA   a_pass
@@ -259,9 +351,12 @@ nasm_assemble:
       STZ   a_include_depth
       STZ   a_include_error
       STZ   a_cond_depth
+      LDA   a_root_stream
+      STA   a_source_stream
       JSR   a_reset_constants
       STZ   a_scope_len
       STZ   a_anon_count
+      STZ   a_anon_count+1
       LDA   nasm_source_name_ptr
       STA   a_file_ptr
       LDA   nasm_source_name_ptr+1
@@ -278,10 +373,28 @@ nasm_assemble:
       ORA   #XRAM_WIN2_ENABLE | XRAM_WIN3_ENABLE
       STA   XMC_WINCTL
       STZ   XMC_W2AL
+      LDA   a_source_stream
+      BNE   @stream_reset
       LDA   a_src+1
       STA   WIN3_MI
       LDA   a_src+2
       STA   WIN3_HI
+      BRA   @source_length
+@stream_reset:
+      LDX   #2
+@stream_ptr:
+      LDA   a_src,X
+      STA   a_stream_ptr,X
+      DEX
+      BPL   @stream_ptr
+      STZ   a_stream_pos
+      STZ   a_stream_pos+1
+      STZ   a_stream_pos+2
+      STZ   a_stream_cache_valid
+      STZ   a_stream_cap
+      LDA   #$80
+      STA   a_stream_cap+1
+@source_length:
       LDA   nasm_source_len
       STA   a_left
       LDA   nasm_source_len+1
@@ -333,8 +446,14 @@ nasm_assemble:
 @anonymous_label:
       JSR   a_next
       INC   a_anon_count
+      BNE   @anonymous_ready
+      INC   a_anon_count+1
       long_beq a_fail_symbol
+@anonymous_ready:
       LDA   a_anon_count
+      STA   a_anon_target
+      LDA   a_anon_count+1
+      STA   a_anon_target+1
       JSR   a_make_anon_symbol
       LDA   a_pass
       CMP   #NASM_PASS_DEFINE
@@ -396,6 +515,10 @@ nasm_assemble:
       LDX   #>a_kw_import
       JSR   a_symbol_is
       long_bcs @import
+      LDA   #<a_kw_importifref
+      LDX   #>a_kw_importifref
+      JSR   a_symbol_is
+      long_bcs @importifref
       LDA   #<a_kw_export
       LDX   #>a_kw_export
       JSR   a_symbol_is
@@ -471,6 +594,10 @@ nasm_assemble:
       JSR   a_declare_symbols
       long_bcs a_fail_symbol
       JMP   @statement
+@importifref:
+      JSR   a_declare_referenced_imports
+      long_bcs a_fail_symbol
+      JMP   @statement
 @export:
       LDA   #NASM_DECL_EXPORT
       JSR   a_declare_symbols
@@ -524,11 +651,14 @@ nasm_assemble:
       long_beq a_fail_output
       JMP   @statement
 @assert:
-      JSR   a_parse_expression
-      long_bcs a_fail_syntax
       LDA   a_pass
       CMP   #NASM_PASS_EMIT
-      long_bne @statement
+      BEQ   :+
+      JSR   a_skip_to_eol
+      JMP   @statement
+:
+      JSR   a_parse_expression
+      long_bcs a_fail_syntax
       LDA   a_operand_symbol
       long_bne a_fail_symbol
       LDA   a_tmp0
@@ -688,8 +818,7 @@ nasm_assemble:
 @direct_select:
       LDA   a_operand_symbol
       BEQ   @direct_value
-      LDX   a_symbol_index
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_ZP
       BNE   @direct_byte
       LDA   a_operand_reloc
@@ -835,8 +964,7 @@ nasm_assemble:
 @indirect_select:
       LDA   a_operand_symbol
       BEQ   :+
-      LDX   a_symbol_index
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_ZP
       BEQ   @indirect_absolute
       BRA   @indirect_byte
@@ -1072,7 +1200,29 @@ nasm_assemble:
       JSR   a_validate_symbols
       long_bcs a_fail_symbol
       JSR   a_finish_object
-      long_bcs a_fail_output
+      BCC   :+
+      LDA   a_dst
+      STA   $0970
+      LDA   a_dst+1
+      STA   $0971
+      LDA   a_cap
+      STA   $0972
+      LDA   a_cap+1
+      STA   $0973
+      LDA   a_output_symbol_count
+      STA   $0974
+      LDA   a_output_symbol_count+1
+      STA   $0975
+      LDA   a_reloc_len
+      STA   $0976
+      LDA   a_reloc_len+1
+      STA   $0977
+      LDA   a_symbol_index
+      STA   $0978
+      LDA   a_symbol_index_h
+      STA   $0979
+      JMP   a_fail_output
+:
       LDA   #NASM_OK
       RTS
 
@@ -1168,10 +1318,9 @@ a_emit_string:
       RTS
 
 ; Anonymous labels use generated names that source identifiers cannot spell.
-; A is the one-based definition ordinal for this pass.
+; a_anon_target is the one-based 16-bit definition ordinal for this pass.
 a_make_anon_symbol:
-      STA   a_anon_target
-      LDA   #4
+      LDA   #6
       STA   a_symbol_len
       LDA   #1
       STA   a_symbol_local
@@ -1179,17 +1328,28 @@ a_make_anon_symbol:
       STA   a_symbol+0
       LDA   #'@'
       STA   a_symbol+1
-      LDA   a_anon_target
+      LDA   a_anon_target+1
       LSR
       LSR
       LSR
       LSR
       JSR   a_encode_hex
       STA   a_symbol+2
-      LDA   a_anon_target
+      LDA   a_anon_target+1
       AND   #$0F
       JSR   a_encode_hex
       STA   a_symbol+3
+      LDA   a_anon_target
+      LSR
+      LSR
+      LSR
+      LSR
+      JSR   a_encode_hex
+      STA   a_symbol+4
+      LDA   a_anon_target
+      AND   #$0F
+      JSR   a_encode_hex
+      STA   a_symbol+5
       CLC
       RTS
 
@@ -1214,27 +1374,40 @@ a_parse_anonymous:
       CMP   #'-'
       BNE   @bad
       LDA   a_anon_count
-      BEQ   @bad
       STA   a_anon_target
+      LDA   a_anon_count+1
+      STA   a_anon_target+1
+      ORA   a_anon_target
+      BEQ   @bad
 @back_more:
       JSR   a_peek
       BCC   @make
       CMP   #'-'
       BNE   @make
       JSR   a_next
+      LDA   a_anon_target+1
+      BNE   @back_decrement
       LDA   a_anon_target
       CMP   #2
       BCC   @bad
+@back_decrement:
+      LDA   a_anon_target
+      BNE   :+
+      DEC   a_anon_target+1
+:
       DEC   a_anon_target
       BRA   @back_more
 @forward:
       LDA   a_anon_count
       STA   a_anon_target
+      LDA   a_anon_count+1
+      STA   a_anon_target+1
 @forward_one:
-      LDA   a_anon_target
-      CMP   #$FF
-      BEQ   @bad
       INC   a_anon_target
+      BNE   :+
+      INC   a_anon_target+1
+      BEQ   @bad
+:
       JSR   a_peek
       BCC   @make
       CMP   #'+'
@@ -1242,7 +1415,6 @@ a_parse_anonymous:
       JSR   a_next
       BRA   @forward_one
 @make:
-      LDA   a_anon_target
       JSR   a_make_anon_symbol
       CLC
       RTS
@@ -1303,6 +1475,13 @@ a_emit_binary_file:
       LDA   #1
       RTS
 @loaded:
+      LDA   nasm_include_len
+      CMP   #<NASCORE_STREAM_SENTINEL
+      BNE   @bounded
+      LDA   nasm_include_len+1
+      CMP   #>NASCORE_STREAM_SENTINEL
+      BEQ   @stream
+@bounded:
       LDX   #2
 @copy_ptr:
       LDA   nasm_include_ptr,X
@@ -1353,9 +1532,95 @@ a_emit_binary_file:
       LDA   #2
       RTS
 
+@stream:
+      STZ   a_binary_pos
+      STZ   a_binary_pos+1
+      STZ   a_binary_pos+2
+@stream_page:
+      JSR   a_refill_binary
+      BNE   @stream_bad
+      LDA   LIB_RESULT
+      STA   a_binary_left
+      LDA   LIB_RESULT+1
+      STA   a_binary_left+1
+      ORA   a_binary_left
+      BEQ   @done
+      LDX   #2
+@stream_ptr:
+      LDA   nasm_include_ptr,X
+      STA   a_binary_ptr,X
+      DEX
+      BPL   @stream_ptr
+@stream_byte:
+      LDA   a_binary_left
+      ORA   a_binary_left+1
+      BEQ   @stream_page
+      LDY   a_binary_ptr
+      LDA   a_binary_ptr+1
+      STA   WIN3_MI
+      LDA   a_binary_ptr+2
+      STA   WIN3_HI
+      LDA   WIN3_BASE,Y
+      JSR   a_emit
+      BCS   @output_bad
+      INC   a_binary_ptr
+      BNE   :+
+      INC   a_binary_ptr+1
+      BNE   :+
+      INC   a_binary_ptr+2
+:     INC   a_binary_pos
+      BNE   :+
+      INC   a_binary_pos+1
+      BNE   :+
+      INC   a_binary_pos+2
+:     LDA   a_binary_left
+      BNE   :+
+      DEC   a_binary_left+1
+:     DEC   a_binary_left
+      BRA   @stream_byte
+@stream_bad:
+      JSR   a_close_binary
+      LDA   #1
+      RTS
+
+a_refill_binary:
+      LDA   nasm_include_display_ptr
+      STA   LIB_ARG0
+      LDA   nasm_include_display_ptr+1
+      STA   LIB_ARG0+1
+      LDA   nasm_include_display_len
+      STA   LIB_ARG0+2
+      STZ   LIB_ARG0+3
+      LDX   #2
+@offset:
+      LDA   a_binary_pos,X
+      STA   LIB_ARG1,X
+      LDA   nasm_include_ptr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @offset
+      STZ   LIB_ARG1+3             ; PAGER_TARGET_XRAM
+      STZ   LIB_ARG2+3
+      LDA   #<NASCORE_INCLUDE_STREAM_CAP
+      STA   LIB_ARG3
+      LDA   #>NASCORE_INCLUDE_STREAM_CAP
+      STA   LIB_ARG3+1
+      STZ   LIB_ARG3+2
+      STZ   LIB_ARG3+3
+      LDA   #FILE_PAGE
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BEQ   :+
+      INC   a_include_error
+:     RTS
+
 a_close_binary:
       JSR   a_include_close
       PHA
+      STZ   a_stream_cache_valid
       JSR   a_restore_source_window
       PLA
       RTS
@@ -1405,6 +1670,24 @@ a_enter_include:
       STA   a_stack_file_len,X
       LDA   a_cond_depth
       STA   a_stack_cond_depth,X
+      LDA   a_source_stream
+      STA   a_stack_stream,X
+      LDA   a_stream_pos
+      STA   a_stack_stream_pos_l,X
+      LDA   a_stream_pos+1
+      STA   a_stack_stream_pos_m,X
+      LDA   a_stream_pos+2
+      STA   a_stack_stream_pos_h,X
+      LDA   a_stream_ptr
+      STA   a_stack_stream_ptr_l,X
+      LDA   a_stream_ptr+1
+      STA   a_stack_stream_ptr_m,X
+      LDA   a_stream_ptr+2
+      STA   a_stack_stream_ptr_h,X
+      LDA   a_stream_cap
+      STA   a_stack_stream_cap_l,X
+      LDA   a_stream_cap+1
+      STA   a_stack_stream_cap_h,X
       INC   a_include_depth
       LDA   nasm_include_ptr
       STA   a_src
@@ -1418,11 +1701,34 @@ a_enter_include:
       STA   a_left
       LDA   nasm_include_len+1
       STA   a_left+1
+      STZ   a_source_stream
+      LDA   a_left
+      CMP   #<NASCORE_STREAM_SENTINEL
+      BNE   @source_ready
+      LDA   a_left+1
+      CMP   #>NASCORE_STREAM_SENTINEL
+      BNE   @source_ready
+      INC   a_source_stream
+      LDA   nasm_include_ptr
+      STA   a_stream_ptr
+      LDA   nasm_include_ptr+1
+      STA   a_stream_ptr+1
+      LDA   nasm_include_ptr+2
+      STA   a_stream_ptr+2
+      STZ   a_stream_pos
+      STZ   a_stream_pos+1
+      STZ   a_stream_pos+2
+      STZ   a_stream_cache_valid
+      LDA   #<NASCORE_INCLUDE_STREAM_CAP
+      STA   a_stream_cap
+      LDA   #>NASCORE_INCLUDE_STREAM_CAP
+      STA   a_stream_cap+1
+@source_ready:
       LDA   nasm_include_display_ptr
       STA   a_file_ptr
       LDA   nasm_include_display_ptr+1
       STA   a_file_ptr+1
-      LDA   nasm_include_name_len
+      LDA   nasm_include_display_len
       STA   a_file_len
       LDA   #1
       STA   nasm_error_line
@@ -1443,12 +1749,12 @@ a_enter_include:
 
 a_leave_include:
       JSR   a_include_close
-      BNE   @bad
+      long_bne @bad
       DEC   a_include_depth
       LDX   a_include_depth
       LDA   a_stack_cond_depth,X
       CMP   a_cond_depth
-      BNE   @bad
+      long_bne @bad
       LDA   a_stack_src_l,X
       STA   a_src
       LDA   a_stack_src_m,X
@@ -1475,6 +1781,25 @@ a_leave_include:
       STA   a_file_ptr+1
       LDA   a_stack_file_len,X
       STA   a_file_len
+      LDA   a_stack_stream,X
+      STA   a_source_stream
+      LDA   a_stack_stream_pos_l,X
+      STA   a_stream_pos
+      LDA   a_stack_stream_pos_m,X
+      STA   a_stream_pos+1
+      LDA   a_stack_stream_pos_h,X
+      STA   a_stream_pos+2
+      LDA   a_stack_stream_ptr_l,X
+      STA   a_stream_ptr
+      LDA   a_stack_stream_ptr_m,X
+      STA   a_stream_ptr+1
+      LDA   a_stack_stream_ptr_h,X
+      STA   a_stream_ptr+2
+      LDA   a_stack_stream_cap_l,X
+      STA   a_stream_cap
+      LDA   a_stack_stream_cap_h,X
+      STA   a_stream_cap+1
+      STZ   a_stream_cache_valid
       CLC
       RTS
 @bad:
@@ -1721,10 +2046,13 @@ a_relative_delta:
       LDA   a_pass
       CMP   #NASM_PASS_EMIT
       BNE   @define
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   a_section
       BNE   @symbol
+      sym_load a_sym_value_l
+      STA   a_expr_rhs_l
+      sym_load a_sym_value_h
+      STA   a_expr_rhs_h
       CLC
       LDA   a_code_len
       ADC   a_relative_size
@@ -1733,10 +2061,10 @@ a_relative_delta:
       ADC   #0
       STA   a_tmp1
       SEC
-      LDA   a_sym_value_l,X
+      LDA   a_expr_rhs_l
       SBC   a_tmp0
       STA   a_tmp0
-      LDA   a_sym_value_h,X
+      LDA   a_expr_rhs_h
       SBC   a_tmp1
       STA   a_tmp1
       BEQ   @positive
@@ -1773,14 +2101,43 @@ a_relative_delta:
       SEC
       RTS
 
+; Store A at the object-relative offset in a_word.
+a_object_write:
+      STA   a_store_value
+      CLC
+      LDA   a_object_xaddr
+      ADC   a_word
+      STA   a_name_xaddr
+      LDA   a_object_xaddr+1
+      ADC   a_word+1
+      STA   a_name_xaddr+1
+      LDA   a_object_xaddr+2
+      ADC   #0
+      STA   a_name_xaddr+2
+      STZ   XMC_W2AL
+      LDA   a_name_xaddr+1
+      STA   XMC_W2AM
+      LDA   a_name_xaddr+2
+      STA   XMC_W2AH
+      LDY   a_name_xaddr
+      LDA   a_store_value
+      STA   XRAM_WIN2_BASE,Y
+      RTS
+
+a_header_store:
+      PHY
+      STY   a_word
+      STZ   a_word+1
+      JSR   a_object_write
+      PLY
+      RTS
+
 ; Initialize the v2 header and reserve every section's serialized data area.
 a_begin_output:
-      LDA   nasm_object_ptr
-      STA   a_header
-      STA   a_dst
-      LDA   nasm_object_ptr+1
-      STA   a_header+1
-      STA   a_dst+1
+      STZ   a_header
+      STZ   a_header+1
+      STZ   a_dst
+      STZ   a_dst+1
       LDA   nasm_object_cap
       STA   a_cap
       LDA   nasm_object_cap+1
@@ -1794,31 +2151,31 @@ a_begin_output:
       LDY   #0
       LDA   #0
 @clear_header:
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       CPY   #NOBJ_HEADER_SIZE
       BCC   @clear_header
       LDY   #NOBJ_MAGIC
       LDA   #NOBJ_MAGIC0
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   #NOBJ_MAGIC1
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   #NOBJ_MAGIC2
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   #NOBJ_MAGIC3
-      STA   (a_header),Y
+      JSR   a_header_store
       LDY   #NOBJ_VERSION_OFF
       LDA   #NOBJ_VERSION
-      STA   (a_header),Y
+      JSR   a_header_store
       LDY   #NOBJ_SECTION_COUNT
       LDA   a_section_count
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   #0
-      STA   (a_header),Y          ; entry section = CODE
+      JSR   a_header_store        ; entry section = CODE
       CLC
       LDA   a_dst
       ADC   #NOBJ_HEADER_SIZE
@@ -1916,10 +2273,8 @@ a_begin_output:
       STZ   a_reloc_len+1
       STZ   a_reloc_count
       STZ   a_reloc_count+1
-      LDA   nasm_reloc_buffer_ptr
-      STA   a_reloc_ptr
-      LDA   nasm_reloc_buffer_ptr+1
-      STA   a_reloc_ptr+1
+      STZ   a_reloc_ptr
+      STZ   a_reloc_ptr+1
       CLC
       RTS
 @bad:
@@ -1956,8 +2311,49 @@ a_reserve_output:
       SEC
       RTS
 
+; Reuse the no-longer-needed hash chains as old-to-output symbol indices.
+; Private symbols without relocations never need to reach NL.
+a_prepare_output_symbols:
+      STZ   a_output_symbol_count
+      STZ   a_output_symbol_count+1
+      STZ   a_symbol_index
+      STZ   a_symbol_index_h
+@symbol:
+      LDA   a_symbol_index_h
+      CMP   a_symbol_count_h
+      BCC   @check
+      BNE   @done
+      LDA   a_symbol_index
+      CMP   a_symbol_count
+      BCS   @done
+@check:
+      sym_load a_sym_decl
+      AND   #NASM_DECL_IMPORT | NASM_DECL_EXPORT | NASM_DECL_GLOBAL | NASM_DECL_RELOC
+      BNE   @retain
+      LDA   #$FF
+      sym_store a_sym_next_l
+      LDA   #$FF
+      sym_store a_sym_next_h
+      BRA   @next
+@retain:
+      LDA   a_output_symbol_count
+      sym_store a_sym_next_l
+      LDA   a_output_symbol_count+1
+      sym_store a_sym_next_h
+      INC   a_output_symbol_count
+      BNE   @next
+      INC   a_output_symbol_count+1
+@next:
+      INC   a_symbol_index
+      BNE   @symbol
+      INC   a_symbol_index_h
+      BRA   @symbol
+@done:
+      RTS
+
 ; Append symbol and relocation tables, then publish their header offsets.
 a_finish_object:
+      JSR   a_prepare_output_symbols
       SEC
       LDA   a_dst
       SBC   a_header
@@ -1967,57 +2363,70 @@ a_finish_object:
       STA   a_tmp1
       LDY   #NOBJ_SYMBOL_OFFSET
       LDA   a_tmp0
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   a_tmp1
-      STA   (a_header),Y
+      JSR   a_header_store
       LDY   #NOBJ_SYMBOL_COUNT
-      LDA   a_symbol_count
-      STA   (a_header),Y
+      LDA   a_output_symbol_count
+      JSR   a_header_store
       INY
-      LDA   #0
-      STA   (a_header),Y
-      LDX   #0
+      LDA   a_output_symbol_count+1
+      JSR   a_header_store
+      STZ   a_symbol_index
+      STZ   a_symbol_index_h
 @symbol:
-      CPX   a_symbol_count
-      BCS   @symbols_done
-      STX   a_symbol_index
-      LDA   a_sym_value_l,X
+      LDA   a_symbol_index_h
+      CMP   a_symbol_count_h
+      long_bcc @emit_symbol
+      long_bne @symbols_done
+      LDA   a_symbol_index
+      CMP   a_symbol_count
+      long_bcs @symbols_done
+@emit_symbol:
+      sym_load a_sym_next_h
+      CMP   #$FF
+      BEQ   @next_symbol
+      sym_load a_sym_value_l
       JSR   a_emit_tail
       long_bcs @bad
-      LDX   a_symbol_index
-      LDA   a_sym_value_h,X
+      sym_load a_sym_value_h
       JSR   a_emit_tail
       long_bcs @bad
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       JSR   a_emit_tail
       long_bcs @bad
-      LDX   a_symbol_index
-      LDA   a_sym_flags,X
+      sym_load a_sym_flags
       JSR   a_emit_tail
       long_bcs @bad
-      LDX   a_symbol_index
-      LDA   a_sym_name_len,X
+      sym_load a_sym_decl
+      AND   #NASM_DECL_IMPORT | NASM_DECL_EXPORT | NASM_DECL_GLOBAL
+      BEQ   @private_name
+      sym_load a_sym_name_len
+      BRA   @name_length
+@private_name:
+      LDA   #0
+@name_length:
+      STA   a_sym_transfer
       JSR   a_emit_tail
       long_bcs @bad
-      LDX   a_symbol_index
       JSR   a_symbol_name_ptr
       LDY   #0
 @symbol_name:
-      LDX   a_symbol_index
-      TYA
-      CMP   a_sym_name_len,X
+      CPY   a_sym_transfer
       BCS   @next_symbol
+      JSR   a_symbol_name_ptr
       LDA   (a_symbol_ptr),Y
       JSR   a_emit_tail
-      BCS   @bad
+      long_bcs @bad
       INY
       BRA   @symbol_name
 @next_symbol:
-      LDX   a_symbol_index
-      INX
-      BRA   @symbol
+      INC   a_symbol_index
+      BNE   :+
+      INC   a_symbol_index_h
+:
+      JMP   @symbol
 @symbols_done:
       SEC
       LDA   a_dst
@@ -2028,28 +2437,48 @@ a_finish_object:
       STA   a_tmp1
       LDY   #NOBJ_RELOC_OFFSET
       LDA   a_tmp0
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   a_tmp1
-      STA   (a_header),Y
+      JSR   a_header_store
       LDY   #NOBJ_RELOC_COUNT
       LDA   a_reloc_count
-      STA   (a_header),Y
+      JSR   a_header_store
       INY
       LDA   a_reloc_count+1
-      STA   (a_header),Y
-      LDA   nasm_reloc_buffer_ptr
-      STA   a_reloc_ptr
-      LDA   nasm_reloc_buffer_ptr+1
-      STA   a_reloc_ptr+1
+      JSR   a_header_store
+      STZ   a_reloc_ptr
+      STZ   a_reloc_ptr+1
 @copy_reloc:
       LDA   a_reloc_len
       ORA   a_reloc_len+1
       BEQ   @length
-      LDY   #0
-      LDA   (a_reloc_ptr),Y
+      LDA   a_reloc_ptr
+      AND   #NOBJ_RELOC_SIZE-1
+      CMP   #NOBJ_REL_SYMBOL
+      BEQ   @copy_reloc_symbol
+      JSR   a_reloc_read
       JSR   a_emit_tail
       BCS   @bad
+      JSR   @consume_reloc
+      BRA   @copy_reloc
+@copy_reloc_symbol:
+      JSR   a_reloc_read
+      STA   a_symbol_index
+      JSR   @consume_reloc
+      JSR   a_reloc_read
+      STA   a_symbol_index_h
+      JSR   @consume_reloc
+      sym_load a_sym_next_l
+      JSR   a_emit_tail
+      BCS   @bad
+      sym_load a_sym_next_h
+      CMP   #$FF
+      BEQ   @bad
+      JSR   a_emit_tail
+      BCS   @bad
+      BRA   @copy_reloc
+@consume_reloc:
       INC   a_reloc_ptr
       BNE   :+
       INC   a_reloc_ptr+1
@@ -2057,7 +2486,7 @@ a_finish_object:
       BNE   :+
       DEC   a_reloc_len+1
 :     DEC   a_reloc_len
-      BRA   @copy_reloc
+      RTS
 @length:
       SEC
       LDA   a_dst
@@ -2479,15 +2908,94 @@ a_is_ident:
       RTS
 
 ; Find temp a_symbol. Carry set if found; a_symbol_index contains the index.
+a_sym_load:
+      STA   a_word
+      STY   a_word+1
+      PHY
+      JSR   a_sym_map
+      LDA   XRAM_WIN2_BASE,Y
+      PLY
+      RTS
+
+a_sym_store:
+      STA   a_word
+      STY   a_word+1
+      PHY
+      JSR   a_sym_map
+      LDA   a_sym_transfer
+      STA   XRAM_WIN2_BASE,Y
+      PLY
+      RTS
+
+; Map the metadata byte at table offset a_word plus the current symbol index.
+a_sym_map:
+      CLC
+      LDA   a_word
+      ADC   a_symbol_index
+      STA   a_name_xaddr
+      LDA   a_word+1
+      ADC   a_symbol_index_h
+      STA   a_name_xaddr+1
+      LDA   #0
+      ADC   #0
+      STA   a_name_xaddr+2
+      CLC
+      LDA   a_metadata_xaddr
+      ADC   a_name_xaddr
+      STA   a_name_xaddr
+      LDA   a_metadata_xaddr+1
+      ADC   a_name_xaddr+1
+      STA   a_name_xaddr+1
+      LDA   a_metadata_xaddr+2
+      ADC   a_name_xaddr+2
+      STA   a_name_xaddr+2
+      LDA   XMC_WINCTL
+      ORA   #XRAM_WIN2_ENABLE
+      STA   XMC_WINCTL
+      STZ   XMC_W2AL
+      LDA   a_name_xaddr+1
+      STA   XMC_W2AM
+      LDA   a_name_xaddr+2
+      STA   XMC_W2AH
+      LDY   a_name_xaddr
+      RTS
+
+a_init_symbol_hash:
+      STZ   a_symbol_index
+      STZ   a_symbol_index_h
+@clear:
+      LDA   #$FF
+      sym_store a_sym_bucket_l
+      LDA   #$FF
+      sym_store a_sym_bucket_h
+      INC   a_symbol_index
+      BNE   @clear
+      RTS
+
 a_find_symbol:
-      LDX   #0
+      JSR   a_hash_constant
+      LDA   a_const_slot
+      STA   a_symbol_index
+      STZ   a_symbol_index_h
+      sym_load a_sym_bucket_l
+      STA   a_tmp0
+      sym_load a_sym_bucket_h
+      STA   a_tmp1
+      LDA   a_tmp0
+      STA   a_symbol_index
+      LDA   a_tmp1
+      STA   a_symbol_index_h
 @entry:
-      CPX   a_symbol_count
-      BCS   @missing
-      LDA   a_sym_name_len,X
+      LDA   a_symbol_index_h
+      CMP   #$FF
+      BNE   @candidate
+      LDA   a_symbol_index
+      CMP   #$FF
+      BEQ   @missing
+@candidate:
+      sym_load a_sym_name_len
       CMP   a_symbol_len
       BNE   @next
-      STX   a_symbol_index
       JSR   a_symbol_name_ptr
       LDY   #0
 @name:
@@ -2499,9 +3007,15 @@ a_find_symbol:
       INY
       BRA   @name
 @next_saved:
-      LDX   a_symbol_index
 @next:
-      INX
+      sym_load a_sym_next_l
+      STA   a_tmp0
+      sym_load a_sym_next_h
+      STA   a_tmp1
+      LDA   a_tmp0
+      STA   a_symbol_index
+      LDA   a_tmp1
+      STA   a_symbol_index_h
       BRA   @entry
 @found:
       SEC
@@ -2695,6 +3209,7 @@ a_append_constant:
 
 a_const_read_advance:
       PHY
+      STZ   XMC_W2AL
       LDA   a_const_scan+1
       STA   XMC_W2AM
       LDA   a_const_scan+2
@@ -2710,6 +3225,7 @@ a_const_read_advance:
 a_const_write_advance:
       PHY
       PHA
+      STZ   XMC_W2AL
       LDA   a_const_scan+1
       STA   XMC_W2AM
       LDA   a_const_scan+2
@@ -2734,22 +3250,25 @@ a_const_advance:
 a_get_symbol:
       LDA   a_symbol_len
       CMP   #NASM_SYMBOL_CAP+1
-      BCS   @bad
+      long_bcs @bad
       JSR   a_find_symbol
-      BCS   @ok
-      LDX   a_symbol_count
-      CPX   #NASM_SYMBOL_TABLE_CAP
-      BCS   @bad
-      STX   a_symbol_index
+      long_bcs @ok
+      LDA   a_symbol_count_h
+      CMP   #>NASM_SYMBOL_TABLE_CAP
+      long_bcs @bad
+      LDA   a_symbol_count
+      STA   a_symbol_index
+      LDA   a_symbol_count_h
+      STA   a_symbol_index_h
       LDA   a_symbol_len
-      STA   a_sym_name_len,X
-      STZ   a_sym_value_l,X
-      STZ   a_sym_value_h,X
+      sym_store a_sym_name_len
+      sym_clear a_sym_value_l
+      sym_clear a_sym_value_h
       LDA   #NOBJ_SYM_UNDEFINED
-      STA   a_sym_section,X
-      STZ   a_sym_flags,X
-      STZ   a_sym_decl,X
-      STZ   a_sym_forward,X
+      sym_store a_sym_section
+      sym_clear a_sym_flags
+      sym_clear a_sym_decl
+      sym_clear a_sym_forward
       JSR   a_symbol_name_ptr
       LDY   #0
 @copy:
@@ -2760,7 +3279,10 @@ a_get_symbol:
       INY
       BRA   @copy
 @created:
+      JSR   a_link_symbol
       INC   a_symbol_count
+      BNE   @ok
+      INC   a_symbol_count_h
 @ok:
       CLC
       RTS
@@ -2768,30 +3290,62 @@ a_get_symbol:
       SEC
       RTS
 
+a_link_symbol:
+      LDA   a_symbol_index
+      STA   a_hash_symbol_l
+      LDA   a_symbol_index_h
+      STA   a_hash_symbol_h
+      JSR   a_hash_constant
+      LDA   a_const_slot
+      STA   a_symbol_index
+      STZ   a_symbol_index_h
+      sym_load a_sym_bucket_l
+      STA   a_const_next_l
+      sym_load a_sym_bucket_h
+      STA   a_const_next_h
+      LDA   a_hash_symbol_l
+      STA   a_symbol_index
+      LDA   a_hash_symbol_h
+      STA   a_symbol_index_h
+      LDA   a_const_next_l
+      sym_store a_sym_next_l
+      LDA   a_const_next_h
+      sym_store a_sym_next_h
+      LDA   a_const_slot
+      STA   a_symbol_index
+      STZ   a_symbol_index_h
+      LDA   a_hash_symbol_l
+      sym_store a_sym_bucket_l
+      LDA   a_hash_symbol_h
+      sym_store a_sym_bucket_h
+      LDA   a_hash_symbol_l
+      STA   a_symbol_index
+      LDA   a_hash_symbol_h
+      STA   a_symbol_index_h
+      RTS
+
 ; Define temp symbol at the current section-relative code offset.
 a_define_symbol:
       JSR   a_find_symbol
       BCC   @create
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @bad
       BRA   @check_decl
 @create:
       JSR   a_get_symbol
       BCS   @bad
-      LDX   a_symbol_index
 @check_decl:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
       BNE   @bad
 @set:
       LDA   a_code_len
-      STA   a_sym_value_l,X
+      sym_store a_sym_value_l
       LDA   a_code_len+1
-      STA   a_sym_value_h,X
+      sym_store a_sym_value_h
       LDA   a_section
-      STA   a_sym_section,X
+      sym_store a_sym_section
       CLC
       RTS
 @bad:
@@ -2802,17 +3356,15 @@ a_define_symbol:
 a_declare_pending_absolute:
       JSR   a_find_symbol
       BCC   @create
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @bad
       BRA   @check_decl
 @create:
       JSR   a_get_symbol
       BCS   @bad
-      LDX   a_symbol_index
 @check_decl:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
       BNE   @bad
       CLC
@@ -2830,7 +3382,7 @@ a_define_absolute:
       JSR   a_find_symbol
       BCS   @regular
       JSR   a_find_constant
-      BCS   @bad
+      long_bcs @bad
       JSR   a_append_constant
       RTS
 @regular:
@@ -2841,8 +3393,7 @@ a_define_absolute:
       BNE   @verify
       JSR   a_find_symbol
       BCC   @bad
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_ABSOLUTE
       BEQ   @verify_found
       CMP   #NOBJ_SYM_UNDEFINED
@@ -2850,35 +3401,33 @@ a_define_absolute:
       INC   a_resolve_changed
       BRA   @check_decl
 @define:
-      LDX   a_symbol_index
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @bad
       BRA   @check_decl
 @check_decl:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
       BNE   @bad
       LDA   a_repeat_l
-      STA   a_sym_value_l,X
+      sym_store a_sym_value_l
       LDA   a_repeat_h
-      STA   a_sym_value_h,X
+      sym_store a_sym_value_h
       LDA   #NOBJ_SYM_ABSOLUTE
-      STA   a_sym_section,X
+      sym_store a_sym_section
       CLC
       RTS
 @verify:
       JSR   a_find_symbol
       BCC   @bad
-      LDX   a_symbol_index
 @verify_found:
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_ABSOLUTE
       BNE   @bad
-      LDA   a_sym_value_l,X
+      sym_load a_sym_value_l
       CMP   a_repeat_l
       BNE   @bad
-      LDA   a_sym_value_h,X
+      sym_load a_sym_value_h
       CMP   a_repeat_h
       BNE   @bad
       CLC
@@ -2896,25 +3445,63 @@ a_declare_symbols:
       BCS   @bad
       JSR   a_get_symbol
       BCS   @bad
-      LDX   a_symbol_index
       LDA   a_expr_digit
       CMP   #NASM_DECL_IMPORT
       BEQ   @check_export
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
       BNE   @bad
       BRA   @mark
 @check_export:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_EXPORT
       BNE   @bad
 @mark:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       ORA   a_expr_digit
-      STA   a_sym_decl,X
-      LDA   a_sym_flags,X
+      sym_store a_sym_decl
+      sym_load a_sym_flags
       ORA   #NOBJ_SYM_GLOBAL
-      STA   a_sym_flags,X
+      sym_store a_sym_flags
+      JSR   a_skip_hspace
+      JSR   a_peek
+      BCC   @done
+      CMP   #','
+      BNE   @done
+      JSR   a_next
+      BRA   @symbol
+@done:
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; Import only undefined symbols already referenced earlier in this source.
+; This keeps generated ABI footers compact without adding unused NOBJ symbols.
+a_declare_referenced_imports:
+@symbol:
+      JSR   a_skip_hspace
+      JSR   a_parse_identifier
+      BCS   @bad
+      JSR   a_find_symbol
+      BCC   @delimiter
+      sym_load a_sym_section
+      CMP   #NOBJ_SYM_UNDEFINED
+      BNE   @delimiter
+      sym_load a_sym_decl
+      AND   #NASM_DECL_REFERENCED
+      BEQ   @delimiter
+      sym_load a_sym_decl
+      AND   #NASM_DECL_EXPORT
+      BNE   @bad
+      sym_load a_sym_decl
+      ORA   #NASM_DECL_IMPORT
+      sym_store a_sym_decl
+      sym_load a_sym_flags
+      ORA   #NOBJ_SYM_GLOBAL
+      sym_store a_sym_flags
+@delimiter:
       JSR   a_skip_hspace
       JSR   a_peek
       BCC   @done
@@ -2937,10 +3524,9 @@ a_mark_references:
       BCS   @bad
       JSR   a_get_symbol
       BCS   @bad
-      LDX   a_symbol_index
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       ORA   #NASM_DECL_REFERENCED
-      STA   a_sym_decl,X
+      sym_store a_sym_decl
       JSR   a_skip_hspace
       JSR   a_peek
       BCC   @done
@@ -2961,8 +3547,7 @@ a_parse_referenced_condition:
       BCS   @bad
       JSR   a_find_symbol
       BCC   @no
-      LDX   a_symbol_index
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_REFERENCED
       BEQ   @no
       LDA   #1
@@ -3249,23 +3834,33 @@ a_emit_alignment:
 
 ; Every undefined symbol must be an explicit import; every export must resolve.
 a_validate_symbols:
-      LDX   #0
+      STZ   a_symbol_index
+      STZ   a_symbol_index_h
 @symbol:
-      CPX   a_symbol_count
+      LDA   a_symbol_index_h
+      CMP   a_symbol_count_h
+      BCC   @check
+      BNE   @ok
+      LDA   a_symbol_index
+      CMP   a_symbol_count
       BCS   @ok
-      LDA   a_sym_section,X
+@check:
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @defined
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT | NASM_DECL_GLOBAL
       BEQ   @bad
       BRA   @next
 @defined:
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
       BNE   @bad
 @next:
-      INX
+      INC   a_symbol_index
+      BNE   :+
+      INC   a_symbol_index_h
+:
       BRA   @symbol
 @ok:
       CLC
@@ -3274,12 +3869,12 @@ a_validate_symbols:
       SEC
       RTS
 
-; X = symbol index -> pointer to its fixed-size name slot.
+; Map the current 16-bit symbol index's fixed-size XRAM name slot.
 a_symbol_name_ptr:
-      STX   a_symbol_index
-      TXA
+      LDA   a_symbol_index
       STA   a_tmp0
-      STZ   a_tmp1
+      LDA   a_symbol_index_h
+      STA   a_tmp1
       ASL   a_tmp0
       ROL   a_tmp1
       ASL   a_tmp0
@@ -3293,11 +3888,22 @@ a_symbol_name_ptr:
       CLC
       LDA   nasm_symbol_names_ptr
       ADC   a_tmp0
-      STA   a_symbol_ptr
+      STA   a_name_xaddr
       LDA   nasm_symbol_names_ptr+1
       ADC   a_tmp1
+      STA   a_name_xaddr+1
+      LDA   nasm_symbol_names_ptr_h
+      ADC   #0
+      STA   a_name_xaddr+2
+      STZ   XMC_W2AL
+      LDA   a_name_xaddr+1
+      STA   XMC_W2AM
+      LDA   a_name_xaddr+2
+      STA   XMC_W2AH
+      LDA   a_name_xaddr
+      STA   a_symbol_ptr
+      LDA   #>XRAM_WIN2_BASE
       STA   a_symbol_ptr+1
-      LDX   a_symbol_index
       RTS
 
 ; Return an explicit byte transform or range-checked ABS8 by default.
@@ -3312,6 +3918,9 @@ a_byte_reloc_type:
 a_add_relocation:
       STA   a_operand_reloc
       STX   a_relative_size
+      sym_load a_sym_decl
+      ORA   #NASM_DECL_RELOC
+      sym_store a_sym_decl
       LDA   a_tmp0
       STA   a_reloc_addend_l
       LDA   a_tmp1
@@ -3338,7 +3947,7 @@ a_add_relocation:
       LDA   a_symbol_index
       JSR   a_reloc_emit
       BCS   @bad
-      LDA   #0
+      LDA   a_symbol_index_h
       JSR   a_reloc_emit
       BCS   @bad
       LDA   a_reloc_addend_l
@@ -3366,8 +3975,7 @@ a_reloc_emit:
       RTS
 @room:
       PLA
-      LDY   #0
-      STA   (a_reloc_ptr),Y
+      JSR   a_reloc_write
       INC   a_reloc_ptr
       BNE   :+
       INC   a_reloc_ptr+1
@@ -3375,6 +3983,37 @@ a_reloc_emit:
       BNE   :+
       INC   a_reloc_len+1
 :     CLC
+      RTS
+
+a_reloc_write:
+      STA   a_store_value
+      JSR   a_reloc_map
+      LDA   a_store_value
+      STA   XRAM_WIN2_BASE,Y
+      RTS
+
+a_reloc_read:
+      JSR   a_reloc_map
+      LDA   XRAM_WIN2_BASE,Y
+      RTS
+
+a_reloc_map:
+      CLC
+      LDA   a_reloc_xaddr
+      ADC   a_reloc_ptr
+      STA   a_name_xaddr
+      LDA   a_reloc_xaddr+1
+      ADC   a_reloc_ptr+1
+      STA   a_name_xaddr+1
+      LDA   a_reloc_xaddr+2
+      ADC   #0
+      STA   a_name_xaddr+2
+      STZ   XMC_W2AL
+      LDA   a_name_xaddr+1
+      STA   XMC_W2AM
+      LDA   a_name_xaddr+2
+      STA   XMC_W2AH
+      LDY   a_name_xaddr
       RTS
 
 ; 16-bit precedence-climbing expression evaluator. Values wrap at 16 bits;
@@ -3393,10 +4032,10 @@ a_expr_parse:
       STA   a_expr_min,X
       INC   a_expr_depth
       JSR   a_expr_unary
-      BCS   @bad
+      long_bcs @bad
 @operator:
       JSR   a_expr_peek_operator
-      BCC   @done
+      long_bcc @done
       LDY   a_expr_depth
       DEY
       STA   a_expr_op,Y
@@ -3412,6 +4051,8 @@ a_expr_parse:
       STA   a_expr_lhs_sym,Y
       LDA   a_symbol_index
       STA   a_expr_lhs_index,Y
+      LDA   a_symbol_index_h
+      STA   a_expr_lhs_index_h,Y
       LDA   a_expr_op,Y
       JSR   a_expr_consume_operator
       BCS   @bad
@@ -3429,6 +4070,8 @@ a_expr_parse:
       STA   a_expr_rhs_sym
       LDA   a_symbol_index
       STA   a_expr_rhs_index
+      LDA   a_symbol_index_h
+      STA   a_expr_rhs_index_h
       LDY   a_expr_depth
       DEY
       LDA   a_expr_lhs_l,Y
@@ -3439,10 +4082,12 @@ a_expr_parse:
       STA   a_operand_symbol
       LDA   a_expr_lhs_index,Y
       STA   a_symbol_index
+      LDA   a_expr_lhs_index_h,Y
+      STA   a_symbol_index_h
       LDA   a_expr_op,Y
       JSR   a_expr_apply
-      BCS   @bad
-      BRA   @operator
+      long_bcs @bad
+      JMP   @operator
 @done:
       DEC   a_expr_depth
       CLC
@@ -3591,6 +4236,11 @@ a_expr_peek_operator:
       RTS
 
 a_expr_peek_second:
+      LDA   a_source_stream
+      BEQ   @bounded
+      LDX   #1
+      JMP   a_stream_peek_offset
+@bounded:
       LDA   a_left+1
       BNE   @read
       LDA   a_left
@@ -3621,6 +4271,11 @@ a_expr_peek_second:
       RTS
 
 a_expr_peek_third:
+      LDA   a_source_stream
+      BEQ   @bounded
+      LDX   #2
+      JMP   a_stream_peek_offset
+@bounded:
       LDA   a_left+1
       BNE   @read
       LDA   a_left
@@ -3812,8 +4467,11 @@ a_expr_primary:
       CMP   #'9'+1
       long_bcc a_expr_decimal
 @identifier:
+      CMP   #'@'
+      BEQ   @parse_identifier
       JSR   a_is_ident_start
       long_bcc @bad
+@parse_identifier:
       JSR   a_parse_identifier
       long_bcs @bad
       JMP   @symbol
@@ -3837,37 +4495,36 @@ a_expr_primary:
       JSR   a_get_symbol
       long_bcs @bad
 @object_found:
-      LDX   a_symbol_index
       LDA   a_assignment_expr
       BNE   :+
-      LDA   a_sym_decl,X
+      sym_load a_sym_decl
       ORA   #NASM_DECL_REFERENCED
-      STA   a_sym_decl,X
+      sym_store a_sym_decl
 :
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_ABSOLUTE
       BNE   @relocatable
       LDA   a_assignment_expr
       BNE   @absolute
-      LDA   a_sym_forward,X
+      sym_load a_sym_forward
       BNE   @relocatable
 @absolute:
-      LDA   a_sym_value_l,X
+      sym_load a_sym_value_l
       STA   a_tmp0
-      LDA   a_sym_value_h,X
+      sym_load a_sym_value_h
       STA   a_tmp1
       STZ   a_operand_symbol
       CLC
       RTS
 @relocatable:
-      LDA   a_sym_section,X
+      sym_load a_sym_section
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   :+
       LDA   a_pass
       CMP   #NASM_PASS_DEFINE
       BNE   :+
       LDA   #1
-      STA   a_sym_forward,X
+      sym_store a_sym_forward
 :
       LDA   #1
       STA   a_operand_symbol
@@ -4250,6 +4907,8 @@ a_expr_apply:
       STA   a_operand_symbol
       LDA   a_expr_rhs_index
       STA   a_symbol_index
+      LDA   a_expr_rhs_index_h
+      STA   a_symbol_index_h
 @add_values:
       CLC
       LDA   a_tmp0
@@ -4399,7 +5058,147 @@ a_read_upper:
       CLC
       RTS
 
+; Stream the current source from disk through its bounded XRAM cache. Root
+; sources and includes share this path; nested includes invalidate and refill
+; their parent's cache when they return.
+a_stream_peek_offset:
+      STX   a_stream_extra
+      LDA   a_stream_cache_valid
+      long_beq @refill
+@cached:
+      SEC
+      LDA   a_stream_pos
+      SBC   a_stream_base
+      STA   a_stream_offset
+      LDA   a_stream_pos+1
+      SBC   a_stream_base+1
+      STA   a_stream_offset+1
+      LDA   a_stream_pos+2
+      SBC   a_stream_base+2
+      BCC   @refill
+      BNE   @refill
+      CLC
+      LDA   a_stream_offset
+      ADC   a_stream_extra
+      STA   a_stream_offset
+      LDA   a_stream_offset+1
+      ADC   #0
+      STA   a_stream_offset+1
+      BCS   @outside
+      CMP   a_stream_cache_len+1
+      BCC   @read
+      BNE   @outside
+      LDA   a_stream_offset
+      CMP   a_stream_cache_len
+      BCS   @outside
+@read:
+      CLC
+      LDA   a_stream_ptr
+      ADC   a_stream_offset
+      TAY
+      LDA   a_stream_ptr+1
+      ADC   a_stream_offset+1
+      STA   WIN3_MI
+      LDA   a_stream_ptr+2
+      ADC   #0
+      STA   WIN3_HI
+      LDA   WIN3_BASE,Y
+      SEC
+      RTS
+@outside:
+      LDA   a_stream_cache_len
+      CMP   a_stream_cap
+      BNE   @fail
+      LDA   a_stream_cache_len+1
+      CMP   a_stream_cap+1
+      BNE   @fail
+      LDA   a_stream_pos
+      CMP   a_stream_base
+      BNE   @refill
+      LDA   a_stream_pos+1
+      CMP   a_stream_base+1
+      BNE   @refill
+      LDA   a_stream_pos+2
+      CMP   a_stream_base+2
+      BEQ   @fail
+@refill:
+      JSR   a_stream_refill
+      BNE   @fail
+      JMP   @cached
+@fail:
+      CLC
+      RTS
+
+a_stream_refill:
+      LDA   a_stream_cap
+      STA   LIB_ARG3
+      LDA   a_stream_cap+1
+      STA   LIB_ARG3+1
+      LDA   a_file_ptr
+      STA   LIB_ARG0
+      LDA   a_file_ptr+1
+      STA   LIB_ARG0+1
+      LDA   a_file_len
+      STA   LIB_ARG0+2
+      STZ   LIB_ARG0+3
+      LDA   a_stream_pos
+      STA   LIB_ARG1
+      LDA   a_stream_pos+1
+      STA   LIB_ARG1+1
+      LDA   a_stream_pos+2
+      STA   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+      LDX   #2
+@address:
+      LDA   a_stream_ptr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      STZ   LIB_ARG2+3
+      STZ   LIB_ARG3+2
+      STZ   LIB_ARG3+3
+      LDA   #FILE_PAGE
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @error
+      LDA   LIB_RESULT
+      STA   a_stream_cache_len
+      LDA   LIB_RESULT+1
+      STA   a_stream_cache_len+1
+      LDX   #2
+@base:
+      LDA   a_stream_pos,X
+      STA   a_stream_base,X
+      DEX
+      BPL   @base
+      LDA   #1
+      STA   a_stream_cache_valid
+      LDA   #0
+@done:
+      RTS
+@error:
+      INC   a_include_error
+      LDA   #1
+      RTS
+
 a_peek:
+      LDA   a_source_stream
+      BEQ   @bounded
+      PHX
+      LDX   #0
+      JSR   a_stream_peek_offset
+      PLX
+      BCS   @done
+      LDA   a_include_depth
+      BEQ   @eof
+      JSR   a_leave_include
+      BCC   a_peek
+      INC   a_include_error
+      BRA   @eof
+@bounded:
       LDA   a_left
       ORA   a_left+1
       BNE   @read
@@ -4413,6 +5212,7 @@ a_peek:
       LDY   a_src
       LDA   WIN3_BASE,Y
       SEC
+@done:
       RTS
 @eof:
       CLC
@@ -4422,6 +5222,15 @@ a_next:
       JSR   a_peek
       BCC   @eof
       PHA
+      LDA   a_source_stream
+      BEQ   @xram
+      INC   a_stream_pos
+      BNE   @position
+      INC   a_stream_pos+1
+      BNE   @position
+      INC   a_stream_pos+2
+      BRA   @position
+@xram:
       INC   a_src
       BNE   @left
       INC   a_src+1
@@ -4436,6 +5245,7 @@ a_next:
       BNE   :+
       DEC   a_left+1
 :     DEC   a_left
+@position:
       PLA
       PHA
       CMP   #$0A
@@ -4486,8 +5296,7 @@ a_emit:
       ADC   a_code_len+1
       STA   a_word+1
       PLA
-      LDY   #0
-      STA   (a_word),Y
+      JSR   a_object_write
 a_advance:
       INC   a_code_len
       BNE   :+
@@ -4519,9 +5328,12 @@ a_emit_tail:
       LDA   a_cap
       ORA   a_cap+1
       BEQ   @full
+      LDA   a_dst
+      STA   a_word
+      LDA   a_dst+1
+      STA   a_word+1
       PLA
-      LDY   #0
-      STA   (a_dst),Y
+      JSR   a_object_write
       INC   a_dst
       BNE   :+
       INC   a_dst+1
@@ -4551,6 +5363,7 @@ a_kw_bvs:  .byte "BVS", 0
 a_kw_byte: .byte "BYTE", 0
 a_kw_word: .byte "WORD", 0
 a_kw_import: .byte "IMPORT", 0
+a_kw_importifref: .byte "IMPORTIFREF", 0
 a_kw_export: .byte "EXPORT", 0
 a_kw_global: .byte "GLOBAL", 0
 a_kw_globalzp: .byte "GLOBALZP", 0

@@ -8,8 +8,9 @@ SRC_URI = "file://authorized_keys \
 
 S = "${WORKDIR}"
 
-# Location of the NovaVM checkout (the nova-fs essentials are installed from it).
-NOVAVM_REPO ?= "/home/barry/NovaVM"
+# Resolve the checkout through the linked meta-user layer so builds are not
+# tied to one developer's filesystem layout.
+NOVAVM_REPO ?= "${@os.path.realpath(os.path.join(d.getVar('THISDIR'), '../../../../../../..'))}"
 
 RDEPENDS:${PN} = "samba avahi-daemon parted e2fsprogs-resize2fs util-linux-sfdisk util-linux-partx novavm"
 

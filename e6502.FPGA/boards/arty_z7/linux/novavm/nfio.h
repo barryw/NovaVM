@@ -45,6 +45,7 @@ void nfio_init(void);
  * bare-metal. Add the matching `case FIO_CMD_*:` entries to novavm.c's switch
  * (see the opcode map in nfio.c's header comment / the delivered report). */
 void fio_xload(void);         /* FIO_CMD_XLOAD       0x18: file -> flat XRAM            */
+void fio_xsave(void);         /* FIO_CMD_XSAVE       0x19: flat XRAM -> file            */
 void fio_xpage(void);         /* FIO_CMD_XPAGE       0x29: file slice -> XRAM or CPU RAM */
 void fio_load_runtime(void);  /* FIO_CMD_LOADRUNTIME 0x28: 16KB ROM -> $C000 primary bank */
 void fio_fopen(void);         /* FIO_CMD_FOPEN       0x2D: open image file -> handle    */
@@ -55,6 +56,11 @@ void fio_fwrite(void);        /* FIO_CMD_FWRITE      0x31: append chunk to write
 void fio_fseek(void);         /* FIO_CMD_FSEEK       0x32: set handle position          */
 void fio_ftell(void);         /* FIO_CMD_FTELL       0x33: report handle position       */
 void fio_fsize(void);         /* FIO_CMD_FSIZE       0x34: report handle size           */
+void fio_fresize(void);       /* FIO_CMD_FRESIZE     0x35: resize writable handle       */
+void fio_fflush(void);        /* FIO_CMD_FFLUSH      0x36: persist dirty handle         */
+void fio_fstatus(void);       /* FIO_CMD_FSTATUS     0x37: exact-file status            */
+void fio_fdelete(void);       /* FIO_CMD_FDELETE     0x38: exact-file delete            */
+void fio_frename(void);       /* FIO_CMD_FRENAME     0x39: exact-file rename            */
 
 /* ---- mounted-image LOAD hook (wire into novavm.c's fio_load) ---------------
  * Resolve a bare 6502 filename inside the mounted .ndi boot image and, if found,

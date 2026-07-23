@@ -4,13 +4,20 @@
 file, editor, compiler, assembler, linker, build, and run commands.
 
 The shell and native Pascal compiler (NPC) remain resident in the
-`$C000-$FFFF` language ROM. NPC allocates transient source storage through the
-NDK Memory module, streams Pascal source into that block, parses it there, and
-releases it after writing generated assembly to disk.
+`$C000-$FFFF` language ROM. For each active primary or `{$I}` source, NPC
+allocates one 16 KiB block through the NDK Memory module and treats its halves
+as alternating 8 KiB cache pages. Refills use the generic Files-module
+`FILE_PAGE` service and a 24-bit disk offset, so source size is bounded by the
+Nova file format rather than the cache allocation. Parser marks preserve the
+page cursor across lookahead, and every allocation is released after generated
+assembly has been streamed to disk.
 
 O2 is a separate disk-loaded compiler stage, `NPO2.BIN`, so optimization does
 not consume scarce resident ROM and NAS/NL remain language-neutral. NPC emits a
-compact typed linear IR into the temporary `.S` stream. NPO2 uses two transient
+compact typed linear IR into per-source `.ASM` or direct-build `.S` streams.
+Before NPO2 runs, NAS preprocessing expands generic `.INCLUDETEXT` composition
+so the optimizer sees one typed program without expanding ordinary assembly
+includes. NPO2 uses two transient
 16 KiB NDK-managed XRAM buffers for six streaming passes and releases both on
 every exit path: typed dataflow optimization;
 three rounds of leaf/caller inlining and dead-routine removal; 65C02 instruction
@@ -22,7 +29,9 @@ Call-free function tails keep their result in compiler scratch, while the stack
 ABI remains the conservative fallback. Inlining is limited to local leaf
 routines with exactly one static call site and iterates so their callers can
 become eligible. NPO2 overwrites the `.S` file with ordinary readable 65C02
-assembly before NAS runs; no `.O2` records reach NAS or user-visible output.
+assembly before NAS runs; no `.O2` records reach NAS or the final `.S`.
+Standalone unit `.ASM` is intentionally published typed IR so another Pascal
+build can retain routine boundaries for whole-program O2.
 Both `COMPILE` and `BUILD` print the optimizer banner and every pass as it runs.
 
 ## Executable language slice
@@ -52,7 +61,10 @@ main `begin`. NPC records routine boundaries, calls, and function-result effects
 in typed IR. NPO2 lowers ordinary `JSR`/`RTS` and stack-resident results when a
 routine must remain callable; at O2 it removes a single-call leaf and substitutes
 its body at the call site, and it uses an NDK scratch byte when no call can occur
-after a function-result assignment. Life remains readable Pascal built from
+after a function-result assignment. Routines using Pascal parameter/local
+frames remain callable until O2 has a dedicated frame-elision transform; it
+never deletes the caller return pair that the frame ABI uses to find packed
+arguments. Life remains readable Pascal built from
 `RandomCell`, `Seed`, `Draw`, `CountNeighbors`, `NextCell`, `Evolve`, and
 `Commit`; optimization does not require source-level flattening.
 
@@ -83,11 +95,13 @@ block. Substantial assembly belongs in the existing unit bundle (`.PAS`, `.NPI`,
 `.INC`, and `.S`) so it retains a Pascal-facing contract and the canonical NDK
 implementation rather than growing inside a Pascal source file.
 
-The resident driver reuses `$2000-$6FFF` as transient compiler workspace before
-NAS or NL is loaded: generated assembly occupies `$2000-$5FFF`, and a 64-entry
-typed symbol table starts at `$6000`. Generated arithmetic uses the canonical
-NDK pseudo-register mailbox declared by `NVR.INC`; compact word, comparison,
-and indexed-array helpers are ordinary members of `PASCAL.NLIB`, so NL extracts
+NPC loads `NPCFE.OVL` at `$1E00-$9FFF` only while compiling. The overlay owns
+the recursive-descent parser and typed tables; its source bytes stay in
+NDK-allocated XRAM pages. Include buffers are keyed by active nesting depth, so
+finished sequential `{$I}` files reuse the same 16 KiB double buffer; generated
+assembly is written incrementally through `FILE_FWRITE`. Generated arithmetic uses the canonical NDK
+pseudo-register mailbox declared by `NVR.INC`; compact word, comparison, and
+indexed-array helpers are ordinary members of `PASCAL.NLIB`, so NL extracts
 them only when referenced. Decimal byte output is a separate
 `P_WRITE_BYTE` archive member, so NL omits it from programs that only print
 strings. NPC emits zero-, one-, and two-character `writeln` literals as direct
@@ -103,13 +117,19 @@ the bytes and advances the saved return address past them before returning;
 NAS and NL require no special handling. Syntax failures are reported as
 `file:line:column` diagnostics.
 
-`Word` is currently unsigned and uses A for its low byte and X for its high
-byte. `Boolean` and `Char` occupy one byte, as do Boolean array elements.
-Project-owned units support public parameterless procedures and public
-parameterless `Byte`/`Boolean` functions. Routine parameters, routine-local and
-unit-local declarations, unit initialization/finalization, signed `Integer`,
-wider integer types, `Real`, sets, records, pointers, word arrays, and word
-output remain subsequent work rather than accepted-but-partial syntax.
+`Word` is unsigned; `Integer` is signed 16-bit; `Boolean` and `Char` occupy one
+byte. `Real` is signed Q16.16 and executes in the shared paged `LANGRT` module.
+Multiplication, square root, sine, cosine, and arctangent use Nova's math
+coprocessor; the runtime scales its integer and fixed-point results back into
+Pascal `Real` values. General Q16.16 division remains software because the
+hardware divider intentionally returns only a signed 16-bit quotient.
+The MicroCalc compatibility slice exercises enumerations, subranges,
+sets, records, strings, multidimensional arrays, `Real`, nested and recursive
+routines, value and `var` parameters, locals, typed/text files, and formatted
+output. Public project-unit declarations remain intentionally narrower:
+parameterless procedures and parameterless `Byte`/`Boolean` functions. Pointers,
+wider integers, unit initialization/finalization, and Object Pascal are not yet
+language contracts.
 
 ## Pascal standard units
 
@@ -153,6 +173,32 @@ the model for the rest of the NDK. Standard platform units remain precompiled,
 generated components tied to canonical NDK metadata. Project-owned units are
 ordinary `.PAS` sources compiled as part of an NPP 2 build.
 
+`NovaMemory` exposes allocation without leaking platform address widths into
+Pascal. `RamBlock` is an opaque pointer/length descriptor over the unused tail
+of the project's configured application-RAM region; `RamAlloc`, `RamFree`,
+`RamRead`, and `RamWrite` use 16-bit sizes and offsets, bounds-check every
+transfer, and coalesce released blocks without a fixed allocation table.
+`XRamBlock` similarly hides the allocator's 24-bit address while
+`XRamAlloc`, `XRamFree`, `XRamRead`, and `XRamWrite` retain a Pascal-sized
+16-bit allocation/transfer contract and call the canonical NDK Memory module.
+The readable `NOVAMEMORY.PAS` contract declares both descriptor types. Current
+`.NPI` metadata validates routine calls but does not yet import unit type
+declarations, so source clients temporarily repeat those two array aliases;
+compiled-unit type metadata is the clean removal path.
+
+The development disk keeps those roles physically separate. `/SYSTEM` contains
+generated NDK contracts, declarations, implementations, and `PASCAL.NLIB`;
+users do not edit it. `/USER` contains reusable user unit projects and their
+published build artifacts. New manifests search both roots in this order:
+
+```text
+UNITPATH SYSTEM
+UNITPATH USER
+```
+
+NAS performs the actual case-insensitive include lookup through those generic
+paths. NPC contains no disk layout, NDK symbol table, or hardware API table.
+
 ## Low-level NDK bindings
 
 NPC accepts a standard `USES` clause for canonical NDK source units. A unit
@@ -174,9 +220,10 @@ begin
 end.
 ```
 
-`Byte` variables occupy linker-managed `BSS`. Nova's raw load-address binary
-format materializes live BSS, so each live variable costs exactly one
-zero-filled byte with no per-variable metadata or alignment overhead. A
+Static variables occupy linker-managed `BSS`. When BSS is the final live
+segment, NL omits its zero bytes and appends the eight-byte `NBS1` trailer;
+`MEM_EXEC_IMAGE` validates that trailer and zeroes the exact range before entry.
+Legacy flat binaries remain valid. A
 no-argument `function()` returns its byte in A; a one-byte routine argument is
 passed in A. Decimal, `$` hexadecimal, and single-character byte values are
 accepted. `Byte(NDK_CONSTANT)` loads a generated, range-checked canonical byte
@@ -192,9 +239,9 @@ Consequently `uses NovaRng;` can call RNG without naming or ordering its interna
 FIO dependency, while a program that directly calls FIO still declares
 `NovaFio` for its typed interface.
 
-The development disk installs generated unit bundles for all 40 annotated NDK
-libraries: Nova, FIO, Audio, VGC, Sprite, Meta-Sprite, Virtual Sprite, Virtual
-Text, NUI and its component libraries, Copper, DMA, Blitter, XRAM, XMC, Pager,
+The development disk installs generated unit bundles for all 42 annotated NDK
+libraries: Nova, Array, RAM Heap, FIO, Audio, VGC, Sprite, Meta-Sprite, Virtual
+Sprite, Virtual Text, NUI and its component libraries, Copper, DMA, Blitter, XRAM, XMC, Pager,
 RNG, NVG, Animation, Tween, NIC, Game Server, Overlay, Mouse, Sprite Bank, WTS,
 and the focused VGC/FIO/text helpers. Each bundle has a human-readable
 `NOVA*.PAS` contract, checked `.NPI` ABI, declaration `.INC`, and implementation
@@ -204,9 +251,10 @@ and the focused VGC/FIO/text helpers. Each bundle has a human-readable
 
 The generator composes split libraries from every canonical source containing
 Pascal-callable entries rather than maintaining copied implementations.
-Assembly-only inline-parameter sources are deliberately omitted, preserving
-dead stripping and the typed unit boundary. NPC supports 16 units per program
-and embeds no API catalog or hardware address.
+Assembly-only inline-parameter sources are deliberately omitted, and header-only
+dependencies remain `.INC` dependencies instead of inventing nonexistent `.S`
+assets. This preserves dead stripping and the typed unit boundary. NPC supports
+16 units per program and embeds no API catalog or hardware address.
 It emits signature assertions for every typed call, so NAS rejects the wrong
 byte arity or use of a procedure as a function before linking. Generated
 contracts currently describe byte constants, byte storage, and routines whose
@@ -217,11 +265,21 @@ Pascal type system can represent them cleanly. Pascal-shaped adapters such as
 NDK protocols for common application code.
 
 Commands load these ordinary Nova load-address-prefixed binaries from disk
-into the shared `$2000-$6FFF` tool slot, one at a time:
+into the shared `$1D00-$7FFF` tool slot, one at a time. NPC is the exception:
+its small driver is resident and its frontend is the `NPCFE.OVL` described
+above. The frontend allocates its 4,864-byte symbol and constant/type-name
+arena through the NDK Memory module, maps individual records through XRAM
+Windows 0 and 1, and releases the arena on every exit path. Keeping this
+growth-sensitive state out of overlay BSS leaves more than 5 KiB in NPCFE for
+the Turbo Pascal compatibility work; focused coverage requires at least 4 KiB
+to remain.
 
 - `NPEDIT.BIN` — thin file/type adapter for the shared editor (`Alt-X` or
   `Ctrl-Q` returns to the shell). It streams documents into transient XRAM;
   generic Editor-module paging keeps only the current window in lower RAM.
+  `EDIT project` opens its manifest-selected main source, and `Ctrl-O` uses the
+  NDK file picker to switch to any text file in that project, including `.NPP`,
+  `.PAS`, `.S`, `.ASM`, `.INC`, `.NPI`, linker configuration, and maps.
   Pascal files install NPEDIT's lexical hook for identifiers, numbers, quoted
   strings, and Pascal comments; other file types remain plain editor clients.
 - `NPO2.BIN` — Pascal-specific typed dataflow, inlining, instruction selection,
@@ -230,14 +288,22 @@ into the shared `$2000-$6FFF` tool slot, one at a time:
 - `NL.BIN` — Nova linker
 
 NAS loads `NASPP.OVL` at `$7000` for preprocessing. The resident frontend
-passes input and output XRAM allocations through a stable mailbox, invokes the
-NDK `SYS_OVL_LOAD`/`SYS_OVL_MAIN`/`SYS_OVL_UNLOAD` API, then assembles the
-returned stream. The first
+passes input and output XRAM allocations through a stable mailbox and uses the
+NDK `SYS_OVL_LOAD` and `SYS_OVL_UNLOAD` lifecycle. It calls the overlay's
+declared fixed entry from resident RAM because `.INCLUDETEXT` callbacks may
+page in the NDK Memory module; a banked `SYS_OVL_MAIN` frame cannot safely
+survive that nested module call. The first
 overlay implementation expands case-insensitive `.MACRO name p1, p2` through
 `.ENDMACRO` definitions and nested `.IF`, `.IFDEF`, `.IFNDEF`, `.ELSEIF`,
 `.ELSE`, and `.ENDIF` blocks. `.DEFINE name value` performs case-insensitive identifier
 substitution outside strings and comments; `.UNDEFINE name` removes it. `.IF`
 evaluates 16-bit constant expressions after one level of definition expansion.
+`.INCLUDETEXT "file"` recursively splices text through the same caller-supplied,
+case-insensitive include paths before macro expansion and source-to-source
+optimization. Definitions from the including source are visible in nested
+text; definitions declared by included text are scoped to that included source.
+Ordinary `.INCLUDE` remains an assembly-phase directive, so
+normal NDK sources are not pulled into Pascal's typed optimizer.
 After preprocessing, NAS replaces that overlay with `NASBE.OVL`. It owns the
 complete language-neutral two-pass assembly core and W65C02 opcode/addressing
 tables; the small resident executable supplies XRAM/file I/O callbacks through
@@ -246,11 +312,15 @@ opcode matrix therefore consume the overlay slot rather than lower RAM.
 NL invokes `NLWORK.OVL` through the same NDK overlay API. No toolchain stage has
 a private overlay loader.
 
-Linked programs default to `$7000`, outside the tool slot. `RUN` reads the
-binary's load-address prefix, validates that the payload fits writable
-application RAM below Nova MMIO, streams the payload directly from FIO to that
-address, and invokes it. Executable size is therefore independent of the
-shell's 4 KiB source/project buffer.
+Direct links default to `$7000`; `NEW` projects instead configure the complete
+`$0900-$9FFF` application window so code, static BSS, and the dynamic RAM tail
+share one checked region. `RUN` stages the
+complete load-address-prefixed image in allocator-owned XRAM, then delegates
+validation, DMA placement, allocation release, and control transfer to the
+shared NDK `MEM_EXEC_IMAGE` service. Pascal `Halt` delegates to
+`MEM_EXIT_IMAGE`, which restores the launcher's hardware stack and returns to
+the shell from any Pascal call depth. The accepted application window is
+`$0900-$9FFF`; executable size is independent of the shell's project buffer.
 NAS allocates source, preprocessed text, constants, and include files through
 `MEM_ALLOC`, loads files with `MEM_XLOAD`, and balances every allocation with
 `MEM_RELEASE`, including errors. Lower RAM is reserved for the object, symbol,
@@ -271,15 +341,16 @@ build, while projects can override it without changing NL.
 `LINK MAIN.OBJ UTIL.OBJ` places both objects in order and resolves exported
 globals across them before searching `PASCAL.NLIB`; the output name is derived
 from the first object. Duplicate case-insensitive globals in the final selected
-object set are rejected even if no live relocation references them. The current
-core ABI reserves eight object slots, while the shell command exposes two until
-project/config input lists land.
+object set are rejected even if no live relocation references them. NOBJ's
+one-byte object count permits 255 selected objects. NL keeps per-object
+state in one NDK-managed XRAM allocation rather than a fixed lower-RAM table;
+the direct shell command currently exposes two explicit object arguments.
 The Pascal-specific code lives in `PASCAL.NLIB`, whose machine operands are
 assembled from NDK definitions in `nova.inc`. `P_WRITE_CHAR` currently pulls a
 separate `P_CHAR_DEVICE` hardware shim through an ordinary NOBJ import, proving
 that archive members may depend on other members. The bulk byte and inline-line
 writers are leaf members backed directly by the same NDK definition, keeping
-mixed numeric/string programs within the current four-object linker core.
+mixed numeric/string programs compact.
 Neither NAS nor NL knows Pascal symbols or Nova hardware addresses.
 
 Their executable frontends, mailbox ABI, project/config readers, preprocessing
@@ -331,8 +402,10 @@ need no linker-config rule and do not appear in maps.
 reported against the active source as `file:line:column: error: message`.
 Case-insensitive `.INCBIN "file"` streams arbitrary bytes through the same
 frontend-owned XRAM callback into the current initialized section.
-Primary and preprocessed sources may be 32 KB; include buffers start at 4 KB
-and retry up to 52 KB, large enough for the canonical `nova.inc`. Local
+Direct source preprocessing uses a 32 KiB XRAM buffer; already-preprocessed
+project output pages from disk and is not held as one source buffer. Include
+buffers start at 4 KiB and retry up to 52 KiB, large enough for the canonical
+`nova.inc`. Local
 absolute constants stay in an XRAM hash table and are not serialized into
 NOBJ, so assembly programs can include `nova.inc`, an NDK declaration such as
 `dma.inc`, and its canonical implementation source directly without a flattened
@@ -345,14 +418,13 @@ emission directly: ordinary operand references seed the live set, `.REFTO`
 propagates dependencies, and inactive routines never enter the NOBJ. The
 end-to-end test assembles canonical `rng.s` and `fio.s`, proves an unrelated FIO
 routine is absent, links with NL unchanged, and runs the resulting executable.
-NAS can emit a 6.5 KiB NOBJ and tracks 168 case-insensitive symbols plus 512
-relocations. NL stages a 6.5 KiB primary object and an optional 3.3 KiB
-secondary object in the otherwise-unused linker-worker band, then writes
-binaries or reports up to 6 KiB. These language-neutral limits accommodate
-selective canonical NDK code without giving either tool Pascal-specific
-behavior. NAS reuses its project-option buffer for object output after the
-manifest has been consumed, so the larger object ceiling does not increase its
-resident lower-RAM footprint.
+NAS can emit a 65,535-byte NOBJ and keeps up to 1,024 case-insensitive symbols
+and 32,768 relocations in NDK-managed XRAM. NL likewise streams root objects
+into XRAM, allocates output for the full application window, and keeps its
+selected-object state in XRAM. The remaining explicit ceilings are the 16-bit
+NOBJ/file lengths, eight sections per object, a 12 KiB linker library, and a
+12 KiB map or label report; none of those tables consume the application's
+lower RAM.
 Direct `ASSEMBLE file.s [-Dname=value] [-o file.obj]` seeds one case-insensitive
 preprocessor definition and optionally selects the object filename. Options may
 appear in either order.
@@ -379,13 +451,15 @@ HELLOWORLD/
 `MAIN.PAS` is a minimal program that prints `Hello, world!`.
 `HELLOWORLD.NPP` is the single end-to-end NPC, NAS, and NL configuration. It
 selects O2, defines `NOVA=1` for NAS, links initialized `CODE` and zero-fill
-`BSS` at `$8000`, and requests `.MAP` and `.LBL` reports. Project and unit names
+`BSS` in the full `$0900-$9FFF` application region, and requests `.MAP` and
+`.LBL` reports. Project and unit names
 are case-insensitive Pascal identifiers of at most 15 characters.
 
 The project commands are:
 
 ```text
 NEW project
+NEWUNIT unit
 ADDUNIT project unit
 DELUNIT project unit
 DELPROJECT project
@@ -399,6 +473,19 @@ manifest. `DELUNIT` removes that manifest entry, its source, and its generated
 unit files. Both commands invalidate stale project output. A project may list
 up to 16 units. Names beginning with `Nova` are reserved for generated NDK
 platform units.
+
+`NEWUNIT GREETLIB` creates `/USER/GREETLIB` with `MAIN.PAS` and
+`GREETLIB.NPP`. Its `TARGET UNIT` manifest makes `BUILD GREETLIB` publish
+typed `/USER/GREETLIB.ASM`, readable optimized `/USER/GREETLIB.S`, and
+language-neutral `/USER/GREETLIB.OBJ`, then stops without invoking NL or making
+a fake executable. Public interface routines are NOBJ exports. Another Pascal
+project can simply `uses GreetLib`; NPC selects the typed stream through
+`UNITPATH USER` with NAS's generic `.INCLUDETEXT`, preserves signature checking
+and routine boundaries, and lets whole-program O2 remove unused unit code.
+Assembly projects use the ordinary
+`.S` or link the `.OBJ`; future BASIC, Forth, and Logo bindings can target that
+NOBJ ABI instead of adopting a Pascal-specific object format. Named project
+commands search the current directory first and then `/USER`.
 
 `DELPROJECT` validates that the directory contains an NPP 2 project, refuses a
 project containing nested directories, then deletes the ordinary files in the
@@ -456,6 +543,8 @@ NPP 2
 MAIN MAIN.PAS
 UNIT GREETER.PAS
 UNIT FORMAT.PAS
+UNITPATH SYSTEM
+UNITPATH USER
 OUTPUT HELLOWORLD.BIN
 OPTIMIZE O2
 DEFINE NOVA=1
@@ -463,7 +552,7 @@ CONFIG INLINE
 MAP HELLOWORLD.MAP
 LABEL HELLOWORLD.LBL
 MEMORY {
-    RAM: start = $8000, size = $1000, file = %O;
+    RAM: start = $0900, size = $9700, file = %O;
 }
 SEGMENTS {
     CODE: load = RAM, type = ro;
@@ -473,8 +562,9 @@ SEGMENTS {
 
 `BUILD HELLOWORLD` enters the project directory and validates the complete NPP
 and linker configuration before creating intermediates. It compiles
-`MAIN.PAS` and each `UNIT` to readable `.ASM` 65C02 streams, combines the unit streams
-in manifest order with the program entry point, runs NPO2 across the whole
+`MAIN.PAS` and each `UNIT` to readable typed `.ASM` streams, combines the unit
+streams in manifest order with the program entry point, expands reusable-unit
+`.INCLUDETEXT` directives, and runs NPO2 across the whole
 program, assembles one NOBJ with NAS, and links it with NL and `PASCAL.NLIB`.
 Each tool prints its banner, inputs, outputs, pass names, and completion status.
 Per-source `.ASM`, combined project `.S`, `.OBJ`, `.BIN`, `.MAP`, and `.LBL`
@@ -489,6 +579,14 @@ commands. Either version may name one optional ordinary NAS-produced `OBJECT`,
 or one `ASM` source that BUILD assembles before linking; the forms are mutually
 exclusive. Optional `DEFINE name=value` uses the same case-insensitive NAS
 preprocessor path as direct `ASSEMBLE file.s -Dname=value`.
+
+`TARGET PROGRAM` is the default. `TARGET UNIT` makes `OUTPUT` name an NOBJ,
+publishes sibling typed `.ASM` and optimized `.S` files from the same stem,
+exports every public interface routine in the standalone object, and ends the
+build after NAS. A program consumes the typed stream so O2 can discard public
+routines it never calls. Repeated `UNITPATH` directives
+(currently up to two) are shared NAS settings; generated projects use `SYSTEM`
+followed by `USER`.
 
 `OPTIMIZE O2` is optional and explicitly selects NPC's current optimized 65C02
 lowering; O2 is also the default. `LOAD` is optional and defaults to `$7000`.
@@ -516,10 +614,11 @@ SYMBOLS {
 ```
 
 Keywords and names are case-insensitive. Each `start`/`size` pair defines a
-non-overlapping writable application-RAM region from `$7000` through `$9FFF`;
+non-overlapping writable application-RAM region from `$0900` through `$9FFF`;
 `SEGMENTS` maps each NOBJ section into one of those regions. NL aligns sections,
-relocates across regions, zero-fills gaps and BSS, and rejects missing mappings,
-overlap, overflow, and output spans larger than its current 6 KB buffer.
+relocates across regions, zero-fills interior gaps, represents final BSS with an
+`NBS1` trailer, and rejects missing mappings, overlap, overflow, and output spans
+beyond the application window.
 An optional `SYMBOLS` block after `SEGMENTS` defines up to four absolute linker
 symbols. NAS sources import them normally; NL resolves them case-insensitively
 at the exact configured value without load-address rebasing and rejects any
@@ -529,9 +628,9 @@ same-name object export.
 LF-only VICE label file (`al 00hhhh .NAME`) from the same live placed exports.
 Direct `LINK main.obj [more.obj] [-C file.cfg] [-M file.map] [-Ln file.lbl]`
 uses the same config, map, and label paths as project builds. NL loads
-`NLWORK.OVL` at `$7000` after saving the binary to generate each requested
+`NLWORK.OVL` at `$8000` after saving the binary to generate each requested
 report through the same fixed language-neutral mailbox, then unloads it and
-saves the report. Reports share NL's 6 KB output buffer and fail loudly if they
+saves the report. Reports use a 12 KiB NDK-managed XRAM buffer and fail loudly if they
 do not fit.
 
 `DIR` prints complete filenames, including extensions. `EDIT` accepts ASCII

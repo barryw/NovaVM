@@ -151,8 +151,8 @@ public class AvaloniaDmaTests
         for (int i = 0; i < 4; i++)
             Assert.AreEqual(VgcConstants.TextAttrFlash, bus.Vgc.GetScreenTextAttr(2 + i, 1));
 
-        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(1, 1));
-        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(6, 1));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(1, 1));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(6, 1));
     }
 
     [TestMethod]

@@ -3,9 +3,11 @@
 .ifndef NAS_CORE_INC
 NAS_CORE_INC = 1
 
-NASCORE_LOAD = $7000
+.include "nas_backend.inc"
+
+NASCORE_LOAD = NASBE_LOAD
 NASCORE_ENTRY = NASCORE_LOAD
-NASCORE_MAX = $3000
+NASCORE_MAX = NASBE_MAX
 
 ; The resident frontend reserves these 32 zero-page bytes for the core.
 NASCORE_ZP_BASE = $72
@@ -16,7 +18,7 @@ nasm_source_ptr = $0900              ; u24 XRAM address
 nasm_source_len = $0903              ; u16
 nasm_source_name_ptr = $0905         ; u16
 nasm_source_name_len = $0907         ; u8
-nasm_object_ptr = $0908              ; u16
+nasm_object_ptr = $0908              ; u16 low/mid; high at nasm_object_ptr_h
 nasm_object_cap = $090A              ; u16
 nasm_object_len = $090C              ; u16
 nasm_error = $090E                   ; u8
@@ -32,12 +34,24 @@ nasm_error_name_len = $095D          ; u8
 NASCORE_INCLUDE_OPEN = $095E          ; u16 callback
 NASCORE_INCLUDE_CLOSE = $0960         ; u16 callback
 nasm_constant_ptr = $0962             ; u24 XRAM scratch for local constants
-nasm_symbol_names_ptr = $0965         ; u16 resident regular-symbol name table
-nasm_reloc_buffer_ptr = $0967         ; u16 resident relocation buffer
-
+nasm_symbol_names_ptr = $0965         ; u16 low/mid XRAM regular-symbol names
+nasm_reloc_buffer_ptr = $0967         ; u16 low/mid XRAM relocation buffer
+nasm_include_display_len = $0969      ; u8 resolved path length
+nasm_symbol_names_ptr_h = $096A       ; u8
+nasm_reloc_buffer_ptr_h = $096B       ; u8
+nasm_object_ptr_h = $096C             ; u8
+NASCORE_INCLUDE_MODE = $096D           ; u8 callback mode
+NASCORE_INCLUDE_STREAM = 0
+NASCORE_INCLUDE_BUFFERED = 1
 NASCORE_CONSTANT_CAP = $8000
-NASCORE_SYMBOL_CAP = 168
+NASCORE_SYMBOL_CAP = 1024
 NASCORE_SYMBOL_NAMES_CAP = NASCORE_SYMBOL_CAP * 32
-NASCORE_RELOC_CAP = 4096
+NASCORE_SYMBOL_META_FIELDS = 10
+NASCORE_SYMBOL_META_CAP = NASCORE_SYMBOL_CAP * NASCORE_SYMBOL_META_FIELDS
+NASCORE_RELOC_CAP = $8000
+NASCORE_SYMBOL_WORK_CAP = NASCORE_SYMBOL_NAMES_CAP + NASCORE_SYMBOL_META_CAP
+NASCORE_OBJECT_CAP = $FFFF
+NASCORE_STREAM_SENTINEL = $8001
+NASCORE_INCLUDE_STREAM_CAP = $1000
 
 .endif

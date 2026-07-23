@@ -31,7 +31,7 @@ cwd_name_len:      .res 1
 token_buf:         .res NPP_NAME_CAP
 token_len:         .res 1
 unit_lens:         .res NPP_UNIT_CAP
-unit_names:        .res NPP_UNIT_CAP * NPP_UNIT_NAME_CAP
+unit_names:        .res NPP_UNIT_CAP * NPP_UNIT_FILE_CAP
 unit_start_lo:     .res NPP_UNIT_CAP
 unit_start_hi:     .res NPP_UNIT_CAP
 unit_end_lo:       .res NPP_UNIT_CAP
@@ -43,6 +43,8 @@ project_version:   .res 1
 project_unit_count:.res 1
 project_output_seen:.res 1
 project_object_seen:.res 1
+project_target_seen:.res 1
+project_new_unit:  .res 1
 project_dir_entered:.res 1
 project_created:   .res 1
 project_source_created:.res 1
@@ -52,6 +54,8 @@ project_write_id:  .res 2
 project_requested_unit:.res 1
 project_requested_index:.res 1
 project_error_detail:.res 1
+project_hash:      .res 3
+project_hash_saved:.res 3
 
       .segment "NOINIT"
 project_buffer:    .res PROJECT_BUFFER_CAP
@@ -72,6 +76,8 @@ tool_main:
       long_beq project_op_parse
       CMP   #NPP_OP_NEW
       long_beq project_op_new
+      CMP   #NPP_OP_NEW_UNIT_PROJECT
+      long_beq project_op_new_unit
       CMP   #NPP_OP_ADD_UNIT
       long_beq project_op_add_unit
       CMP   #NPP_OP_DEL_UNIT
@@ -117,6 +123,9 @@ project_op_get_unit:
 @done:
       LDA   #0
       RTS
+
+project_op_new_unit:
+      INC   project_new_unit
 
 project_op_new:
       JSR   project_require_one_identifier
@@ -317,6 +326,7 @@ project_op_del_project:
       long_bcs @restore_project_fail
       JSR   project_reject_nested_directories
       long_bcs @restore_fail
+      JSR   project_delete_outputs
       JSR   project_delete_directory_files
       long_bcs @restore_fail
       JSR   project_restore_cwd
@@ -350,8 +360,12 @@ project_op_combine:
       long_bcs project_io_fail
       LDA   project_unit_count
       BEQ   @main
+      LDA   NPP_PLAN_BASE+NPP_PLAN_TARGET
+      CMP   #NPP_TARGET_UNIT
+      BEQ   @units
       JSR   project_write_entry_jump
       BCS   @close_fail
+@units:
       STZ   project_requested_unit
 @unit:
       LDX   project_requested_unit
@@ -577,6 +591,18 @@ project_parse:
       LDX   #>word_unit
       JSR   token_is
       long_bcs @unit
+      LDA   #<word_unitpath
+      LDX   #>word_unitpath
+      JSR   token_is
+      long_bcs @unitpath
+      LDA   #<word_overlay
+      LDX   #>word_overlay
+      JSR   token_is
+      long_bcs @overlay
+      LDA   #<word_target
+      LDX   #>word_target
+      JSR   token_is
+      long_bcs @target
       LDA   #<word_output
       LDX   #>word_output
       JSR   token_is
@@ -615,6 +641,83 @@ project_parse:
       long_bcs @label
       JMP   @bad
 
+@unitpath:
+      LDX   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATH_COUNT
+      CPX   #NPP_UNIT_PATH_CAP
+      long_bcs @bad
+      LDA   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATH_COUNT
+      BNE   @unitpath_second
+      LDA   #<(NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS+1)
+      LDX   #>(NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS+1)
+      BRA   @unitpath_parse
+@unitpath_second:
+      LDA   #<(NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS+NPP_UNIT_PATH_SIZE+1)
+      LDX   #>(NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS+NPP_UNIT_PATH_SIZE+1)
+@unitpath_parse:
+      JSR   project_parse_plan_value
+      long_bcs @bad
+      INC   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATH_COUNT
+      JMP   @directive
+
+@overlay:
+      LDA   project_version
+      CMP   #NPP_VERSION_2
+      long_bne @bad
+      LDX   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      CPX   #NPP_OVERLAY_CAP
+      long_bcs @too_many
+      JSR   parser_next_token
+      long_bcs @bad
+      LDA   token_len
+      CMP   #1
+      long_bne @bad
+      LDA   token_buf
+      CMP   #'1'
+      long_bcc @bad
+      CMP   #'0'+NPP_OVERLAY_GROUP_CAP+1
+      long_bcs @bad
+      SEC
+      SBC   #'0'
+      STA   project_requested_index
+      JSR   parser_next_token
+      long_bcs @bad
+      LDA   token_len
+      long_beq @bad
+      CMP   #NPP_OVERLAY_FILE_CAP
+      long_bcs @bad
+      LDX   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      LDA   project_requested_index
+      STA   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_GROUPS,X
+      JSR   project_publish_overlay_hash
+      JSR   parser_finish_line
+      long_bcs @bad
+      INC   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      JMP   @directive
+
+@target:
+      LDA   project_version
+      CMP   #NPP_VERSION_2
+      long_bne @bad
+      LDA   project_target_seen
+      long_bne @bad
+      INC   project_target_seen
+      JSR   parser_next_token
+      long_bcs @bad
+      LDA   #<word_program
+      LDX   #>word_program
+      JSR   token_is
+      BCS   @target_end
+      LDA   #<word_unit_target
+      LDX   #>word_unit_target
+      JSR   token_is
+      long_bcc @bad
+      LDA   #NPP_TARGET_UNIT
+      STA   NPP_PLAN_BASE+NPP_PLAN_TARGET
+@target_end:
+      JSR   parser_finish_line
+      long_bcs @bad
+      JMP   @directive
+
 @unit:
       LDA   project_version
       CMP   #NPP_VERSION_2
@@ -635,6 +738,7 @@ project_parse:
       long_bcs @bad
       JSR   project_store_unit_token
       long_bcs @bad
+      JSR   project_publish_unit_hash
       JSR   parser_finish_line
       long_bcs @bad
       LDX   project_unit_count
@@ -740,6 +844,7 @@ project_parse:
       long_beq @bad
       LDA   project_unit_count
       STA   NPP_PLAN_BASE+NPP_PLAN_UNIT_COUNT
+      STA   NPP_PLAN_BASE+NPP_PLAN_LOCAL_COUNT
       CLC
       RTS
 @version_bad:
@@ -770,6 +875,12 @@ project_clear_plan:
       STZ   NPP_PLAN_BASE+NPP_PLAN_OPTIMIZE
       STZ   NPP_PLAN_BASE+NPP_PLAN_ASM
       STZ   NPP_PLAN_BASE+NPP_PLAN_INLINE
+      STZ   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATH_COUNT
+      STZ   NPP_PLAN_BASE+NPP_PLAN_TARGET
+      STZ   NPP_PLAN_BASE+NPP_PLAN_LOCAL_COUNT
+      STZ   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      STZ   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS
+      STZ   NPP_PLAN_BASE+NPP_PLAN_UNIT_PATHS+NPP_UNIT_PATH_SIZE
       LDA   #$00
       STA   NPP_PLAN_BASE+NPP_PLAN_LOAD_LO
       LDA   #$70
@@ -1111,8 +1222,108 @@ project_store_unit_token:
       SEC
       RTS
 
-; X selects one 16-byte unit slot; returns its pointer in project_ptr.
+; Publish the compiler's case-insensitive 24-bit DJB2 hash for the UNIT
+; filename stem. NPC uses this compact set to distinguish project-local
+; source units from independently published units found through UNITPATH.
+project_publish_unit_hash:
+      LDA   token_len
+      SEC
+      SBC   #4
+      STA   project_requested_unit
+      JSR   project_hash_token
+      LDA   project_unit_count
+      ASL
+      CLC
+      ADC   project_unit_count
+      TAX
+      LDA   project_hash+0
+      STA   NPP_PLAN_BASE+NPP_PLAN_LOCAL_HASHES+0,X
+      LDA   project_hash+1
+      STA   NPP_PLAN_BASE+NPP_PLAN_LOCAL_HASHES+1,X
+      LDA   project_hash+2
+      STA   NPP_PLAN_BASE+NPP_PLAN_LOCAL_HASHES+2,X
+      RTS
+
+project_publish_overlay_hash:
+      LDA   token_len
+      STA   project_requested_unit
+      JSR   project_hash_token
+      LDA   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      ASL
+      CLC
+      ADC   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_COUNT
+      TAX
+      LDA   project_hash+0
+      STA   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_HASHES+0,X
+      LDA   project_hash+1
+      STA   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_HASHES+1,X
+      LDA   project_hash+2
+      STA   NPP_PLAN_BASE+NPP_PLAN_OVERLAY_HASHES+2,X
+      RTS
+
+; DJB2 truncated to 24 bits, matching NPC's case-insensitive source-name hash.
+; project_requested_unit is the number of token bytes to include.
+project_hash_token:
+      LDA   #$05
+      STA   project_hash+0
+      LDA   #$15
+      STA   project_hash+1
+      STZ   project_hash+2
+      LDY   #0
+@char:
+      CPY   project_requested_unit
+      BCS   @done
+      LDA   token_buf,Y
+      JSR   project_upper
+      PHA
+      LDX   #2
+@save:
+      LDA   project_hash,X
+      STA   project_hash_saved,X
+      DEX
+      BPL   @save
+      LDX   #5
+@shift:
+      ASL   project_hash+0
+      ROL   project_hash+1
+      ROL   project_hash+2
+      DEX
+      BNE   @shift
+      CLC
+      LDA   project_hash+0
+      ADC   project_hash_saved+0
+      STA   project_hash+0
+      LDA   project_hash+1
+      ADC   project_hash_saved+1
+      STA   project_hash+1
+      LDA   project_hash+2
+      ADC   project_hash_saved+2
+      STA   project_hash+2
+      PLA
+      CLC
+      ADC   project_hash+0
+      STA   project_hash+0
+      BCC   @next
+      INC   project_hash+1
+      BNE   @next
+      INC   project_hash+2
+@next:
+      INY
+      BRA   @char
+@done:
+      RTS
+
+; X selects one complete unit-filename slot; returns its pointer in project_ptr.
 project_unit_pointer:
+      TXA
+      STZ   project_ptr+1
+      ASL
+      ROL   project_ptr+1
+      ASL
+      ROL   project_ptr+1
+      STA   project_aux
+      LDA   project_ptr+1
+      STA   project_aux+1
       TXA
       STZ   project_ptr+1
       ASL
@@ -1124,6 +1335,13 @@ project_unit_pointer:
       ASL
       ROL   project_ptr+1
       CLC
+      ADC   project_aux
+      STA   project_ptr
+      LDA   project_ptr+1
+      ADC   project_aux+1
+      STA   project_ptr+1
+      CLC
+      LDA   project_ptr
       ADC   #<unit_names
       STA   project_ptr
       LDA   project_ptr+1
@@ -1710,10 +1928,50 @@ project_restore_cwd:
       RTS
 
 project_cd_project:
-      LDA   #<project_name
-      LDX   #>project_name
-      LDY   project_name_len
+      LDA   cwd_name_len
+      CLC
+      ADC   project_name_len
+      ADC   #1
+      CMP   #NPP_NAME_CAP
+      BCS   @bad
+      LDX   #0
+@cwd:
+      CPX   cwd_name_len
+      BCS   @separator
+      LDA   cwd_name,X
+      STA   temp_name,X
+      INX
+      BRA   @cwd
+@separator:
+      CPX   #0
+      BEQ   @slash
+      LDA   temp_name-1,X
+      CMP   #'/'
+      BEQ   @project
+@slash:
+      LDA   #'/'
+      STA   temp_name,X
+      INX
+@project:
+      LDY   #0
+@name:
+      CPY   project_name_len
+      BCS   @done
+      LDA   project_name,Y
+      STA   temp_name,X
+      INX
+      INY
+      BRA   @name
+@done:
+      STX   temp_name_len
+      STZ   temp_name,X
+      LDA   #<temp_name
+      LDX   #>temp_name
+      LDY   temp_name_len
       JMP   project_cd_named
+@bad:
+      SEC
+      RTS
 
 project_enter_named_project:
       JSR   project_save_cwd
@@ -2040,6 +2298,21 @@ project_delete_outputs:
       LDX   #>(NPP_PLAN_BASE+NPP_PLAN_OUTPUT)
       LDY   NPP_PLAN_BASE+NPP_PLAN_OUTPUT_LEN
       JSR   project_delete_named_optional
+      LDA   NPP_PLAN_BASE+NPP_PLAN_TARGET
+      CMP   #NPP_TARGET_UNIT
+      BNE   @map
+      LDA   #<(NPP_PLAN_BASE+NPP_PLAN_OUTPUT)
+      LDX   #>(NPP_PLAN_BASE+NPP_PLAN_OUTPUT)
+      LDY   NPP_PLAN_BASE+NPP_PLAN_OUTPUT_LEN
+      JSR   project_copy_named_to_temp
+      LDA   #<ext_s
+      LDX   #>ext_s
+      JSR   project_replace_temp_extension
+      JSR   project_delete_temp_optional
+      LDA   #<ext_asm
+      LDX   #>ext_asm
+      JSR   project_replace_temp_extension
+      JSR   project_delete_temp_optional
 @map:
       LDA   NPP_PLAN_BASE+NPP_PLAN_MAP_LEN
       BEQ   @label
@@ -2214,12 +2487,22 @@ project_buffer_append_byte:
 
 project_build_main_source:
       JSR   project_buffer_reset
+      LDA   project_new_unit
+      BNE   @unit
       LDA   #<new_program_prefix
       LDX   #>new_program_prefix
       JSR   project_buffer_append_z
       JSR   project_buffer_append_arg0
       LDA   #<new_program_suffix
       LDX   #>new_program_suffix
+      JMP   project_buffer_append_z
+@unit:
+      LDA   #<new_library_prefix
+      LDX   #>new_library_prefix
+      JSR   project_buffer_append_z
+      JSR   project_buffer_append_project_upper
+      LDA   #<new_library_suffix
+      LDX   #>new_library_suffix
       JMP   project_buffer_append_z
 
 project_build_unit_source:
@@ -2234,6 +2517,8 @@ project_build_unit_source:
 
 project_build_manifest:
       JSR   project_buffer_reset
+      LDA   project_new_unit
+      BNE   @unit
       LDA   #<new_manifest_prefix
       LDX   #>new_manifest_prefix
       JSR   project_buffer_append_z
@@ -2248,6 +2533,14 @@ project_build_manifest:
       JSR   project_buffer_append_project_upper
       LDA   #<new_manifest_map
       LDX   #>new_manifest_map
+      JMP   project_buffer_append_z
+@unit:
+      LDA   #<new_unit_manifest_prefix
+      LDX   #>new_unit_manifest_prefix
+      JSR   project_buffer_append_z
+      JSR   project_buffer_append_project_upper
+      LDA   #<new_unit_manifest_suffix
+      LDX   #>new_unit_manifest_suffix
       JMP   project_buffer_append_z
 
 ; ---------------------------------------------------------------------
@@ -2308,6 +2601,9 @@ project_fail:
 word_npp:      .byte "NPP", 0
 word_main:     .byte "MAIN", 0
 word_unit:     .byte "UNIT", 0
+word_unitpath: .byte "UNITPATH", 0
+word_overlay:  .byte "OVERLAY", 0
+word_target:   .byte "TARGET", 0
 word_output:   .byte "OUTPUT", 0
 word_optimize: .byte "OPTIMIZE", 0
 word_define:   .byte "DEFINE", 0
@@ -2320,6 +2616,8 @@ word_label:    .byte "LABEL", 0
 word_memory:   .byte "MEMORY", 0
 word_inline:   .byte "INLINE", 0
 word_o2:       .byte "O2", 0
+word_program:  .byte "PROGRAM", 0
+word_unit_target: .byte "UNIT", 0
 word_nova:     .byte "NOVA"
 
 ext_pas: .byte ".PAS", 0
@@ -2340,13 +2638,27 @@ new_program_suffix:
       .byte "begin", $0A
       .byte "  writeln('Hello, world!');", $0A
       .byte "end.", $0A, 0
+new_library_prefix: .byte "unit ", 0
+new_library_suffix:
+      .byte ";", $0A, $0A
+      .byte "interface", $0A
+      .byte "procedure Hello;", $0A, $0A
+      .byte "implementation", $0A
+      .byte "procedure Hello;", $0A
+      .byte "begin", $0A
+      .byte "  writeln('Hello from this unit');", $0A
+      .byte "end;", $0A, $0A
+      .byte "end.", $0A, 0
 new_unit_prefix: .byte "unit ", 0
 new_unit_suffix:
       .byte ";", $0A, $0A
       .byte "interface", $0A, $0A
       .byte "implementation", $0A, $0A
       .byte "end.", $0A, 0
-new_manifest_prefix: .byte "NPP 2", $0A, "MAIN MAIN.PAS", $0A, "OUTPUT ", 0
+new_manifest_prefix:
+      .byte "NPP 2", $0A, "MAIN MAIN.PAS", $0A
+      .byte "UNITPATH SYSTEM", $0A, "UNITPATH USER", $0A
+      .byte "OUTPUT ", 0
 new_manifest_output:
       .byte ".BIN", $0A
       .byte "OPTIMIZE O2", $0A
@@ -2357,12 +2669,22 @@ new_manifest_bin: .byte ".MAP", $0A, "LABEL ", 0
 new_manifest_map:
       .byte ".LBL", $0A
       .byte "MEMORY {", $0A
-      .byte "    RAM: start = $8000, size = $1000, file = %O;", $0A
+      .byte "    RAM: start = $0900, size = $9700, file = %O;", $0A
       .byte "}", $0A, $0A
       .byte "SEGMENTS {", $0A
       .byte "    CODE: load = RAM, type = ro;", $0A
+      .byte "    RODATA: load = RAM, type = ro;", $0A
       .byte "    BSS: load = RAM, type = bss;", $0A
       .byte "}", $0A, 0
+new_unit_manifest_prefix:
+      .byte "NPP 2", $0A, "MAIN MAIN.PAS", $0A
+      .byte "TARGET UNIT", $0A
+      .byte "UNITPATH SYSTEM", $0A, "UNITPATH USER", $0A
+      .byte "OUTPUT /USER/", 0
+new_unit_manifest_suffix:
+      .byte ".OBJ", $0A
+      .byte "OPTIMIZE O2", $0A
+      .byte "DEFINE NOVA=1", $0A, 0
 project_entry_jump: .byte "JMP __NP_MAIN", $0A
 project_entry_jump_end:
 message_created:         .byte "Created project ", 0

@@ -192,7 +192,8 @@ const MODULES = [
     { id: 0x04, name: "files", file: "files.bin" },
     { id: 0x05, name: "memory", file: "memory.bin" },
     { id: 0x06, name: "net", file: "net.bin" },
-    { id: 0x07, name: "turtle", file: "turtle.bin" }
+    { id: 0x07, name: "turtle", file: "turtle.bin" },
+    { id: 0x09, name: "langrt", file: "langrt.bin" }
 ];
 
 self.onmessage = async event => {
@@ -1949,20 +1950,29 @@ function drawTextCanvasScanline(data, palette, canvasPy, mode, bg, transparentMa
         const textAttr = attr[cell] || 0;
         let fg = colorAttr & 0x0F;
         let cellBg = (colorAttr >> 4) & 0x0F;
-        const isCursor = cursorEnabled && col === cursorX && displayRow === cursorY;
-        if (isCursor) {
+        const reverse = (textAttr & 0x02) !== 0;
+        if (reverse) {
             const tmp = fg;
             fg = cellBg;
             cellBg = tmp;
         }
+        const bgTransparent = (textAttr & 0x08) !== 0;
+        let resolvedBg = bgTransparent ? (bg & 0x0F) : cellBg;
+        const isCursor = cursorEnabled && col === cursorX && displayRow === cursorY;
+        if (isCursor) {
+            const tmp = fg;
+            fg = resolvedBg;
+            resolvedBg = tmp;
+        }
 
-        const bits = (textAttr & 0x01) !== 0 && !cursorVisible ? 0 : (font[ch * 8 + glyphY] || 0);
+        let bits = (textAttr & 0x01) !== 0 && !cursorVisible ? 0 : (font[ch * 8 + glyphY] || 0);
+        if ((textAttr & 0x04) !== 0) bits |= bits >> 1;
         const fgRgb = palette[fg];
-        const bgRgb = palette[cellBg];
+        const bgRgb = palette[resolvedBg];
         let offset = (destY * SCREEN_WIDTH + TEXT_X + col * 8) * 4;
         for (let glyphX = 0; glyphX < 8; glyphX++) {
             const set = (bits & (0x80 >> glyphX)) !== 0;
-            if (!set && transparentMatchingBg && !isCursor && cellBg === (bg & 0x0F)) {
+            if (!set && transparentMatchingBg && !isCursor && !reverse && bgTransparent) {
                 offset += 4;
                 continue;
             }
@@ -1985,20 +1995,29 @@ function drawTextRowInto(data, row, stride, originX, originY, palette, transpare
         const colorAttr = color[cell] || 0x0F;
         const textAttr = attr[cell] || 0;
         let fg = colorAttr & 0x0F;
-        let bg = (colorAttr >> 4) & 0x0F;
+        let cellBg = (colorAttr >> 4) & 0x0F;
+        const reverse = (textAttr & 0x02) !== 0;
+        if (reverse) {
+            const tmp = fg;
+            fg = cellBg;
+            cellBg = tmp;
+        }
+        const bgTransparent = (textAttr & 0x08) !== 0;
+        let resolvedBg = bgTransparent ? globalBg : cellBg;
         const isCursor = cursorEnabled && col === cursorX && row === cursorY;
         if (isCursor) {
             const tmp = fg;
-            fg = bg;
-            bg = tmp;
+            fg = resolvedBg;
+            resolvedBg = tmp;
         }
 
         const fgRgb = palette[fg];
-        const bgRgb = palette[bg];
+        const bgRgb = palette[resolvedBg];
         const flashHidden = (textAttr & 0x01) !== 0 && !cursorVisible;
-        const transparentCellBg = transparentMatchingBg && !isCursor && bg === globalBg;
+        const transparentCellBg = transparentMatchingBg && !isCursor && !reverse && bgTransparent;
         for (let glyphY = 0; glyphY < 8; glyphY++) {
-            const bits = flashHidden ? 0 : (font[ch * 8 + glyphY] || 0);
+            let bits = flashHidden ? 0 : (font[ch * 8 + glyphY] || 0);
+            if ((textAttr & 0x04) !== 0) bits |= bits >> 1;
             let offset = ((originY + glyphY) * stride + originX + col * 8) * 4;
             for (let glyphX = 0; glyphX < 8; glyphX++) {
                 const set = (bits & (0x80 >> glyphX)) !== 0;

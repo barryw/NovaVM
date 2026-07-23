@@ -107,6 +107,11 @@ sys_ptr2H:         .res 1
 ;@ret u8 pressed key byte (RESULT byte0)
 ;@status LERR_OK
 ;
+;@fn SYS_CONSOLE_CLEAR_EOL
+;@ndk vgc_clear_eol
+;@ret void
+;@status LERR_OK
+;
 ;@fn SYS_NUI_SAVE_UNDER
 ;@ndk nui_save_under
 ;@brief Save a text-plane rectangle to caller-owned XRAM buffers.
@@ -232,7 +237,7 @@ sys_ptr2H:         .res 1
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (25) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (29) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -279,11 +284,19 @@ sys_jtable:
       .word   sys_nui_file_picker-1    ; $19 SYS_NUI_FILE_PICKER
       .word   sys_nui_text_input-1     ; $1A SYS_NUI_TEXT_INPUT
       .word   sys_nui_drain_keys-1     ; $1B SYS_NUI_DRAIN_KEYS
+      .word   sys_console_clear_eol-1  ; $1C SYS_CONSOLE_CLEAR_EOL
 
 sys_no_fn:
       lda     #LERR_NO_FN
       sta     LIB_STATUS
       rts
+
+; --- $1C SYS_CONSOLE_CLEAR_EOL: clear through the end of the cursor row ---
+sys_console_clear_eol:
+      JSR   vgc_clear_eol
+      LDA   #LERR_OK
+      STA   LIB_STATUS
+      RTS
 
 ; ===========================================================================
 ; Timing services (moved from the NovaLogo extension ROM in Phase B). THIN wrappers

@@ -1,0 +1,18 @@
+NPP 2
+MAIN MC.PAS
+UNITPATH SYSTEM
+UNITPATH USER
+OUTPUT MICROCALC.BIN
+OPTIMIZE O2
+CONFIG INLINE
+MAP MICROCALC.MAP
+LABEL MICROCALC.LBL
+MEMORY {
+    RAM: start = $0900, size = $9700, file = %O;
+}
+
+SEGMENTS {
+    CODE: load = RAM, type = ro;
+    RODATA: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
+}

@@ -30,6 +30,8 @@ io_left:        .res 2
       .export nptool_save_arg0
       .export nptool_save_arg1
       .export nptool_save_named
+      .export nptool_size_named
+      .export nptool_probe_named
       .export nptool_validate_text
       .export nptool_print_z
       .export nptool_newline
@@ -236,6 +238,87 @@ nptool_load:
       LDA   #NPTOOL_IO_SHORT
       STA   io_saved_error
       JMP   io_fail_close_saved
+
+; Publish a non-empty input's exact 16-bit size without staging its contents.
+; Files at or above 64 KiB cannot be represented by the NOBJ v2 offsets.
+nptool_size_arg0:
+      LDA   #<NPTOOL_ARG0
+      STA   io_name_ptr
+      LDA   #>NPTOOL_ARG0
+      STA   io_name_ptr+1
+      LDA   NPTOOL_ARG0_LEN
+      STA   io_name_len
+      BRA   nptool_size_nonempty
+
+nptool_size_arg3:
+      LDA   #<NPTOOL_ARG3
+      STA   io_name_ptr
+      LDA   #>NPTOOL_ARG3
+      STA   io_name_ptr+1
+      LDA   NPTOOL_ARG3_LEN
+      STA   io_name_len
+nptool_size_nonempty:
+      JSR   nptool_size
+      BNE   @done
+      LDA   NPTOOL_IO_LEN+0
+      ORA   NPTOOL_IO_LEN+1
+      BNE   @ok
+      LDA   #NPTOOL_IO_SHORT
+      STA   io_saved_error
+      JMP   io_set_saved_error
+@ok:
+      LDA   #0
+@done:
+      RTS
+
+; A/X points at a filename and Y is its length. Publish its exact 16-bit size.
+; Unlike object/linker inputs, an empty named file is valid (for example, an
+; empty assembly include).
+nptool_size_named:
+      STA   io_name_ptr
+      STX   io_name_ptr+1
+      STY   io_name_len
+nptool_size:
+      JSR   io_open_read
+      BEQ   :+
+      JMP   io_fail
+:
+      JSR   io_file_size
+      BEQ   :+
+      JMP   io_fail_close
+:
+      LDA   LIB_RESULT+2
+      ORA   LIB_RESULT+3
+      BNE   @too_large
+      LDA   LIB_RESULT+0
+      STA   NPTOOL_IO_LEN+0
+      LDA   LIB_RESULT+1
+      STA   NPTOOL_IO_LEN+1
+      JSR   io_close
+      BEQ   :+
+      JMP   io_fail
+:
+      LDA   #0
+      RTS
+@too_large:
+      LDA   #NPTOOL_IO_TOO_LARGE
+      STA   io_saved_error
+      JMP   io_fail_close_saved
+
+; A/X points at a filename and Y is its length. Verify that the file can be
+; opened without imposing the 16-bit size limit used by buffered tool inputs.
+nptool_probe_named:
+      STA   io_name_ptr
+      STX   io_name_ptr+1
+      STY   io_name_len
+      JSR   io_open_read
+      BEQ   :+
+      JMP   io_fail
+:     JSR   io_close
+      BEQ   :+
+      JMP   io_fail
+:     LDA   #0
+      RTS
 
 nptool_save_arg0:
       LDA   #<NPTOOL_ARG0

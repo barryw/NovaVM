@@ -379,6 +379,8 @@ nui_file_build_rows:
       JSR   nui_file_append_name
 
       STZ   FIO_NAMELEN
+      LDA   #FIO_DIR_FLAG_FULLNAME
+      STA   FIO_DIRTYPE
       JSR   fio_dir_open
       BNE   @done
 @next:

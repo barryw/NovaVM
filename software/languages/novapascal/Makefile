@@ -5,6 +5,8 @@ RESOURCES = ../../../e6502.Avalonia/Resources
 NOVA_CLI_DLL = ../../../e6502.Nova/bin/Release/net10.0/linux-x64/nova.dll
 NOVA_CLI = dotnet $(NOVA_CLI_DLL)
 NOVA_CLI_SOURCES = ../../../e6502.Nova/Program.cs ../../../e6502.Nova/BuildTools.cs
+OVERLAY_PACKER = ../../../e6502.Tools/e6502.Tools.csproj
+OVERLAY_PACKER_DLL = ../../../e6502.Tools/bin/Release/net10.0/e6502.Tools.dll
 
 BUILD_DIR = tools/build
 TOOLCHAIN_BUILD = $(TOOLCHAIN)/build
@@ -14,6 +16,10 @@ TOOL_IO = $(TOOLCHAIN_BUILD)/nptool_io.o
 NPEDIT = $(BUILD_DIR)/NPEDIT.BIN
 NPO2 = $(BUILD_DIR)/NPO2.BIN
 NPPROJ = $(BUILD_DIR)/NPPROJ.BIN
+NPCFE_PAYLOAD = $(BUILD_DIR)/npcfe.bin
+NPCFE = $(BUILD_DIR)/NPCFE.OVL
+NPCFE_LOAD = 0x1E00
+NPCFE_MAX = 0x8200
 NAS = $(TOOLCHAIN_BUILD)/NAS.BIN
 NL = $(TOOLCHAIN_BUILD)/NL.BIN
 TOOL_BINS = $(NPEDIT) $(NPO2) $(NPPROJ) $(NAS) $(NL)
@@ -25,15 +31,15 @@ NASBE_OVERLAY = $(TOOLCHAIN_BUILD)/NASBE.OVL
 NLWORK_OVERLAY = $(TOOLCHAIN_BUILD)/NLWORK.OVL
 TOOLCHAIN_ASSETS = $(NAS) $(NL) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY) $(TOOL_IO)
 
-all: novapascal.bin $(TOOL_BINS) $(PASCAL_LIBRARY) pascal-bindings $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
+all: novapascal.bin $(NPCFE) $(TOOL_BINS) $(PASCAL_LIBRARY) pascal-bindings $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
 
 $(NOVA_LIB_FILE): FORCE
 	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
 
-novapascal.bin: novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/resident_io.o novapascal.cfg $(NOVA_LIB_FILE)
-	ld65 -C novapascal.cfg -m novapascal.map -o $@ novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/resident_io.o $(NOVA_LIB_FILE)
+novapascal.bin: novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/npc_frontend.o $(BUILD_DIR)/resident_io.o novapascal.cfg $(NOVA_LIB_FILE)
+	ld65 -C novapascal.cfg -m novapascal.map -Ln $(BUILD_DIR)/novapascal.sym -o $@ novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/npc_frontend.o $(BUILD_DIR)/resident_io.o $(NOVA_LIB_FILE)
 
-novapascal.o: novapascal.s shell.s tools/npproj.inc $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc novapascal.cfg $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/replline.inc
+novapascal.o: novapascal.s shell.s tools/npproj.inc $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc novapascal.cfg $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/fio.inc $(NOVA_ASM)/replline.inc
 	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -l novapascal.lst -o $@ novapascal.s
 
 $(BUILD_DIR):
@@ -47,17 +53,28 @@ toolchain:
 $(BUILD_DIR)/resident_io.o: $(TOOLCHAIN)/nptool_io.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ $(TOOLCHAIN)/nptool_io.s
 
-$(BUILD_DIR)/npc_resident.o: tools/npc.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc $(NOVA_ASM)/docbuf.inc | $(BUILD_DIR)
-	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npc.s
+$(BUILD_DIR)/npc_resident.o: tools/npc_resident.s tools/npc_frontend.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+	ca65 --cpu w65c02 -I tools -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npc_resident.s
 
-$(BUILD_DIR)/npedit.o: tools/npedit.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libeditor.inc $(NOVA_ASM)/libmemory.inc | $(BUILD_DIR)
+$(BUILD_DIR)/npc_frontend.o: tools/npc.s tools/npc_frontend.inc tools/npproj.inc $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+	ca65 --cpu w65c02 -I . -I tools -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npc.s
+
+$(NPCFE_PAYLOAD): novapascal.bin
+
+$(OVERLAY_PACKER_DLL): FORCE
+	dotnet build $(OVERLAY_PACKER) -c Release -m:1 /p:SkipRomBuild=true /nr:false
+
+$(NPCFE): $(NPCFE_PAYLOAD) $(OVERLAY_PACKER_DLL)
+	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NPCFE_PAYLOAD)" --output "$@" --load $(NPCFE_LOAD) --max-size $(NPCFE_MAX) --sym "$(BUILD_DIR)/novapascal.sym" --main npcfe_main --bss-size "$$(awk '$$3 == ".__NPCFE_BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/novapascal.sym")" --module-id 0x4E43 --module-version 1
+
+$(BUILD_DIR)/npedit.o: tools/npedit.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/editbuf.inc $(NOVA_ASM)/editui.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libeditor.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/nui.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npedit.s
 
 $(NPEDIT): $(BUILD_DIR)/npedit.o $(TOOL_IO) $(TOOL_CFG)
 	ld65 -C $(TOOL_CFG) -m $(BUILD_DIR)/npedit.map -o $@ $(BUILD_DIR)/npedit.o $(TOOL_IO)
 
-$(BUILD_DIR)/npo2.o: tools/npo2.s $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/xramstream.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
-	ca65 --cpu w65c02 -I . -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npo2.s
+$(BUILD_DIR)/npo2.o: tools/npo2.s tools/npproj.inc $(TOOLCHAIN)/longbranch.inc $(TOOLCHAIN)/xramstream.inc $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/pager.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+	ca65 --cpu w65c02 -I . -I tools -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ tools/npo2.s
 
 $(NPO2): $(BUILD_DIR)/npo2.o $(TOOL_IO) $(TOOL_CFG)
 	ld65 -C $(TOOL_CFG) -m $(BUILD_DIR)/npo2.map -o $@ $(BUILD_DIR)/npo2.o $(TOOL_IO)
@@ -68,7 +85,7 @@ $(BUILD_DIR)/npproj.o: tools/npproj.s tools/npproj.inc $(TOOLCHAIN)/longbranch.i
 $(NPPROJ): $(BUILD_DIR)/npproj.o $(TOOL_IO) $(TOOL_CFG)
 	ld65 -C $(TOOL_CFG) -m $(BUILD_DIR)/npproj.map -o $@ $(BUILD_DIR)/npproj.o $(TOOL_IO)
 
-$(BUILD_DIR)/pascal_runtime.o: pascal_runtime.s $(TOOLCHAIN)/nobj.inc $(NOVA_ASM)/nova.inc | $(BUILD_DIR)
+$(BUILD_DIR)/pascal_runtime.o: pascal_runtime.s pascal_real_runtime.inc $(TOOLCHAIN)/nobj.inc $(NOVA_ASM)/array_index_core.body $(NOVA_ASM)/array_index_byte_stack.body $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/libmemory.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I $(TOOLCHAIN) -I $(NOVA_ASM) -o $@ pascal_runtime.s
 
 $(PASCAL_LIBRARY): $(BUILD_DIR)/pascal_runtime.o pascal_runtime.cfg
@@ -100,28 +117,53 @@ FORCE:
 NDI_RUNTIME := novapascal.bin
 NDI_OUTPUT  := novapascal.ndi
 NDI_LABEL   := NPASCAL
-NDI_DIRECTORY_SECTORS := 96
+NDI_SIZE_KB := 2048
+NDI_DIRECTORY_SECTORS := 128
 PASCAL_UNIT_SOURCES := pascal.inc units/novagfx.pas units/graphics.inc units/graphics.npi units/graphics.s \
 	units/novainput.pas units/input.inc units/input.npi units/input.s \
-	units/novarand.pas units/random.inc units/random.npi units/random.s
-NDI_ASSET_DEPS := hello.pas hello.npp fizzbuzz.pas fizzbuzz.npp life.pas life.npp $(PASCAL_UNIT_SOURCES) $(NOVA_ASM)/nvr.inc $(TOOL_BINS) $(PASCAL_LIBRARY) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
+	units/novarand.pas units/random.inc units/random.npi units/random.s \
+	units/novamemory.pas units/memory.inc units/memory.npi units/memory.s
+MICROCALC_SOURCES := microcalc/MC.PAS microcalc/MC-MOD00.INC microcalc/MC-MOD01.INC \
+	microcalc/MC-MOD02.INC microcalc/MC-MOD03.INC microcalc/MC-MOD04.INC \
+	microcalc/MC-MOD05.INC microcalc/MC.HLP microcalc/MCDEMO.MCS \
+	microcalc/MICROCALC.NPP microcalc/README.md
+NDI_ASSET_DEPS := hello.pas hello.npp fizzbuzz.pas fizzbuzz.npp life.pas life.npp user-readme.txt $(MICROCALC_SOURCES) $(PASCAL_UNIT_SOURCES) $(NOVA_ASM)/nvr.inc $(NPCFE) $(TOOL_BINS) $(PASCAL_LIBRARY) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
 NDI_ASSETS := --asset hello.pas:HELLO/MAIN.PAS --asset hello.npp:HELLO/HELLO.NPP \
 	--asset fizzbuzz.pas:FIZZBUZZ/MAIN.PAS --asset fizzbuzz.npp:FIZZBUZZ/FIZZBUZZ.NPP \
 	--asset life.pas:LIFE/MAIN.PAS --asset life.npp:LIFE/LIFE.NPP \
-	--asset pascal.inc:PASCAL.INC \
-	--asset $(NOVA_ASM)/nvr.inc:NVR.INC \
-	--asset units/novagfx.pas:NOVAGFX.PAS \
-	--asset units/graphics.inc:GRAPHICS.INC \
-	--asset units/graphics.npi:GRAPHICS.NPI \
-	--asset units/graphics.s:GRAPHICS.S \
-	--asset units/novainput.pas:NOVAINPUT.PAS \
-	--asset units/input.inc:INPUT.INC \
-	--asset units/input.npi:INPUT.NPI \
-	--asset units/input.s:INPUT.S \
-	--asset units/novarand.pas:NOVARAND.PAS \
-	--asset units/random.inc:RANDOM.INC \
-	--asset units/random.npi:RANDOM.NPI \
-	--asset units/random.s:RANDOM.S \
+	--asset microcalc/MC.PAS:MICROCALC/MC.PAS \
+	--asset microcalc/MC-MOD00.INC:MICROCALC/MC-MOD00.INC \
+	--asset microcalc/MC-MOD01.INC:MICROCALC/MC-MOD01.INC \
+	--asset microcalc/MC-MOD02.INC:MICROCALC/MC-MOD02.INC \
+	--asset microcalc/MC-MOD03.INC:MICROCALC/MC-MOD03.INC \
+	--asset microcalc/MC-MOD04.INC:MICROCALC/MC-MOD04.INC \
+	--asset microcalc/MC-MOD05.INC:MICROCALC/MC-MOD05.INC \
+	--asset microcalc/MC.HLP:MICROCALC/MC.HLP \
+	--asset microcalc/MCDEMO.MCS:MICROCALC/MCDEMO.MCS \
+	--asset microcalc/MICROCALC.NPP:MICROCALC/MICROCALC.NPP \
+	--asset microcalc/README.md:MICROCALC/README.TXT \
+	--asset pascal.inc:SYSTEM/PASCAL.INC \
+	--asset $(NOVA_ASM)/nvr.inc:SYSTEM/NVR.INC \
+	--asset units/novagfx.pas:SYSTEM/NOVAGFX.PAS \
+	--asset units/graphics.inc:SYSTEM/GRAPHICS.INC \
+	--asset units/graphics.npi:SYSTEM/GRAPHICS.NPI \
+	--asset units/graphics.s:SYSTEM/GRAPHICS.S \
+	--asset units/novainput.pas:SYSTEM/NOVAINPUT.PAS \
+	--asset units/input.inc:SYSTEM/INPUT.INC \
+	--asset units/input.npi:SYSTEM/INPUT.NPI \
+	--asset units/input.s:SYSTEM/INPUT.S \
+	--asset units/novarand.pas:SYSTEM/NOVARAND.PAS \
+	--asset units/random.inc:SYSTEM/RANDOM.INC \
+	--asset units/random.npi:SYSTEM/RANDOM.NPI \
+	--asset units/random.s:SYSTEM/RANDOM.S \
+	--asset units/novamemory.pas:SYSTEM/NOVAMEMORY.PAS \
+	--asset units/memory.inc:SYSTEM/MEMORY.INC \
+	--asset units/memory.npi:SYSTEM/MEMORY.NPI \
+	--asset units/memory.s:SYSTEM/MEMORY.S \
+	--asset $(NOVA_ASM)/libabi.inc:SYSTEM/LIBABI.INC \
+	--asset $(NOVA_ASM)/libmemory.inc:SYSTEM/LIBMEMORY.INC \
+	--asset user-readme.txt:USER/README.TXT \
+	--asset $(NPCFE):NPCFE.OVL \
 	--asset $(BUILD_DIR)/NPEDIT.BIN:NPEDIT.BIN \
 	--asset $(BUILD_DIR)/NPO2.BIN:NPO2.BIN \
 	--asset $(BUILD_DIR)/NPPROJ.BIN:NPPROJ.BIN \
@@ -130,8 +172,8 @@ NDI_ASSETS := --asset hello.pas:HELLO/MAIN.PAS --asset hello.npp:HELLO/HELLO.NPP
 	--asset $(NASPP_OVERLAY):NASPP.OVL \
 	--asset $(NASBE_OVERLAY):NASBE.OVL \
 	--asset $(NLWORK_OVERLAY):NLWORK.OVL \
-	--asset $(PASCAL_LIBRARY):PASCAL.NLIB \
-	--asset-dir $(PASCAL_BINDING_DIR)
+	--asset $(PASCAL_LIBRARY):SYSTEM/PASCAL.NLIB \
+	--asset-dir $(PASCAL_BINDING_DIR):SYSTEM
 include ../../runtime/ndi/ndi.mk
 
 $(NDI_OUTPUT): pascal-bindings

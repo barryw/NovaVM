@@ -24,6 +24,7 @@ VGC_RESULT_ERROR = $01
 .global vgc_vsync
 .global vgc_wait_frames
 .global vgc_cls
+.global vgc_clear_eol
 .global vgc_set_fg
 .global vgc_set_bg
 .global vgc_set_border

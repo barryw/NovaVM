@@ -12,6 +12,7 @@ NASM_ERR_SYMBOL    = 3
 NASM_ERR_RANGE     = 4
 NASM_ERR_INCLUDE   = 5
 NASM_ERR_ASSERT    = 6
+NASM_ERR_CAPACITY  = 7
 NASM_INCLUDE_DEPTH = 8
 NASM_FILENAME_CAP  = 64
 
@@ -31,6 +32,7 @@ NASM_FILENAME_CAP  = 64
 .global nasm_include_ptr
 .global nasm_include_len
 .global nasm_include_display_ptr
+.global nasm_include_display_len
 .global nasm_error_name_ptr
 .global nasm_error_name_len
 .global nasm_include_open

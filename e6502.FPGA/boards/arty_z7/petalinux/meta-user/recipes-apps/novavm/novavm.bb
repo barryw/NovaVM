@@ -4,8 +4,9 @@ installs it + its SysV init script. Built from source so the image is reproducib
 LICENSE = "CLOSED"
 PV = "1.0"
 
-# Location of the NovaVM checkout (override if it lives elsewhere).
-NOVAVM_REPO ?= "/home/barry/NovaVM"
+# Resolve the checkout through the linked meta-user layer so builds are not
+# tied to one developer's filesystem layout.
+NOVAVM_REPO ?= "${@os.path.realpath(os.path.join(d.getVar('THISDIR'), '../../../../../../..'))}"
 NOVAVM_SRC   = "${NOVAVM_REPO}/e6502.FPGA/boards/arty_z7/linux/novavm"
 
 # We build directly from the external NovaVM tree — nothing to fetch/unpack.
@@ -35,7 +36,7 @@ do_compile() {
     # naudio.c #includes ../../ps_fio/src/{sid.c,thirdparty/*}; those resolve
     # relative to each source file, so absolute paths on the command line are fine.
     ${CC} ${CFLAGS} ${LDFLAGS} -O2 -pthread -I${NOVAVM_SRC} \
-        ${NOVAVM_SRC}/novavm.c ${NOVAVM_SRC}/naudio.c ${NOVAVM_SRC}/nservers.c \
+        ${NOVAVM_SRC}/novavm.c ${NOVAVM_SRC}/naudio.c ${NOVAVM_SRC}/nsidvm.c ${NOVAVM_SRC}/nservers.c \
         ${NOVAVM_SRC}/nkbd.c ${NOVAVM_SRC}/nmouse.c ${NOVAVM_SRC}/nfio.c ${NOVAVM_SRC}/nsplash.c \
         ${NOVAVM_SRC}/nbootcfg.c ${NOVAVM_SRC}/nosd.c ${NOVAVM_SRC}/cJSON.c \
         -lm -o ${B}/novavm

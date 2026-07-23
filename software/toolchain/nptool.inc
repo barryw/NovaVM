@@ -3,8 +3,11 @@
 .ifndef NPTOOL_INC
 NPTOOL_INC = 1
 
-NPTOOL_LOAD = $2000
-NPTOOL_MAX  = $5000
+; The resident language shell owns $0900-$1CDA. $1D00 is therefore the first
+; safe page for transient tools; the slot extends to the linker worker at
+; $8000.
+NPTOOL_LOAD = $1D00
+NPTOOL_MAX  = $6000
 
 ; Linker placement option. The shell/project layer owns the default; NL only
 ; consumes this ABI cell and never hardcodes a runtime address.
@@ -35,6 +38,8 @@ NPTOOL_ARG6_LEN = $02F0
 NPTOOL_ARG6     = $0970
 NPTOOL_FLAGS    = $02EF
 NPTOOL_FLAG_VALIDATE = $01
+NPTOOL_FLAG_PREPROCESS_ONLY = $02
+NPTOOL_FLAG_SOURCE_PREPROCESSED = $04
 
 ; Shared I/O transfer cells used by tool entry points.
 NPTOOL_DIAG_LINE = $02F3
@@ -59,6 +64,10 @@ NPTOOL_IO_TOO_LARGE = $FE
 .global nptool_load_arg2
 .global nptool_load_arg3
 .global nptool_load_arg4
+.global nptool_size_arg0
+.global nptool_size_arg3
+.global nptool_size_named
+.global nptool_probe_named
 .global nptool_save_arg0
 .global nptool_save_arg1
 .global nptool_save_named

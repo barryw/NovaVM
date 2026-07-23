@@ -138,6 +138,7 @@ module vgc (
     localparam DIM_REG_ADDR   = 16'hA0E5;
     localparam TEXT_FLAGS_ADDR = 16'hA0E6;
     localparam TEXT_REVATTR_ADDR = 16'hA0E7;
+    localparam TEXT_BG_ADDR = 16'hA0C0;
     localparam GFX_TRANS_ADDR = 16'hA0E8;
     localparam PALETTE_MODE_ADDR = 16'hA0E9;
     localparam SCROLL_CTL_ADDR = 16'hA0EA;
@@ -210,6 +211,7 @@ module vgc (
     localparam TATTR_REVERSE = 8'h02;
     localparam TATTR_BOLD  = 8'h04;
     localparam TATTR_BGTRANS = 8'h08;
+    localparam TEXT_BG_TRANS = 8'h10;
 
     // Drawing commands
     localparam CMD_PLOT    = 8'h01;
@@ -588,6 +590,7 @@ module vgc (
 
     logic [7:0]  text_flags;        // declared above first use (xsim strict order)
     logic [7:0]  text_reverse_attr;
+    logic [7:0]  text_bg;
     wire       gtext_reverse = (text_flags & TXF_REVERSE) != 0;
     wire [3:0] gtext_reverse_fg =
         ((text_flags & TXF_REVEX) != 0) ? text_reverse_attr[3:0] : bg_color;
@@ -1085,7 +1088,7 @@ module vgc (
         vram_plane = SPACE_CHAR; vram_addr = 0; vram_ctrl = 8'h01;
         vram_cpu_read_pending = 0; vram_cpu_read_space = SPACE_CHAR; vram_cpu_read_latch = 0;
         vram_port_read_active = 0; vram_port_read_space = SPACE_CHAR; vram_port_read_addr = 0;
-        text_flags = 8'h00; text_reverse_attr = 8'hF0;
+        text_flags = 8'h00; text_reverse_attr = 8'hF0; text_bg = TEXT_BG_TRANS;
         frame_counter = 0;
         scroll_x = 0; scroll_y = 0; scroll_ctl = SCROLL_CTL_DEFAULT;
         scroll_x_fetch = 0; scroll_y_fetch = 0;
@@ -1135,6 +1138,12 @@ module vgc (
         active_text_style_attr =
             (((flags & TXF_FLASH) != 0) ? TATTR_FLASH : 8'h00) |
             (((flags & TXF_BOLD) != 0) ? TATTR_BOLD : 8'h00);
+    endfunction
+
+    function automatic logic [7:0] emit_style_attr(input logic [7:0] flags, input logic [7:0] tbg);
+        emit_style_attr = active_text_style_attr(flags) |
+                          ((((tbg & TEXT_BG_TRANS) != 0) && ((flags & TXF_REVERSE) == 0))
+                              ? TATTR_BGTRANS : 8'h00);
     endfunction
 
     function automatic logic text_glyph_pixel(
@@ -1200,7 +1209,8 @@ module vgc (
     wire spr_reg_sel   = (cpu_raddr >= SPR_REG_BASE && cpu_raddr <= SPR_REG_END);
     wire vram_reg_sel  = (cpu_raddr >= VRAM_REG_BASE && cpu_raddr <= VRAM_REG_END);
     wire dim_reg_sel   = (cpu_raddr == DIM_REG_ADDR);
-    wire text_reg_sel  = (cpu_raddr == TEXT_FLAGS_ADDR || cpu_raddr == TEXT_REVATTR_ADDR);
+    wire text_reg_sel  = (cpu_raddr == TEXT_BG_ADDR || cpu_raddr == TEXT_FLAGS_ADDR ||
+                          cpu_raddr == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel = (cpu_raddr == GFX_TRANS_ADDR);
     wire palette_mode_sel = (cpu_raddr == PALETTE_MODE_ADDR);
     wire palette_index_sel = (cpu_raddr == PALETTE_INDEX_ADDR);
@@ -1236,7 +1246,8 @@ module vgc (
     wire spr_reg_sel_w   = (r_cpu_addr_w >= SPR_REG_BASE && r_cpu_addr_w <= SPR_REG_END);
     wire vram_reg_sel_w  = (r_cpu_addr_w >= VRAM_REG_BASE && r_cpu_addr_w <= VRAM_REG_END);
     wire dim_reg_sel_w   = (r_cpu_addr_w == DIM_REG_ADDR);
-    wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_FLAGS_ADDR || r_cpu_addr_w == TEXT_REVATTR_ADDR);
+    wire text_reg_sel_w  = (r_cpu_addr_w == TEXT_BG_ADDR || r_cpu_addr_w == TEXT_FLAGS_ADDR ||
+                            r_cpu_addr_w == TEXT_REVATTR_ADDR);
     wire gfx_trans_sel_w = (r_cpu_addr_w == GFX_TRANS_ADDR);
     wire palette_index_sel_w = (r_cpu_addr_w == PALETTE_INDEX_ADDR);
     wire palette_data_sel_w = (r_cpu_addr_w == PALETTE_DATA_ADDR);
@@ -1452,6 +1463,7 @@ module vgc (
         else if (screen_plane_sel) cpu_rdata = {6'b0, screen_win_plane};
         else if (text_reg_sel) begin
             case (cpu_raddr)
+                TEXT_BG_ADDR:      cpu_rdata = text_bg;
                 TEXT_FLAGS_ADDR:   cpu_rdata = text_flags;
                 TEXT_REVATTR_ADDR: cpu_rdata = text_reverse_attr;
                 default:           cpu_rdata = 8'h00;
@@ -1483,7 +1495,8 @@ module vgc (
     wire dbg_spr_sel   = (dbg_addr >= SPR_REG_BASE && dbg_addr <= SPR_REG_END);
     wire dbg_vram_sel  = (dbg_addr >= VRAM_REG_BASE && dbg_addr <= VRAM_REG_END);
     wire dbg_dim_sel   = (dbg_addr == DIM_REG_ADDR);
-    wire dbg_text_sel  = (dbg_addr == TEXT_FLAGS_ADDR || dbg_addr == TEXT_REVATTR_ADDR);
+    wire dbg_text_sel  = (dbg_addr == TEXT_BG_ADDR || dbg_addr == TEXT_FLAGS_ADDR ||
+                          dbg_addr == TEXT_REVATTR_ADDR);
     wire dbg_gfx_trans_sel = (dbg_addr == GFX_TRANS_ADDR);
     wire dbg_palette_mode_sel = (dbg_addr == PALETTE_MODE_ADDR);
     wire dbg_palette_index_sel = (dbg_addr == PALETTE_INDEX_ADDR);
@@ -1496,7 +1509,9 @@ module vgc (
     wire dbg_write_spr_sel  = dbg_we && (dbg_waddr >= SPR_REG_BASE && dbg_waddr <= SPR_REG_END);
     wire dbg_write_vram_sel = dbg_we && (dbg_waddr >= VRAM_REG_BASE && dbg_waddr <= VRAM_REG_END);
     wire dbg_write_dim_sel  = dbg_we && (dbg_waddr == DIM_REG_ADDR);
-    wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_FLAGS_ADDR || dbg_waddr == TEXT_REVATTR_ADDR);
+    wire dbg_write_text_sel = dbg_we && (dbg_waddr == TEXT_BG_ADDR ||
+                                         dbg_waddr == TEXT_FLAGS_ADDR ||
+                                         dbg_waddr == TEXT_REVATTR_ADDR);
     wire dbg_write_gfx_trans_sel = dbg_we && (dbg_waddr == GFX_TRANS_ADDR);
     wire dbg_write_palette_index_sel = dbg_we && (dbg_waddr == PALETTE_INDEX_ADDR);
     wire dbg_write_palette_data_sel = dbg_we && (dbg_waddr == PALETTE_DATA_ADDR);
@@ -1576,6 +1591,7 @@ module vgc (
         end
         else if (dbg_text_sel) begin
             case (dbg_addr)
+                TEXT_BG_ADDR:      dbg_rdata = text_bg;
                 TEXT_FLAGS_ADDR:   dbg_rdata = text_flags;
                 TEXT_REVATTR_ADDR: dbg_rdata = text_reverse_attr;
                 default:           dbg_rdata = 8'h00;
@@ -1615,7 +1631,7 @@ module vgc (
             scroll_y_fetch <= 0;
             frame_counter <= 0;
             vram_plane <= SPACE_CHAR; vram_addr <= 16'd0; vram_ctrl <= 8'h01;
-            text_flags <= 8'h00; text_reverse_attr <= 8'hF0;
+            text_flags <= 8'h00; text_reverse_attr <= 8'hF0; text_bg <= TEXT_BG_TRANS;
             scroll_offset <= 0; scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
             text_top_row <= 0;
             screen_win_plane <= 0;
@@ -1746,10 +1762,12 @@ module vgc (
                         cmd_char_din <= 8'h20;
                         cmd_char_we <= 1;
                         cmd_color_addr <= reset_clear_addr[11:0];
-                        cmd_color_din <= pack_text_color(bg_color, fg_color);
+                        cmd_color_din <= pack_text_color(
+                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0],
+                            fg_color);
                         cmd_color_we <= 1;
                         cmd_attr_addr <= reset_clear_addr[11:0];
-                        cmd_attr_din <= 8'h00;
+                        cmd_attr_din <= emit_style_attr(text_flags, text_bg);
                         cmd_attr_we <= 1;
                         if (reset_clear_addr == TEXT_SIZE - 1) begin
                             reset_clear_addr <= 17'd0;
@@ -1813,10 +1831,12 @@ module vgc (
                     cmd_char_din <= 8'h20;
                     cmd_char_we <= 1;
                     cmd_color_addr <= screen_addr(scroll_col, ROWS - 1);
-                    cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, bg_color);
+                    cmd_color_din <= active_text_color_attr(
+                        text_flags, text_reverse_attr, fg_color,
+                        ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                     cmd_color_we <= 1;
                     cmd_attr_addr <= screen_addr(scroll_col, ROWS - 1);
-                    cmd_attr_din <= active_text_style_attr(text_flags);
+                    cmd_attr_din <= emit_style_attr(text_flags, text_bg);
                     cmd_attr_we <= 1;
                     if (scroll_col == COLS - 1) begin
                         scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
@@ -2119,10 +2139,12 @@ module vgc (
                         cmd_char_din <= 8'h20;
                         cmd_char_we <= 1;
                         cmd_color_addr <= text_linear_addr(cmd_cy[5:0], cmd_cx[6:0]);
-                        cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, bg_color);
+                        cmd_color_din <= active_text_color_attr(
+                            text_flags, text_reverse_attr, fg_color,
+                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                         cmd_color_we <= 1;
                         cmd_attr_addr <= text_linear_addr(cmd_cy[5:0], cmd_cx[6:0]);
-                        cmd_attr_din <= active_text_style_attr(text_flags);
+                        cmd_attr_din <= emit_style_attr(text_flags, text_bg);
                         cmd_attr_we <= 1;
                         if (cmd_cx == COLS - 1) begin
                             cmd_cx <= 0;
@@ -2346,10 +2368,12 @@ module vgc (
                                         cmd_char_din <= r_cpu_wdata_w;
                                         cmd_char_we <= 1;
                                         cmd_color_addr <= screen_addr(cursor_x, cursor_y);
-                                        cmd_color_din <= active_text_color_attr(text_flags, text_reverse_attr, fg_color, bg_color);
+                                        cmd_color_din <= active_text_color_attr(
+                                            text_flags, text_reverse_attr, fg_color,
+                                            ((text_bg & TEXT_BG_TRANS) != 0) ? bg_color : text_bg[3:0]);
                                         cmd_color_we <= 1;
                                         cmd_attr_addr <= screen_addr(cursor_x, cursor_y);
-                                        cmd_attr_din <= active_text_style_attr(text_flags);
+                                        cmd_attr_din <= emit_style_attr(text_flags, text_bg);
                                         cmd_attr_we <= 1;
                                         if (cursor_x >= COLS - 1) begin
                                             cursor_x <= 0;
@@ -2671,6 +2695,7 @@ module vgc (
 
                 if (text_reg_sel_w) begin
                     case (r_cpu_addr_w)
+                        TEXT_BG_ADDR:      text_bg <= r_cpu_wdata_w;
                         TEXT_FLAGS_ADDR:   text_flags <= r_cpu_wdata_w;
                         TEXT_REVATTR_ADDR: text_reverse_attr <= r_cpu_wdata_w;
                         default: ;
@@ -2799,6 +2824,7 @@ module vgc (
 
             if (dbg_write_text_sel) begin
                 case (dbg_waddr)
+                    TEXT_BG_ADDR:      text_bg <= dbg_wdata;
                     TEXT_FLAGS_ADDR:   text_flags <= dbg_wdata;
                     TEXT_REVATTR_ADDR: text_reverse_attr <= dbg_wdata;
                     default: ;
@@ -3243,6 +3269,7 @@ module vgc (
     logic        text_reverse_d2;
     logic        text_bold_d2;
     logic        text_bgtrans_d2;
+    logic [3:0]  resolved_bg_d2;
     logic        cursor_active_d2;
     logic [3:0]  text_pixel_idx_d2;
     logic [3:0]  pixel_color_idx;
@@ -3275,12 +3302,13 @@ module vgc (
         text_bgtrans_d2 = attr_b_dout[3];
         cur_fg_d2     = text_reverse_d2 ? color_b_dout[7:4] : color_b_dout[3:0];
         cur_bg_d2     = text_reverse_d2 ? color_b_dout[3:0] : color_b_dout[7:4];
+        resolved_bg_d2 = text_bgtrans_d2 ? bg_color : cur_bg_d2;
         text_flash_hidden_d2 = attr_b_dout[0] && !frame_counter[5];
         pixel_on_d2   = text_glyph_pixel(font_b_dout, font_pixel_d2, text_bold_d2) && !text_flash_hidden_d2;
         cursor_active_d2 = cursor_here && cursor_blink;
-        text_pixel_idx_d2 = pixel_on_d2 ? cur_fg_d2 : cur_bg_d2;
+        text_pixel_idx_d2 = pixel_on_d2 ? cur_fg_d2 : resolved_bg_d2;
         if (cursor_active_d2)
-            text_pixel_idx_d2 = pixel_on_d2 ? cur_bg_d2 : cur_fg_d2;
+            text_pixel_idx_d2 = pixel_on_d2 ? resolved_bg_d2 : cur_fg_d2;
 
         cur_gfx_d2    = gfx_b_dout;
 
@@ -3302,7 +3330,7 @@ module vgc (
                     3'd1: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : text_pixel_idx_d2;
                     3'd2: pixel_color_idx = cursor_active_d2 ? text_pixel_idx_d2 :
                                              pixel_on_d2 ? cur_fg_d2 :
-                                             ({4'h0, cur_gfx_d2} != gfx_trans_color && text_bgtrans_d2 && !text_reverse_d2) ? cur_gfx_d2 : cur_bg_d2;
+                                             ({4'h0, cur_gfx_d2} != gfx_trans_color && text_bgtrans_d2 && !text_reverse_d2) ? cur_gfx_d2 : resolved_bg_d2;
                     3'd3: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
                     3'd4: pixel_color_idx = ({4'h0, cur_gfx_d2} != gfx_trans_color) ? cur_gfx_d2 : bg_color;
                     default: pixel_color_idx = text_pixel_idx_d2;

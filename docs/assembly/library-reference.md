@@ -321,6 +321,7 @@ covers:
 - signed 16x16 multiply
 - signed Q8.8 multiply
 - signed 32/16 division
+- unsigned 16-bit integer square root
 - sine/cosine
 - atan2 plus approximate hypotenuse
 - approximate distance

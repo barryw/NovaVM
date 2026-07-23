@@ -7,14 +7,17 @@
       .include "wordmath.inc"
       .include "xramstream.inc"
       .include "nas_preprocessor.inc"
+      .include "nas_core.inc"
 
 LINE_CAP       = 255
-MACRO_CAP      = 8
-NAME_CAP       = 16
+MACRO_CAP      = 24
+NAME_CAP       = 32
 PARAM_CAP      = 4
 ARG_CAP        = 48
 COND_CAP       = 8
 EXPR_DEPTH     = 8
+INCLUDE_DEPTH  = 8
+INCLUDE_NAME_CAP = 64
 
 EXPR_BOOL_OR = 1
 EXPR_BOOL_AND = 2
@@ -97,6 +100,11 @@ macro_body_start_l:.res MACRO_CAP
 macro_body_start_h:.res MACRO_CAP
 macro_body_end_l: .res MACRO_CAP
 macro_body_end_h: .res MACRO_CAP
+macro_body_base_l:.res MACRO_CAP
+macro_body_base_m:.res MACRO_CAP
+macro_body_base_h:.res MACRO_CAP
+macro_source_len_l:.res MACRO_CAP
+macro_source_len_h:.res MACRO_CAP
 param_index:      .res 1
 flat_slot:        .res 1
 arg_count:        .res 1
@@ -106,6 +114,9 @@ arg_lens:         .res PARAM_CAP
 arg_text:         .res PARAM_CAP * ARG_CAP
 saved_input_pos:  .res 2
 saved_line:       .res 2
+saved_input_base: .res 3
+saved_input_len:  .res 2
+saved_define_base:.res 3
 expansion_end:    .res 2
 quote_char:       .res 1
 params_active:    .res 1
@@ -113,6 +124,23 @@ define_slot:      .res 1
 saved_macro_slot: .res 1
 command_value_len:.res 1
 command_value:    .res ARG_CAP
+include_depth:    .res 1
+include_need_lf:  .res 1
+include_close_error:.res 1
+include_stack_base_l:.res INCLUDE_DEPTH
+include_stack_base_m:.res INCLUDE_DEPTH
+include_stack_base_h:.res INCLUDE_DEPTH
+include_stack_pos_l:.res INCLUDE_DEPTH
+include_stack_pos_h:.res INCLUDE_DEPTH
+include_stack_len_l:.res INCLUDE_DEPTH
+include_stack_len_h:.res INCLUDE_DEPTH
+include_stack_line_l:.res INCLUDE_DEPTH
+include_stack_line_h:.res INCLUDE_DEPTH
+include_stack_cond:.res INCLUDE_DEPTH
+include_stack_macro:.res INCLUDE_DEPTH
+include_stack_output_l:.res INCLUDE_DEPTH
+include_stack_output_h:.res INCLUDE_DEPTH
+include_stack_lf: .res INCLUDE_DEPTH
 
       .segment "CODE"
       .export naspp_main
@@ -121,6 +149,7 @@ naspp_main:
       STZ   NASPP_ERROR
       STZ   macro_count
       STZ   cond_depth
+      STZ   include_depth
       STZ   output_len
       STZ   output_len+1
       STZ   current_line
@@ -165,6 +194,12 @@ naspp_main:
       BEQ   :+
       JMP   @fail
 :
+      LDA   include_depth
+      BEQ   :+
+      JSR   leave_include_text
+      BEQ   @next_line
+      JMP   @fail
+:
       LDA   cond_depth
       BEQ   :+
       JMP   @nesting_error
@@ -179,7 +214,7 @@ naspp_main:
 @have_line:
       JSR   prepare_token
       LDA   token_len
-      BEQ   @ordinary
+      long_beq @ordinary
 
       LDA   #<kw_if
       LDX   #>kw_if
@@ -241,6 +276,12 @@ naspp_main:
       BNE   :+
       JMP   @syntax_error
 :
+      LDA   #<kw_includetext
+      LDX   #>kw_includetext
+      JSR   token_equals
+      BNE   :+
+      JMP   @handle_includetext
+:
 
 @ordinary:
       LDA   current_active
@@ -275,6 +316,17 @@ naspp_main:
       JMP   @fail
 :
       JMP   @next_line
+
+@handle_includetext:
+      LDA   current_active
+      BEQ   @emit_skipped
+      JSR   parse_include_text_name
+      long_bne @syntax_error
+      JSR   enter_include_text
+      long_beq @next_line
+      LDA   #NASPP_ERR_INCLUDE
+      STA   NASPP_ERROR
+      JMP   @fail
 
 @handle_if:
       JSR   parse_condition_expression
@@ -333,7 +385,7 @@ naspp_main:
 
 @handle_define:
       LDA   current_active
-      BEQ   @emit_skipped
+      long_beq @emit_skipped
       JSR   define_constant
       BNE   @fail
       JMP   @next_line
@@ -501,6 +553,194 @@ ensure_line_end:
       BEQ   @ok
       LDA   #1
       RTS
+@ok:
+      LDA   #0
+      RTS
+
+; .INCLUDETEXT performs an early, recursive text splice. Unlike ordinary
+; .INCLUDE, it is resolved by the preprocessor so downstream source-to-source
+; tools can see the combined stream before NAS assembles it.
+parse_include_text_name:
+      JSR   skip_spaces
+      LDX   parse_pos
+      CPX   line_len
+      BCS   @bad
+      LDA   line_buf,X
+      CMP   #'"'
+      BNE   @bad
+      INX
+      STZ   nasm_include_name_len
+@char:
+      CPX   line_len
+      BCS   @bad
+      LDA   line_buf,X
+      CMP   #'"'
+      BEQ   @close
+      CMP   #$20
+      BCC   @bad
+      LDY   nasm_include_name_len
+      CPY   #INCLUDE_NAME_CAP-1
+      BCS   @bad
+      STA   nasm_include_name,Y
+      INC   nasm_include_name_len
+      INX
+      BRA   @char
+@close:
+      LDA   nasm_include_name_len
+      BEQ   @bad
+      TAY
+      LDA   #0
+      STA   nasm_include_name,Y
+      INX
+      STX   parse_pos
+      JMP   ensure_line_end
+@bad:
+      LDA   #1
+      RTS
+
+preprocessor_include_open:
+      LDA   #NASCORE_INCLUDE_BUFFERED
+      STA   NASCORE_INCLUDE_MODE
+      JSR   @call
+      PHA
+      STZ   NASCORE_INCLUDE_MODE
+      PLA
+      RTS
+@call:
+      JMP   (NASCORE_INCLUDE_OPEN)
+
+preprocessor_include_close:
+      JMP   (NASCORE_INCLUDE_CLOSE)
+
+enter_include_text:
+      LDX   include_depth
+      CPX   #INCLUDE_DEPTH
+      long_bcs @bad
+      JSR   preprocessor_include_open
+      long_bne @bad
+      JSR   map_output
+      LDX   include_depth
+      LDA   input_base
+      STA   include_stack_base_l,X
+      LDA   input_base+1
+      STA   include_stack_base_m,X
+      LDA   input_base+2
+      STA   include_stack_base_h,X
+      LDA   input_pos
+      STA   include_stack_pos_l,X
+      LDA   input_pos+1
+      STA   include_stack_pos_h,X
+      LDA   input_len
+      STA   include_stack_len_l,X
+      LDA   input_len+1
+      STA   include_stack_len_h,X
+      LDA   current_line
+      STA   include_stack_line_l,X
+      LDA   current_line+1
+      STA   include_stack_line_h,X
+      LDA   cond_depth
+      STA   include_stack_cond,X
+      LDA   macro_count
+      STA   include_stack_macro,X
+      LDA   output_len
+      STA   include_stack_output_l,X
+      LDA   output_len+1
+      STA   include_stack_output_h,X
+      LDA   line_has_lf
+      STA   include_stack_lf,X
+      INC   include_depth
+      LDA   nasm_include_ptr
+      STA   input_base
+      LDA   nasm_include_ptr+1
+      STA   input_base+1
+      LDA   nasm_include_ptr+2
+      STA   input_base+2
+      STZ   input_pos
+      STZ   input_pos+1
+      LDA   nasm_include_len
+      STA   input_len
+      LDA   nasm_include_len+1
+      STA   input_len+1
+      STZ   current_line
+      STZ   current_line+1
+      LDA   #0
+      RTS
+@bad:
+      LDA   #1
+      RTS
+
+leave_include_text:
+      LDX   include_depth
+      long_beq @bad
+      DEX
+      STZ   include_need_lf
+      LDA   output_len+1
+      CMP   include_stack_output_h,X
+      BNE   @has_output
+      LDA   output_len
+      CMP   include_stack_output_l,X
+      BEQ   @outer_lf
+@has_output:
+      LDA   line_has_lf
+      BNE   @check_nesting
+@outer_lf:
+      LDA   include_stack_lf,X
+      BEQ   @check_nesting
+      INC   include_need_lf
+@check_nesting:
+      STZ   include_close_error
+      LDA   cond_depth
+      CMP   include_stack_cond,X
+      BEQ   :+
+      INC   include_close_error
+:
+      JSR   preprocessor_include_close
+      BEQ   :+
+      LDA   #2
+      STA   include_close_error
+:
+      JSR   map_output
+      DEC   include_depth
+      LDX   include_depth
+      LDA   include_stack_base_l,X
+      STA   input_base
+      LDA   include_stack_base_m,X
+      STA   input_base+1
+      LDA   include_stack_base_h,X
+      STA   input_base+2
+      LDA   include_stack_pos_l,X
+      STA   input_pos
+      LDA   include_stack_pos_h,X
+      STA   input_pos+1
+      LDA   include_stack_len_l,X
+      STA   input_len
+      LDA   include_stack_len_h,X
+      STA   input_len+1
+      LDA   include_stack_line_l,X
+      STA   current_line
+      LDA   include_stack_line_h,X
+      STA   current_line+1
+      LDA   include_stack_macro,X
+      STA   macro_count
+      LDA   include_close_error
+      BEQ   @separator
+      CMP   #1
+      BNE   @include_bad
+      LDA   #NASPP_ERR_NESTING
+      STA   NASPP_ERROR
+      LDA   #1
+      RTS
+@include_bad:
+      LDA   #NASPP_ERR_INCLUDE
+      STA   NASPP_ERROR
+@bad:
+      LDA   #1
+      RTS
+@separator:
+      LDA   include_need_lf
+      BEQ   @ok
+      LDA   #$0A
+      JMP   emit_byte
 @ok:
       LDA   #0
       RTS
@@ -713,7 +953,7 @@ expr_append:
 expr_copy_define:
       LDA   #'('
       JSR   expr_append
-      BNE   @error
+      long_bne @error
       LDX   define_slot
       LDA   macro_kind,X
       CMP   #3
@@ -722,6 +962,7 @@ expr_copy_define:
       PHA
       LDA   input_pos+1
       PHA
+      JSR   use_define_source
       LDX   define_slot
       LDA   macro_body_start_l,X
       STA   input_pos
@@ -746,12 +987,14 @@ expr_copy_define:
       BNE   @source_error
       BRA   @source_byte
 @source_done:
+      JSR   restore_define_source
       PLA
       STA   input_pos+1
       PLA
       STA   input_pos
       BRA   @close
 @source_error:
+      JSR   restore_define_source
       PLA
       STA   input_pos+1
       PLA
@@ -772,6 +1015,31 @@ expr_copy_define:
       JMP   expr_append
 @error:
       LDA   #1
+      RTS
+
+use_define_source:
+      LDX   #2
+@save:
+      LDA   input_base,X
+      STA   saved_define_base,X
+      DEX
+      BPL   @save
+      LDX   define_slot
+      LDA   macro_body_base_l,X
+      STA   input_base
+      LDA   macro_body_base_m,X
+      STA   input_base+1
+      LDA   macro_body_base_h,X
+      STA   input_base+2
+      RTS
+
+restore_define_source:
+      LDX   #2
+@restore:
+      LDA   saved_define_base,X
+      STA   input_base,X
+      DEX
+      BPL   @restore
       RTS
 
 ; Precedence-climbing parser. Larger precedence values bind more tightly.
@@ -1865,6 +2133,7 @@ define_macro:
       STA   macro_body_start_l,X
       LDA   input_pos+1
       STA   macro_body_start_h,X
+      JSR   store_macro_source
       JSR   emit_skipped_line
       BNE   @error
 @body:
@@ -1906,14 +2175,14 @@ define_macro:
 define_constant:
       LDA   macro_count
       CMP   #MACRO_CAP
-      BCS   @capacity
+      long_bcs @capacity
       JSR   scan_next_token
       LDA   token_len
-      BEQ   @syntax
+      long_beq @syntax
       CMP   #NAME_CAP
-      BCS   @capacity
+      long_bcs @capacity
       JSR   find_macro
-      BCS   @syntax
+      long_bcs @syntax
       LDA   macro_count
       STA   macro_slot
       TAX
@@ -1957,6 +2226,7 @@ define_constant:
       LDA   line_start+1
       ADC   #0
       STA   macro_body_end_h,X
+      JSR   store_macro_source
       INC   macro_count
       JMP   emit_skipped_line
 @capacity:
@@ -1968,6 +2238,20 @@ define_constant:
       LDA   #NASPP_ERR_SYNTAX
       STA   NASPP_ERROR
       LDA   #1
+      RTS
+
+store_macro_source:
+      LDX   macro_slot
+      LDA   input_base
+      STA   macro_body_base_l,X
+      LDA   input_base+1
+      STA   macro_body_base_m,X
+      LDA   input_base+2
+      STA   macro_body_base_h,X
+      LDA   input_len
+      STA   macro_source_len_l,X
+      LDA   input_len+1
+      STA   macro_source_len_h,X
       RTS
 
 undefine_constant:
@@ -2293,6 +2577,16 @@ point_to_argument:
 expand_macro:
       LDA   #1
       STA   params_active
+      LDX   #2
+@save_base:
+      LDA   input_base,X
+      STA   saved_input_base,X
+      DEX
+      BPL   @save_base
+      LDA   input_len
+      STA   saved_input_len
+      LDA   input_len+1
+      STA   saved_input_len+1
       LDA   input_pos
       STA   saved_input_pos
       LDA   input_pos+1
@@ -2310,6 +2604,16 @@ expand_macro:
       STA   expansion_end
       LDA   macro_body_end_h,X
       STA   expansion_end+1
+      LDA   macro_body_base_l,X
+      STA   input_base
+      LDA   macro_body_base_m,X
+      STA   input_base+1
+      LDA   macro_body_base_h,X
+      STA   input_base+2
+      LDA   macro_source_len_l,X
+      STA   input_len
+      LDA   macro_source_len_h,X
+      STA   input_len+1
 @line:
       LDA   input_pos+1
       CMP   expansion_end+1
@@ -2325,6 +2629,7 @@ expand_macro:
       BNE   @error
       BRA   @line
 @done:
+      JSR   restore_expansion_source
       LDA   saved_input_pos
       STA   input_pos
       LDA   saved_input_pos+1
@@ -2337,6 +2642,7 @@ expand_macro:
       LDA   #0
       RTS
 @error:
+      JSR   restore_expansion_source
       LDA   saved_input_pos
       STA   input_pos
       LDA   saved_input_pos+1
@@ -2347,6 +2653,19 @@ expand_macro:
       STA   current_line+1
       STZ   params_active
       LDA   #1
+      RTS
+
+restore_expansion_source:
+      LDX   #2
+@base:
+      LDA   saved_input_base,X
+      STA   input_base,X
+      DEX
+      BPL   @base
+      LDA   saved_input_len
+      STA   input_len
+      LDA   saved_input_len+1
+      STA   input_len+1
       RTS
 
 ; ponytail: expansion is deliberately one level; recurse through the same
@@ -2654,6 +2973,7 @@ emit_define:
       PHA
       LDA   input_pos+1
       PHA
+      JSR   use_define_source
       LDX   define_slot
       LDA   macro_body_start_l,X
       STA   input_pos
@@ -2682,6 +3002,7 @@ emit_define:
       PLX
       BRA   @loop
 @done:
+      JSR   restore_define_source
       PLA
       STA   input_pos+1
       PLA
@@ -2689,6 +3010,7 @@ emit_define:
       LDA   #0
       RTS
 @error:
+      JSR   restore_define_source
       PLA
       STA   input_pos+1
       PLA
@@ -2790,6 +3112,7 @@ kw_macro:    .byte 6, ".macro"
 kw_define:   .byte 7, ".define"
 kw_undefine: .byte 9, ".undefine"
 kw_endmacro: .byte 9, ".endmacro"
+kw_includetext:.byte 12, ".includetext"
 op_or:       .byte 3, ".OR"
 op_and:      .byte 4, ".AND"
 op_xor:      .byte 4, ".XOR"

@@ -3580,7 +3580,7 @@
       ],
       "kind": "routine",
       "symbol": "pager_load_current_file_page",
-      "summary": "Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR."
+      "summary": "Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes."
     },
     {
       "label": "PAGER.LOAD_FILE_PAGE",
@@ -3609,7 +3609,7 @@
       ],
       "kind": "routine",
       "symbol": "pager_load_file_page",
-      "summary": "Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR."
+      "summary": "Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes."
     },
     {
       "label": "PAGER.NAMELEN",
@@ -4946,7 +4946,7 @@
     {
       "label": "VGC.CHARBG_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 314,
+      "line": 348,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4957,7 +4957,7 @@
     {
       "label": "VGC.CIRCLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 584,
+      "line": 618,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -4975,9 +4975,25 @@
       "summary": "Issue the VGC circle/ellipse command using VGC.P0..VGC.P7."
     },
     {
+      "label": "VGC.CLEAR_EOL",
+      "source": "../../runtime/asm/vgc.s",
+      "line": 271,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "VGC_RESULT_OK."
+        }
+      ],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "vgc_clear_eol",
+      "summary": "Clear from the current text cursor through the end of its row, preserving the cursor."
+    },
+    {
       "label": "VGC.CLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 252,
+      "line": 255,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -4988,7 +5004,7 @@
     {
       "label": "VGC.COMMAND",
       "source": "../../runtime/asm/vgc.s",
-      "line": 172,
+      "line": 175,
       "inputs": [
         {
           "name": "A",
@@ -5015,7 +5031,7 @@
     {
       "label": "VGC.DISPLAY_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 338,
+      "line": 372,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5026,7 +5042,7 @@
     {
       "label": "VGC.DISPLAY_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 327,
+      "line": 361,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5037,7 +5053,7 @@
     {
       "label": "VGC.EXEC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 207,
+      "line": 210,
       "inputs": [
         {
           "name": "A",
@@ -5053,7 +5069,7 @@
     {
       "label": "VGC.FILL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 617,
+      "line": 651,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5073,7 +5089,7 @@
     {
       "label": "VGC.FLASH_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 517,
+      "line": 551,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5084,7 +5100,7 @@
     {
       "label": "VGC.FLASH_ON",
       "source": "../../runtime/asm/vgc.s",
-      "line": 505,
+      "line": 539,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5095,7 +5111,7 @@
     {
       "label": "VGC.GCLS",
       "source": "../../runtime/asm/vgc.s",
-      "line": 530,
+      "line": 564,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5106,7 +5122,7 @@
     {
       "label": "VGC.GCOLOR",
       "source": "../../runtime/asm/vgc.s",
-      "line": 540,
+      "line": 574,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5131,7 +5147,7 @@
     {
       "label": "VGC.GTEXT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 595,
+      "line": 629,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5151,7 +5167,7 @@
     {
       "label": "VGC.IRQ_ACK",
       "source": "../../runtime/asm/vgc.s",
-      "line": 391,
+      "line": 425,
       "inputs": [
         {
           "name": "A",
@@ -5167,7 +5183,7 @@
     {
       "label": "VGC.IRQ_DISABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 378,
+      "line": 412,
       "inputs": [
         {
           "name": "A",
@@ -5183,7 +5199,7 @@
     {
       "label": "VGC.IRQ_ENABLE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 365,
+      "line": 399,
       "inputs": [
         {
           "name": "A",
@@ -5199,7 +5215,7 @@
     {
       "label": "VGC.IRQ_INSTALL",
       "source": "../../runtime/asm/vgc.s",
-      "line": 349,
+      "line": 383,
       "inputs": [
         {
           "name": "A",
@@ -5219,7 +5235,7 @@
     {
       "label": "VGC.LINE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 573,
+      "line": 607,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5239,7 +5255,7 @@
     {
       "label": "VGC.LOCATE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 402,
+      "line": 436,
       "inputs": [
         {
           "name": "VGC_P0",
@@ -5259,7 +5275,7 @@
     {
       "label": "VGC.MEM_READ",
       "source": "../../runtime/asm/vgc.s",
-      "line": 439,
+      "line": 473,
       "inputs": [],
       "outputs": [
         {
@@ -5280,7 +5296,7 @@
     {
       "label": "VGC.MEM_WRITE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 451,
+      "line": 485,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5297,7 +5313,7 @@
     {
       "label": "VGC.PAINT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 628,
+      "line": 662,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5361,7 +5377,7 @@
     {
       "label": "VGC.PLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 551,
+      "line": 585,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5377,7 +5393,7 @@
     {
       "label": "VGC.RECT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 606,
+      "line": 640,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5397,7 +5413,7 @@
     {
       "label": "VGC.REVERSE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 464,
+      "line": 498,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5408,7 +5424,7 @@
     {
       "label": "VGC.REVERSE_EXPLICIT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 478,
+      "line": 512,
       "inputs": [
         {
           "name": "A",
@@ -5424,7 +5440,7 @@
     {
       "label": "VGC.REVERSE_OFF",
       "source": "../../runtime/asm/vgc.s",
-      "line": 493,
+      "line": 527,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5435,7 +5451,7 @@
     {
       "label": "VGC.SET_BG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 279,
+      "line": 313,
       "inputs": [
         {
           "name": "X",
@@ -5451,7 +5467,7 @@
     {
       "label": "VGC.SET_BORDER",
       "source": "../../runtime/asm/vgc.s",
-      "line": 290,
+      "line": 324,
       "inputs": [
         {
           "name": "X",
@@ -5467,7 +5483,7 @@
     {
       "label": "VGC.SET_CHARBG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 301,
+      "line": 335,
       "inputs": [
         {
           "name": "X",
@@ -5483,7 +5499,7 @@
     {
       "label": "VGC.SET_FG",
       "source": "../../runtime/asm/vgc.s",
-      "line": 268,
+      "line": 302,
       "inputs": [
         {
           "name": "X",
@@ -5499,7 +5515,7 @@
     {
       "label": "VGC.SET_FONT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 428,
+      "line": 462,
       "inputs": [
         {
           "name": "X",
@@ -5515,7 +5531,7 @@
     {
       "label": "VGC.SET_MODE",
       "source": "../../runtime/asm/vgc.s",
-      "line": 417,
+      "line": 451,
       "inputs": [
         {
           "name": "X",
@@ -5596,7 +5612,7 @@
     {
       "label": "VGC.UNPLOT",
       "source": "../../runtime/asm/vgc.s",
-      "line": 562,
+      "line": 596,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -5633,7 +5649,7 @@
     {
       "label": "VGC.VSYNC",
       "source": "../../runtime/asm/vgc.s",
-      "line": 220,
+      "line": 223,
       "inputs": [],
       "outputs": [
         {
@@ -5649,7 +5665,7 @@
     {
       "label": "VGC.WAIT_COMMAND",
       "source": "../../runtime/asm/vgc.s",
-      "line": 184,
+      "line": 187,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -5660,7 +5676,7 @@
     {
       "label": "VGC.WAIT_FRAMES",
       "source": "../../runtime/asm/vgc.s",
-      "line": 235,
+      "line": 238,
       "inputs": [
         {
           "name": "A",
@@ -8031,7 +8047,7 @@
     {
       "label": "XRAM.ADDR_IN_RANGE",
       "source": "../../runtime/asm/xram.s",
-      "line": 217,
+      "line": 325,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8044,7 +8060,7 @@
     {
       "label": "XRAM.COPY_FROM_RAM",
       "source": "../../runtime/asm/xram.s",
-      "line": 287,
+      "line": 403,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8063,7 +8079,7 @@
     {
       "label": "XRAM.COPY_TO_RAM",
       "source": "../../runtime/asm/xram.s",
-      "line": 314,
+      "line": 432,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8094,7 +8110,7 @@
     {
       "label": "XRAM.FILL",
       "source": "../../runtime/asm/xram.s",
-      "line": 341,
+      "line": 461,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8136,7 +8152,7 @@
     {
       "label": "XRAM.MAP_WINDOW3",
       "source": "../../runtime/asm/xram.s",
-      "line": 235,
+      "line": 345,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8210,7 +8226,7 @@
     {
       "label": "XRAM.READ8",
       "source": "../../runtime/asm/xram.s",
-      "line": 251,
+      "line": 363,
       "inputs": [],
       "outputs": [
         {
@@ -8230,7 +8246,7 @@
     {
       "label": "XRAM.SET_ERROR",
       "source": "../../runtime/asm/xram.s",
-      "line": 54,
+      "line": 142,
       "inputs": [
         {
           "name": "A",
@@ -8251,7 +8267,7 @@
     {
       "label": "XRAM.SET_OK",
       "source": "../../runtime/asm/xram.s",
-      "line": 42,
+      "line": 128,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -8262,7 +8278,7 @@
     {
       "label": "XRAM.WAIT_DMA",
       "source": "../../runtime/asm/xram.s",
-      "line": 376,
+      "line": 500,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -8273,7 +8289,7 @@
     {
       "label": "XRAM.WRITE8",
       "source": "../../runtime/asm/xram.s",
-      "line": 268,
+      "line": 382,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8289,7 +8305,7 @@
     {
       "label": "XRAM.XLOAD",
       "source": "../../runtime/asm/xram.s",
-      "line": 166,
+      "line": 268,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8309,7 +8325,7 @@
     {
       "label": "XRAM.XMC_COPY_FROM_RAM",
       "source": "../../runtime/asm/xram.s",
-      "line": 121,
+      "line": 217,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8328,7 +8344,7 @@
     {
       "label": "XRAM.XMC_COPY_TO_RAM",
       "source": "../../runtime/asm/xram.s",
-      "line": 132,
+      "line": 230,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8347,7 +8363,7 @@
     {
       "label": "XRAM.XMC_FILL",
       "source": "../../runtime/asm/xram.s",
-      "line": 143,
+      "line": 243,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8365,7 +8381,7 @@
     {
       "label": "XRAM.XMC_READ8",
       "source": "../../runtime/asm/xram.s",
-      "line": 95,
+      "line": 187,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8380,7 +8396,7 @@
     {
       "label": "XRAM.XMC_WRITE8",
       "source": "../../runtime/asm/xram.s",
-      "line": 110,
+      "line": 204,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -8396,7 +8412,7 @@
     {
       "label": "XRAM.XSAVE",
       "source": "../../runtime/asm/xram.s",
-      "line": 182,
+      "line": 286,
       "inputs": [],
       "outputs": [],
       "requires": [

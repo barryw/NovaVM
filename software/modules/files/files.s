@@ -406,15 +406,15 @@ fdl_header:
       BRA   @fh
 @fhd: RTS
 
-; Print FIO_SIZEL/H as a right-justified 5-digit decimal (leading spaces), with a
-; one-column gap in front. A directory entry (type DIR) prints blanks, not a size.
+; Print the full 24-bit FIO size as right-justified decimal (leading spaces), with
+; a one-column gap in front. A directory entry (type DIR) prints blanks.
 fdl_size:
       LDA   #' '
       STA   VGC_CHAROUT
       LDA   FIO_DIRTYPE
       CMP   #FIO_TYPE_DIR
       BNE   @fs_num
-      LDX   #$05                       ; dir: 5 blanks
+      LDX   #$08                       ; dir: 8 blanks
 @fs_blank:
       LDA   #' '
       STA   VGC_CHAROUT
@@ -426,8 +426,10 @@ fdl_size:
       STA   NVR0L
       LDA   FIO_SIZEH
       STA   NVR0H
-      LDX   #$00                       ; place index 0..4 (10000..1)
-      STZ   NVR1L                      ; "printed a nonzero digit" flag
+      LDA   FIO_SIZE2
+      STA   NVR1L
+      LDX   #$00                       ; place index 0..7 (10000000..1)
+      STZ   NVR1H                      ; "printed a nonzero digit" flag
 @fs_place:
       LDY   #$00                       ; digit value at this place
 @fs_sub:
@@ -436,19 +438,26 @@ fdl_size:
       SBC   pow10_lo,X
       STA   NVR2L
       LDA   NVR0H
+      SBC   pow10_mid,X
+      STA   NVR2H
+      LDA   NVR1L
       SBC   pow10_hi,X
       BCC   @fs_emit                   ; NVR0 < pow10 -> place done
-      STA   NVR0H
+      STA   NVR3L
       LDA   NVR2L
       STA   NVR0L
+      LDA   NVR2H
+      STA   NVR0H
+      LDA   NVR3L
+      STA   NVR1L
       INY
       BRA   @fs_sub
 @fs_emit:
-      CPX   #$04                       ; the 1's place -> always a digit
+      CPX   #$07                       ; the 1's place -> always a digit
       BEQ   @fs_dig
       CPY   #$00
       BNE   @fs_dig
-      LDA   NVR1L                      ; leading zero with nothing printed yet?
+      LDA   NVR1H                      ; leading zero with nothing printed yet?
       BNE   @fs_dig
       LDA   #' '                       ; -> blank instead of '0'
       STA   VGC_CHAROUT
@@ -458,19 +467,20 @@ fdl_size:
       ORA   #'0'
       STA   VGC_CHAROUT
       LDA   #$01
-      STA   NVR1L
+      STA   NVR1H
 @fs_next:
       INX
-      CPX   #$05
+      CPX   #$08
       BCC   @fs_place
       RTS
 
-pow10_lo: .byte <10000, <1000, <100, <10, <1
-pow10_hi: .byte >10000, >1000, >100, >10, >1
+pow10_lo:  .byte $80, $40, $A0, $10, $E8, $64, $0A, $01
+pow10_mid: .byte $96, $42, $86, $27, $03, $00, $00, $00
+pow10_hi:  .byte $98, $0F, $01, $00, $00, $00, $00, $00
 
 fdl_hdr:
       .byte "NAME                              TYPE           SIZE", $0D, $0A
-      .byte "--------------------------------  -------------- ------", $0D, $0A, $00
+      .byte "--------------------------------  -------------- --------", $0D, $0A, $00
 
 fdl_strs:                              ; 11 x 16-byte type fields (print first 14)
       .byte "BAS             "
@@ -646,7 +656,7 @@ file_page:
       LDA   LIB_ARG3+1
       STA   PAGER_LENH
       JSR   pager_load_file_page
-      JMP   file_finish_status
+      JMP   file_finish_result_fio_size
 
 ; ===========================================================================
 ; Low-level byte-stream file handles.

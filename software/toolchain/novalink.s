@@ -7,9 +7,67 @@
       .setcpu "w65c02"
       .include "novalink.inc"
       .include "longbranch.inc"
+      .include "xram.inc"
+      .include "libabi.inc"
+      .include "novaexec.inc"
 
 NLINK_SECTION_CAP = 8
-NLINK_TOTAL_SECTION_CAP = NLINK_OBJECT_CAP * NLINK_SECTION_CAP
+NLINK_QUERY_NAME_CAP = 32
+
+.macro l_object_lda pointer
+      PHP
+      LDA   l_obj_xram
+      BEQ   :+
+      LDA   pointer
+      STA   l_read_offset
+      LDA   pointer+1
+      STA   l_read_offset+1
+      JSR   l_read_object_y
+      STA   l_read_value
+      PLP
+      LDA   l_read_value
+      BRA   :++
+:
+      PLP
+      LDA   (pointer),Y
+:
+.endmacro
+
+.macro l_object_cmp pointer
+      STA   l_read_acc
+      l_object_lda pointer
+      STA   l_read_value
+      LDA   l_read_acc
+      CMP   l_read_value
+.endmacro
+
+.macro l_object_ora pointer
+      STA   l_read_acc
+      l_object_lda pointer
+      STA   l_read_value
+      LDA   l_read_acc
+      ORA   l_read_value
+.endmacro
+
+.macro l_object_adc pointer
+      STA   l_read_acc
+      PHP
+      l_object_lda pointer
+      STA   l_read_value
+      PLP
+      LDA   l_read_acc
+      ADC   l_read_value
+.endmacro
+
+.macro l_object_sbc pointer
+      STA   l_read_acc
+      PHP
+      l_object_lda pointer
+      STA   l_read_value
+      PLP
+      LDA   l_read_acc
+      SBC   l_read_value
+.endmacro
 
       .segment "ZEROPAGE"
 l_obj:          .res 2
@@ -40,12 +98,19 @@ l_tmp:          .res 2
       .export nlink_object_ptr_h
       .export nlink_object_len_l
       .export nlink_object_len_h
+      .export nlink_object_xram
+      .export nlink_object_xaddr_l
+      .export nlink_object_xaddr_m
+      .export nlink_object_xaddr_h
       .export nlink_library_ptr
       .export nlink_library_len
       .export nlink_output_ptr
+      .export nlink_output_xram
+      .export nlink_output_xaddr
       .export nlink_output_cap
       .export nlink_load_base
       .export nlink_output_len
+      .export nlink_memory_len
       .export nlink_entry
       .export nlink_error
       .export nlink_config_enabled
@@ -65,17 +130,25 @@ l_tmp:          .res 2
       .export nlink_config_symbol_names
       .export nlink_config_symbol_value_l
       .export nlink_config_symbol_value_h
-nlink_object_count:.res 1
-nlink_object_ptr_l:.res NLINK_OBJECT_CAP
-nlink_object_ptr_h:.res NLINK_OBJECT_CAP
-nlink_object_len_l:.res NLINK_OBJECT_CAP
-nlink_object_len_h:.res NLINK_OBJECT_CAP
+nlink_object_count = NLW_OBJECT_COUNT
+nlink_object_ptr_l = NLW_OBJECT_PTR_L
+nlink_object_ptr_h = NLW_OBJECT_PTR_H
+nlink_object_len_l = NLW_OBJECT_LEN_L
+nlink_object_len_h = NLW_OBJECT_LEN_H
+nlink_object_xram = NLW_OBJECT_XRAM
+nlink_object_xaddr_l = NLW_OBJECT_XADDR_L
+nlink_object_xaddr_m = NLW_OBJECT_XADDR_M
+nlink_object_xaddr_h = NLW_OBJECT_XADDR_H
 nlink_library_ptr: .res 2
 nlink_library_len: .res 2
 nlink_output_ptr:  .res 2
+nlink_output_xram: .res 1
+nlink_output_xaddr:.res 3
 nlink_output_cap:  .res 2
 nlink_load_base:   .res 2
 nlink_output_len:  .res 2
+nlink_memory_len:  .res 2
+l_file_payload_len:.res 2
 nlink_entry:       .res 2
 nlink_error:       .res 1
 nlink_config_enabled:.res 1
@@ -99,8 +172,10 @@ l_section_len:     .res 2
 l_addend:          .res 2
 l_section_count:   .res 1
 l_section_index:   .res 1
-l_patch_flat:      .res 1
-l_section_base:    .res 1
+l_patch_flat:      .res 2
+l_section_base:    .res 2
+l_section_flat:    .res 2
+l_state_word:      .res 2
 l_object_iter:     .res 1
 l_scan_object:     .res 1
 l_reloc_object:    .res 1
@@ -113,11 +188,28 @@ l_archive_index:   .res 1
 l_rule_index:      .res 1
 l_region_cursor_l: .res NLINK_REGION_CAP
 l_region_cursor_h: .res NLINK_REGION_CAP
-l_sec_offset_l:    .res NLINK_TOTAL_SECTION_CAP
-l_sec_offset_h:    .res NLINK_TOTAL_SECTION_CAP
-l_sec_size_l:      .res NLINK_TOTAL_SECTION_CAP
-l_sec_size_h:      .res NLINK_TOTAL_SECTION_CAP
+l_output_offset:   .res 2
+l_output_index:    .res 1
+l_output_m:        .res 1
+l_output_h:        .res 1
+l_output_window_m: .res 1
+l_output_window_h: .res 1
+l_output_window_valid:.res 1
+l_obj_xram:        .res 1
+l_obj_xaddr_l:     .res 1
+l_obj_xaddr_m:     .res 1
+l_obj_xaddr_h:     .res 1
+l_read_offset:     .res 2
+l_read_index:      .res 1
+l_read_m:          .res 1
+l_read_h:          .res 1
+l_read_x:          .res 1
+l_read_y:          .res 1
+l_read_acc:        .res 1
+l_read_value:      .res 1
+l_query_name:      .res NLINK_QUERY_NAME_CAP
 l_prepared:        .res 1
+l_place_zerofill:  .res 1
 
       .segment "CODE"
       .export nlink_link
@@ -132,10 +224,10 @@ nlink_prepare:
       STZ   l_prepared
       STZ   nlink_output_len
       STZ   nlink_output_len+1
+      STZ   nlink_memory_len
+      STZ   nlink_memory_len+1
       LDA   nlink_object_count
       long_beq l_bad_object
-      CMP   #NLINK_OBJECT_CAP+1
-      long_bcs l_bad_object
       STZ   l_object_iter
 @validate_object:
       LDA   l_object_iter
@@ -184,35 +276,44 @@ nlink_link:
       STA   l_cap+1
       long_bcc l_bad_output
 
+      STZ   l_output_window_valid
+      LDA   nlink_output_xram
+      BEQ   @ram_output
+      STZ   l_dst
+      STZ   l_dst+1
+      BRA   @write_header
+@ram_output:
       LDA   nlink_output_ptr
       STA   l_dst
       LDA   nlink_output_ptr+1
       STA   l_dst+1
-      LDY   #0
+@write_header:
       LDA   nlink_load_base
-      STA   (l_dst),Y
-      INY
-      LDA   nlink_load_base+1
-      STA   (l_dst),Y
-      CLC
-      LDA   l_dst
-      ADC   #2
-      STA   l_dst
-      BCC   :+
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
       INC   l_dst+1
-:     JSR   l_zero_output
+:
+      LDA   nlink_load_base+1
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:
+      JSR   l_zero_output
       STZ   l_payload_len
       STZ   l_payload_len+1
+      STZ   l_place_zerofill
 
       STZ   l_object_iter
 @place_object:
       LDA   l_object_iter
       CMP   nlink_object_count
-      BEQ   @relocations
+      BEQ   @place_zerofill
       JSR   l_select_object
       long_bcs l_bad_object
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_section_count
       JSR   l_place_sections
       BCC   @next_place_object
@@ -225,6 +326,33 @@ nlink_link:
       INC   l_object_iter
       BRA   @place_object
 
+@place_zerofill:
+      LDA   l_payload_len
+      STA   l_file_payload_len
+      LDA   l_payload_len+1
+      STA   l_file_payload_len+1
+      INC   l_place_zerofill
+      STZ   l_object_iter
+@place_zerofill_object:
+      LDA   l_object_iter
+      CMP   nlink_object_count
+      BEQ   @relocations
+      JSR   l_select_object
+      long_bcs l_bad_object
+      LDY   #NOBJ_SECTION_COUNT
+      l_object_lda l_obj
+      STA   l_section_count
+      JSR   l_place_sections
+      BCC   @next_zerofill_object
+      CMP   #NLINK_ERR_OBJECT
+      long_beq l_bad_object
+      CMP   #NLINK_ERR_CONFIG
+      long_beq l_bad_config
+      JMP   l_bad_output
+@next_zerofill_object:
+      INC   l_object_iter
+      BRA   @place_zerofill_object
+
 @relocations:
       STZ   l_object_iter
 @relocation_object:
@@ -235,13 +363,13 @@ nlink_link:
       JSR   l_select_object
       long_bcs l_bad_object
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_section_count
       LDY   #NOBJ_RELOC_OFFSET
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp+1
       CLC
       LDA   l_obj
@@ -259,10 +387,10 @@ nlink_link:
       STA   l_reloc_bytes+1
       long_bcc l_bad_object
       LDY   #NOBJ_RELOC_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_reloc_count
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_reloc_count+1
 
 @next_reloc:
@@ -273,7 +401,7 @@ nlink_link:
       JSR   l_select_object
       long_bcs l_bad_object
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_section_count
       JSR   l_take_reloc
       long_bcs l_bad_relocation
@@ -284,9 +412,11 @@ nlink_link:
       BCS   :+
       JMP   @skip_reloc
 :     LDA   l_section_index
-      CLC
-      ADC   l_section_base
+      JSR   l_set_section_flat
+      LDA   l_section_flat
       STA   l_patch_flat
+      LDA   l_section_flat+1
+      STA   l_patch_flat+1
       JSR   l_take_reloc
       long_bcs l_bad_relocation
       STA   l_reloc_type
@@ -350,43 +480,45 @@ nlink_link:
       CLC
       LDA   l_payload_len
       ADC   #2
-      STA   nlink_output_len
+      STA   nlink_memory_len
       LDA   l_payload_len+1
       ADC   #0
-      STA   nlink_output_len+1
+      STA   nlink_memory_len+1
+      JSR   l_finish_output
+      long_bcs l_bad_output
       LDA   #0
       JSR   l_select_object
       long_bcs l_bad_object
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_section_count
       LDY   #NOBJ_ENTRY_SECTION
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   l_section_count
       long_bcs l_bad_object
-      CLC
-      ADC   l_section_base
-      TAX
+      JSR   l_set_section_flat
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_read_word
       CLC
       LDA   nlink_load_base
-      ADC   l_sec_offset_l,X
+      ADC   l_state_word
       STA   nlink_entry
       LDA   nlink_load_base+1
-      ADC   l_sec_offset_h,X
+      ADC   l_state_word+1
       STA   nlink_entry+1
       INY
       CLC
       LDA   nlink_entry
-      ADC   (l_obj),Y
+      l_object_adc l_obj
       STA   nlink_entry
       INY
       LDA   nlink_entry+1
-      ADC   (l_obj),Y
+      l_object_adc l_obj
       STA   nlink_entry+1
       LDA   #NLINK_OK
       RTS
 
-; Select object A and its reserved section-placement slice.
+; Select object A and its section-placement slice in XRAM state.
 l_select_object:
       CMP   nlink_object_count
       BCS   @bad
@@ -399,15 +531,76 @@ l_select_object:
       STA   l_obj_len
       LDA   nlink_object_len_h,X
       STA   l_obj_len+1
+      LDA   nlink_object_xram,X
+      STA   l_obj_xram
+      BEQ   @storage_ready
+      STZ   l_obj
+      STZ   l_obj+1
+      LDA   nlink_object_xaddr_l,X
+      STA   l_obj_xaddr_l
+      LDA   nlink_object_xaddr_m,X
+      STA   l_obj_xaddr_m
+      LDA   nlink_object_xaddr_h,X
+      STA   l_obj_xaddr_h
+@storage_ready:
       TXA
+      STZ   l_section_base+1
       ASL
+      ROL   l_section_base+1
       ASL
+      ROL   l_section_base+1
       ASL
       STA   l_section_base
+      ROL   l_section_base+1
       CLC
       RTS
 @bad:
       SEC
+      RTS
+
+; Read byte Y from the object-relative pointer in l_read_offset. Window 2 is
+; shared with XRAM output, so publish every remap through the same cache.
+l_read_object_y:
+      STX   l_read_x
+      STY   l_read_y
+      CLC
+      LDA   l_obj_xaddr_l
+      ADC   l_read_offset
+      ADC   l_read_y
+      STA   l_read_index
+      LDA   l_obj_xaddr_m
+      ADC   l_read_offset+1
+      STA   l_read_m
+      LDA   l_obj_xaddr_h
+      ADC   #0
+      STA   l_read_h
+      LDA   l_output_window_valid
+      BEQ   @map
+      LDA   l_read_m
+      CMP   l_output_window_m
+      BNE   @map
+      LDA   l_read_h
+      CMP   l_output_window_h
+      BEQ   @ready
+@map:
+      STZ   XMC_W2AL
+      LDA   l_read_m
+      STA   l_output_window_m
+      STA   XMC_W2AM
+      LDA   l_read_h
+      STA   l_output_window_h
+      STA   XMC_W2AH
+      LDA   XMC_WINCTL
+      ORA   #XRAM_WIN2_ENABLE
+      STA   XMC_WINCTL
+      INC   l_output_window_valid
+@ready:
+      LDX   l_read_index
+      LDA   XRAM_WIN2_BASE,X
+      PHA
+      LDX   l_read_x
+      LDY   l_read_y
+      PLA
       RTS
 
 ; Carry set when the current object's current section survives GC. Before the
@@ -417,8 +610,12 @@ l_section_is_live:
       BEQ   @yes
       LDX   l_section_index
       LDA   l_section_bits,X
-      LDX   l_object_iter
-      AND   NLW_LIVE_MASK,X
+      STA   l_read_value
+      LDA   l_object_iter
+      STA   nlstate_offset
+      STZ   nlstate_offset+1
+      JSR   nlstate_read
+      AND   l_read_value
       BEQ   @no
 @yes:
       SEC
@@ -427,21 +624,60 @@ l_section_is_live:
       CLC
       RTS
 
+; A is a section index in the selected object. Produce its 16-bit flat slot.
+l_set_section_flat:
+      CLC
+      ADC   l_section_base
+      STA   l_section_flat
+      LDA   l_section_base+1
+      ADC   #0
+      STA   l_section_flat+1
+      RTS
+
+l_use_patch_flat:
+      LDA   l_patch_flat
+      STA   l_section_flat
+      LDA   l_patch_flat+1
+      STA   l_section_flat+1
+      RTS
+
+; X is the high byte of a page-aligned state field. Read/write a 16-bit entry;
+; corresponding high-byte fields are eight pages after their low-byte fields.
+l_state_section_read_word:
+      JSR   l_state_section_offset
+      JSR   nlstate_read
+      STA   l_state_word
+      TXA
+      CLC
+      ADC   #8
+      TAX
+      JSR   l_state_section_offset
+      JSR   nlstate_read
+      STA   l_state_word+1
+      RTS
+
+l_state_section_write_word:
+      JSR   l_state_section_offset
+      LDA   l_state_word
+      JSR   nlstate_write
+      TXA
+      CLC
+      ADC   #8
+      TAX
+      JSR   l_state_section_offset
+      LDA   l_state_word+1
+      JMP   nlstate_write
+
+l_state_section_offset:
+      LDA   l_section_flat
+      STA   nlstate_offset
+      TXA
+      CLC
+      ADC   l_section_flat+1
+      STA   nlstate_offset+1
+      RTS
+
 nlink_export_worker_state:
-      LDA   nlink_object_count
-      STA   NLW_OBJECT_COUNT
-      LDX   #NLINK_OBJECT_CAP-1
-@object:
-      LDA   nlink_object_ptr_l,X
-      STA   NLW_OBJECT_PTR_L,X
-      LDA   nlink_object_ptr_h,X
-      STA   NLW_OBJECT_PTR_H,X
-      LDA   nlink_object_len_l,X
-      STA   NLW_OBJECT_LEN_L,X
-      LDA   nlink_object_len_h,X
-      STA   NLW_OBJECT_LEN_H,X
-      DEX
-      BPL   @object
       LDA   nlink_library_ptr
       STA   NLW_LIBRARY_PTR
       LDA   nlink_library_ptr+1
@@ -472,44 +708,17 @@ nlink_export_worker_state:
       STA   NLW_LOAD_BASE
       LDA   nlink_load_base+1
       STA   NLW_LOAD_BASE+1
-      LDA   nlink_output_len
+      LDA   nlink_memory_len
       STA   NLW_OUTPUT_LEN
-      LDA   nlink_output_len+1
+      LDA   nlink_memory_len+1
       STA   NLW_OUTPUT_LEN+1
-      LDX   #NLINK_TOTAL_SECTION_CAP-1
-@section:
-      LDA   l_sec_offset_l,X
-      STA   NLW_SEC_OFFSET_L,X
-      LDA   l_sec_offset_h,X
-      STA   NLW_SEC_OFFSET_H,X
-      LDA   l_sec_size_l,X
-      STA   NLW_SEC_SIZE_L,X
-      LDA   l_sec_size_h,X
-      STA   NLW_SEC_SIZE_H,X
-      DEX
-      BPL   @section
       RTS
 
 nlink_import_worker_objects:
       LDA   NLW_OBJECT_COUNT
       BEQ   @bad
-      CMP   #NLINK_OBJECT_CAP+1
-      BCS   @bad
       CMP   NLW_ROOT_COUNT
       BCC   @bad
-      STA   nlink_object_count
-      LDX   #NLINK_OBJECT_CAP-1
-@object:
-      LDA   NLW_OBJECT_PTR_L,X
-      STA   nlink_object_ptr_l,X
-      LDA   NLW_OBJECT_PTR_H,X
-      STA   nlink_object_ptr_h,X
-      LDA   NLW_OBJECT_LEN_L,X
-      STA   nlink_object_len_l,X
-      LDA   NLW_OBJECT_LEN_H,X
-      STA   nlink_object_len_h,X
-      DEX
-      BPL   @object
       LDA   #0
       RTS
 @bad:
@@ -624,9 +833,8 @@ l_zero_output:
       LDA   l_left
       ORA   l_left+1
       BEQ   @restore
-      LDY   #0
       LDA   #0
-      STA   (l_dst),Y
+      JSR   l_write_output
       INC   l_dst
       BNE   :+
       INC   l_dst+1
@@ -636,6 +844,13 @@ l_zero_output:
 :     DEC   l_left
       BRA   @byte
 @restore:
+      LDA   nlink_output_xram
+      BEQ   @restore_ram
+      LDA   #2
+      STA   l_dst
+      STZ   l_dst+1
+      RTS
+@restore_ram:
       CLC
       LDA   nlink_output_ptr
       ADC   #2
@@ -664,25 +879,39 @@ l_place_sections:
       JSR   l_object_has
       long_bcc @object
       LDY   #NOBJ_SEC_ALIGN
-      LDA   (l_member),Y
+      l_object_lda l_member
       CMP   #9
       long_bcs @object
       STA   l_archive_index
 
-      CLC
-      LDA   l_section_base
-      ADC   l_section_index
-      TAX
-      STX   l_patch_flat
+      LDA   l_section_index
+      JSR   l_set_section_flat
+      LDA   l_section_flat
+      STA   l_patch_flat
+      LDA   l_section_flat+1
+      STA   l_patch_flat+1
       LDY   #NOBJ_SEC_SIZE
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_section_len
-      STA   l_sec_size_l,X
+      STA   l_state_word
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_section_len+1
-      STA   l_sec_size_h,X
+      STA   l_state_word+1
+      LDX   #>NLW_STATE_SEC_SIZE_L
+      JSR   l_state_section_write_word
       STZ   l_global_found
+      LDY   #NOBJ_SEC_FLAGS
+      l_object_lda l_member
+      AND   #NOBJ_SEC_ZEROFILL
+      BEQ   @initialized_section
+      LDA   l_place_zerofill
+      BNE   @selected_pass
+      BRA   @data_length
+@initialized_section:
+      LDA   l_place_zerofill
+      BNE   @data_length
+@selected_pass:
       JSR   l_section_is_live
       BCC   @dead_section
       INC   l_global_found
@@ -695,24 +924,26 @@ l_place_sections:
       LDA   l_archive_index
       JSR   l_align_output
       long_bcs @output
-      LDX   l_patch_flat
       LDA   l_payload_len
-      STA   l_sec_offset_l,X
+      STA   l_state_word
       LDA   l_payload_len+1
-      STA   l_sec_offset_h,X
+      STA   l_state_word+1
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_write_word
       BRA   @data_length
 @dead_section:
-      LDX   l_patch_flat
-      STZ   l_sec_offset_l,X
-      STZ   l_sec_offset_h,X
-      STZ   l_sec_size_l,X
-      STZ   l_sec_size_h,X
+      STZ   l_state_word
+      STZ   l_state_word+1
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_write_word
+      LDX   #>NLW_STATE_SEC_SIZE_L
+      JSR   l_state_section_write_word
 @data_length:
       LDY   #NOBJ_SEC_DATA_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_member_len
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_member_len+1
       CMP   l_section_len+1
       BCC   @data_fits
@@ -723,7 +954,7 @@ l_place_sections:
       long_bne @object
 @data_fits:
       LDY   #NOBJ_SEC_FLAGS
-      LDA   (l_member),Y
+      l_object_lda l_member
       AND   #NOBJ_SEC_ZEROFILL
       BEQ   @source
       LDA   l_member_len
@@ -732,7 +963,7 @@ l_place_sections:
 
 @source:
       LDY   #NOBJ_SEC_NAME_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       CLC
       ADC   #NOBJ_SEC_HEADER_SIZE
       STA   l_tmp
@@ -763,16 +994,41 @@ l_place_sections:
       long_bcc @object
       LDY   #NOBJ_SYMBOL_OFFSET+1
       LDA   l_offset+1
-      CMP   (l_obj),Y
+      l_object_cmp l_obj
       BCC   @copy_data
       long_bne @object
       DEY
       LDA   l_offset
-      CMP   (l_obj),Y
+      l_object_cmp l_obj
       BCC   @copy_data
       long_bne @object
 
 @copy_data:
+      LDY   #NOBJ_SEC_FLAGS
+      l_object_lda l_member
+      AND   #NOBJ_SEC_ZEROFILL
+      BEQ   @copy_initialized
+      LDA   l_global_found
+      long_beq @next
+      LDA   nlink_config_enabled
+      long_bne @next
+      LDA   l_section_len
+      STA   l_left
+      LDA   l_section_len+1
+      STA   l_left+1
+@reserve:
+      LDA   l_left
+      ORA   l_left+1
+      long_beq @next
+      JSR   l_reserve
+      long_bcs @output
+      LDA   l_left
+      BNE   :+
+      DEC   l_left+1
+:     DEC   l_left
+      BRA   @reserve
+
+@copy_initialized:
       LDA   l_global_found
       BNE   :+
       LDA   l_tmp
@@ -790,7 +1046,7 @@ l_place_sections:
       ORA   l_left+1
       BEQ   @fill_count
       LDY   #0
-      LDA   (l_src),Y
+      l_object_lda l_src
       JSR   l_append
       long_bcs @output
       INC   l_src
@@ -842,11 +1098,11 @@ l_place_sections:
       long_bcc @object
       LDY   #NOBJ_SYMBOL_OFFSET
       LDA   l_tmp
-      CMP   (l_obj),Y
+      l_object_cmp l_obj
       long_bne @object
       INY
       LDA   l_tmp+1
-      CMP   (l_obj),Y
+      l_object_cmp l_obj
       long_bne @object
       CLC
       RTS
@@ -954,11 +1210,24 @@ l_place_configured_section:
       BCC   @output_ok
       long_bne @bad
 @output_ok:
-      LDX   l_patch_flat
+      JSR   l_use_patch_flat
       LDA   l_offset
-      STA   l_sec_offset_l,X
+      STA   l_state_word
       LDA   l_offset+1
-      STA   l_sec_offset_h,X
+      STA   l_state_word+1
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_write_word
+      LDA   nlink_output_xram
+      BEQ   @output_ram
+      CLC
+      LDA   l_offset
+      ADC   #2
+      STA   l_dst
+      LDA   l_offset+1
+      ADC   #0
+      STA   l_dst+1
+      BRA   @output_ready
+@output_ram:
       CLC
       LDA   nlink_output_ptr
       ADC   #2
@@ -973,6 +1242,7 @@ l_place_configured_section:
       LDA   l_dst+1
       ADC   l_offset+1
       STA   l_dst+1
+@output_ready:
       LDX   l_rule_index
       LDA   l_src
       STA   l_region_cursor_l,X
@@ -1000,7 +1270,7 @@ l_place_configured_section:
 
 l_find_section_rule:
       LDY   #NOBJ_SEC_NAME_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_name_len
       CLC
       LDA   l_member
@@ -1032,7 +1302,7 @@ l_find_section_rule:
 @name:
       CPY   l_name_len
       BCS   @found
-      LDA   (l_name),Y
+      l_object_lda l_name
       CMP   (l_tmp),Y
       BNE   @next_saved
       INY
@@ -1097,73 +1367,73 @@ l_validate_object:
       BNE   @magic
       LDA   l_obj_len
       CMP   #NOBJ_HEADER_SIZE
-      BCC   @bad
+      long_bcc @bad
 @magic:
       LDY   #NOBJ_MAGIC
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_MAGIC0
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_MAGIC1
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_MAGIC2
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_MAGIC3
-      BNE   @bad
+      long_bne @bad
       LDY   #NOBJ_VERSION_OFF
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_VERSION
-      BNE   @bad
+      long_bne @bad
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
-      BEQ   @bad
+      l_object_lda l_obj
+      long_beq @bad
       CMP   #NLINK_SECTION_CAP+1
-      BCS   @bad
+      long_bcs @bad
       STA   l_section_count
       LDY   #NOBJ_RESERVED
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       INY
-      ORA   (l_obj),Y
-      BNE   @bad
+      l_object_ora l_obj
+      long_bne @bad
       ; header <= symbol offset <= relocation offset <= object length
       LDY   #NOBJ_SYMBOL_OFFSET+1
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       BNE   @symbol_min_ok
       DEY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       CMP   #NOBJ_HEADER_SIZE
-      BCC   @bad
+      long_bcc @bad
 @symbol_min_ok:
       LDY   #NOBJ_SYMBOL_OFFSET
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp+1
       LDY   #NOBJ_RELOC_OFFSET
       SEC
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       SBC   l_tmp
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       SBC   l_tmp+1
-      BCC   @bad
+      long_bcc @bad
 @reloc_order_ok:
       LDY   #NOBJ_RELOC_OFFSET
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_tmp+1
       LDA   l_tmp+1
       CMP   l_obj_len+1
       BCC   @ok
-      BNE   @bad
+      long_bne @bad
       LDA   l_tmp
       CMP   l_obj_len
       BCC   @ok
@@ -1184,7 +1454,7 @@ l_validate_library:
       BNE   @magic
       LDA   nlink_library_len
       CMP   #NLIB_HEADER_SIZE
-      BCC   @bad
+      long_bcc @bad
 @magic:
       LDY   #0
       LDA   (l_library),Y
@@ -1220,11 +1490,13 @@ l_validate_library:
       STA   l_obj
       LDA   l_member_code+1
       STA   l_obj+1
+      STZ   l_obj_xram
       LDA   l_archive_len
       STA   l_obj_len
       LDA   l_archive_len+1
       STA   l_obj_len+1
       STZ   l_section_base
+      STZ   l_section_base+1
       JSR   l_validate_object
       BCS   @bad
       DEC   l_archive_index
@@ -1325,16 +1597,16 @@ l_take_archive_member:
 l_resolve_symbol:
       LDY   #NOBJ_SYMBOL_COUNT
       LDA   l_tmp
-      CMP   (l_obj),Y
+      l_object_cmp l_obj
       INY
       LDA   l_tmp+1
-      SBC   (l_obj),Y
+      l_object_sbc l_obj
       long_bcs @bad
       LDY   #NOBJ_SYMBOL_OFFSET
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_member
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_member+1
       CLC
       LDA   l_member
@@ -1343,33 +1615,34 @@ l_resolve_symbol:
       LDA   l_member+1
       ADC   l_obj+1
       STA   l_member+1
-      LDA   l_tmp+1
-      long_bne @bad              ; native table cap is below 256 today
-      LDX   l_tmp
 @skip:
-      CPX   #0
-      BEQ   @target
+      LDA   l_tmp
+      ORA   l_tmp+1
+      long_beq @target
       LDA   #NOBJ_SYM_HEADER_SIZE
       JSR   l_object_has
-      BCC   @bad
+      long_bcc @bad
       LDY   #NOBJ_SYM_NAME_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       CLC
       ADC   #NOBJ_SYM_HEADER_SIZE
       JSR   l_advance_member
-      DEX
+      LDA   l_tmp
+      BNE   :+
+      DEC   l_tmp+1
+:     DEC   l_tmp
       BRA   @skip
 @target:
       LDA   #NOBJ_SYM_HEADER_SIZE
       JSR   l_object_has
-      BCC   @bad
+      long_bcc @bad
       LDY   #NOBJ_SYM_NAME_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_name_len
       CLC
       ADC   #NOBJ_SYM_HEADER_SIZE
       JSR   l_object_has
-      BCC   @bad
+      long_bcc @bad
       CLC
       LDA   l_member
       ADC   #NOBJ_SYM_HEADER_SIZE
@@ -1378,13 +1651,13 @@ l_resolve_symbol:
       ADC   #0
       STA   l_name+1
       LDY   #NOBJ_SYM_VALUE
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_address
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_address+1
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       CMP   l_section_count
       BCC   @section
       CMP   #NOBJ_SYM_ABSOLUTE
@@ -1392,20 +1665,20 @@ l_resolve_symbol:
       CMP   #NOBJ_SYM_UNDEFINED
       BNE   @bad
       LDY   #NOBJ_SYM_FLAGS
-      LDA   (l_member),Y
+      l_object_lda l_member
       AND   #NOBJ_SYM_GLOBAL
       BEQ   @bad
       JMP   l_resolve_global
 @section:
-      CLC
-      ADC   l_section_base
-      TAX
+      JSR   l_set_section_flat
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_read_word
       CLC
       LDA   l_address
-      ADC   l_sec_offset_l,X
+      ADC   l_state_word
       STA   l_address
       LDA   l_address+1
-      ADC   l_sec_offset_h,X
+      ADC   l_state_word+1
       STA   l_address+1
       CLC
       LDA   l_address
@@ -1423,6 +1696,18 @@ l_resolve_symbol:
 
 ; Resolve l_name against exported definitions in the final selected object set.
 l_resolve_global:
+      LDA   l_name_len
+      CMP   #NLINK_QUERY_NAME_CAP+1
+      long_bcs @bad
+      LDY   #0
+@copy_name:
+      CPY   l_name_len
+      BCS   @name_ready
+      l_object_lda l_name
+      STA   l_query_name,Y
+      INY
+      BRA   @copy_name
+@name_ready:
       STZ   l_global_found
       STZ   l_scan_object
 @object:
@@ -1432,7 +1717,7 @@ l_resolve_global:
       JSR   l_select_object
       BCS   @bad
       LDY   #NOBJ_SECTION_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_section_count
       JSR   l_find_global_definition
       BCC   @found
@@ -1447,6 +1732,12 @@ l_resolve_global:
       INC   l_global_found
       BRA   @next
 @objects_done:
+      JSR   l_find_builtin_definition
+      BCS   @builtin_missing
+      LDA   l_global_found
+      BNE   @bad
+      INC   l_global_found
+@builtin_missing:
       JSR   l_find_config_definition
       BCS   @config_missing
       LDA   l_global_found
@@ -1459,6 +1750,61 @@ l_resolve_global:
       CLC
       RTS
 @bad:
+      SEC
+      RTS
+
+; Publish NL-owned absolute symbols after placement, while l_payload_len is the
+; exact initialized+BSS span and before relocation patching begins.
+l_find_builtin_definition:
+      LDA   l_name_len
+      CMP   #16
+      BNE   @ram_end
+      LDA   #<l_builtin_image_end
+      LDX   #>l_builtin_image_end
+      JSR   l_builtin_name_matches
+      BCS   @missing
+      CLC
+      LDA   nlink_load_base
+      ADC   l_payload_len
+      STA   l_address
+      LDA   nlink_load_base+1
+      ADC   l_payload_len+1
+      STA   l_address+1
+      CLC
+      RTS
+@ram_end:
+      CMP   #14
+      BNE   @missing
+      LDA   #<l_builtin_ram_end
+      LDX   #>l_builtin_ram_end
+      JSR   l_builtin_name_matches
+      BCS   @missing
+      LDA   #<NOVA_APP_RAM_END
+      STA   l_address
+      LDA   #>NOVA_APP_RAM_END
+      STA   l_address+1
+      CLC
+      RTS
+@missing:
+      SEC
+      RTS
+
+l_builtin_name_matches:
+      STA   l_tmp
+      STX   l_tmp+1
+      LDY   #0
+@byte:
+      CPY   l_name_len
+      BCS   @found
+      LDA   (l_tmp),Y
+      CMP   l_query_name,Y
+      BNE   @missing
+      INY
+      BRA   @byte
+@found:
+      CLC
+      RTS
+@missing:
       SEC
       RTS
 
@@ -1488,7 +1834,7 @@ l_find_config_definition:
       CPY   l_name_len
       BCS   @found
       LDA   (l_tmp),Y
-      CMP   (l_name),Y
+      CMP   l_query_name,Y
       BNE   @next_saved
       INY
       BRA   @name
@@ -1513,17 +1859,16 @@ l_find_config_definition:
 ; Carry clear = found, carry set/A=0 = absent, carry set/A=1 = malformed.
 l_find_global_definition:
       LDY   #NOBJ_SYMBOL_COUNT
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_left
       INY
-      LDA   (l_obj),Y
-      long_bne @bad
-      STZ   l_left+1
+      l_object_lda l_obj
+      STA   l_left+1
       LDY   #NOBJ_SYMBOL_OFFSET
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_member
       INY
-      LDA   (l_obj),Y
+      l_object_lda l_obj
       STA   l_member+1
       CLC
       LDA   l_member
@@ -1534,29 +1879,30 @@ l_find_global_definition:
       STA   l_member+1
 @symbol:
       LDA   l_left
+      ORA   l_left+1
       long_beq @missing
       LDA   #NOBJ_SYM_HEADER_SIZE
       JSR   l_object_has
       long_bcc @bad
       LDY   #NOBJ_SYM_NAME_LEN
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_tmp
       CLC
       ADC   #NOBJ_SYM_HEADER_SIZE
       JSR   l_object_has
       long_bcc @bad
       LDY   #NOBJ_SYM_FLAGS
-      LDA   (l_member),Y
+      l_object_lda l_member
       AND   #NOBJ_SYM_GLOBAL
       long_beq @advance
       LDY   #NOBJ_SYM_SECTION
-      LDA   (l_member),Y
+      l_object_lda l_member
       CMP   #NOBJ_SYM_UNDEFINED
       long_beq @advance
       CMP   l_section_count
       BCC   @compare_name
       CMP   #NOBJ_SYM_ABSOLUTE
-      BNE   @bad
+      long_bne @bad
 @compare_name:
       LDA   l_tmp
       CMP   l_name_len
@@ -1572,31 +1918,31 @@ l_find_global_definition:
 @compare:
       CPY   l_name_len
       BCS   @matched
-      LDA   (l_member_name),Y
-      CMP   (l_name),Y
+      l_object_lda l_member_name
+      CMP   l_query_name,Y
       long_bne @advance
       INY
       BRA   @compare
 @matched:
       LDY   #NOBJ_SYM_VALUE
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_address
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       STA   l_address+1
       INY
-      LDA   (l_member),Y
+      l_object_lda l_member
       CMP   #NOBJ_SYM_ABSOLUTE
       BEQ   @found
-      CLC
-      ADC   l_section_base
-      TAX
+      JSR   l_set_section_flat
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_read_word
       CLC
       LDA   l_address
-      ADC   l_sec_offset_l,X
+      ADC   l_state_word
       STA   l_address
       LDA   l_address+1
-      ADC   l_sec_offset_h,X
+      ADC   l_state_word+1
       STA   l_address+1
       CLC
       LDA   l_address
@@ -1613,6 +1959,10 @@ l_find_global_definition:
       LDA   l_tmp
       ADC   #NOBJ_SYM_HEADER_SIZE
       JSR   l_advance_member
+      LDA   l_left
+      BNE   :+
+      DEC   l_left+1
+:
       DEC   l_left
       JMP   @symbol
 @missing:
@@ -1679,13 +2029,15 @@ l_apply_relocation:
       long_bne @bad
 
       ; REL8 is relative to the byte after the one-byte patch.
-      LDX   l_patch_flat
+      JSR   l_use_patch_flat
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_read_word
       CLC
       LDA   nlink_load_base
-      ADC   l_sec_offset_l,X
+      ADC   l_state_word
       STA   l_addend
       LDA   nlink_load_base+1
-      ADC   l_sec_offset_h,X
+      ADC   l_state_word+1
       STA   l_addend+1
       CLC
       LDA   l_addend
@@ -1728,21 +2080,22 @@ l_apply_relocation:
       LDA   #0
       JSR   l_patch_pointer
       BCS   @bad
-      LDY   #0
       LDA   l_address
-      STA   (l_tmp),Y
+      JSR   l_write_patch
       CLC
       RTS
 @abs16:
       LDA   #1
       JSR   l_patch_pointer
       BCS   @bad
-      LDY   #0
       LDA   l_address
-      STA   (l_tmp),Y
-      INY
+      JSR   l_write_patch
+      INC   l_tmp
+      BNE   :+
+      INC   l_tmp+1
+:
       LDA   l_address+1
-      STA   (l_tmp),Y
+      JSR   l_write_patch
       CLC
       RTS
 @bad:
@@ -1761,15 +2114,38 @@ l_patch_pointer:
       ADC   #0
       STA   l_src+1
       BCS   @bad
-      LDX   l_patch_flat
+      JSR   l_use_patch_flat
+      LDX   #>NLW_STATE_SEC_SIZE_L
+      JSR   l_state_section_read_word
       LDA   l_src+1
-      CMP   l_sec_size_h,X
+      CMP   l_state_word+1
       BCC   @in_range
       BNE   @bad
       LDA   l_src
-      CMP   l_sec_size_l,X
+      CMP   l_state_word
       BCS   @bad
 @in_range:
+      LDX   #>NLW_STATE_SEC_OFFSET_L
+      JSR   l_state_section_read_word
+      LDA   nlink_output_xram
+      BEQ   @patch_ram
+      CLC
+      LDA   l_state_word
+      ADC   #2
+      STA   l_tmp
+      LDA   l_state_word+1
+      ADC   #0
+      STA   l_tmp+1
+      CLC
+      LDA   l_tmp
+      ADC   l_offset
+      STA   l_tmp
+      LDA   l_tmp+1
+      ADC   l_offset+1
+      STA   l_tmp+1
+      CLC
+      RTS
+@patch_ram:
       CLC
       LDA   nlink_output_ptr
       ADC   #2
@@ -1779,10 +2155,10 @@ l_patch_pointer:
       STA   l_tmp+1
       CLC
       LDA   l_tmp
-      ADC   l_sec_offset_l,X
+      ADC   l_state_word
       STA   l_tmp
       LDA   l_tmp+1
-      ADC   l_sec_offset_h,X
+      ADC   l_state_word+1
       STA   l_tmp+1
       CLC
       LDA   l_tmp
@@ -1802,7 +2178,7 @@ l_take_reloc:
       ORA   l_reloc_bytes+1
       BEQ   @empty
       LDY   #0
-      LDA   (l_reloc),Y
+      l_object_lda l_reloc
       PHA
       INC   l_reloc
       BNE   :+
@@ -1818,6 +2194,79 @@ l_take_reloc:
       SEC
       RTS
 
+; Output may live in ordinary RAM for embedded callers or in an NDK-allocated
+; XRAM block for NL. Offsets remain 16-bit; window 2 supplies the mapped byte.
+l_write_output:
+      PHA
+      LDA   nlink_output_xram
+      BNE   @xram
+      PLA
+      LDY   #0
+      STA   (l_dst),Y
+      RTS
+@xram:
+      LDA   l_dst
+      STA   l_output_offset
+      LDA   l_dst+1
+      STA   l_output_offset+1
+      JSR   l_map_output_offset
+      PLA
+      STA   XRAM_WIN2_BASE,X
+      RTS
+
+l_write_patch:
+      PHA
+      LDA   nlink_output_xram
+      BNE   @xram
+      PLA
+      LDY   #0
+      STA   (l_tmp),Y
+      RTS
+@xram:
+      LDA   l_tmp
+      STA   l_output_offset
+      LDA   l_tmp+1
+      STA   l_output_offset+1
+      JSR   l_map_output_offset
+      PLA
+      STA   XRAM_WIN2_BASE,X
+      RTS
+
+l_map_output_offset:
+      CLC
+      LDA   nlink_output_xaddr
+      ADC   l_output_offset
+      STA   l_output_index
+      LDA   nlink_output_xaddr+1
+      ADC   l_output_offset+1
+      STA   l_output_m
+      LDA   nlink_output_xaddr+2
+      ADC   #0
+      STA   l_output_h
+      LDA   l_output_window_valid
+      BEQ   @map
+      LDA   l_output_m
+      CMP   l_output_window_m
+      BNE   @map
+      LDA   l_output_h
+      CMP   l_output_window_h
+      BEQ   @ready
+@map:
+      STZ   XMC_W2AL
+      LDA   l_output_m
+      STA   l_output_window_m
+      STA   XMC_W2AM
+      LDA   l_output_h
+      STA   l_output_window_h
+      STA   XMC_W2AH
+      LDA   XMC_WINCTL
+      ORA   #XRAM_WIN2_ENABLE
+      STA   XMC_WINCTL
+      INC   l_output_window_valid
+@ready:
+      LDX   l_output_index
+      RTS
+
 l_append:
       PHA
       LDA   nlink_config_enabled
@@ -1826,8 +2275,7 @@ l_append:
       ORA   l_cap+1
       BEQ   @full
       PLA
-      LDY   #0
-      STA   (l_dst),Y
+      JSR   l_write_output
       INC   l_dst
       BNE   :+
       INC   l_dst+1
@@ -1842,8 +2290,7 @@ l_append:
       RTS
 @configured:
       PLA
-      LDY   #0
-      STA   (l_dst),Y
+      JSR   l_write_output
       INC   l_dst
       BNE   :+
       INC   l_dst+1
@@ -1851,6 +2298,122 @@ l_append:
       RTS
 @full:
       PLA
+      SEC
+      RTS
+
+; Reserve one zero-filled sequential byte without touching the output image.
+l_reserve:
+      LDA   l_cap
+      ORA   l_cap+1
+      BEQ   @full
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     LDA   l_cap
+      BNE   :+
+      DEC   l_cap+1
+:     DEC   l_cap
+      INC   l_payload_len
+      BNE   :+
+      INC   l_payload_len+1
+:     CLC
+      RTS
+@full:
+      SEC
+      RTS
+
+; Preserve legacy flat images for tiny tails. Larger BSS tails are replaced
+; by an eight-byte, self-checking trailer that MEM_EXEC_IMAGE expands to zero.
+l_finish_output:
+      SEC
+      LDA   l_payload_len
+      SBC   l_file_payload_len
+      STA   l_left
+      LDA   l_payload_len+1
+      SBC   l_file_payload_len+1
+      STA   l_left+1
+      BCS   :+
+      JMP   @bad
+:
+      BNE   @compact
+      LDA   l_left
+      CMP   #NOVA_EXEC_BSS_TRAILER_SIZE+1
+      BCS   @compact
+      JMP   @flat
+@compact:
+      LDA   nlink_output_xram
+      BEQ   @ram
+      CLC
+      LDA   l_file_payload_len
+      ADC   #2
+      STA   l_dst
+      LDA   l_file_payload_len+1
+      ADC   #0
+      STA   l_dst+1
+      BRA   @trailer
+@ram:
+      CLC
+      LDA   nlink_output_ptr
+      ADC   l_file_payload_len
+      STA   l_dst
+      LDA   nlink_output_ptr+1
+      ADC   l_file_payload_len+1
+      STA   l_dst+1
+      CLC
+      LDA   l_dst
+      ADC   #2
+      STA   l_dst
+      BCC   @trailer
+      INC   l_dst+1
+@trailer:
+      LDX   #0
+@magic:
+      LDA   l_bss_magic,X
+      PHX
+      JSR   l_write_output
+      PLX
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     INX
+      CPX   #4
+      BCC   @magic
+      LDA   l_left
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     LDA   l_left+1
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     LDA   l_left
+      EOR   #$FF
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     LDA   l_left+1
+      EOR   #$FF
+      JSR   l_write_output
+      CLC
+      LDA   l_file_payload_len
+      ADC   #2+NOVA_EXEC_BSS_TRAILER_SIZE
+      STA   nlink_output_len
+      LDA   l_file_payload_len+1
+      ADC   #0
+      STA   nlink_output_len+1
+      CLC
+      RTS
+@flat:
+      LDA   nlink_memory_len
+      STA   nlink_output_len
+      LDA   nlink_memory_len+1
+      STA   nlink_output_len+1
+      CLC
+      RTS
+@bad:
       SEC
       RTS
 
@@ -1873,3 +2436,10 @@ l_fail:
       .segment "RODATA"
 l_section_bits:
       .byte $01, $02, $04, $08, $10, $20, $40, $80
+l_bss_magic:
+      .byte NOVA_EXEC_BSS_MAGIC0, NOVA_EXEC_BSS_MAGIC1
+      .byte NOVA_EXEC_BSS_MAGIC2, NOVA_EXEC_BSS_MAGIC3
+l_builtin_image_end:.byte "__NOVA_IMAGE_END"
+l_builtin_ram_end:  .byte "__NOVA_RAM_END"
+
+      .include "nl_state.s"

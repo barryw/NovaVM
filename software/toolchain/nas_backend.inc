@@ -5,9 +5,9 @@ NAS_BACKEND_INC = 1
 
 .include "libabi.inc"
 
-NASBE_LOAD       = $7000
+NASBE_LOAD       = $4000
 NASBE_ENTRY      = NASBE_LOAD
-NASBE_MAX        = $3000
+NASBE_MAX        = $4000
 NASBE_NAME_LEN   = 10
 
 NASBE_MODE       = LIB_ARG0

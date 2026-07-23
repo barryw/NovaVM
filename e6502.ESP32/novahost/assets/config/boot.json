@@ -65,7 +65,8 @@
     { "name": "files", "id": 4, "path": "/lib/files.nmod", "size": 16384 },
     { "name": "memory", "id": 5, "path": "/lib/memory.nmod", "size": 16384 },
     { "name": "net", "id": 6, "path": "/lib/net.nmod", "size": 16384 },
-    { "name": "turtle", "id": 7, "path": "/lib/turtle.nmod", "size": 16384 }
+    { "name": "turtle", "id": 7, "path": "/lib/turtle.nmod", "size": 16384 },
+    { "name": "langrt", "id": 9, "path": "/lib/langrt.nmod", "size": 16384 }
   ],
   "network": {
     "gameServer": {

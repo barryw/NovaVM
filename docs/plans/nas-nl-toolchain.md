@@ -84,8 +84,9 @@ its exports, then scans newly live member sections to a fixed point.
 5. Linker configuration, placement/alignment, maps/labels and project options.
 6. Macros/conditionals/debug metadata, reachability stripping and assembly IDE.
 
-Step 4's object/archive path is implemented: NL's core accepts up to four
-ordered NOBJ inputs, maintains per-object section placement, resolves global
+Step 4's object/archive path is implemented: NOBJ's one-byte object count allows
+up to 255 selected objects. NL maintains its per-object state in one
+NDK-allocated XRAM block, performs section placement, resolves global
 imports against object exports, and adds demanded NLIB v2 NOBJ members to that
 same table. The growing table is scanned along live relocation edges to a fixed
 point before placement, so transitive imports inside selected archive members
@@ -114,11 +115,11 @@ Case-insensitive `.ASSERT expression` now checks absolute assembly-time
 invariants during the final pass, emits no bytes, and has a distinct
 source-located failure diagnostic.
 
-NAS and NL are currently 2,290 and 6,905 bytes on disk. NAS now allocates its
-3 KB source input through `MEM_ALLOC`, streams it with `MEM_XLOAD`, parses it
+NAS and NL are currently 4,442 and 10,909 bytes on disk. NAS allocates source
+input through `MEM_ALLOC`, streams it with `MEM_XLOAD`, parses it
 through an XRAM window, and releases it on every exit path. Nested `.INCLUDE`
 sources use independent XRAM allocations and retain their filenames for
-diagnostics. NAS loads the 5,668-byte `NASPP.OVL` NOVO
+diagnostics. NAS loads the 6,438-byte `NASPP.OVL` NOVO
 preprocessing image at `$7000` and exchanges source/result streams through
 XRAM. That overlay provides case-insensitive parameterized macros and nested
 16-bit constant-expression `.IF`/`.ELSEIF` conditionals plus
@@ -127,15 +128,11 @@ substitution and the shared direct/project definition option. Expressions
 cover arithmetic, shifts, bitwise logic, comparisons, boolean operators,
 grouping, unary transforms, ca65's case-insensitive spelled operator aliases,
 and one-level definition expansion. Ordinary source lines normalize those same
-aliases before backend assembly. Its complete image ends at `$8C4D`, leaving
-5,043 bytes below `$A000`. Recursive expansion remains in this overlay phase.
-NAS then loads the 8,202-byte `NASBE.OVL` into the same slot. It contains the complete two-pass
-assembler core plus opcode matrix. Its expression engine now handles arithmetic,
-shifts, bitwise logic, comparisons, and boolean operators. Its full image ends
-at `$99B3`, leaving 1,613 bytes below `$A000`. The resident file/XRAM frontend now ends at `$371A`,
-leaving 14,565 bytes below the overlay boundary. NL's complete
-lower-RAM image now ends at `$4F08`, leaving 8,439 bytes below the overlay
-boundary. The 2,251-byte `NLWORK.OVL` receives direct objects and the validated
+aliases before backend assembly. Recursive expansion remains in this overlay
+phase. NAS then loads the 11,902-byte `NASBE.OVL` into the same slot. It contains
+the complete two-pass assembler core plus opcode matrix. Its expression engine
+handles arithmetic, shifts, bitwise logic, comparisons, and boolean operators.
+The 4,980-byte `NLWORK.OVL` receives direct objects and the validated
 archive through a fixed mailbox, marks direct entry/export roots, follows
 relocation edges to a fixed
 point, selects archive members only for live unresolved globals, and returns

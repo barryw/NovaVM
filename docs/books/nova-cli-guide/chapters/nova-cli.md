@@ -207,12 +207,38 @@ skeleton and adds it to the NPP 2 manifest; `DELUNIT HELLOWORLD GREETER`
 removes it. `DELPROJECT HELLOWORLD` validates and removes the project, but
 refuses directories containing nested directories.
 
+`NEWUNIT GREETLIB` creates the reusable source project
+`/USER/GREETLIB/{MAIN.PAS,GREETLIB.NPP}`. Its `TARGET UNIT` build publishes
+typed `/USER/GREETLIB.ASM`, optimized `/USER/GREETLIB.S`, and language-neutral
+`/USER/GREETLIB.OBJ`, then stops before NL because a unit is not an executable.
+Public Pascal interface routines are ordinary NOBJ exports, so assembly and
+future language bindings can link them without a Pascal-specific object format.
+Named `BUILD`, `EDIT`, `ADDUNIT`, `DELUNIT`, and `DELPROJECT` commands search
+the current directory first and `/USER` second.
+
+Generated manifests use `UNITPATH SYSTEM` followed by `UNITPATH USER`.
+`/SYSTEM` contains generated NDK contracts and `PASCAL.NLIB`; `/USER` contains
+user unit source projects and their published artifacts. NAS owns the generic,
+case-insensitive path lookup. NPC emits `.INCLUDETEXT` only for typed reusable
+unit streams, allowing NAS preprocessing to compose them before whole-program
+O2 while ordinary `.INCLUDE` stays in the assembly phase. `.INCLUDETEXT` is
+recursive: outer definitions are visible in nested text, while definitions
+declared inside an included source remain scoped to that source.
+
+`NEW` configures the full `$0900-$9FFF` application-RAM window. NL places
+initialized sections and static BSS from the bottom, publishes the resulting
+image-end and region-end symbols, and represents final zero-fill with the
+compact `NBS1` executable trailer. `NovaMemory.RamAlloc` uses only the remaining
+tail and coalesces releases; `NovaMemory.XRamAlloc` uses the shared NDK XRAM
+allocator while hiding its 24-bit address in an opaque Pascal descriptor. Both
+APIs retain 16-bit sizes and offsets and bounds-check bulk transfers.
+
 `BUILD HELLOWORLD` enters the project, validates its complete manifest and
 linker configuration, compiles `MAIN.PAS` and every repeated `UNIT` source,
 then runs disk-loaded NPO2, NAS, and NL. Unit streams are combined in manifest
 order with the program entry point, so O2 optimizes and dead-strips across the
 whole project before NAS writes one object and NL links `PASCAL.NLIB`. Generated
-per-source `.ASM` and combined `.S` assembly, object, map, labels, and
+per-source typed `.ASM` and combined optimized `.S` assembly, object, map, labels, and
 load-address-prefixed binary stay in the project directory. `RUN HELLOWORLD`
 executes that result. Direct `BUILD file.pas`, `BUILD file.npp`, and `RUN
 file.bin` remain available for compatible flat-file workflows.
@@ -244,9 +270,29 @@ operations, and formation of one relocatable base for compatible
 constant-offset array accesses. The final `.S` is ordinary readable assembly;
 NAS and NL contain no Pascal-specific logic.
 NPC, NPO2, NPEDIT, and NAS obtain transient XRAM through the NDK Memory module
-and release every allocation on success or failure. NAS and NL load, enter, and
-unload their `$7000` workers only through the NDK System overlay API; the tools
-do not reserve private XRAM blocks or implement private overlay loaders.
+and release every allocation on success or failure. NPC treats each primary or
+Turbo `{$I}` source allocation as two alternating 8 KiB cache pages and refills
+them through the Files module's `FILE_PAGE` operation. Primary and include files
+therefore use the same 24-bit, offset-based streaming path already used by NAS
+and NPO2. NPC also keeps its 4,864-byte symbol and constant/type-name arena in
+one allocator-owned XRAM block, mapping the requested record through Windows 0
+and 1. This leaves more than 5 KiB of the frontend overlay available for new
+language support without reducing any compiler table limits. Finished
+sequential includes reuse their nesting-depth XRAM slot, so
+only simultaneously nested sources add buffers; no Pascal-specific disk protocol
+or whole-file lower-RAM buffer is required. NAS and NL load and unload
+their transient workers through the NDK System overlay lifecycle (`$7000` for
+NAS and `$8000` for NL); NL's worker can
+use `SYS_OVL_MAIN`, while callback-capable NASPP invokes its declared fixed
+entry from resident RAM so nested Memory-module calls cannot evict a waiting
+System-module return frame. The tools do not reserve private XRAM blocks or
+implement private overlay loaders.
+`RUN` similarly delegates image validation, DMA placement, allocation release,
+and transfer to `MEM_EXEC_IMAGE`; Pascal `Halt` returns through
+`MEM_EXIT_IMAGE`, even when called below nested Pascal frames.
+The generated NDK Pascal bundles include implementation dependencies only when
+the canonical runtime contains a matching `.s` source; header-only dependencies
+remain `.INC` includes and never create fictitious assembly assets.
 Pascal `uses NovaGraphics;` exposes native Pascal graphics
 procedures while its precompiled unit adapter alone handles the canonical VGC
 NDK parameter layout and command protocol. `uses NovaInput;` provides
@@ -335,7 +381,8 @@ nova docs fun-n-games
 ```
 
 `nova build browser-rust-core` builds the browser WASM core and copies the ROM,
-font, and module assets into `e6502.Browser/wwwroot/rust`. `nova docs
+font, and every paged NDK module—including the shared `LANGRT` compiler-language
+runtime—into `e6502.Browser/wwwroot/rust`. `nova docs
 showcase-demo` rebuilds `docs/programs/demo.ndi` from the SuperNova music browser,
 its linked keyboard visualizer, and the curated SID/MIDI sources. The disk has one
 `AUTOBOOT.bin`; it does not carry the obsolete standalone `KEYBOARD.bin` payload.
@@ -1298,6 +1345,12 @@ current hardware handoff, Vitis hook, or PS sources. It refuses to package an
 existing `.bit` file when the Vivado implementation run directory contains
 failure markers, because that means the file can be stale.
 
+`nova arty sync-payloads` rebuilds every module embedded by the Arty hosts,
+including the shared `LANGRT` module, and regenerates both host module tables.
+It also rebuilds the NovaPascal, NovaLogo, and NovaForth bootable language
+images so a host deployment cannot pair new runtimes with stale tools or omit a
+new module ID.
+
 `nova arty build-linux-image` rebuilds the PetaLinux image from the current repo
 layer and Arty XSA, then packages the Linux `BOOT.BIN`. This is the path that
 installs kernel/device-tree/rootfs features such as the NovaVM V4L2/ALSA capture
@@ -1320,12 +1373,15 @@ avoiding stale or environment-specific `dotnet run` calls while refreshing
 payloads. After installing the Linux host, the command restarts NovaVM and
 waits for the management port before returning.
 
-`nova arty deploy-linux-host` places bootable language disks under
-`/data/nova/disks/languages`, currently `novalogo.ndi` and `novaforth.ndi`.
-`novapascal.ndi` is currently built and validated locally but is not yet added
-to this deployment command. The command also rebuilds the
+`nova arty deploy-linux-host` places `novapascal.ndi`, `novalogo.ndi`, and
+`novaforth.ndi` under `/data/nova/disks/languages`. It removes obsolete copies
+from `/data/nova/disks/floppy`. After atomically installing the host binaries,
+the command performs a full Linux reboot and waits for both a new boot ID and
+NovaHost. The reboot is required to restore a coherent ARM/FPGA view of the
+shared XRAM DDR window; restarting only the service can leave the 6502 reading
+stale or zero XRAM pages. The command also rebuilds the
 SuperNova showcase, uploads it as `/data/nova/disks/demos/supernova.ndi`, and
-verifies that remote image against the local SHA-256 before restarting NovaHost.
+verifies that remote image against the local SHA-256 before rebooting.
 
 `nova arty upload-infocom` builds the known NovaZ Infocom project images with
 the existing `software/examples/novaz` Makefile and uploads them under

@@ -53,6 +53,22 @@ namespace e6502UnitTests
         }
 
         [TestMethod]
+        public void BrowserRustBuildStagesTheSharedLanguageRuntimeEverywhere()
+        {
+            string repo = FindRepoRoot();
+            string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova", "Program.cs"));
+            string browserWorker = File.ReadAllText(Path.Combine(repo, "e6502.Browser", "wwwroot", "nova-rust-worker.js"));
+            string websiteWorker = File.ReadAllText(Path.Combine(repo, "website", "emulator", "nova-rust-worker.js"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs", "books", "nova-cli-guide", "chapters", "nova-cli.md"));
+
+            StringAssert.Contains(program, "\"langrt.bin\"");
+            StringAssert.Contains(program, "stages every paged NDK module resource");
+            StringAssert.Contains(browserWorker, "{ id: 0x09, name: \"langrt\", file: \"langrt.bin\" }");
+            StringAssert.Contains(websiteWorker, "{ id: 0x09, name: \"langrt\", file: \"langrt.bin\" }");
+            StringAssert.Contains(guide, "shared `LANGRT`");
+        }
+
+        [TestMethod]
         public void PascalDirectoryTypesAreDocumentedAndDistinct()
         {
             string repo = FindRepoRoot();
@@ -223,6 +239,7 @@ namespace e6502UnitTests
             string recipe = Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-kernel/novacap/novacap.bb");
             string gadget = Path.Combine(repo, "e6502.FPGA/boards/arty_z7/linux/novavm/novacap-gadget.c");
             string novavmRecipe = File.ReadAllText(Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-apps/novavm/novavm.bb"));
+            string applianceRecipe = File.ReadAllText(Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-core/nova-appliance/nova-appliance.bb"));
             string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
             string config = File.ReadAllText(Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-kernel/linux/linux-xlnx/bsp.cfg"));
             string image = File.ReadAllText(Path.Combine(repo, "e6502.FPGA/boards/arty_z7/petalinux/meta-user/recipes-core/images/petalinux-image-minimal.bbappend"));
@@ -250,6 +267,14 @@ namespace e6502UnitTests
                 "The hardware capture device must appear after boot without a manual modprobe.");
             StringAssert.Contains(novavmRecipe, "novacap-gadget.c");
             StringAssert.Contains(novavmRecipe, "novacap-gadget");
+            StringAssert.Contains(novavmRecipe, "nsidvm.c",
+                "The PetaLinux recipe must link the SID VM used by the current Linux host.");
+            StringAssert.Contains(novavmRecipe, "os.path.realpath",
+                "The PetaLinux host recipe must resolve the active checkout instead of hardcoding a developer path.");
+            StringAssert.Contains(applianceRecipe, "os.path.realpath",
+                "The appliance recipe must stage assets from the active checkout instead of hardcoding a developer path.");
+            Assert.IsFalse(novavmRecipe.Contains("/home/barry/NovaVM", StringComparison.Ordinal));
+            Assert.IsFalse(applianceRecipe.Contains("/home/barry/NovaVM", StringComparison.Ordinal));
             StringAssert.Contains(program, "\"novacap-gadget.c\"");
             StringAssert.Contains(program, "\"/usr/bin/novacap-gadget\"");
             StringAssert.Contains(config, "CONFIG_MEDIA_SUPPORT=y");
@@ -420,7 +445,8 @@ namespace e6502UnitTests
             StringAssert.Contains(program, "UnmountAllBootDrives(host)");
             StringAssert.Contains(program, "MakeArgsWithCurrentNova");
             StringAssert.Contains(program, "WaitForRemotePort(host, 6504");
-            StringAssert.Contains(program, "pidof novavm");
+            StringAssert.Contains(program, "mv -f /usr/bin/novavm.new /usr/bin/novavm");
+            StringAssert.Contains(program, "WaitForRemoteBoot(host, previousBootId");
             StringAssert.Contains(guide, "editor-demo.ndi");
             StringAssert.Contains(guide, "mounts it as `fd0`");
         }
@@ -447,6 +473,7 @@ namespace e6502UnitTests
         {
             string repo = FindRepoRoot();
             string program = File.ReadAllText(Path.Combine(repo, "e6502.Nova/Program.cs"));
+            string guide = File.ReadAllText(Path.Combine(repo, "docs/books/nova-cli-guide/chapters/nova-cli.md"));
 
             StringAssert.Contains(program,
                 "Path.Combine(repo, \"software\", \"languages\", \"novalogo\"), \"ndi\"",
@@ -455,16 +482,27 @@ namespace e6502UnitTests
                 "Path.Combine(repo, \"software\", \"languages\", \"novaforth\"), \"ndi\"",
                 "sync-payloads must rebuild novaforth.ndi before any Arty deploy can boot it.");
             StringAssert.Contains(program,
+                "Path.Combine(repo, \"software\", \"languages\", \"novapascal\"), \"ndi\"",
+                "sync-payloads must rebuild novapascal.ndi before hardware can compile with the current runtime and overlays.");
+            StringAssert.Contains(program,
                 "RunScp(host, Path.Combine(repo, \"software\", \"languages\", \"novalogo\", \"novalogo.ndi\"), \"/data/nova/disks/languages/novalogo.ndi\")",
                 "deploy-linux-host must upload the rebuilt Logo disk, not leave hardware booting stale editor hooks.");
             StringAssert.Contains(program,
                 "RunScp(host, Path.Combine(repo, \"software\", \"languages\", \"novaforth\", \"novaforth.ndi\"), \"/data/nova/disks/languages/novaforth.ndi\")",
                 "deploy-linux-host must upload the rebuilt Forth disk for the same stale-code reason.");
-            StringAssert.Contains(program, "/data/nova/disks/languages",
-                "deploy-linux-host must create the languages disk folder for Logo, Forth, and future Pascal images.");
             StringAssert.Contains(program,
-                "rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi",
+                "RunScp(host, Path.Combine(repo, \"software\", \"languages\", \"novapascal\", \"novapascal.ndi\"), \"/data/nova/disks/languages/novapascal.ndi\")",
+                "deploy-linux-host must install NovaPascal in the canonical languages folder.");
+            StringAssert.Contains(program, "/data/nova/disks/languages",
+                "deploy-linux-host must create the languages disk folder for Pascal, Logo, and Forth images.");
+            StringAssert.Contains(program,
+                "rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi /data/nova/disks/floppy/novapascal.ndi",
                 "deploy-linux-host must clean the old flat floppy language image locations when moving them under languages/.");
+            StringAssert.Contains(program, "\"langrt\"",
+                "sync-payloads must rebuild LANGRT before regenerating the hardware host module table.");
+            StringAssert.Contains(program, "EMBEDDED_MOD_COUNT 10");
+            StringAssert.Contains(guide, "shared `LANGRT` module");
+            StringAssert.Contains(guide, "full Linux reboot");
         }
 
         [TestMethod]
@@ -569,10 +607,18 @@ namespace e6502UnitTests
                 Assert.IsTrue(xramImplementation.IndexOf("xram_dma_result:", StringComparison.Ordinal)
                               < xramImplementation.IndexOf(".include \"DMA.S\"", StringComparison.Ordinal),
                     "Dependency implementations must follow callers so .referenced() stripping can see live edges.");
-                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.NPI").Length);
-                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.INC").Length);
-                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.S").Length);
-                Assert.AreEqual(40, Directory.GetFiles(bindings, "*.PAS").Length);
+                Assert.IsTrue(File.Exists(Path.Combine(bindings, "ARRAY.NPI")),
+                    "The canonical NDK array-address helpers must generate a Pascal unit bundle.");
+                string ramHeapImplementation = File.ReadAllText(Path.Combine(bindings, "RAMHEAP.S"));
+                StringAssert.Contains(ramHeapImplementation, "ndk_ram_alloc:");
+                Assert.IsFalse(ramHeapImplementation.Contains("LIBABI.S", StringComparison.Ordinal),
+                    "Header-only NDK dependencies must not become nonexistent Pascal implementation assets.");
+                Assert.IsFalse(ramHeapImplementation.Contains("NVR.S", StringComparison.Ordinal),
+                    "Header-only NDK dependencies must not become nonexistent Pascal implementation assets.");
+                Assert.AreEqual(42, Directory.GetFiles(bindings, "*.NPI").Length);
+                Assert.AreEqual(42, Directory.GetFiles(bindings, "*.INC").Length);
+                Assert.AreEqual(42, Directory.GetFiles(bindings, "*.S").Length);
+                Assert.AreEqual(42, Directory.GetFiles(bindings, "*.PAS").Length);
                 StringAssert.Contains(RunNova("codegen", "help"), "--pascal-dir");
                 Assert.IsFalse(rng.Contains('\r'), "Generated Pascal bindings must use Nova's LF-only text convention.");
             }

@@ -1,0 +1,88 @@
+; Shared implementation used by nova.lib and the NOBJ Pascal runtime archive.
+; The caller-facing declarations and documentation live in array.inc/array.s.
+
+i_array_index_addr:
+      STA   NVR1L
+      STX   NVR1H
+      BRA   array_index_inline
+
+i_array_index_addr_stack:
+      STA   NVR1L
+      STX   NVR1H
+      TSX
+      LDA   $0103,X
+      STA   NVR3L
+      LDA   $0104,X
+      STA   NVR3H
+      LDA   $0102,X
+      STA   $0104,X
+      LDA   $0101,X
+      STA   $0103,X
+      INX
+      INX
+      TXS
+
+array_index_inline:
+      TSX
+      CLC
+      LDA   $0101,X
+      ADC   #1
+      STA   NVR2L
+      LDA   $0102,X
+      ADC   #0
+      STA   NVR2H
+      LDY   #0
+      LDA   (NVR2L),Y
+      STA   NVR4L
+      INY
+      LDA   (NVR2L),Y
+      STA   NVR4H
+      INY
+      LDA   (NVR2L),Y
+      STA   NVR5L
+      INY
+      LDA   (NVR2L),Y
+      STA   NVR5H
+      CLC
+      LDA   $0101,X
+      ADC   #4
+      STA   $0101,X
+      LDA   $0102,X
+      ADC   #0
+      STA   $0102,X
+      SEC
+      LDA   NVR1L
+      SBC   NVR4L
+      STA   NVR1L
+      LDA   NVR1H
+      SBC   NVR4H
+      STA   NVR1H
+      STZ   NVR0L
+      STZ   NVR0H
+      LDY   #16
+@multiply:
+      LDA   NVR5L
+      AND   #1
+      BEQ   :+
+      CLC
+      LDA   NVR0L
+      ADC   NVR1L
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   NVR1H
+      STA   NVR0H
+:     ASL   NVR1L
+      ROL   NVR1H
+      LSR   NVR5H
+      ROR   NVR5L
+      DEY
+      BNE   @multiply
+      CLC
+      LDA   NVR0L
+      ADC   NVR3L
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   NVR3H
+      TAX
+      LDA   NVR0L
+      RTS

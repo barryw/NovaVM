@@ -2,10 +2,12 @@
 ; NovaPascal native command shell.
 ;
 ; This file is included by the resident $C000 shell/compiler ROM. Commands
-; load the editor, NAS, and NL standard binaries into the $2000 tool slot.
+; load the editor, NAS, and NL standard binaries into the $1D00 tool slot.
 ; =====================================================================
 
 SHELL_NAME_CAP = 64
+SHELL_RUN_CWD_SIZE = SHELL_NAME_CAP + 1
+SHELL_RUN_CWD_NAME_SIZE = 10
 
       .segment "ZEROPAGE"
 shell_scan:       .res 1
@@ -40,6 +42,13 @@ shell_project_label   = NPP_PLAN_BASE + NPP_PLAN_LABEL
 shell_project_optimize = NPP_PLAN_BASE + NPP_PLAN_OPTIMIZE
 shell_project_asm      = NPP_PLAN_BASE + NPP_PLAN_ASM
 shell_project_inline   = NPP_PLAN_BASE + NPP_PLAN_INLINE
+shell_project_target   = NPP_PLAN_BASE + NPP_PLAN_TARGET
+shell_local_unit_count = NPP_PLAN_BASE + NPP_PLAN_LOCAL_COUNT
+shell_unit_path_count  = NPP_PLAN_BASE + NPP_PLAN_UNIT_PATH_COUNT
+shell_unit_path1_len   = NPP_PLAN_BASE + NPP_PLAN_UNIT_PATHS
+shell_unit_path1       = shell_unit_path1_len + 1
+shell_unit_path2_len   = shell_unit_path1_len + NPP_UNIT_PATH_SIZE
+shell_unit_path2       = shell_unit_path2_len + 1
 
 shell_name:           .res SHELL_NAME_CAP
 shell_name2:          .res SHELL_NAME_CAP
@@ -51,9 +60,12 @@ shell_project_dir:    .res SHELL_NAME_CAP
 shell_project_dir_len:.res 1
 shell_saved_cwd:      .res SHELL_NAME_CAP
 shell_saved_cwd_len:  .res 1
+shell_run_cwd_name_buf:.res SHELL_RUN_CWD_NAME_SIZE
 shell_project_unit_index:.res 1
 shell_project_scoped: .res 1
 shell_program_entry:  .res 2
+shell_program_xaddr:  .res 3
+shell_program_allocated:.res 1
 shell_number:          .res 2
 shell_digit:           .res 1
 shell_number_printed:  .res 1
@@ -73,7 +85,9 @@ shell_number_printed:  .res 1
 .endmacro
 
 shell_start:
+      STZ   LIB_EXEC_SP
       JSR   shell_reset_link_base
+      JSR   shell_delete_run_cwd
       LDA   #$0C
       STA   VGC_CHAROUT
       JSR   repl_init
@@ -82,6 +96,27 @@ shell_start:
       LDA   #>shell_banner
       STA   p_word+1
       JSR   print_z
+      JMP   shell_loop
+
+; A standalone application may replace every byte of the shell's BSS. Rebuild
+; the small amount of resident state needed for the next prompt without
+; clearing the program's final screen output or changing the restored CWD.
+shell_warm_start:
+      CLD
+      LDX   #$FF
+      TXS
+      LDA   #ROMSWAP_PRIMARY
+      STA   LIB_HOME_BANK
+      STZ   LIB_RESIDENT
+      STZ   LIB_EXEC_SP
+      STZ   shell_project_scoped
+      STZ   shell_program_allocated
+      JSR   shell_reset_link_base
+      JSR   repl_init
+      JSR   shell_restore_run_cwd
+      LDA   VGC_CURSX
+      BEQ   shell_loop
+      JSR   shell_newline
 
 shell_loop:
       LDA   #<shell_prompt
@@ -99,6 +134,7 @@ shell_loop:
       shell_try shell_kw_cd,       shell_cmd_cd
       shell_try shell_kw_type,     shell_cmd_type
       shell_try shell_kw_new,      shell_cmd_new
+      shell_try shell_kw_newunit,  shell_cmd_newunit
       shell_try shell_kw_addunit,  shell_cmd_addunit
       shell_try shell_kw_delunit,  shell_cmd_delunit
       shell_try shell_kw_delproject, shell_cmd_delproject
@@ -465,6 +501,30 @@ shell_cmd_new:
 @done:
       JMP   shell_loop
 
+shell_cmd_newunit:
+      JSR   shell_read_args
+      BCS   @usage
+      LDA   shell_name_len
+      BEQ   @usage
+      LDA   shell_name2_len
+      BNE   @usage
+      STZ   shell_project_scoped
+      JSR   shell_enter_user_root
+      BCS   @file_error
+      LDA   #NPP_OP_NEW_UNIT_PROJECT
+      JSR   shell_launch_project_op
+      BCC   @done
+      JSR   shell_print_tool_error
+      BRA   @done
+@file_error:
+      JSR   shell_print_file_error
+      BRA   @done
+@usage:
+      JSR   shell_print_usage
+@done:
+      JSR   shell_leave_project
+      JMP   shell_loop
+
 shell_cmd_addunit:
       JSR   shell_read_args
       BCS   @usage
@@ -473,7 +533,7 @@ shell_cmd_addunit:
       LDA   shell_name2_len
       BEQ   @usage
       LDA   #NPP_OP_ADD_UNIT
-      JSR   shell_launch_project_op
+      JSR   shell_launch_project_op_with_user_fallback
       BCC   @done
       JSR   shell_print_tool_error
       BRA   @done
@@ -490,7 +550,7 @@ shell_cmd_delunit:
       LDA   shell_name2_len
       BEQ   @usage
       LDA   #NPP_OP_DEL_UNIT
-      JSR   shell_launch_project_op
+      JSR   shell_launch_project_op_with_user_fallback
       BCC   @done
       JSR   shell_print_tool_error
       BRA   @done
@@ -507,7 +567,7 @@ shell_cmd_delproject:
       LDA   shell_name2_len
       BNE   @usage
       LDA   #NPP_OP_DEL_PROJECT
-      JSR   shell_launch_project_op
+      JSR   shell_launch_project_op_with_user_fallback
       BCC   @done
       JSR   shell_print_tool_error
       BRA   @done
@@ -519,6 +579,19 @@ shell_cmd_delproject:
 shell_cmd_edit:
       JSR   shell_require_name
       BCS   @done
+      STZ   shell_project_scoped
+      JSR   shell_name_has_dot
+      BCS   @launch
+      JSR   shell_enter_project
+      BCS   @launch
+      JSR   shell_save_project_file
+      STZ   shell_name2_len
+      STZ   shell_name2
+      LDA   #NPP_OP_PARSE
+      JSR   shell_launch_project_op
+      BCS   @tool_error
+      JSR   shell_copy_arg0_to_name
+@launch:
       STZ   shell_name2_len
       JSR   shell_prepare_tool_args
       LDA   #<shell_tool_editor
@@ -539,11 +612,16 @@ shell_cmd_edit:
 @tool_error:
       JSR   shell_print_tool_error
 @done:
+      JSR   shell_leave_project
       JMP   shell_loop
 
 shell_cmd_compile:
       JSR   shell_require_name
       BCS   @done
+      STZ   shell_project_target
+      STZ   shell_local_unit_count
+      STZ   shell_project_file_len
+      STZ   shell_unit_path_count
       LDA   #<shell_ext_s
       STA   p_word
       LDA   #>shell_ext_s
@@ -552,6 +630,10 @@ shell_cmd_compile:
       JSR   shell_prepare_tool_args
       JSR   npc_compile_file
       BEQ   :+
+      JMP   @tool_error
+:
+      JSR   shell_preprocess
+      BCC   :+
       JMP   @tool_error
 :
       JSR   shell_optimize
@@ -655,7 +737,14 @@ shell_cmd_build:
       STZ   shell_project_label_len
       STZ   shell_project_optimize
       STZ   shell_project_inline
+      STZ   shell_project_target
+      STZ   shell_local_unit_count
       STZ   shell_project_file_len
+      STZ   shell_unit_path_count
+      STZ   shell_unit_path1_len
+      STZ   shell_unit_path1
+      STZ   shell_unit_path2_len
+      STZ   shell_unit_path2
       JSR   shell_name_has_dot
       BCS   @check_project_file
       JSR   shell_enter_project
@@ -725,11 +814,25 @@ shell_cmd_build:
       BRA   @unit
 @combine:
       JSR   shell_restore_project_file
+      LDA   shell_project_target
+      CMP   #NPP_TARGET_UNIT
+      BNE   @combine_default_name
+      JSR   shell_use_project_output
+      JSR   shell_promote_name2
+      LDA   #<shell_ext_asm
+      STA   p_word
+      LDA   #>shell_ext_asm
+      STA   p_word+1
+      JSR   shell_derive_name
+      JSR   shell_restore_project_file
+      BRA   @combine_named
+@combine_default_name:
       LDA   #<shell_ext_s
       STA   p_word
       LDA   #>shell_ext_s
       STA   p_word+1
       JSR   shell_derive_name
+@combine_named:
       JSR   shell_prepare_tool_args
       LDA   #NPP_OP_COMBINE
       STA   NPTOOL_FLAGS
@@ -741,12 +844,15 @@ shell_cmd_build:
       JSR   shell_launch_tool
       long_bcs @tool_error
       JSR   shell_use_inline_config
+      JSR   shell_preprocess
+      long_bcs @tool_error
       JSR   shell_optimize
       long_bcs @tool_error
       JSR   shell_promote_name2
       JMP   @assemble
 
 @source_build:
+      STZ   shell_local_unit_count
       LDA   #<shell_ext_s
       STA   p_word
       LDA   #>shell_ext_s
@@ -755,6 +861,10 @@ shell_cmd_build:
       JSR   shell_prepare_tool_args
       JSR   npc_compile_file
       BEQ   :+
+      JMP   @tool_error
+:
+      JSR   shell_preprocess
+      BCC   :+
       JMP   @tool_error
 :
       JSR   shell_optimize
@@ -770,6 +880,8 @@ shell_cmd_build:
       JSR   shell_derive_name
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_nas_project
+      LDA   #NPTOOL_FLAG_SOURCE_PREPROCESSED
+      STA   NPTOOL_FLAGS
       LDA   #<shell_tool_assembler
       STA   p_word
       LDA   #>shell_tool_assembler
@@ -779,6 +891,9 @@ shell_cmd_build:
       BCS   @tool_error
 
       JSR   shell_promote_name2
+      LDA   shell_project_target
+      CMP   #NPP_TARGET_UNIT
+      BEQ   @build_complete
       LDA   shell_project_asm
       BEQ   :+
       JSR   shell_assemble_project_source
@@ -807,6 +922,7 @@ shell_cmd_build:
       LDA   #shell_tool_linker_end-shell_tool_linker
       JSR   shell_launch_tool
       BCS   @tool_error
+@build_complete:
       LDA   #<shell_build_ok
       STA   p_word
       LDA   #>shell_build_ok
@@ -827,8 +943,10 @@ shell_cmd_build:
 
 shell_cmd_run:
       JSR   shell_require_name
-      BCS   @done
+      long_bcs @done
       STZ   shell_project_scoped
+      JSR   shell_stash_run_cwd
+      BCS   @memory_error
       JSR   shell_name_has_dot
       BCS   @check_manifest
       JSR   shell_enter_project
@@ -844,6 +962,9 @@ shell_cmd_run:
       LDA   #NPP_OP_PARSE
       JSR   shell_launch_project_op
       BCS   @tool_error
+      LDA   shell_project_target
+      CMP   #NPP_TARGET_UNIT
+      BEQ   @bad_project
       LDA   shell_project_out_len
       BEQ   @bad_project
       JSR   shell_use_project_output
@@ -854,6 +975,8 @@ shell_cmd_run:
       BEQ   @file_error
       CMP   #2
       BEQ   @bad_binary
+      CMP   #3
+      BEQ   @memory_error
       LDA   #<shell_running
       STA   p_word
       LDA   #>shell_running
@@ -866,8 +989,8 @@ shell_cmd_run:
       LDA   #':'
       STA   VGC_CHAROUT
       JSR   shell_newline
-      JSR   shell_call_program
-      BRA   @done
+      JSR   shell_exec_program
+      BRA   @bad_binary
 @bad_binary:
       LDA   #<shell_binary_error
       STA   p_word
@@ -877,6 +1000,14 @@ shell_cmd_run:
       BRA   @done
 @file_error:
       JSR   shell_print_file_error
+      BRA   @done
+@memory_error:
+      JSR   shell_release_program
+      LDA   #<shell_memory_error
+      STA   p_word
+      LDA   #>shell_memory_error
+      STA   p_word+1
+      JSR   print_z
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
@@ -889,6 +1020,7 @@ shell_cmd_run:
       JSR   print_z
 @done:
       JSR   shell_leave_project
+      JSR   shell_delete_run_cwd
       JMP   shell_loop
 
 ; ---------------------------------------------------------------------
@@ -948,23 +1080,21 @@ shell_save_cwd:
       RTS
 
 shell_enter_project:
+      JSR   shell_save_project_name
       JSR   shell_save_cwd
       BCS   @bad
-      LDA   shell_name_len
-      STA   shell_project_dir_len
-      TAX
-      STZ   shell_project_dir,X
-@save:
-      DEX
-      BMI   @cd
-      LDA   shell_name,X
-      STA   shell_project_dir,X
-      BRA   @save
-@cd:
+      LDA   #FILE_CD
+      JSR   shell_call_file_name
+      LDA   LIB_STATUS
+      BEQ   @entered
+      JSR   shell_set_user_project_path
+      BCS   @bad
       LDA   #FILE_CD
       JSR   shell_call_file_name
       LDA   LIB_STATUS
       BNE   @bad
+@entered:
+      JSR   shell_restore_project_name
       INC   shell_project_scoped
       LDA   #<shell_ext_npp
       STA   p_word
@@ -972,6 +1102,94 @@ shell_enter_project:
       STA   p_word+1
       JSR   shell_derive_name
       JSR   shell_promote_name2
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; NEWUNIT always creates source projects below the shared /USER library root.
+shell_enter_user_root:
+      JSR   shell_save_project_name
+      JSR   shell_save_cwd
+      BCS   @bad
+      LDA   #shell_user_root_end-shell_user_root
+      STA   shell_name_len
+      LDX   #0
+@path:
+      LDA   shell_user_root,X
+      STA   shell_name,X
+      INX
+      CPX   #shell_user_root_end-shell_user_root
+      BCC   @path
+      STZ   shell_name,X
+      LDA   #FILE_CD
+      JSR   shell_call_file_name
+      LDA   LIB_STATUS
+      BNE   @bad
+      JSR   shell_restore_project_name
+      INC   shell_project_scoped
+      CLC
+      RTS
+@bad:
+      LDA   FIO_ERRCODE
+      STA   shell_fio_error
+      SEC
+      RTS
+
+shell_save_project_name:
+      LDA   shell_name_len
+      STA   shell_project_dir_len
+      TAX
+      STZ   shell_project_dir,X
+@copy:
+      DEX
+      BMI   @done
+      LDA   shell_name,X
+      STA   shell_project_dir,X
+      BRA   @copy
+@done:
+      RTS
+
+shell_restore_project_name:
+      LDA   shell_project_dir_len
+      STA   shell_name_len
+      TAX
+      STZ   shell_name,X
+@copy:
+      DEX
+      BMI   @done
+      LDA   shell_project_dir,X
+      STA   shell_name,X
+      BRA   @copy
+@done:
+      RTS
+
+shell_set_user_project_path:
+      LDA   shell_project_dir_len
+      CLC
+      ADC   #shell_user_prefix_end-shell_user_prefix
+      CMP   #SHELL_NAME_CAP
+      BCS   @bad
+      STA   shell_name_len
+      LDX   #0
+@prefix:
+      LDA   shell_user_prefix,X
+      STA   shell_name,X
+      INX
+      CPX   #shell_user_prefix_end-shell_user_prefix
+      BCC   @prefix
+      LDY   #0
+@name:
+      CPY   shell_project_dir_len
+      BCS   @done
+      LDA   shell_project_dir,Y
+      STA   shell_name,X
+      INX
+      INY
+      BRA   @name
+@done:
+      STZ   shell_name,X
       CLC
       RTS
 @bad:
@@ -999,6 +1217,91 @@ shell_leave_project:
       BEQ   @done
       JSR   shell_print_file_error
 @done:
+      RTS
+
+; Standalone programs own lower RAM, including all shell BSS. Preserve the
+; caller's directory through the NDK named-XRAM API so a project executable
+; can use relative data files while it runs and the shell can still return to
+; the directory from which RUN was issued.
+shell_stash_run_cwd:
+      JSR   shell_save_cwd
+      BCS   @bad
+      JSR   shell_run_cwd_args
+      LDA   #<shell_saved_cwd
+      STA   LIB_ARG1+2
+      LDA   #>shell_saved_cwd
+      STA   LIB_ARG1+3
+      LDA   #SHELL_RUN_CWD_SIZE
+      STA   LIB_ARG2+0
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_NAMED_STASH
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @bad
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+shell_restore_run_cwd:
+      JSR   shell_run_cwd_args
+      LDA   #<shell_saved_cwd
+      STA   LIB_ARG1+2
+      LDA   #>shell_saved_cwd
+      STA   LIB_ARG1+3
+      LDA   #SHELL_RUN_CWD_SIZE
+      STA   LIB_ARG2+0
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_NAMED_FETCH
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @delete
+      LDA   shell_saved_cwd_len
+      CMP   #SHELL_NAME_CAP
+      BCS   @delete
+      STA   shell_name_len
+      TAX
+      STZ   shell_name,X
+@copy:
+      DEX
+      BMI   @cd
+      LDA   shell_saved_cwd,X
+      STA   shell_name,X
+      BRA   @copy
+@cd:
+      LDA   #FILE_CD
+      JSR   shell_call_file_name
+@delete:
+      ; The context has served its purpose even if the directory disappeared.
+      ; Always release the allocator-owned named block.
+shell_delete_run_cwd:
+      JSR   shell_run_cwd_args
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_NAMED_DELETE
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      RTS
+
+shell_run_cwd_args:
+      JSR   shell_clear_lib_args
+      LDX   #SHELL_RUN_CWD_NAME_SIZE-1
+@name:
+      LDA   shell_run_cwd_name,X
+      STA   shell_run_cwd_name_buf,X
+      DEX
+      BPL   @name
+      LDA   #<shell_run_cwd_name_buf
+      STA   LIB_ARG0+0
+      LDA   #>shell_run_cwd_name_buf
+      STA   LIB_ARG0+1
+      LDA   #SHELL_RUN_CWD_NAME_SIZE
+      STA   LIB_ARG1+0
       RTS
 
 shell_restore_project_file:
@@ -1057,6 +1360,34 @@ shell_launch_project_op:
       STA   p_word+1
       LDA   #shell_tool_project_end-shell_tool_project
       JMP   shell_launch_tool
+
+; Project mutation commands first honor the current directory, then look in
+; /USER so reusable unit projects behave like ordinary named projects.
+shell_launch_project_op_with_user_fallback:
+      STA   shell_digit
+      JSR   shell_launch_project_op
+      BCC   @ok
+      LDA   NPTOOL_STATUS
+      CMP   #NPTOOL_ERR_IO
+      BNE   @fail
+      LDA   NPTOOL_DETAIL
+      CMP   #FIO_ERR_NOTFOUND
+      BNE   @fail
+      STZ   shell_project_scoped
+      JSR   shell_enter_user_root
+      BCS   @fail
+      LDA   shell_digit
+      JSR   shell_launch_project_op
+      BCS   @leave_fail
+      JSR   shell_leave_project
+@ok:
+      CLC
+      RTS
+@leave_fail:
+      JSR   shell_leave_project
+@fail:
+      SEC
+      RTS
 
 shell_prepare_tool_args:
       STZ   NPTOOL_STATUS
@@ -1135,9 +1466,29 @@ shell_launch_tool:
       SEC
       RTS
 
-; NPC emits compact typed IR into the requested .S file. O2 is the sole
-; language level today, so every compile runs its disk-loaded lowering and
-; peephole passes before the language-neutral assembler sees that source.
+; Expand language-neutral NAS includes while the source is still typed IR.
+; A standalone unit keeps that expanded stream in its .S artifact; ordinary
+; programs preprocess in place. This lets O2 optimize across unit boundaries.
+shell_preprocess:
+      JSR   shell_promote_name2
+      LDA   #<shell_ext_s
+      STA   p_word
+      LDA   #>shell_ext_s
+      STA   p_word+1
+      JSR   shell_derive_name
+      JSR   shell_prepare_tool_args
+      JSR   shell_prepare_nas_project
+      LDA   #NPTOOL_FLAG_PREPROCESS_ONLY
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_assembler
+      STA   p_word
+      LDA   #>shell_tool_assembler
+      STA   p_word+1
+      LDA   #shell_tool_assembler_end-shell_tool_assembler
+      JMP   shell_launch_tool
+
+; Every compile lowers compact typed IR and runs machine peepholes before the
+; language-neutral assembler sees the resulting 65C02 source.
 shell_optimize:
       LDA   #<shell_tool_optimizer
       STA   p_word
@@ -1201,10 +1552,17 @@ shell_print_tool_error:
       STA   shell_fio_error
       JMP   shell_print_file_error
 @compile:
+      LDA   NPTOOL_ARG6_LEN
+      BEQ   @compile_primary
+      LDA   #<NPTOOL_ARG6
+      LDX   #>NPTOOL_ARG6
+      BRA   @compile_name
+@compile_primary:
       LDA   #<NPTOOL_ARG0
+      LDX   #>NPTOOL_ARG0
+@compile_name:
       STA   p_word
-      LDA   #>NPTOOL_ARG0
-      STA   p_word+1
+      STX   p_word+1
       JSR   print_z
       LDA   #':'
       STA   VGC_CHAROUT
@@ -1267,6 +1625,8 @@ shell_print_tool_error:
       BEQ   @assemble_include
       CMP   #6
       BEQ   @assemble_assert
+      CMP   #7
+      BEQ   @assemble_capacity
       LDA   #<shell_assemble_error
       LDX   #>shell_assemble_error
       BRA   @assemble_message
@@ -1293,6 +1653,10 @@ shell_print_tool_error:
 @assemble_assert:
       LDA   #<shell_assemble_assert
       LDX   #>shell_assemble_assert
+      BRA   @assemble_message
+@assemble_capacity:
+      LDA   #<shell_assemble_capacity
+      LDX   #>shell_assemble_capacity
 @assemble_message:
       STA   p_word
       STX   p_word+1
@@ -1381,13 +1745,14 @@ shell_promote_name2:
       STY   shell_name_len
       RTS
 
-; Load a raw Nova executable without staging its payload in the 4 KiB shell
-; document buffer. The two-byte entry header is read first, then FIO streams
-; the remaining bytes directly to the validated $7000-$9FFF destination.
-; Returns A=0 success, A=1 file error, or A=2 invalid executable.
+; Stage a raw Nova executable in allocator-owned XRAM without consuming the
+; shell document buffer or overwriting the resident shell's lower-RAM state.
+; The NDK Memory module owns the destructive copy/transfer after validation.
+; Returns A=0 success, A=1 file error, A=2 invalid executable, or A=3 XRAM error.
 shell_load_program:
       STZ   shell_load_error
       STZ   shell_fio_error
+      STZ   shell_program_allocated
       LDA   #<shell_name
       STA   p_word
       LDA   #>shell_name
@@ -1426,32 +1791,93 @@ shell_load_program:
       BCS   @read_header
       JMP   @bad
 @read_header:
-      LDA   shell_file_id
-      STA   FIO_SRCL
-      LDA   shell_file_id+1
-      STA   FIO_SRCH
-      LDA   #<source_buf
-      STA   FIO_ENDL
-      LDA   #>source_buf
-      STA   FIO_ENDH
-      LDA   #2
-      STA   FIO_GLENL
-      STZ   FIO_GLENH
-      LDA   #FIO_FILE_TARGET_RAM
-      STA   FIO_DIRTYPE
-      JSR   fio_fread
+      JSR   shell_close_file
       BEQ   :+
-      JMP   @io_failed
+      JMP   @open_failed
 :
-      LDA   source_buf
+      JSR   shell_clear_lib_args
+      LDA   shell_file_len+0
+      STA   LIB_ARG2+0
+      LDA   shell_file_len+1
+      STA   LIB_ARG2+1
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_ALLOC
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BEQ   :+
+      JMP   @memory_failed
+:
+      LDX   #2
+@save_xaddr:
+      LDA   LIB_RESULT,X
+      STA   shell_program_xaddr,X
+      DEX
+      BPL   @save_xaddr
+      INC   shell_program_allocated
+
+      JSR   shell_clear_lib_args
+      LDA   #<shell_name
+      STA   LIB_ARG0+0
+      LDA   #>shell_name
+      STA   LIB_ARG0+1
+      LDA   shell_name_len
+      STA   LIB_ARG1+0
+      LDX   #2
+@xload_addr:
+      LDA   shell_program_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @xload_addr
+      LDA   shell_file_len+0
+      STA   LIB_ARG3+0
+      LDA   shell_file_len+1
+      STA   LIB_ARG3+1
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_XLOAD
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BEQ   :+
+      JMP   @memory_failed
+:
+
+      JSR   shell_clear_lib_args
+      LDX   #2
+@header_addr:
+      LDA   shell_program_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @header_addr
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_READ8
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @memory_failed
+      LDA   LIB_RESULT
       STA   shell_program_entry
-      LDA   source_buf+1
+      INC   LIB_ARG0+0
+      BNE   :+
+      INC   LIB_ARG0+1
+      BNE   :+
+      INC   LIB_ARG0+2
+:
+      LDA   #MEM_READ8
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @memory_failed
+      LDA   LIB_RESULT
       STA   shell_program_entry+1
-      CMP   #>OUTPUT_BASE
+      CMP   #>NOVA_APP_RAM_START
       BCC   @bad
       BNE   @base_ok
       LDA   shell_program_entry
-      CMP   #<OUTPUT_BASE
+      CMP   #<NOVA_APP_RAM_START
       BCC   @bad
 @base_ok:
       SEC
@@ -1468,33 +1894,17 @@ shell_load_program:
       LDA   shell_program_entry+1
       ADC   p_left+1
       BCS   @bad
-      CMP   #>VGC_MODE
+      CMP   #>NOVA_APP_RAM_END
       BCC   @load
       BNE   @bad
       TXA
-      CMP   #<VGC_MODE
+      CMP   #<NOVA_APP_RAM_END
       BNE   @bad
 @load:
-      LDA   shell_file_id
-      STA   FIO_SRCL
-      LDA   shell_file_id+1
-      STA   FIO_SRCH
-      LDA   shell_program_entry
-      STA   FIO_ENDL
-      LDA   shell_program_entry+1
-      STA   FIO_ENDH
-      LDA   p_left
-      STA   FIO_GLENL
-      LDA   p_left+1
-      STA   FIO_GLENH
-      STZ   FIO_DIRTYPE
-      JSR   fio_fread
-      BNE   @io_failed
-      JSR   shell_close_file
       LDA   #0
       RTS
 @bad:
-      JSR   shell_close_file
+      JSR   shell_release_program
       LDA   #2
       RTS
 @too_large:
@@ -1513,14 +1923,59 @@ shell_load_program:
       STA   shell_fio_error
       LDA   #1
       RTS
+@memory_failed:
+      JSR   shell_release_program
+      LDA   #3
+      RTS
 
-shell_call_program:
-      LDA   #>(@returned-1)
-      PHA
-      LDA   #<(@returned-1)
-      PHA
-      JMP   (shell_program_entry)
-@returned:
+shell_release_program:
+      LDA   shell_program_allocated
+      BEQ   @done
+      STZ   shell_program_allocated
+      JSR   shell_clear_lib_args
+      LDX   #2
+@address:
+      LDA   shell_program_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   shell_file_len+0
+      STA   LIB_ARG2+0
+      LDA   shell_file_len+1
+      STA   LIB_ARG2+1
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_RELEASE
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+@done:
+      RTS
+
+; MEM_EXEC_IMAGE consumes the staging allocation. Success transfers to the
+; application; its final RTS flows through lib_call and cold-starts this shell.
+shell_exec_program:
+      STZ   shell_program_allocated
+      JSR   shell_clear_lib_args
+      LDX   #2
+@address:
+      LDA   shell_program_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   shell_file_len+0
+      STA   LIB_ARG1+0
+      LDA   shell_file_len+1
+      STA   LIB_ARG1+1
+      LDA   #<shell_warm_start
+      STA   LIB_ARG2+0
+      LDA   #>shell_warm_start
+      STA   LIB_ARG2+1
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_EXEC_IMAGE
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
       RTS
 
 shell_reset_link_base:
@@ -1928,6 +2383,48 @@ shell_prepare_nas_project:
 @empty:
       STZ   NPTOOL_ARG4
 @done:
+      LDA   shell_unit_path_count
+      BNE   @configured_paths
+      LDA   #shell_default_system_end-shell_default_system-1
+      STA   NPTOOL_ARG3_LEN
+      LDX   #0
+@default_system:
+      LDA   shell_default_system,X
+      STA   NPTOOL_ARG3,X
+      BEQ   @default_user_start
+      INX
+      BRA   @default_system
+@default_user_start:
+      LDA   #shell_default_user_end-shell_default_user-1
+      STA   NPTOOL_ARG5_LEN
+      LDX   #0
+@default_user:
+      LDA   shell_default_user,X
+      STA   NPTOOL_ARG5,X
+      BEQ   @paths_done
+      INX
+      BRA   @default_user
+@configured_paths:
+      LDA   shell_unit_path1_len
+      STA   NPTOOL_ARG3_LEN
+      LDX   #0
+@path1:
+      LDA   shell_unit_path1,X
+      STA   NPTOOL_ARG3,X
+      BEQ   @path2_start
+      INX
+      BRA   @path1
+@path2_start:
+      LDA   shell_unit_path2_len
+      STA   NPTOOL_ARG5_LEN
+      LDX   #0
+@path2:
+      LDA   shell_unit_path2,X
+      STA   NPTOOL_ARG5,X
+      BEQ   @paths_done
+      INX
+      BRA   @path2
+@paths_done:
       RTS
 
 shell_prepare_link_config:
@@ -2157,18 +2654,27 @@ shell_parse_link_options:
 ; Replace shell_name's extension and write the result to shell_name2.
 ; p_word points at the new extension, including its dot.
 shell_derive_name:
+      LDA   shell_name_len
+      STA   shell_scan
       LDY   #0
 @base:
       CPY   shell_name_len
       BCS   @extension
       LDA   shell_name,Y
-      CMP   #'.'
-      BEQ   @extension
       STA   shell_name2,Y
+      CMP   #'/'
+      BNE   @dot
+      LDA   shell_name_len
+      STA   shell_scan
+      BRA   @next
+@dot:
+      CMP   #'.'
+      BNE   @next
+      STY   shell_scan
+@next:
       INY
       BRA   @base
 @extension:
-      STY   shell_scan
       LDY   #0
 @ext:
       LDA   (p_word),Y
@@ -2291,6 +2797,14 @@ shell_close_file:
 ; ---------------------------------------------------------------------
 ; FILES-module and output helpers.
 ; ---------------------------------------------------------------------
+shell_clear_lib_args:
+      LDX   #15
+@clear:
+      STZ   LIB_ARG0,X
+      DEX
+      BPL   @clear
+      RTS
+
 shell_call_file_name:
       STA   LIB_FN_ID
       STZ   shell_load_error
@@ -2490,6 +3004,7 @@ shell_assemble_symbol:.byte "invalid or unresolved symbol.", $0D, $0A, 0
 shell_assemble_range: .byte "value is out of range.", $0D, $0A, 0
 shell_assemble_include:.byte "cannot read include file.", $0D, $0A, 0
 shell_assemble_assert:.byte "assertion failed.", $0D, $0A, 0
+shell_assemble_capacity:.byte "assembler table capacity exceeded.", $0D, $0A, 0
 shell_link_error: .byte "Linker error.", $0D, $0A, 0
 shell_link_config_error: .byte "Linker configuration error.", $0D, $0A, 0
 shell_project_error: .byte "Invalid Pascal project.", $0D, $0A, 0
@@ -2509,6 +3024,7 @@ shell_help:
       .byte "  CD dir           Change directory", $0D, $0A
       .byte "  TYPE file        Print ASCII text only", $0D, $0A
       .byte "  NEW name         Create a Pascal project directory", $0D, $0A
+      .byte "  NEWUNIT name     Create a reusable unit in /USER", $0D, $0A
       .byte "  ADDUNIT proj unit Add a Pascal unit", $0D, $0A
       .byte "  DELUNIT proj unit Delete a Pascal unit", $0D, $0A
       .byte "  DELPROJECT proj  Delete a Pascal project", $0D, $0A
@@ -2532,6 +3048,7 @@ shell_kw_pwd:      .byte "PWD", 0
 shell_kw_cd:       .byte "CD", 0
 shell_kw_type:     .byte "TYPE", 0
 shell_kw_new:      .byte "NEW", 0
+shell_kw_newunit:  .byte "NEWUNIT", 0
 shell_kw_addunit:  .byte "ADDUNIT", 0
 shell_kw_delunit:  .byte "DELUNIT", 0
 shell_kw_delproject:.byte "DELPROJECT", 0
@@ -2552,8 +3069,18 @@ shell_ext_obj: .byte ".OBJ", 0
 shell_ext_bin: .byte ".BIN", 0
 shell_ext_npp: .byte ".NPP", 0
 shell_project_inline_kw: .byte "INLINE"
+shell_default_system: .byte "SYSTEM", 0
+shell_default_system_end:
+shell_default_user: .byte "USER", 0
+shell_default_user_end:
+shell_user_root: .byte "/USER"
+shell_user_root_end:
+shell_user_prefix: .byte "/USER/"
+shell_user_prefix_end:
+shell_run_cwd_name: .byte "__NPSH.CWD"
+shell_run_cwd_name_end:
 
-shell_pascal_library: .byte "/PASCAL.NLIB"
+shell_pascal_library: .byte "/SYSTEM/PASCAL.NLIB"
 shell_pascal_library_end:
 shell_tool_editor: .byte "/NPEDIT.BIN"
 shell_tool_editor_end:

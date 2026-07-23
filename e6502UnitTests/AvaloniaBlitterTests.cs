@@ -102,9 +102,9 @@ public class AvaloniaBlitterTests
             for (int col = 3; col <= 5; col++)
                 Assert.AreEqual(VgcConstants.TextAttrFlash, bus.Vgc.GetScreenTextAttr(col, row));
 
-        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(2, 1));
-        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(6, 1));
-        Assert.AreEqual(0, bus.Vgc.GetScreenTextAttr(3, 3));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(2, 1));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(6, 1));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(3, 3));
     }
 
     [TestMethod]

@@ -830,7 +830,7 @@ public class AvaloniaCompositeBusTests
 
         Assert.AreEqual((byte)' ', bus.Vgc.GetScreenChar(0, 0));
         Assert.AreEqual(0x0F, bus.ReadVramByte(VgcConstants.VramPlaneColor, 0));
-        Assert.AreEqual(0x00, bus.Vgc.GetScreenTextAttr(0, 0));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, bus.Vgc.GetScreenTextAttr(0, 0));
         Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneGfx, 0));
         Assert.AreEqual(0x00, bus.ReadVramByte(VgcConstants.VramPlaneSprite, 0));
         Assert.AreEqual(15, bus.Read((ushort)VgcConstants.RegFgCol));

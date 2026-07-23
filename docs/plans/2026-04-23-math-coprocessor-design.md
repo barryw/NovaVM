@@ -1,7 +1,7 @@
 # Math Coprocessor Design
 
 **Date:** 2026-04-23
-**Status:** v2 implemented: scalar ops, DIV/ATAN2, RNG, and fixed-point vector helpers
+**Status:** v2 implemented: scalar ops, DIV/ATAN2, integer square root, RNG, and fixed-point vector helpers
 **Target:** FPGA (ULX3S-85F) and Avalonia software emulator
 
 ## Motivation
@@ -53,18 +53,19 @@ signed 8.8 × signed 8.8 → signed saturated 8.8.
 | `VEC_CROSS_S16` | ax·by − ay·bx with s16 components → s32 | 3 fabric cycles | shared multiplier |
 | `VEC_LEN2` | ax² + ay² with s16 components → u32 | 3 fabric cycles | shared multiplier |
 | `VEC_SCALE_FX` | Q8.8 vector × Q8.8 scalar → two saturated Q8.8 results | 3 fabric cycles | shared multiplier |
+| `SQRT_U16` | unsigned 16-bit integer → floor square root | 10 fabric cycles | iterative root |
 
 **Explicitly deferred:**
 - `DIV_FX` — emulate with MUL_FX + reciprocal LUT if needed.
-- True `SQRT` — CORDIC hypot on ATAN2 covers the real use case;
-  DIST_APPROX covers the collision-check case.
+- Wider or floating-point `SQRT` — compose it in software from `SQRT_U16`
+  when the numeric format needs more range or fractional precision.
 - Matrix transforms — composable in software from SINCOS + MUL16.
 - 2×2 vector rotate — composable in software; 2 MUL_FX + 2 adds.
 
 **Implementation staging:** v1 landed the MMIO block, CPU stall plumbing,
 Avalonia parity, constants, and tests for `MUL16`, `MUL_FX`, `SINCOS`,
-`DIST_APPROX`, and `RNG`. v2 implements `DIV_S32_16`, `ATAN2`, and the
-fixed-point vector helper bank.
+`DIST_APPROX`, and `RNG`. v2 implements `DIV_S32_16`, `ATAN2`, `SQRT_U16`,
+and the fixed-point vector helper bank.
 
 ## Interaction model
 
@@ -161,7 +162,8 @@ $BB3B  RES_3            ┘
 
 $BB3C  CAPS_0            bit 0=MUL16, bit 1=MULFX, bit 2=SINCOS,
                          bit 3=DIST_APPROX, bit 4=RNG,
-                         bit 5=DIV_S32_16, bit 6=ATAN2
+                         bit 5=DIV_S32_16, bit 6=ATAN2,
+                         bit 7=SQRT_U16
 $BB3D  CAPS_1            vector capability bitmap:
                          bit 0=VEC_DOT_S16, bit 1=VEC_DOT_FX,
                          bit 2=VEC_CROSS_S16, bit 3=VEC_LEN2,
@@ -181,6 +183,8 @@ $BB46  VEC_BY_LO         │ vector operand B.y
 $BB47  VEC_BY_HI         │
 $BB48  VEC_SCALAR_LO     │ Q8.8 scalar for VEC_SCALE_FX
 $BB49  VEC_SCALAR_HI     ┘
+$BB4A  SQRT_LO           │ unsigned 16-bit radicand
+$BB4B  SQRT_HI      *    ┘ write high byte to trigger; RES[0..1]=floor root
 $BB4E  VEC_OP       *    write: 1=DOT_S16, 2=DOT_FX, 3=CROSS_S16,
                                 4=LEN2, 5=SCALE_FX
 ```

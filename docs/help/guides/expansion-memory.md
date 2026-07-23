@@ -33,8 +33,8 @@ can:
 - Name blocks and recall them without tracking raw addresses.
 - Map 256-byte XRAM pages directly into CPU address windows for transparent
 byte-level access via `PEEK` and `POKE`.
-- Use documented fixed workspaces for runtimes that need predictable scratch
-storage.
+- Allocate transient blocks from the shared heap so applications and runtimes
+cannot overlap one another.
 
 The XRAM hardware is controlled by the Expansion Memory Controller (XMC), mapped at
 `$BA00`. You normally never touch those registers directly -- the BASIC
@@ -287,10 +287,11 @@ Any named or unnamed blocks that overlap that range are removed from the allocat
 table. `XFREE` operates on the low 256 KB BASIC/XMC heap; documented high-XRAM
 workspaces are fixed regions rather than heap allocations.
 
-Assembly applications should avoid heap-style XRAM allocation. Use the flat
-`xram.s` routines with a documented fixed workspace and clear that workspace at
-program launch. `xram.inc` defines the shared layout bands used by NovaZ and the
-NVG loader.
+Assembly applications should request transient blocks through the MEMORY module
+(`MEM_ALLOC`/`MEM_RELEASE`) or the equivalent directly linked XMC routines.
+`xram.s` provides access and transfer operations for an allocated address; it
+does not confer ownership. Fixed ranges are reserved only for explicitly
+documented platform services.
 
 ::: warning
 **XRESET** clears all allocation tracking in one step -- named blocks,

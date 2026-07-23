@@ -23,7 +23,7 @@ PAGER_IMPLEMENTATION_INCLUDED = 1
 ; @label PAGER.LOAD_FILE_PAGE
 ; @kind routine
 ; @symbol pager_load_file_page
-; @summary Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR.
+; @summary Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes.
 ; @requires PAGER_FILEL PAGER_FILEM PAGER_FILEH PAGER_TARGET PAGER_ADDRL PAGER_ADDRM PAGER_ADDRH PAGER_LENL PAGER_LENH PAGER_NAMELEN PAGER_NAMEPTR_L PAGER_NAMEPTR_H
 ; @out A: 0 on success, 1 on error.
 pager_load_file_page:
@@ -36,7 +36,7 @@ pager_load_file_page:
 ; @label PAGER.LOAD_CURRENT_FILE_PAGE
 ; @kind routine
 ; @symbol pager_load_current_file_page
-; @summary Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR.
+; @summary Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes.
 ; @requires PAGER_FILEL PAGER_FILEM PAGER_FILEH PAGER_TARGET PAGER_ADDRL PAGER_ADDRM PAGER_ADDRH PAGER_LENL PAGER_LENH FIO_NAME FIO_NAMELEN
 ; @out A: 0 on success, 1 on error.
 pager_load_current_file_page:

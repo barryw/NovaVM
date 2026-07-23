@@ -565,6 +565,9 @@ internal static class NovaBuildTools
                             && NdkPascalRoutineSignature(entry) is not null)
             .Select(entry => routineOwners[Value(entry, "symbol").ToUpperInvariant()])
             .Where(owner => owner != stem), StringComparer.Ordinal);
+        HashSet<string> implementationStems = Directory.GetFiles(runtimeDirectory, "*.s")
+            .Select(path => NdkPascalFileStem(Path.GetFileNameWithoutExtension(path)))
+            .ToHashSet(StringComparer.Ordinal);
         var interfaceSources = sources.Where(source => source.EndsWith(".inc", StringComparison.OrdinalIgnoreCase)).ToList();
         var externalIncludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var emittedSourceNames = implementationSources.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -581,7 +584,7 @@ internal static class NovaBuildTools
                 {
                     string dependency = NdkPascalFileStem(Path.GetFileNameWithoutExtension(include));
                     externalIncludes.Add(dependency + ".INC");
-                    if (emitsSource)
+                    if (emitsSource && implementationStems.Contains(dependency))
                         implementationDependencies.Add(dependency);
                 }
             }
@@ -601,7 +604,7 @@ internal static class NovaBuildTools
             foreach (Match match in Regex.Matches(text, "(?im)^\\s*\\.include\\s+\"([^\"]+\\.inc)\""))
             {
                 string dependency = NdkPascalFileStem(Path.GetFileNameWithoutExtension(match.Groups[1].Value));
-                if (dependency != stem && implementationSources.Length > 0)
+                if (dependency != stem && implementationSources.Length > 0 && implementationStems.Contains(dependency))
                     implementationDependencies.Add(dependency);
             }
         }

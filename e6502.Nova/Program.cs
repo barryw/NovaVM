@@ -127,7 +127,9 @@ static void PrintArtyUsage()
     Console.Error.WriteLine("  nova arty upload-infocom [--repo <repo>] [--remote <ip>] [--infocom-root <path>]");
     Console.Error.WriteLine("  nova arty make-boot-bin [--repo <repo>] [--workspace <path>] [--bootgen <path>] [--vitis <path>]");
     Console.Error.WriteLine();
+    Console.Error.WriteLine("sync-payloads rebuilds the runtime, all embedded NDK modules, and the Pascal, Logo, and Forth language disks.");
     Console.Error.WriteLine("deploy-linux-host rebuilds and installs the SuperNova showcase as /data/nova/disks/demos/supernova.ndi.");
+    Console.Error.WriteLine("deploy-linux-host installs language disks under /data/nova/disks/languages and reboots Linux to restore coherent XRAM.");
 }
 
 static int UnknownArtyCommand(string command)
@@ -270,6 +272,9 @@ static int DoArtySyncPayloads(string repo, List<string> args)
         if (rc != 0) return rc;
 
         rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "languages", "novaforth"), "ndi"));
+        if (rc != 0) return rc;
+
+        rc = RunCommand("make", MakeArgsWithCurrentNova(repo, "-C", Path.Combine(repo, "software", "languages", "novapascal"), "ndi"));
         if (rc != 0) return rc;
 
         rc = DoDocsShowcaseDemo(repo, []);
@@ -782,6 +787,13 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
         return rc;
     }
 
+    string? previousBootId = ReadRemoteBootId(host);
+    if (previousBootId is null)
+    {
+        Console.Error.WriteLine($"cannot read current Linux boot_id from {remote}");
+        return 1;
+    }
+
     rc = DoArtyBuildLinuxHost(repo, []);
     if (rc != 0) return rc;
 
@@ -792,7 +804,7 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
         if (rc != 0) return rc;
     }
 
-    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy /data/nova/disks/languages /data/nova/disks/demos /data/nova/disks/games/infocom && rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi");
+    rc = RunSsh(host, "mkdir -p /data/nova/roms /data/nova/disks/floppy /data/nova/disks/languages /data/nova/disks/demos /data/nova/disks/games/infocom && rm -f /data/nova/disks/floppy/novalogo.ndi /data/nova/disks/floppy/novaforth.ndi /data/nova/disks/floppy/novapascal.ndi");
     if (rc != 0) return rc;
 
     rc = RunScp(host, Path.Combine(hostDir, "novavm"), "/run/novavm.new");
@@ -808,6 +820,9 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     if (rc != 0) return rc;
 
     rc = RunScp(host, Path.Combine(repo, "software", "languages", "novaforth", "novaforth.ndi"), "/data/nova/disks/languages/novaforth.ndi");
+    if (rc != 0) return rc;
+
+    rc = RunScp(host, Path.Combine(repo, "software", "languages", "novapascal", "novapascal.ndi"), "/data/nova/disks/languages/novapascal.ndi");
     if (rc != 0) return rc;
 
     // Curated demos in demos/, chess in games/ — all appear in the OSD disk browser.
@@ -836,14 +851,13 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
         if (rc != 0) return rc;
     }
 
-    string installAndStop = "mount -o remount,rw / || exit 1; " +
-                            "cp /run/novavm.new /usr/bin/novavm && chmod 0755 /usr/bin/novavm && " +
-                            "cp /run/novacap-gadget.new /usr/bin/novacap-gadget && chmod 0755 /usr/bin/novacap-gadget && sync; " +
+    string installAtomically = "mount -o remount,rw / || exit 1; " +
+                            "cp /run/novavm.new /usr/bin/novavm.new && chmod 0755 /usr/bin/novavm.new && mv -f /usr/bin/novavm.new /usr/bin/novavm && " +
+                            "cp /run/novacap-gadget.new /usr/bin/novacap-gadget.new && chmod 0755 /usr/bin/novacap-gadget.new && mv -f /usr/bin/novacap-gadget.new /usr/bin/novacap-gadget && sync; " +
                             "rc=$?; mount -o remount,ro / 2>/dev/null || true; rm -f /run/novavm.new; " +
                             "rm -f /run/novacap-gadget.new; " +
-                            "[ \"$rc\" -eq 0 ] || exit \"$rc\"; " +
-                            "for p in $(pidof novavm 2>/dev/null); do kill \"$p\" 2>/dev/null || true; done; sleep 1";
-    rc = RunSsh(host, installAndStop);
+                            "[ \"$rc\" -eq 0 ] || exit \"$rc\"";
+    rc = RunSsh(host, installAtomically);
     if (rc != 0) return rc;
 
     rc = VerifyRemoteFileSha256(host, Path.Combine(hostDir, "novavm"), "/usr/bin/novavm");
@@ -852,15 +866,12 @@ static int DoArtyDeployLinuxHost(string repo, List<string> args, string? host, b
     rc = VerifyRemoteFileSha256(host, Path.Combine(hostDir, "novacap-gadget"), "/usr/bin/novacap-gadget");
     if (rc != 0) return rc;
 
-    rc = RunSsh(host, "/etc/init.d/novavm start");
+    _ = RunSsh(host, "reboot");
+    rc = WaitForRemoteBoot(host, previousBootId, TimeSpan.FromSeconds(120));
     if (rc != 0) return rc;
 
-    rc = WaitForRemotePort(host, 6504, TimeSpan.FromSeconds(10));
-    if (rc != 0)
-    {
-        _ = RunSsh(host, "tail -80 /run/novavm.log");
-        return rc;
-    }
+    rc = WaitForRemotePort(host, 6504, TimeSpan.FromSeconds(45));
+    if (rc != 0) return rc;
 
     if (editorDemo)
     {
@@ -1123,7 +1134,7 @@ static string? FindPsFioStaleReason(string xsa, string fsbl, string app, string 
 
 static string[] ArtyModuleNames() =>
 [
-    "graphics", "system", "editor", "sound", "files", "memory", "net", "turtle"
+    "graphics", "system", "editor", "sound", "files", "memory", "net", "turtle", "langrt"
 ];
 
 static (string Symbol, string Name)[] ArtyEmbeddedModules() =>
@@ -1136,6 +1147,7 @@ static (string Symbol, string Name)[] ArtyEmbeddedModules() =>
     ("MOD_NET", "net"),
     ("MOD_TURTLE", "turtle"),
     ("MOD_EDITOR", "editor"),
+    ("MOD_LANGRT", "langrt"),
 ];
 
 static bool WriteBinHeader(string input, string output, string symbol, bool check, string generator = "nova arty sync-payloads")
@@ -1188,7 +1200,8 @@ static string RenderArtyModules(string repo)
         sb.Append("};\n");
     }
 
-    sb.Append("static const unsigned char *const EMBEDDED_MOD[9] = {0, MOD_GRAPHICS, MOD_SOUND, MOD_SYSTEM, MOD_FILES, MOD_MEMORY, MOD_NET, MOD_TURTLE, MOD_EDITOR};\n");
+    sb.Append("#define EMBEDDED_MOD_COUNT 10\n");
+    sb.Append("static const unsigned char *const EMBEDDED_MOD[EMBEDDED_MOD_COUNT] = {0, MOD_GRAPHICS, MOD_SOUND, MOD_SYSTEM, MOD_FILES, MOD_MEMORY, MOD_NET, MOD_TURTLE, MOD_EDITOR, MOD_LANGRT};\n");
     sb.Append("#endif\n");
     return sb.ToString();
 }
@@ -2351,7 +2364,7 @@ static string[] BrowserRustResourceFiles() =>
 [
     "ehbasic.bin", "novalogo.bin", "novaforth.bin", "extension.bin", "cp437.bin",
     "libcall.bin", "graphics.bin", "system.bin", "sound.bin", "editor.bin",
-    "files.bin", "memory.bin", "net.bin", "turtle.bin",
+    "files.bin", "memory.bin", "net.bin", "turtle.bin", "langrt.bin",
 ];
 
 static bool IsForthSourcePath(string path)
@@ -2371,6 +2384,7 @@ static void PrintBuildUsage()
 {
     Console.Error.WriteLine("Usage:");
     Console.Error.WriteLine("  nova build browser-rust-core [--repo <repo>]");
+    Console.Error.WriteLine("    Builds the browser core and stages every paged NDK module resource.");
 }
 
 static int DoCapture(string[] args, string? host)
@@ -4866,14 +4880,17 @@ static int WriteCompositeScreenshot(Func<string, JsonNode> Send, string outPath,
         bool reverse = (textAttr & 0x02) != 0;               // TextAttrReverse
         if (reverse) (fg, cellBg) = (cellBg, fg);
         bool isCursor = cursorEnabled && c == cursorX && displayRow == cursorY;
-        if (isCursor) (fg, cellBg) = (cellBg, fg);
+        bool bgTransparent = (textAttr & 0x08) != 0;
+        int resolvedBg = bgTransparent ? bgColor : cellBg;
         int gx = srcPx % GLYPH, gy = srcPy % GLYPH;
         int rowBits = font[ch * GLYPH + gy];
         if ((textAttr & 0x04) != 0) rowBits |= rowBits >> 1; // TextAttrBold
         bool set = (rowBits & (0x80 >> gx)) != 0;
         // Flash (TextAttrFlash bit0) is shown lit in a still capture.
-        if (mode == 2 && !set && !isCursor && !reverse && (textAttr & 0x08) != 0) return false;
-        idx = set ? fg : cellBg;
+        if (mode == 2 && !set && !isCursor && !reverse && bgTransparent) return false;
+        idx = isCursor
+            ? set ? resolvedBg : fg
+            : set ? fg : resolvedBg;
         return true;
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using e6502.GameServer.Protocol;
 using e6502.GameServer.Server;
@@ -14,6 +15,124 @@ namespace e6502UnitTests;
 public class RuntimeLibraryAbiTests
 {
     [TestMethod]
+    public void PascalRuntimeArchiveContainsOnlyCompleteNobjMembers()
+    {
+        byte[] library = File.ReadAllBytes(RepoPath(
+            "software", "languages", "novapascal", "tools", "build", "PASCAL.NLIB"));
+
+        CollectionAssert.AreEqual(new byte[] { (byte)'N', (byte)'L', (byte)'I', (byte)'B' }, library[..4]);
+        Assert.AreEqual(2, library[4], "NLIB version");
+        int offset = 6;
+        for (int member = 0; member < library[5]; member++)
+        {
+            Assert.IsTrue(offset + 2 <= library.Length, $"NLIB member {member} is missing its length.");
+            int length = library[offset] | library[offset + 1] << 8;
+            offset += 2;
+            Assert.IsTrue(offset + length <= library.Length, $"NLIB member {member} overruns the archive.");
+            AssertCompleteNobj(library.AsSpan(offset, length), member);
+            offset += length;
+        }
+
+        Assert.AreEqual(library.Length, offset, "NLIB must not contain undeclared members or trailing bytes.");
+    }
+
+    [TestMethod]
+    public void PascalFileRuntimeRelocatesEveryInternalAbsoluteJump()
+    {
+        byte[] library = File.ReadAllBytes(RepoPath(
+            "software", "languages", "novapascal", "tools", "build", "PASCAL.NLIB"));
+
+        int memberOffset = 6;
+        for (int member = 0; member < library[5]; member++)
+        {
+            int memberLength = library[memberOffset] | library[memberOffset + 1] << 8;
+            int objectOffset = memberOffset + 2;
+            ReadOnlySpan<byte> objectFile = library.AsSpan(objectOffset, memberLength);
+            int symbolCount = objectFile[10] | objectFile[11] << 8;
+            int symbolOffset = objectFile[12] | objectFile[13] << 8;
+            var symbolOffsets = new int[symbolCount];
+            int symbolCursor = symbolOffset;
+            bool exportsRead = false;
+            for (int symbol = 0; symbol < symbolCount; symbol++)
+            {
+                symbolOffsets[symbol] = symbolCursor;
+                int nameLength = objectFile[symbolCursor + 4];
+                exportsRead |= objectFile[symbolCursor + 3] == 1 &&
+                               Encoding.ASCII.GetString(objectFile.Slice(symbolCursor + 5, nameLength)) == "READ";
+                symbolCursor += 5 + nameLength;
+            }
+
+            if (exportsRead)
+            {
+                int codeOffset = 20 + 8 + objectFile[22];
+                int relocationCount = objectFile[14] | objectFile[15] << 8;
+                int relocationOffset = objectFile[16] | objectFile[17] << 8;
+                Assert.AreEqual(5, relocationCount,
+                    "Each absolute jump within the relocatable READ/READLN member needs an NOBJ relocation.");
+                for (int relocation = 0; relocation < relocationCount; relocation++)
+                {
+                    int record = relocationOffset + relocation * 8;
+                    int patch = objectFile[record + 2] | objectFile[record + 3] << 8;
+                    int target = objectFile[record + 4] | objectFile[record + 5] << 8;
+                    Assert.AreEqual(1, objectFile[record + 1], "Internal control transfers use ABS16 relocations.");
+                    Assert.AreEqual(0x4C, objectFile[codeOffset + patch - 1],
+                        "The relocation must patch the operand of a JMP opcode.");
+                    Assert.AreEqual(0, objectFile[symbolOffsets[target] + 2],
+                        "Internal jump targets must remain in the member's CODE section.");
+                    Assert.AreEqual(0, objectFile[symbolOffsets[target] + 3],
+                        "Internal jump targets must not leak into the archive's global export index.");
+                }
+                return;
+            }
+
+            memberOffset = objectOffset + memberLength;
+        }
+
+        Assert.Fail("PASCAL.NLIB has no member exporting READ.");
+    }
+
+    [TestMethod]
+    public void IndexedAddressHelperIsCanonicalNdkCodeSharedWithPascal()
+    {
+        string declarations = File.ReadAllText(RepoPath("software", "runtime", "asm", "array.inc"));
+        string implementation = File.ReadAllText(RepoPath("software", "runtime", "asm", "array.s"));
+        string pascalRuntime = File.ReadAllText(RepoPath("software", "languages", "novapascal", "pascal_runtime.s"));
+
+        StringAssert.Contains(declarations, ".global i_array_index_addr_stack");
+        StringAssert.Contains(declarations, ".global i_array_index_byte_stack");
+        StringAssert.Contains(implementation, ".include \"array_index_core.body\"");
+        StringAssert.Contains(implementation, ".include \"array_index_byte_stack.body\"");
+        StringAssert.Contains(pascalRuntime, ".include \"array_index_core.body\"");
+        StringAssert.Contains(pascalRuntime, ".include \"array_index_byte_stack.body\"");
+        StringAssert.Contains(pascalRuntime, "\"I_ARRAY_INDEX_ADDR_STACK\"");
+        StringAssert.Contains(pascalRuntime, "\"I_ARRAY_INDEX_BYTE_STACK\"");
+        Assert.IsFalse(pascalRuntime.Contains("index_address_stack:", StringComparison.Ordinal),
+            "Pascal must package the canonical NDK implementation instead of maintaining a private copy.");
+        Assert.IsTrue(pascalRuntime.IndexOf("index_object:", StringComparison.Ordinal) <
+                      pascalRuntime.IndexOf("byte_index_object:", StringComparison.Ordinal));
+        Assert.IsTrue(pascalRuntime.IndexOf("byte_index_object:", StringComparison.Ordinal) <
+                      pascalRuntime.IndexOf("block_object:", StringComparison.Ordinal),
+            "Independent array operations must remain separate archive members for linker extraction.");
+    }
+
+    [TestMethod]
+    public void PascalConsoleCompatibilityUsesCanonicalKeysAndVisibleHighVideoFields()
+    {
+        string systemAbi = File.ReadAllText(RepoPath("software", "runtime", "asm", "libsystem.inc"));
+        string runtime = File.ReadAllText(RepoPath("software", "languages", "novapascal", "pascal_runtime.s"));
+
+        foreach (string key in new[] { "SYS_KEY_LEFT", "SYS_KEY_RIGHT", "SYS_KEY_UP", "SYS_KEY_DOWN" })
+            StringAssert.Contains(systemAbi, key,
+                "SYS_WAIT_KEY results must have canonical public names shared by every language runtime.");
+        StringAssert.Contains(runtime, "CMP   #SYS_KEY_DOWN");
+        StringAssert.Contains(runtime, "LDA   #$18", "Turbo Pascal cursor-down compatibility is ^X.");
+        StringAssert.Contains(runtime, "STA   VGC_TEXT_BG",
+            "HighVideo must capture an opaque background in every subsequently written field cell.");
+        StringAssert.Contains(runtime, "LDA   #VGC_TEXT_BG_TRANSPARENT",
+            "LowVideo/NormVideo must restore Nova's normal transparent text background.");
+    }
+
+    [TestMethod]
     public void MemoryWindowMappingConsumesTheFullAllocatedXramAddress()
     {
         string abi = File.ReadAllText(RepoPath("software", "runtime", "asm", "libmemory.inc"));
@@ -23,6 +142,22 @@ public class RuntimeLibraryAbiTests
         StringAssert.Contains(module,
             "LDA   LIB_ARG0+2\n      STA   XMC_BANK",
             "A mapped window must stay in the allocator-returned 24-bit XRAM bank.");
+    }
+
+    [TestMethod]
+    public void ExecutableLifecycleIsSharedByTheNdkMemoryModule()
+    {
+        string coreAbi = File.ReadAllText(RepoPath("software", "runtime", "asm", "libabi.inc"));
+        string memoryAbi = File.ReadAllText(RepoPath("software", "runtime", "asm", "libmemory.inc"));
+        string memoryModule = File.ReadAllText(RepoPath("software", "modules", "memory", "memory.s"));
+        string pascalRuntime = File.ReadAllText(RepoPath("software", "languages", "novapascal", "pascal_runtime.s"));
+
+        StringAssert.Contains(coreAbi, "LIB_EXEC_SP      = LIB_MBOX+31");
+        StringAssert.Contains(memoryAbi, "MEM_EXEC_IMAGE = $1B");
+        StringAssert.Contains(memoryAbi, "MEM_EXIT_IMAGE = $1C");
+        StringAssert.Contains(memoryModule, ".word   mem_exit_image-1");
+        StringAssert.Contains(pascalRuntime, "PASCAL_MEMORY_CALL MEM_EXIT_IMAGE",
+            "Pascal Halt must use the same executable lifecycle as every other Nova runtime.");
     }
 
     [TestMethod]
@@ -1084,6 +1219,58 @@ public class RuntimeLibraryAbiTests
         Assert.IsFalse(
             Regex.IsMatch(source, $@"(?m)^\s*{Regex.Escape(symbol)}\s*=\s*NVR\d[HL]?\b"),
             $"{symbol} must not alias an NVR pseudo-register.");
+    }
+
+    private static void AssertCompleteNobj(ReadOnlySpan<byte> objectFile, int member)
+    {
+        Assert.IsTrue(objectFile.Length >= 20, $"NOBJ member {member} is shorter than its header.");
+        Assert.IsTrue(objectFile[..4].SequenceEqual("NOBJ"u8), $"NOBJ member {member} has bad magic.");
+        Assert.AreEqual(2, objectFile[4], $"NOBJ member {member} version");
+
+        int sectionCount = objectFile[6];
+        int symbolCount = objectFile[10] | objectFile[11] << 8;
+        int symbolOffset = objectFile[12] | objectFile[13] << 8;
+        int relocationCount = objectFile[14] | objectFile[15] << 8;
+        int relocationOffset = objectFile[16] | objectFile[17] << 8;
+        int cursor = 20;
+        var sectionSizes = new List<int>(sectionCount);
+
+        for (int section = 0; section < sectionCount; section++)
+        {
+            Assert.IsTrue(cursor + 8 <= objectFile.Length, $"NOBJ member {member} section {section} is truncated.");
+            int nameLength = objectFile[cursor + 2];
+            int size = objectFile[cursor + 4] | objectFile[cursor + 5] << 8;
+            int dataLength = objectFile[cursor + 6] | objectFile[cursor + 7] << 8;
+            Assert.IsTrue(dataLength <= size, $"NOBJ member {member} section {section} data exceeds memory size.");
+            cursor += 8 + nameLength + dataLength;
+            Assert.IsTrue(cursor <= objectFile.Length, $"NOBJ member {member} section {section} overruns the object.");
+            sectionSizes.Add(size);
+        }
+        Assert.AreEqual(symbolOffset, cursor, $"NOBJ member {member} symbol-table offset");
+
+        for (int symbol = 0; symbol < symbolCount; symbol++)
+        {
+            Assert.IsTrue(cursor + 5 <= objectFile.Length, $"NOBJ member {member} symbol {symbol} is truncated.");
+            cursor += 5 + objectFile[cursor + 4];
+            Assert.IsTrue(cursor <= objectFile.Length, $"NOBJ member {member} symbol {symbol} overruns the object.");
+        }
+        Assert.AreEqual(relocationOffset, cursor, $"NOBJ member {member} relocation-table offset");
+        Assert.AreEqual(objectFile.Length, relocationOffset + relocationCount * 8,
+            $"NOBJ member {member} relocation count must describe the complete table.");
+
+        for (int relocation = 0; relocation < relocationCount; relocation++)
+        {
+            int record = relocationOffset + relocation * 8;
+            int section = objectFile[record];
+            int type = objectFile[record + 1];
+            int patch = objectFile[record + 2] | objectFile[record + 3] << 8;
+            int symbol = objectFile[record + 4] | objectFile[record + 5] << 8;
+            Assert.IsTrue(section < sectionCount, $"NOBJ member {member} relocation {relocation} has a bad section.");
+            Assert.IsTrue(symbol < symbolCount, $"NOBJ member {member} relocation {relocation} has a bad symbol.");
+            int width = type == 1 ? 2 : 1;
+            Assert.IsTrue(patch + width <= sectionSizes[section],
+                $"NOBJ member {member} relocation {relocation} overruns its section.");
+        }
     }
 
     private static char MarkedHotkey(string label)

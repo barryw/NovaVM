@@ -2432,7 +2432,7 @@ Low byte of transfer length.
 
 ## PAGER.LOAD_CURRENT_FILE_PAGE
 
-Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR.
+Load PAGER_LEN bytes from PAGER_FILE offset in the current FIO.NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes.
 
 - Kind: `routine`
 - Symbol: `pager_load_current_file_page`
@@ -2455,7 +2455,7 @@ Requires:
 
 ## PAGER.LOAD_FILE_PAGE
 
-Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR.
+Load PAGER_LEN bytes from PAGER_FILE offset in PAGER_NAME into PAGER_TARGET/PAGER_ADDR; exact EOF succeeds with zero bytes.
 
 - Kind: `routine`
 - Symbol: `pager_load_file_page`
@@ -3310,6 +3310,16 @@ Requires:
 - `VGC_P5`
 - `VGC_P6`
 - `VGC_P7`
+
+## VGC.CLEAR_EOL
+
+Clear from the current text cursor through the end of its row, preserving the cursor.
+
+- Kind: `routine`
+- Symbol: `vgc_clear_eol`
+
+Outputs:
+- `A`: VGC_RESULT_OK.
 
 ## VGC.CLS
 

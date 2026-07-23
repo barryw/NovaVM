@@ -89,6 +89,10 @@
       <Link>Resources\files.bin</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Include="..\e6502.Avalonia\Resources\langrt.bin">
+      <Link>Resources\langrt.bin</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

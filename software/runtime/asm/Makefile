@@ -16,6 +16,7 @@ BUILD_DIR := build
 NOVA_LIB  := $(BUILD_DIR)/nova.lib
 
 NOVA_LIB_SRCS := \
+	array.s \
 	audio.s \
 	wts.s \
 	anim.s \
@@ -48,6 +49,7 @@ NOVA_LIB_SRCS := \
 	nvg_named.s \
 	overlay.s \
 	pager.s \
+	ramheap.s \
 	replline.s \
 	rng.s \
 	sprite.s \
@@ -70,7 +72,7 @@ all: libcall.bin $(NOVA_LIB)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(BUILD_DIR)/%.o: %.s *.inc | $(BUILD_DIR)
+$(BUILD_DIR)/%.o: %.s *.inc *.body | $(BUILD_DIR)
 	$(CA65) -DNOVA_EMIT_ALL_RUNTIME=1 -o $@ $<
 
 $(NOVA_LIB): $(NOVA_LIB_OBJS)

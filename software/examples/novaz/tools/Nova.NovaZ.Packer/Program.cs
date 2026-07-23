@@ -231,14 +231,25 @@ internal sealed record Options(
                     i++;
                     break;
                 case "--asset-dir" when value is not null:
-                    if (!Directory.Exists(value))
+                    string assetDirectory = value;
+                    string assetPrefix = string.Empty;
+                    int assetSeparator = value.LastIndexOf(':');
+                    if (assetSeparator > 0 && Directory.Exists(value[..assetSeparator]))
                     {
-                        Console.Error.WriteLine($"Asset directory not found: {value}");
+                        assetDirectory = value[..assetSeparator];
+                        assetPrefix = value[(assetSeparator + 1)..].Trim('/');
+                    }
+                    if (!Directory.Exists(assetDirectory))
+                    {
+                        Console.Error.WriteLine($"Asset directory not found: {assetDirectory}");
                         return null;
                     }
-                    assets.AddRange(Directory.GetFiles(value, "*", SearchOption.TopDirectoryOnly)
+                    assets.AddRange(Directory.GetFiles(assetDirectory, "*", SearchOption.TopDirectoryOnly)
                         .Order(StringComparer.Ordinal)
-                        .Select(path => new AssetOption(path, Path.GetFileName(path))));
+                        .Select(path => new AssetOption(path,
+                            string.IsNullOrEmpty(assetPrefix)
+                                ? Path.GetFileName(path)
+                                : $"{assetPrefix}/{Path.GetFileName(path)}")));
                     i++;
                     break;
                 case "--sounds" when value is not null:
@@ -308,7 +319,7 @@ internal sealed record Options(
     public static void PrintUsage()
     {
         Console.Error.WriteLine("Nova.NovaZ.Packer");
-        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--asset-dir <directory>] [--sounds <file.blb>] [--pictures <file.blb>] [--label NOVAZ] [--size-kb 1440] [--directory-sectors 48]");
+        Console.Error.WriteLine("  --output <fd0.ndi> --autoboot <AUTOBOOT.bin> --runtime <novaz.bin> [--runtime-name novaz.bin] [--story <story-file>] [--story-name story.bin] [--asset <path:image-name>] [--asset-dir <directory[:image-directory]>] [--sounds <file.blb>] [--pictures <file.blb>] [--label NOVAZ] [--size-kb 1440] [--directory-sectors 48]");
     }
 }
 

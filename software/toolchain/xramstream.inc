@@ -5,8 +5,14 @@
 .ifndef XRAMSTREAM_INC
 XRAMSTREAM_INC = 1
 
-.macro xram_stream_impl error_byte, output_error
+.macro xram_stream_impl error_byte, output_error, backing_mode
 input_at_end:
+.ifnblank backing_mode
+      LDA   backing_mode
+      BEQ   @xram
+      JMP   large_input_at_end
+@xram:
+.endif
       LDA   input_pos+1
       CMP   input_len+1
       BCC   @no
@@ -22,6 +28,12 @@ input_at_end:
       RTS
 
 map_input:
+.ifnblank backing_mode
+      LDA   backing_mode
+      BEQ   @xram
+      JMP   large_map_input
+@xram:
+.endif
       CLC
       LDA   input_base
       ADC   input_pos
@@ -40,11 +52,23 @@ map_input:
       RTS
 
 read_input_byte:
+.ifnblank backing_mode
+      LDA   backing_mode
+      BEQ   @xram
+      JMP   large_read_input_byte
+@xram:
+.endif
       LDX   input_addr
       LDA   XRAM_WIN2_BASE,X
       RTS
 
 increment_input:
+.ifnblank backing_mode
+      LDA   backing_mode
+      BEQ   @xram
+      JMP   large_increment_input
+@xram:
+.endif
       INC   input_addr
       BNE   @position
       INC   input_addr+1
@@ -62,6 +86,12 @@ increment_input:
       RTS
 
 map_output:
+.ifnblank backing_mode
+      LDA   backing_mode
+      BEQ   @xram
+      RTS
+@xram:
+.endif
       LDA   output_addr+1
       STA   WIN3_MI
       LDA   output_addr+2
@@ -69,6 +99,15 @@ map_output:
       RTS
 
 emit_byte:
+.ifnblank backing_mode
+      STA   byte_value
+      LDA   backing_mode
+      BEQ   @xram
+      LDA   byte_value
+      JMP   large_emit_byte
+@xram:
+      LDA   byte_value
+.endif
       STA   byte_value
       LDA   output_len+1
       CMP   output_cap+1

@@ -20,17 +20,17 @@ $(BUILD_DIR):
 $(BUILD_DIR)/nptool_io.o: nptool_io.s nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -D NPTOOL_BIN -I . -I $(NOVA_ASM) -o $@ nptool_io.s
 
-$(BUILD_DIR)/novaasm_tool.o: novaasm_tool.s longbranch.inc nas_preprocessor.inc nas_project.inc nas_backend.inc nas_core.inc nptool.inc novaasm.inc nobj.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novaasm_tool.o: novaasm_tool.s longbranch.inc nas_preprocessor.inc nas_project.inc nas_backend.inc nas_core.inc nptool.inc novaasm.inc nobj.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novaasm_tool.s
 
-$(BUILD_DIR)/novaasm_core.o: novaasm.s longbranch.inc wordmath.inc novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novaasm_core.o: novaasm.s longbranch.inc wordmath.inc novaasm.inc nas_backend.inc nas_core.inc nobj.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -D NASM_CORE_OVERLAY -I . -I $(NOVA_ASM) -o $@ novaasm.s
 
-$(BUILD_DIR)/novalink_tool.o: novalink_tool.s longbranch.inc nptool.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/libsystem.inc | $(BUILD_DIR)
+$(BUILD_DIR)/novalink_tool.o: novalink_tool.s longbranch.inc nptool.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libsystem.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
 	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novalink_tool.s
 
-$(BUILD_DIR)/novalink_core.o: novalink.s longbranch.inc novalink.inc nl_worker.inc nobj.inc | $(BUILD_DIR)
-	ca65 --cpu w65c02 -I . -o $@ novalink.s
+$(BUILD_DIR)/novalink_core.o: novalink.s nl_state.s longbranch.inc novalink.inc nl_worker.inc nobj.inc $(NOVA_ASM)/xram.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/novaexec.inc | $(BUILD_DIR)
+	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ novalink.s
 
 $(NAS): $(BUILD_DIR)/novaasm_tool.o $(BUILD_DIR)/nptool_io.o tool.cfg
 	ld65 -C tool.cfg -m $(BUILD_DIR)/novaasm.map -o $@ $(BUILD_DIR)/novaasm_tool.o $(BUILD_DIR)/nptool_io.o
@@ -48,23 +48,23 @@ $(BUILD_DIR)/nas_backend.o: nas_backend.s nas_backend.inc nas_core.inc | $(BUILD
 $(NASBE_PAYLOAD): $(BUILD_DIR)/novaasm_core.o $(BUILD_DIR)/nas_backend.o overlay.cfg
 	ld65 -C overlay.cfg -m $(BUILD_DIR)/nasbe.map -Ln $(BUILD_DIR)/nasbe.sym -o $@ $(BUILD_DIR)/novaasm_core.o $(BUILD_DIR)/nas_backend.o
 
-$(BUILD_DIR)/nl_worker.o: nl_worker.s longbranch.inc nl_worker.inc novalink.inc nobj.inc | $(BUILD_DIR)
-	ca65 --cpu w65c02 -I . -o $@ nl_worker.s
+$(BUILD_DIR)/nl_worker.o: nl_worker.s nl_state.s longbranch.inc nl_worker.inc novalink.inc nobj.inc $(NOVA_ASM)/xram.inc | $(BUILD_DIR)
+	ca65 --cpu w65c02 -I . -I $(NOVA_ASM) -o $@ nl_worker.s
 
-$(NLWORK_PAYLOAD): $(BUILD_DIR)/nl_worker.o overlay.cfg
-	ld65 -C overlay.cfg -m $(BUILD_DIR)/nlwork.map -Ln $(BUILD_DIR)/nlwork.sym -o $@ $(BUILD_DIR)/nl_worker.o
+$(NLWORK_PAYLOAD): $(BUILD_DIR)/nl_worker.o nl_worker.cfg
+	ld65 -C nl_worker.cfg -m $(BUILD_DIR)/nlwork.map -Ln $(BUILD_DIR)/nlwork.sym -o $@ $(BUILD_DIR)/nl_worker.o
 
 $(OVERLAY_PACKER_DLL): FORCE
 	dotnet build $(OVERLAY_PACKER) -c Release -m:1 /p:SkipRomBuild=true /nr:false
 
 $(NASPP): $(NASPP_PAYLOAD) $(OVERLAY_PACKER_DLL)
-	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NASPP_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x3000 --sym "$(BUILD_DIR)/naspp.sym" --main naspp_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/naspp.sym")" --module-id 0x4E50 --module-version 1
+	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NASPP_PAYLOAD)" --output "$@" --load 0x4000 --max-size 0x4000 --sym "$(BUILD_DIR)/naspp.sym" --main naspp_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/naspp.sym")" --module-id 0x4E50 --module-version 1
 
 $(NASBE): $(NASBE_PAYLOAD) $(OVERLAY_PACKER_DLL)
-	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NASBE_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x3000 --sym "$(BUILD_DIR)/nasbe.sym" --main nasm_assemble --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nasbe.sym")" --module-id 0x4E42 --module-version 1
+	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NASBE_PAYLOAD)" --output "$@" --load 0x4000 --max-size 0x4000 --sym "$(BUILD_DIR)/nasbe.sym" --main nasm_assemble --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nasbe.sym")" --module-id 0x4E42 --module-version 1
 
 $(NLWORK): $(NLWORK_PAYLOAD) $(OVERLAY_PACKER_DLL)
-	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NLWORK_PAYLOAD)" --output "$@" --load 0x7000 --max-size 0x08C0 --sym "$(BUILD_DIR)/nlwork.sym" --main nlw_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nlwork.sym")" --module-id 0x4E4C --module-version 1
+	dotnet "$(OVERLAY_PACKER_DLL)" pack-overlay --input "$(NLWORK_PAYLOAD)" --output "$@" --load 0x8000 --max-size 0x2000 --sym "$(BUILD_DIR)/nlwork.sym" --main nlw_main --bss-size "$$(awk '$$3 == ".__BSS_SIZE__" { print "0x" $$2 }' "$(BUILD_DIR)/nlwork.sym")" --module-id 0x4E4C --module-version 1
 
 clean:
 	rm -rf $(BUILD_DIR)

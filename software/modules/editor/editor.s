@@ -208,6 +208,14 @@ sys_edit:
       ; still identifies the outer call while the pager enters sys_edit.
       LDA   LIB_FN_ID
       BEQ   @run
+      ; Preserve the caller's adjacent command/changed vectors before wrapping
+      ; them with paging behavior.
+      LDX   #3
+@save_pager_hooks:
+      LDA   EDITBUF_COMMAND_VECL,X
+      STA   ep_host_command,X
+      DEX
+      BPL   @save_pager_hooks
       LDA   #<ep_command_hook
       STA   EDITBUF_COMMAND_VECL
       LDA   #>ep_command_hook

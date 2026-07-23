@@ -7,28 +7,48 @@ NLW_COMMAND       = $0900
 NLW_OBJECT_COUNT  = $0901
 NLW_ROOT_COUNT    = $0902
 NLW_ERROR         = $0903
-NLW_OBJECT_PTR_L  = $0904              ; 8 bytes
-NLW_OBJECT_PTR_H  = $090C              ; 8 bytes
-NLW_LOAD_BASE     = $0914              ; u16
-NLW_OUTPUT_LEN    = $0916              ; u16
-NLW_SEC_OFFSET_L  = $0918              ; 64 bytes
-NLW_SEC_OFFSET_H  = $0958              ; 64 bytes
-NLW_SEC_SIZE_L    = $0998              ; 64 bytes
-NLW_SEC_SIZE_H    = $09D8              ; 64 bytes
-NLW_MAP_PTR       = $0A18              ; u16
-NLW_MAP_CAP       = $0A1A              ; u16
-NLW_MAP_LEN       = $0A1C              ; u16
-NLW_LIVE_MASK     = $0A1E              ; one 8-section bitmap per object
-NLW_GC_READY      = $0A26              ; nonzero when LIVE_MASK is valid
-NLW_OBJECT_LEN_L  = $0A27              ; 8 bytes
-NLW_OBJECT_LEN_H  = $0A2F              ; 8 bytes
-NLW_LIBRARY_PTR   = $0A37              ; u16
-NLW_LIBRARY_LEN   = $0A39              ; u16
-NLW_CONFIG_SYMBOL_COUNT = $0A3B
-NLW_CONFIG_SYMBOL_NAME_LEN = $0A3C     ; 4 bytes
-NLW_CONFIG_SYMBOL_NAMES = $0A40        ; 4 * 16 bytes
-NLW_CONFIG_SYMBOL_VALUE_L = $0A80      ; 4 bytes
-NLW_CONFIG_SYMBOL_VALUE_H = $0A84      ; 4 bytes
+; NOBJ stores object/member counts in one byte. Support every representable
+; selected object; exhaustion is now the XRAM allocator or executable space.
+NLW_OBJECT_CAP    = $FF
+NLW_SECTION_CAP   = 8
+NLW_SECTION_SLOTS = 256 * NLW_SECTION_CAP
+NLW_OBJECT_PTR_L  = $0904
+NLW_OBJECT_PTR_H  = NLW_OBJECT_PTR_L + NLW_OBJECT_CAP
+NLW_OBJECT_LEN_L  = NLW_OBJECT_PTR_H + NLW_OBJECT_CAP
+NLW_OBJECT_LEN_H  = NLW_OBJECT_LEN_L + NLW_OBJECT_CAP
+NLW_OBJECT_XRAM   = NLW_OBJECT_LEN_H + NLW_OBJECT_CAP
+NLW_OBJECT_XADDR_L= NLW_OBJECT_XRAM + NLW_OBJECT_CAP
+NLW_OBJECT_XADDR_M= NLW_OBJECT_XADDR_L + NLW_OBJECT_CAP
+NLW_OBJECT_XADDR_H= NLW_OBJECT_XADDR_M + NLW_OBJECT_CAP
+NLW_LOAD_BASE     = NLW_OBJECT_XADDR_H + NLW_OBJECT_CAP
+NLW_OUTPUT_LEN    = NLW_LOAD_BASE + 2
+NLW_MAP_PTR       = NLW_OUTPUT_LEN + 2
+NLW_MAP_CAP       = NLW_MAP_PTR + 2
+NLW_MAP_LEN       = NLW_MAP_CAP + 2
+NLW_GC_READY      = NLW_MAP_LEN + 2
+NLW_LIBRARY_PTR   = NLW_GC_READY + 1
+NLW_LIBRARY_LEN   = NLW_LIBRARY_PTR + 2
+NLW_CONFIG_SYMBOL_COUNT = NLW_LIBRARY_LEN + 2
+NLW_CONFIG_SYMBOL_NAME_LEN = NLW_CONFIG_SYMBOL_COUNT + 1
+NLW_CONFIG_SYMBOL_NAMES = NLW_CONFIG_SYMBOL_NAME_LEN + 4
+NLW_CONFIG_SYMBOL_VALUE_L = NLW_CONFIG_SYMBOL_NAMES + (4 * 16)
+NLW_CONFIG_SYMBOL_VALUE_H = NLW_CONFIG_SYMBOL_VALUE_L + 4
+NLW_MAP_XRAM      = NLW_CONFIG_SYMBOL_VALUE_H + 4
+NLW_MAP_XADDR_L   = NLW_MAP_XRAM + 1
+NLW_MAP_XADDR_M   = NLW_MAP_XADDR_L + 1
+NLW_MAP_XADDR_H   = NLW_MAP_XADDR_M + 1
+NLW_STATE_XADDR_L = NLW_MAP_XADDR_H + 1
+NLW_STATE_XADDR_M = NLW_STATE_XADDR_L + 1
+NLW_STATE_XADDR_H = NLW_STATE_XADDR_M + 1
+
+; Growth-sensitive GC and placement state lives in one allocator-backed XRAM
+; block. Page-aligned fields keep 16-bit section indexes cheap on the 65C02.
+NLW_STATE_LIVE_MASK    = $0000       ; 256 bytes (object indexes 0..254)
+NLW_STATE_SEC_OFFSET_L = $0100       ; 2048 bytes (256 * 8 sections)
+NLW_STATE_SEC_OFFSET_H = $0900
+NLW_STATE_SEC_SIZE_L   = $1100
+NLW_STATE_SEC_SIZE_H   = $1900
+NLW_STATE_SIZE         = $2100
 
 NLW_COMMAND_MAP   = 1
 NLW_COMMAND_GC    = 2
@@ -36,14 +56,10 @@ NLW_COMMAND_LABEL = 3
 NLW_ERROR_COMMAND = 1
 NLW_ERROR_OUTPUT  = 2
 NLW_ERROR_OBJECT  = 3
-NLW_LOAD          = $7000
-; NLWORK's packed payload and BSS occupy exactly $7000-$78BF. The remainder
-; of its fixed band stages two language-neutral NOBJ inputs while it runs.
-NLW_MAX           = $08C0
-NLW_OBJECT0       = NLW_LOAD + NLW_MAX
-NLW_OBJECT0_CAP   = $1A00
-NLW_OBJECT1       = NLW_OBJECT0 + NLW_OBJECT0_CAP
-NLW_OBJECT1_CAP   = $0D40
+NLW_LOAD          = $8000
+; Root objects live in NDK-managed XRAM; the worker owns the rest of the
+; lower-RAM tool band and reads those objects through XRAM window 2.
+NLW_MAX           = $2000
 NLW_NAME_LEN      = 11
 
 .endif

@@ -17,17 +17,40 @@ public class NovaPascalTests
     [TestMethod]
     public void ToolchainUsesNdkManagedXramAndOverlayApis()
     {
-        string npc = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npc.s"));
+        string npcResident = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npc_resident.s"));
+        string npcFrontend = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npc.s"));
         string optimizer = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npo2.s"));
         string editor = File.ReadAllText(RepoPath("software", "languages", "novapascal", "tools", "npedit.s"));
         string assembler = File.ReadAllText(RepoPath("software", "toolchain", "novaasm_tool.s"));
         string linker = File.ReadAllText(RepoPath("software", "toolchain", "novalink_tool.s"));
+        string linkerCore = File.ReadAllText(RepoPath("software", "toolchain", "novalink.s"));
         string linkerAbi = File.ReadAllText(RepoPath("software", "toolchain", "novalink.inc"));
+        string linkerWorkerAbi = File.ReadAllText(RepoPath("software", "toolchain", "nl_worker.inc"));
 
-        StringAssert.Contains(npc, "LDA   #MEM_ALLOC");
-        StringAssert.Contains(npc, "LDA   #MEM_RELEASE");
-        Assert.IsFalse(npc.Contains("DOCBUF_XRAM_BASE", StringComparison.Ordinal),
+        StringAssert.Contains(npcResident, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(npcResident, "LDA   #MEM_RELEASE");
+        StringAssert.Contains(npcResident, "LDA   #SYS_OVL_LOAD");
+        StringAssert.Contains(npcResident, "JSR   NPCFE_LOAD");
+        StringAssert.Contains(npcResident, "LDA   #SYS_OVL_UNLOAD");
+        Assert.IsFalse(npcResident.Contains("overlay_load_fixed", StringComparison.Ordinal),
+            "NPC must use the NDK System overlay lifecycle.");
+        Assert.IsFalse(npcResident.Contains("DOCBUF_XRAM_BASE", StringComparison.Ordinal),
             "NPC must allocate transient source storage instead of claiming the editor's XRAM slot.");
+        StringAssert.Contains(npcFrontend, "LDA   #<P_STATE_SIZE");
+        StringAssert.Contains(npcFrontend, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(npcFrontend, "LDA   #MEM_RELEASE");
+        Assert.IsFalse(npcFrontend.Contains("p_symbols:          .res", StringComparison.Ordinal),
+            "Growth-sensitive compiler symbol/name storage belongs in allocator-backed XRAM.");
+        string[] npcMap = File.ReadAllLines(RepoPath("software", "languages", "novapascal", "novapascal.map"));
+        int frontendBytes = new[] { "NPCFE_CODE", "NPCFE_RODATA", "NPCFE_BSS" }.Sum(segment =>
+        {
+            string line = npcMap.Single(candidate => candidate.StartsWith(segment, StringComparison.Ordinal) &&
+                                                     !candidate.Contains("Offs=", StringComparison.Ordinal));
+            return Convert.ToInt32(line.Split(' ', StringSplitOptions.RemoveEmptyEntries)[3], 16);
+        });
+        Assert.IsTrue(0x8200 - frontendBytes >= 0x1000,
+            $"NPCFE must retain at least 4 KiB for the approved Turbo Pascal feature work; " +
+            $"only {0x8200 - frontendBytes} bytes remain.");
         StringAssert.Contains(optimizer, "LDA   #MEM_ALLOC");
         StringAssert.Contains(optimizer, "LDA   #MEM_RELEASE");
         StringAssert.Contains(optimizer, ".include \"xramstream.inc\"");
@@ -36,16 +59,25 @@ public class NovaPascalTests
         StringAssert.Contains(assembler, "LDA   #MEM_ALLOC");
         StringAssert.Contains(assembler, "LDA   #MEM_RELEASE");
         StringAssert.Contains(assembler, "LDA   #SYS_OVL_LOAD");
-        StringAssert.Contains(assembler, "LDA   #SYS_OVL_MAIN");
+        StringAssert.Contains(assembler, "JSR   NASPP_LOAD");
         StringAssert.Contains(assembler, "LDA   #SYS_OVL_UNLOAD");
         Assert.IsFalse(assembler.Contains("overlay_load_fixed", StringComparison.Ordinal),
             "NAS must not bypass the NDK System overlay lifecycle.");
         StringAssert.Contains(linker, "LDA   #SYS_OVL_LOAD");
         StringAssert.Contains(linker, "LDA   #SYS_OVL_MAIN");
         StringAssert.Contains(linker, "LDA   #SYS_OVL_UNLOAD");
+        StringAssert.Contains(linker, "LDA   #MEM_ALLOC");
+        StringAssert.Contains(linker, "LDA   #MEM_XSAVE");
+        StringAssert.Contains(linker, "LDA   #MEM_RELEASE");
+        StringAssert.Contains(linkerCore, "STA   XRAM_WIN2_BASE,X");
         Assert.IsFalse(linker.Contains("overlay_load_fixed", StringComparison.Ordinal),
             "NL must not bypass the NDK System overlay lifecycle.");
-        StringAssert.Contains(linkerAbi, "NLINK_OBJECT_CAP     = 8");
+        StringAssert.Contains(linkerAbi, "NLINK_OBJECT_CAP     = NLW_OBJECT_CAP");
+        StringAssert.Contains(linkerWorkerAbi.Replace(" ", string.Empty), "NLW_OBJECT_CAP=$FF",
+            "NL must support every object count representable by NOBJ instead of imposing a RAM-table ceiling.");
+        StringAssert.Contains(linker, "LDA   #<NLW_STATE_SIZE");
+        StringAssert.Contains(linkerWorkerAbi, "NLW_STATE_SEC_OFFSET_L",
+            "Growth-sensitive linker section state must live in allocator-backed XRAM.");
     }
 
     [TestMethod]
@@ -57,11 +89,16 @@ public class NovaPascalTests
         string sourceImage = RepoPath("software", "languages", "novapascal", "novapascal.ndi");
         using (NdiImage image = NdiImage.Open(sourceImage))
         {
-            Assert.AreEqual(96u, image.Header.DirectorySectorCount,
-                "A development disk needs room for generated units and user build artifacts.");
+            Assert.AreEqual(128u, image.Header.DirectorySectorCount,
+                "The compatibility corpus and generated user artifacts need a development-sized directory.");
             NdiDirEntry[] entries = image.ListDirectory(0xFFFF);
+            NdiDirEntry system = entries.Single(entry => entry.IsDirectory &&
+                entry.Filename.Equals("SYSTEM", StringComparison.OrdinalIgnoreCase));
+            Assert.IsTrue(entries.Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("USER", StringComparison.OrdinalIgnoreCase)));
+            NdiDirEntry[] systemEntries = image.ListDirectory((ushort)system.Index);
             Assert.AreEqual(NdiFileType.Assembly,
-                entries.Single(entry => entry.Filename.Equals("AUDIO.NPI", StringComparison.OrdinalIgnoreCase)).FileType,
+                systemEntries.Single(entry => entry.Filename.Equals("AUDIO.NPI", StringComparison.OrdinalIgnoreCase)).FileType,
                 "Compiled unit interfaces are editable assembly text, not opaque binaries.");
         }
         File.Copy(
@@ -84,6 +121,8 @@ public class NovaPascalTests
 
             var disk = bus.DeviceManager.GetDevice("FD0");
             Assert.IsFalse(disk.FileExists("NPC", ".BIN"), "NPC must remain resident at $C000, not be a disk tool.");
+            Assert.IsTrue(disk.FileExists("NPCFE", ".OVL"),
+                "NPC's extensible frontend must be an NDK-managed disk overlay while its command remains resident.");
             Assert.IsTrue(disk.FileExists("NPEDIT", ".BIN"), "The editor must be a standard disk-loaded binary.");
             Assert.IsTrue(disk.FileExists("NPO2", ".BIN"), "O2 passes must run from lower RAM without displacing resident NPC.");
             Assert.IsTrue(disk.FileExists("NPPROJ", ".BIN"), "Project operations must run from a standard disk-loaded binary.");
@@ -92,6 +131,7 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NASBE", ".OVL"), "NAS assembly core and opcode tables must live in its disk-loaded backend overlay.");
             Assert.IsTrue(disk.FileExists("NL", ".BIN"), "NL must be a standard, language-neutral binary.");
             Assert.IsTrue(disk.FileExists("NLWORK", ".OVL"), "NL map/GC work must live in its disk-loaded overlay.");
+            disk.CurrentDirectory = "SYSTEM";
             Assert.IsTrue(disk.FileExists("PASCAL", ".NLIB"), "Pascal runtime APIs belong in an ordinary linker library.");
             Assert.IsTrue(disk.FileExists("PASCAL", ".INC"), "Generated code must use the declared Pascal compiler ABI.");
             Assert.IsTrue(disk.FileExists("NVR", ".INC"), "Compiler scratch registers must come from the canonical NDK mailbox include.");
@@ -99,11 +139,12 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NOVA", ".NPI"), "Pascal bindings must be generated from canonical NDK metadata.");
             string[] ndkUnitStems =
             {
-                "NOVA", "FIO", "AUDIO", "VGC", "SPRITE", "MSPRITE", "VSPRITE", "VTEXT", "NUI",
+                "NOVA", "ARRAY", "FIO", "AUDIO", "VGC", "SPRITE", "MSPRITE", "VSPRITE", "VTEXT", "NUI",
                 "COPPER", "DMA", "BLITTER", "XRAM", "XMC", "PAGER", "RNG", "NVG", "ANIM", "TWEEN",
                 "NIC", "GAMESERVER", "OVERLAY", "VGCWAIT", "COPPERSPLIT", "DOCBUF", "FIOCLEARERROR",
                 "MOUSE", "MOUSEEVENTS", "NUIDIALOG", "NUIFILE", "NUIINPUT", "NUILIST", "NUITEXT",
                 "NUIUISAVE", "NUIWAIT", "SPRITEBANK", "VGCPALETTE", "VGCVSYNC", "VTEXTMIXED", "WTS",
+                "RAMHEAP",
             };
             foreach (string stem in ndkUnitStems)
             {
@@ -125,8 +166,12 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NOVARAND", ".PAS"), "Randomness must be exposed as a native Pascal unit.");
             Assert.IsTrue(disk.FileExists("RANDOM", ".NPI"), "The random unit must carry its compiled Pascal interface.");
             Assert.IsTrue(disk.FileExists("RANDOM", ".S"), "The random unit must adapt the canonical RNG implementation.");
-            CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NAS", ".BIN")[..2]);
-            CollectionAssert.AreEqual(new byte[] { 0x00, 0x20 }, disk.Load("NL", ".BIN")[..2]);
+            Assert.IsTrue(disk.FileExists("NOVAMEMORY", ".PAS"), "Managed RAM and XRAM must be exposed as a native Pascal unit.");
+            Assert.IsTrue(disk.FileExists("MEMORY", ".NPI"), "The memory unit must carry its compiled Pascal interface.");
+            Assert.IsTrue(disk.FileExists("MEMORY", ".S"), "The memory unit must adapt the canonical NDK allocators.");
+            disk.CurrentDirectory = "/";
+            CollectionAssert.AreEqual(new byte[] { 0x00, 0x1D }, disk.Load("NAS", ".BIN")[..2]);
+            CollectionAssert.AreEqual(new byte[] { 0x00, 0x1D }, disk.Load("NL", ".BIN")[..2]);
 
             Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
                 entry.Filename.Equals("HELLO", StringComparison.OrdinalIgnoreCase)),
@@ -141,12 +186,129 @@ public class NovaPascalTests
                                              && entry.Extension.Equals(".NPP", StringComparison.OrdinalIgnoreCase)).FileType);
             disk.CurrentDirectory = "/";
 
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("MICROCALC", StringComparison.OrdinalIgnoreCase)),
+                "The original Turbo Pascal MicroCalc compatibility corpus must ship as a project.");
+            disk.CurrentDirectory = "MICROCALC";
+            byte[] microCalcSource = disk.Load("MC", ".PAS");
+            Assert.AreEqual(0, microCalcSource.Length % 128,
+                "The CP/M-derived source must remain record padded after Nova compatibility changes.");
+            Assert.IsTrue(Array.IndexOf(microCalcSource, (byte)0x1A) > 0,
+                "NPC compatibility depends on honoring CP/M logical EOF before stale record padding.");
+            Assert.IsTrue(disk.FileExists("MC-MOD05", ".INC"),
+                "All six original include modules must remain available to {$I file}.");
+            disk.CurrentDirectory = "/";
+
             QueueLine(editor, "HELP");
             RunUntil(cpu, bus, s => s.Contains("RUN file.bin", StringComparison.Ordinal), "shell help");
             StringAssert.Contains(Snapshot(bus), "NEW name",
                 "The project generator must be discoverable from shell HELP.");
+            StringAssert.Contains(Snapshot(bus), "NEWUNIT name",
+                "Reusable unit projects must be discoverable from shell HELP.");
             RunSteps(cpu, bus, 100_000);
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            QueueLine(editor, "NEWUNIT GREETLIB");
+            RunUntil(cpu, bus, s => s.Contains("Created project GREETLIB", StringComparison.Ordinal),
+                "new reusable Pascal unit project");
+            disk.CurrentDirectory = "USER";
+            Assert.IsTrue(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("GREETLIB", StringComparison.OrdinalIgnoreCase)),
+                "NEWUNIT must keep user-authored library source below /USER.");
+            disk.CurrentDirectory = "USER/GREETLIB";
+            CollectionAssert.AreEqual(Encoding.ASCII.GetBytes(
+                    "NPP 2\nMAIN MAIN.PAS\nTARGET UNIT\nUNITPATH SYSTEM\nUNITPATH USER\n" +
+                    "OUTPUT /USER/GREETLIB.OBJ\nOPTIMIZE O2\nDEFINE NOVA=1\n"),
+                disk.Load("GREETLIB", ".NPP"),
+                "A unit project must describe its complete NPC/NAS build without linker-only settings.");
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(
+                "unit GreetLib;\n\ninterface\nprocedure Hello;\nprocedure Unused;\n\n" +
+                "implementation\nprocedure Hello;\nbegin\n  writeln('Hello from this unit');\nend;\n\n" +
+                "procedure Unused;\nbegin\n  writeln('Never linked');\nend;\n\nend.\n"), ".PAS");
+            disk.CurrentDirectory = "/";
+
+            QueueLine(editor, "BUILD GREETLIB");
+            RunUntil(cpu, bus, s => s.Contains("Compile successful", StringComparison.Ordinal),
+                "reusable unit compiler completion");
+            Assert.AreEqual("USER/GREETLIB", disk.CurrentDirectory,
+                "BUILD must remain scoped to the reusable unit project between tools.");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: /USER/GREETLIB.OBJ", StringComparison.Ordinal)
+                                    || s.Contains("assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal)
+                                    || s.Contains("File not found:", StringComparison.Ordinal),
+                "reusable Pascal unit build");
+            string unitBuildScreen = Snapshot(bus);
+            Assert.IsTrue(unitBuildScreen.Contains("Build complete: /USER/GREETLIB.OBJ", StringComparison.Ordinal),
+                $"status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
+                $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, " +
+                $"source={ReadMailboxText(bus, 0x0800, 64)}, " +
+                $"s={disk.FileExists("GREETLIB", ".S")}, obj={disk.FileExists("GREETLIB", ".OBJ")}\n" +
+                unitBuildScreen);
+            disk.CurrentDirectory = "USER";
+            Assert.IsTrue(disk.FileExists("GREETLIB", ".S"),
+                "A reusable unit must publish editable optimized assembly in /USER.");
+            Assert.IsTrue(disk.FileExists("GREETLIB", ".ASM"),
+                "A reusable unit must publish typed assembly for Pascal whole-program O2.");
+            Assert.IsTrue(disk.FileExists("GREETLIB", ".OBJ"),
+                "A reusable unit must publish a language-neutral NOBJ in /USER.");
+            Assert.IsFalse(disk.FileExists("GREETLIB", ".BIN"),
+                "TARGET UNIT must stop after NAS instead of inventing a runnable program.");
+            string unitTypedAssembly = Encoding.ASCII.GetString(disk.Load("GREETLIB", ".ASM"));
+            string unitOptimizedAssembly = Encoding.ASCII.GetString(disk.Load("GREETLIB", ".S"));
+            Assert.IsTrue(NobjDefines(disk.Load("GREETLIB", ".OBJ"), "HELLO"),
+                "NAS must export public Pascal unit routines for NL and other Nova languages.\n" +
+                $"Optimized:\n{unitOptimizedAssembly}\nTyped:\n{unitTypedAssembly}");
+            Assert.IsTrue(NobjDefines(disk.Load("GREETLIB", ".OBJ"), "UNUSED"),
+                "A standalone unit NOBJ must retain every public interface routine.");
+            disk.CurrentDirectory = "/";
+
+            QueueLine(editor, "NEW UNITAPP");
+            RunUntil(cpu, bus, s => s.Contains("Created project UNITAPP", StringComparison.Ordinal),
+                "new unit consumer project");
+            disk.CurrentDirectory = "UNITAPP";
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(
+                "program UnitApp;\nuses GreetLib;\nbegin\n  Hello;\nend.\n"), ".PAS");
+            disk.CurrentDirectory = "/";
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD UNITAPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: UNITAPP.BIN", StringComparison.Ordinal)
+                                    || s.Contains("assembler error.", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal)
+                                    || s.Contains("value is out of range.", StringComparison.Ordinal),
+                "external /USER unit consumer build");
+            string unitConsumerBuild = Snapshot(bus);
+            disk.CurrentDirectory = "UNITAPP";
+            string unitConsumerAssembly = Encoding.ASCII.GetString(disk.Load("UNITAPP", ".S"));
+            File.WriteAllText("/tmp/unitapp-debug.s", unitConsumerAssembly);
+            disk.CurrentDirectory = "/";
+            Assert.IsTrue(unitConsumerBuild.Contains("Build complete: UNITAPP.BIN", StringComparison.Ordinal),
+                $"status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
+                $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}\n" +
+                $"Consumer:\n{unitConsumerAssembly}\n{unitConsumerBuild}");
+            Assert.IsFalse(unitConsumerAssembly.Contains("UNUSED", StringComparison.OrdinalIgnoreCase),
+                "A consuming program must remove unreferenced reusable-unit routines at O2.");
+            QueueLine(editor, "RUN UNITAPP");
+            RunUntil(cpu, bus, s => s.Contains("Hello from this unit", StringComparison.Ordinal),
+                "external /USER unit execution");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "DELPROJECT UNITAPP");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project UNITAPP", StringComparison.Ordinal),
+                "delete unit consumer project");
+            QueueLine(editor, "DELPROJECT GREETLIB");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project GREETLIB", StringComparison.Ordinal),
+                "delete reusable project through /USER fallback");
+            disk.CurrentDirectory = "USER";
+            Assert.IsFalse(disk.FileExists("GREETLIB", ".S"),
+                "Deleting a reusable project must remove its published source artifact.");
+            Assert.IsFalse(disk.FileExists("GREETLIB", ".ASM"),
+                "Deleting a reusable project must remove its published typed assembly.");
+            Assert.IsFalse(disk.FileExists("GREETLIB", ".OBJ"),
+                "Deleting a reusable project must remove its published object artifact.");
+            Assert.IsFalse(disk.ListDirectory(null).Any(entry => entry.IsDirectory &&
+                entry.Filename.Equals("GREETLIB", StringComparison.OrdinalIgnoreCase)));
+            disk.CurrentDirectory = "/";
 
             QueueLine(editor, "NEW DEMO");
             RunUntil(cpu, bus, s => s.Contains("Created project DEMO", StringComparison.Ordinal),
@@ -160,10 +322,12 @@ public class NovaPascalTests
             CollectionAssert.AreEqual(demoSource, createdDemoSource,
                 $"NEW must create a minimal LF-only Pascal program; got {Convert.ToHexString(createdDemoSource)}.");
             CollectionAssert.AreEqual(Encoding.ASCII.GetBytes(
-                    "NPP 2\nMAIN MAIN.PAS\nOUTPUT DEMO.BIN\nOPTIMIZE O2\n" +
+                    "NPP 2\nMAIN MAIN.PAS\nUNITPATH SYSTEM\nUNITPATH USER\n" +
+                    "OUTPUT DEMO.BIN\nOPTIMIZE O2\n" +
                     "DEFINE NOVA=1\nCONFIG INLINE\nMAP DEMO.MAP\nLABEL DEMO.LBL\n" +
-                    "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
+                    "MEMORY {\n    RAM: start = $0900, size = $9700, file = %O;\n}\n\n" +
                     "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                    "    RODATA: load = RAM, type = ro;\n" +
                     "    BSS: load = RAM, type = bss;\n}\n"),
                 disk.Load("DEMO", ".NPP"),
                 "The generated project must contain NPC, NAS, and NL configuration.");
@@ -240,7 +404,7 @@ public class NovaPascalTests
             StringAssert.Contains(generatedUnitScreen, "Compiling SECOND.PAS");
             Assert.IsTrue(generatedSecondAssemblyExists,
                 "BUILD must compile every declared unit, including manifest entries after the first.");
-            StringAssert.Contains(generatedBuildScreen, "Library /PASCAL.NLIB",
+            StringAssert.Contains(generatedBuildScreen, "Library /SYSTEM/PASCAL.NLIB",
                 "Generated Pascal projects must link the standard runtime/NDK library.");
 
             QueueLine(editor, "RUN DEMO");
@@ -320,7 +484,7 @@ public class NovaPascalTests
                 : buildScreen.Contains("Pascal syntax error", StringComparison.Ordinal) ? "NovaPascal reported: Pascal syntax error"
                 : buildScreen.Contains(": error:", StringComparison.Ordinal) ? $"NovaPascal reported an assembler error:\n{buildScreen}"
                 : buildScreen.Contains("Linker configuration error", StringComparison.Ordinal)
-                    ? "NovaPascal reported a linker configuration error"
+                    ? $"NovaPascal reported a linker configuration error (status ${bus.Read(0x0275):X2}, detail ${bus.Read(0x0276):X2}):\n{buildScreen}"
                 : buildScreen.Contains("Linker error", StringComparison.Ordinal) ? "NovaPascal reported: Linker error"
                 : buildScreen);
             Assert.AreEqual(xramPagesBeforeBuild, bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8,
@@ -342,7 +506,7 @@ public class NovaPascalTests
             StringAssert.Contains(buildScreen, "Nova Linker v1.0");
             StringAssert.Contains(buildScreen, "Config HELLO.NPP");
             StringAssert.Contains(buildScreen, "Linking HELLO.OBJ");
-            StringAssert.Contains(buildScreen, "Library /PASCAL.NLIB");
+            StringAssert.Contains(buildScreen, "Library /SYSTEM/PASCAL.NLIB");
             StringAssert.Contains(buildScreen, "Writing HELLO.BIN");
             StringAssert.Contains(buildScreen, "Map HELLO.MAP");
             StringAssert.Contains(buildScreen, "Labels HELLO.LBL");
@@ -369,6 +533,62 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Hello from NovaPascal", StringComparison.Ordinal), "linked program output");
             StringAssert.Contains(Snapshot(bus), "Running at $8000:");
 
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "NEW REALABI");
+            RunUntil(cpu, bus, s => s.Contains("Created project REALABI", StringComparison.Ordinal),
+                "real-runtime adapter project creation");
+            disk.CurrentDirectory = "REALABI";
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(
+                "program RealAbi;\nvar R: Real; Code: Integer; Text: string[16];\nbegin\n" +
+                "  R := (3 / 2) + (9 / 4);\n" +
+                "  if R > (7 / 2) then writeln('REAL ADD OK');\n" +
+                "  if Trunc(R) = 3 then writeln('REAL TRUNC OK');\n" +
+                "  Str(R:0:2, Text);\n  writeln(Text);\n" +
+                "  R := Sqrt(9 / 4);\n  Str(R:0:2, Text);\n  writeln(Text);\n" +
+                "  if Trunc(R * 2) = 3 then writeln('REAL SQRT OK');\n" +
+                "  R := Cos(0);\n  Str(R:0:2, Text);\n  writeln(Text);\n" +
+                "  if Trunc(R * 2) = 1 then writeln('REAL TRIG OK');\n" +
+                "  Val('4.50', R, Code);\n" +
+                "  if (Code = 0) and (Trunc(R) = 4) then writeln('REAL VAL OK')\n" +
+                "end.\n"), ".PAS");
+            disk.Save("REALABI", Encoding.ASCII.GetBytes(
+                "NPP 2\nMAIN MAIN.PAS\nUNITPATH SYSTEM\nUNITPATH USER\n" +
+                "OUTPUT REALABI.BIN\nOPTIMIZE O2\nCONFIG INLINE\nMAP REALABI.MAP\n" +
+                "MEMORY {\n    RAM: start = $7000, size = $3000, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            disk.CurrentDirectory = "/";
+            QueueLine(editor, "BUILD REALABI");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: REALABI.BIN", StringComparison.Ordinal),
+                "paged real-runtime build");
+            string realBuildScreen = Snapshot(bus);
+            disk.CurrentDirectory = "REALABI";
+            Assert.IsTrue(disk.FileExists("REALABI", ".BIN"), realBuildScreen);
+            string realMap = Encoding.ASCII.GetString(disk.Load("REALABI", ".MAP"));
+            StringAssert.Contains(realMap, "P_RTCALL",
+                "Pascal real operations must retain only the resident module adapter.");
+            Assert.IsFalse(realMap.Contains("REAL_MULTIPLY", StringComparison.Ordinal),
+                "The 16.16 implementation belongs in the paged LANGRT module, not application RAM.");
+            disk.CurrentDirectory = "/";
+
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN REALABI");
+            RunUntil(cpu, bus, s => s.Contains("REAL VAL OK", StringComparison.Ordinal)
+                                    || s.Contains("Invalid Nova executable.", StringComparison.Ordinal),
+                "paged real-runtime execution");
+            string realRunScreen = Snapshot(bus);
+            StringAssert.Contains(realRunScreen, "REAL ADD OK");
+            StringAssert.Contains(realRunScreen, "REAL TRUNC OK");
+            StringAssert.Contains(realRunScreen, "3.75");
+            StringAssert.Contains(realRunScreen, "1.50");
+            StringAssert.Contains(realRunScreen, "REAL SQRT OK");
+            StringAssert.Contains(realRunScreen, "0.99");
+            StringAssert.Contains(realRunScreen, "REAL TRIG OK");
+            StringAssert.Contains(realRunScreen, "REAL VAL OK");
+            QueueLine(editor, "DELPROJECT REALABI");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project REALABI", StringComparison.Ordinal),
+                "real-runtime adapter project cleanup");
+
             disk.Save("LITERALS", Encoding.ASCII.GetBytes(
                 "program Literals;\nbegin\n  writeln('');\n  writeln('A');\n" +
                 "  writeln('AB');\n  writeln('ABC')\nend.\n"), ".PAS");
@@ -384,6 +604,82 @@ public class NovaPascalTests
             Assert.AreEqual(1, literalAssembly.Split("JSR I_P_WRITE_LINE", StringSplitOptions.None).Length - 1,
                 "A three-character line must cross to the inline-parameter line writer.");
             StringAssert.Contains(literalAssembly, ".BYTE $41,$42,$43,$00");
+
+            disk.Save("WORDLIT", Encoding.ASCII.GetBytes(
+                "program WordLit;\nconst A: Word = 11466; B: Word = 65535;\n" +
+                "var Value: Word;\nbegin\n  Value := A;\n  Value := B\nend.\n"), ".PAS");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "COMPILE WORDLIT.PAS");
+            RunUntil(cpu, bus, s => s.Contains("Compile successful", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "full-width decimal literal compile");
+            Assert.IsTrue(disk.FileExists("WORDLIT", ".S"), Snapshot(bus));
+            string wordLiteralAssembly = Encoding.ASCII.GetString(disk.Load("WORDLIT", ".S"));
+            StringAssert.Contains(wordLiteralAssembly, "LDA #$CA\nLDX #$2C",
+                "Decimal accumulation must preserve carries between the low and high bytes.");
+            StringAssert.Contains(wordLiteralAssembly, "LDA #$FF\nLDX #$FF",
+                "The largest 16-bit literal must compile without truncation.");
+
+            disk.Save("BADWORD", Encoding.ASCII.GetBytes(
+                "program BadWord;\nconst TooBig: Word = 65536;\nbegin\nend.\n"), ".PAS");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "COMPILE BADWORD.PAS");
+            RunUntil(cpu, bus, s => s.Contains(": error:", StringComparison.Ordinal),
+                "overflowing decimal literal rejection");
+            Assert.IsFalse(disk.FileExists("BADWORD", ".S"),
+                "A literal outside the 16-bit language range must fail instead of wrapping.");
+
+            for (int i = 0; i < 20; i++)
+                disk.Save($"SEQ{i:D2}", Encoding.ASCII.GetBytes("writeln('I');\n"), ".INC");
+            disk.Save("MANYINC", Encoding.ASCII.GetBytes(
+                "program ManyInc;\nbegin\n" + string.Concat(Enumerable.Range(0, 20)
+                    .Select(i => $"  {{$I SEQ{i:D2}.INC}}\n")) + "end.\n"), ".PAS");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "COMPILE MANYINC.PAS");
+            RunUntil(cpu, bus, s => s.Contains("Compile successful", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "sequential include-buffer reuse");
+            Assert.IsTrue(disk.FileExists("MANYINC", ".S"),
+                "Sequential {$I} files must reuse nesting-depth XRAM slots instead of imposing a lifetime include-count ceiling.\n" +
+                Snapshot(bus));
+
+            QueueLine(editor, "NEW RAMMEM");
+            RunUntil(cpu, bus, s => s.Contains("Created project RAMMEM", StringComparison.Ordinal),
+                "dynamic low-RAM project creation");
+            disk.CurrentDirectory = "RAMMEM";
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(
+                "program RamHeap;\nuses NovaMemory;\n" +
+                "type RamBlock = array[0..3] of Byte;\n" +
+                "var A, B, C: RamBlock; Source, Dest: array[0..5] of Byte;\n" +
+                "begin\n  RamAlloc(A, 9000);\n  RamAlloc(B, 9000);\n  RamAlloc(C, 9000);\n" +
+                "  if RamAllocated(A) and RamAllocated(B) and RamAllocated(C) then\n  begin\n" +
+                "    Source[0] := 42; Source[5] := 99;\n" +
+                "    RamWrite(B, 9000, Source, 0); RamRead(B, 9000, Dest, 0);\n" +
+                "    RamWrite(B, 8994, Source, 6);\n    RamRead(B, 8994, Dest, 6);\n" +
+                "    if (Dest[0] = 42) and (Dest[5] = 99) then writeln('RAM DATA OK');\n" +
+                "    RamFree(A); RamFree(B); RamFree(C);\n" +
+                "    RamAlloc(A, 27008);\n" +
+                "    if RamAllocated(A) then writeln('RAM COALESCE OK');\n" +
+                "    RamFree(A)\n  end\nend.\n"), ".PAS");
+            disk.CurrentDirectory = "/";
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD RAMMEM");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: RAMMEM.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Build failed", StringComparison.Ordinal),
+                "dynamic low-RAM build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: RAMMEM.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN RAMMEM");
+            RunUntil(cpu, bus, s => s.Contains("RAM COALESCE OK", StringComparison.Ordinal)
+                                    || s.Contains("RUN RAMMEM", StringComparison.Ordinal)
+                                       && s.Contains("NP> ", StringComparison.Ordinal),
+                "dynamic low-RAM allocation, transfer, release, and coalescing");
+            string ramRunScreen = Snapshot(bus);
+            StringAssert.Contains(ramRunScreen, "RAM DATA OK");
+            StringAssert.Contains(ramRunScreen, "RAM COALESCE OK");
+            QueueLine(editor, "DELPROJECT RAMMEM");
+            RunUntil(cpu, bus, s => s.Contains("Deleted project RAMMEM", StringComparison.Ordinal),
+                "dynamic low-RAM project cleanup");
 
             disk.Save("INLINEASM", Encoding.ASCII.GetBytes(
                 "program InlineAsm;\nvar\n  Cells: array[0..2] of Byte;\n" +
@@ -413,10 +709,10 @@ public class NovaPascalTests
             string inlineBuildScreen = Snapshot(bus);
             Assert.IsTrue(disk.FileExists("INLINEASM", ".BIN"), inlineBuildScreen);
             string inlineAssembly = Encoding.ASCII.GetString(disk.Load("INLINEASM", ".S"));
-            StringAssert.Contains(inlineAssembly, "\n     stz NVR2L\n",
+            Assert.IsTrue(inlineAssembly.Split('\n').Any(line => line.Trim() == "stz NVR2L"),
                 "NPC must preserve inline NAS source while marking it opaque to O2.");
-            StringAssert.Contains(inlineAssembly, "\n     lda #'@'\n");
-            StringAssert.Contains(inlineAssembly, "\n     jsr mark\n");
+            Assert.IsTrue(inlineAssembly.Split('\n').Any(line => line.Trim() == "lda #'@'"));
+            Assert.IsTrue(inlineAssembly.Split('\n').Any(line => line.Trim() == "jsr mark"));
             StringAssert.Contains(inlineAssembly, "MARK:",
                 "An inline reference must keep the Pascal routine callable.");
             StringAssert.Contains(inlineAssembly, "JSR MARK");
@@ -502,6 +798,7 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Build complete: LIFE.BIN", StringComparison.Ordinal)
                                     || s.Contains("Assembler error.", StringComparison.Ordinal)
                                     || s.Contains("Linker error.", StringComparison.Ordinal)
+                                    || s.Contains("Linker configuration error.", StringComparison.Ordinal)
                                     || s.Contains("Pascal syntax error.", StringComparison.Ordinal)
                                     || s.Contains("File is too large", StringComparison.Ordinal),
                 "Life compile, assemble, and link");
@@ -520,6 +817,11 @@ public class NovaPascalTests
                 $"symbols={(lifeObject.Length > 11 ? lifeObject[10] | lifeObject[11] << 8 : 0)}, " +
                 $"relocations={(lifeObject.Length > 15 ? lifeObject[14] | lifeObject[15] << 8 : 0)}\n{Snapshot(bus)}");
             byte[] lifeExecutable = disk.Load("LIFE", ".BIN");
+            try { File.Copy(Path.Combine(disks, "fd0.ndi"), "/tmp/life-size-debug.ndi", overwrite: true); } catch { }
+            File.WriteAllText("/tmp/life-size-debug.map", Encoding.ASCII.GetString(disk.Load("LIFE", ".MAP")));
+            File.WriteAllText("/tmp/life-size-debug.s", lifeAssembly);
+            File.WriteAllBytes("/tmp/life-size-debug.asm", disk.Load("MAIN", ".ASM"));
+            File.WriteAllBytes("/tmp/life-size-debug.bin", lifeExecutable);
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x80 }, lifeExecutable[..2]);
             Assert.IsTrue(lifeExecutable.Length <= 5200,
                 $"Life O2 output regressed beyond 5,200 bytes; got {lifeExecutable.Length} bytes.");
@@ -531,6 +833,11 @@ public class NovaPascalTests
             StringAssert.Contains(lifeMap, "RNG_GET8");
             StringAssert.Contains(lifeMap, "POLLKEY");
             StringAssert.Contains(lifeMap, "FIO_EXEC");
+            StringAssert.Contains(lifeMap, "I_ARRAY_INDEX_BYTE_STACK");
+            Assert.IsFalse(lifeMap.Contains("I_ARRAY_INDEX_ADDR_STACK", StringComparison.Ordinal),
+                "Zero-based byte arrays must not pull the general stride/lower-bound runtime member.");
+            Assert.IsFalse(lifeMap.Contains("I_P_BLOCK_COPY", StringComparison.Ordinal),
+                "An indexed byte store must not pull unrelated aggregate-copy code.");
             Assert.IsFalse(lifeMap.Contains("VGC_PLOT", StringComparison.Ordinal),
                 "Selective canonical VGC emission must omit unused primitives.");
             StringAssert.Contains(lifeAssembly, ".INCLUDE \"GRAPHICS.INC\"");
@@ -546,7 +853,8 @@ public class NovaPascalTests
             StringAssert.Contains(lifeAssembly, "NEXT: .RES $07D0");
             StringAssert.Contains(lifeAssembly, "ADC #<CELLS");
             StringAssert.Contains(lifeAssembly, "ADC #>CELLS");
-            StringAssert.Contains(lifeAssembly, "STA (NVR1L)");
+            StringAssert.Contains(lifeAssembly, "JSR I_ARRAY_INDEX_BYTE_STACK");
+            StringAssert.Contains(lifeAssembly, "STA (NVR0L),Y");
             StringAssert.Contains(lifeAssembly, "CMP #$19");
             StringAssert.Contains(lifeAssembly, "INC I");
             StringAssert.Contains(lifeAssembly, "INC COL");
@@ -580,9 +888,9 @@ public class NovaPascalTests
             StringAssert.Contains(lifeAssembly, "JMP __NP_MAIN");
             StringAssert.Contains(lifeAssembly, "DRAW:");
             StringAssert.Contains(lifeAssembly, "COMMIT:");
-            StringAssert.Contains(lifeAssembly, "\n     lda Next+$0100,x\n",
+            Assert.IsTrue(lifeAssembly.Split('\n').Any(line => line.Trim() == "lda Next+$0100,x"),
                 "Life must demonstrate inline NAS by copying Pascal arrays directly.");
-            StringAssert.Contains(lifeAssembly, "\n     cpx #$D0\n",
+            Assert.IsTrue(lifeAssembly.Split('\n').Any(line => line.Trim() == "cpx #$D0"),
                 "The inline copy must cover the final 208 cells of the 2,000-cell board.");
             StringAssert.Contains(lifeAssembly, "JSR RANDOMBYTE");
             Assert.IsFalse(lifeAssembly.Contains("JSR COUNTNEIGHBORS", StringComparison.Ordinal));
@@ -645,7 +953,8 @@ public class NovaPascalTests
                 "NPP 1\nMAIN RETSAFE.PAS\nOUTPUT RETSAFE.BIN\nOPTIMIZE O2\n" +
                 "CONFIG INLINE\nMAP RETSAFE.MAP\nLABEL RETSAFE.LBL\n" +
                 "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
-                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD RETSAFE.NPP");
             RunUntil(cpu, bus, s => s.Contains("Build complete: RETSAFE.BIN", StringComparison.Ordinal)
@@ -696,13 +1005,21 @@ public class NovaPascalTests
                 "MAP NDKPAS.MAP\nLABEL NDKPAS.LBL\n" +
                 "MEMORY {\n    RAM: start = $8000, size = $0200, file = %O;\n}\n\n" +
                 "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n" +
                 "    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD NDKPAS.NPP");
             RunUntil(cpu, bus, s => s.Contains("Build complete: NDKPAS.BIN", StringComparison.Ordinal)
                                     || s.Contains("error", StringComparison.OrdinalIgnoreCase),
                 "Pascal NDK unit build");
-            Assert.IsTrue(disk.FileExists("NDKPAS", ".BIN"), Snapshot(bus));
+            Assert.IsTrue(disk.FileExists("NDKPAS", ".BIN"),
+                $"pc=${cpu.Pc:X4}, status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"o2=${bus.Read(0x0D0A):X2}@${bus.Read(0x0D0C):X2}{bus.Read(0x0D0B):X2}, " +
+                $"xram={bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8}/" +
+                $"{bus.Read(0xBA10) | bus.Read(0xBA11) << 8}, " +
+                $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
+                $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, " +
+                $"source={ReadMailboxText(bus, 0x0800, 64)}\n{Snapshot(bus)}");
             string ndkAssembly = Encoding.ASCII.GetString(disk.Load("NDKPAS", ".S"));
             StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.INC\"");
             StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.NPI\"");
@@ -744,7 +1061,8 @@ public class NovaPascalTests
                 "NPP 1\nMAIN NDKCAT.PAS\nOUTPUT NDKCAT.BIN\nCONFIG INLINE\n" +
                 "MAP NDKCAT.MAP\nLABEL NDKCAT.LBL\n" +
                 "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
-                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "BUILD NDKCAT.NPP");
             RunUntil(cpu, bus, _ => disk.FileExists("NDKCAT", ".BIN") || bus.Read(0x0275) == 5,
@@ -804,7 +1122,7 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal),
                 "TYPE displays generated assembly text");
 
-            QueueLine(editor, "EDIT HELLO/MAIN.PAS");
+            QueueLine(editor, "EDIT HELLO");
             RunUntil(cpu, bus, s => s.Contains("MAIN.PAS", StringComparison.Ordinal)
                                     && s.Contains("program Hello;", StringComparison.Ordinal), "Pascal editor");
             RunSteps(cpu, bus, 100_000);
@@ -812,10 +1130,20 @@ public class NovaPascalTests
                 "NPEDIT must apply Pascal lexical color to source words.");
             Assert.AreEqual((byte)0x65, bus.Vgc.GetScreenColor(10, 3),
                 "NPEDIT must apply Pascal string color to quoted literals.");
+            editor.QueueInput(0x0F); // Ctrl-O
+            RunUntil(cpu, bus, s => s.Contains("Open Text File", StringComparison.Ordinal)
+                                    && s.Contains("HELLO.NPP", StringComparison.Ordinal),
+                "project file picker");
+            editor.QueueInput(0x1F); // Down: MAIN.PAS
+            editor.QueueInput(0x1F); // Down: HELLO.NPP
+            editor.QueueInput(0x0D); // Enter
+            RunUntil(cpu, bus, s => s.Contains("MAIN MAIN.PAS", StringComparison.Ordinal)
+                                    && s.Contains("T:Pascal Project", StringComparison.Ordinal),
+                "project manifest opened from editor");
             editor.QueueInput(0x1B);
             editor.QueueInput((byte)'x');
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal)
-                                    && !s.Contains("program Hello;", StringComparison.Ordinal), "shell after Alt-X");
+                                    && !s.Contains("MAIN MAIN.PAS", StringComparison.Ordinal), "shell after Alt-X");
 
             QueueLine(editor, "EDIT HELLO/HELLO.S");
             RunUntil(cpu, bus, s => s.Contains("JSR I_P_WRITE_LINE", StringComparison.Ordinal)
@@ -823,13 +1151,6 @@ public class NovaPascalTests
                 "assembly-aware editor");
             editor.QueueInput(0x11);
             RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "shell after Ctrl-Q");
-
-            QueueLine(editor, "EDIT HELLO/HELLO.NPP");
-            RunUntil(cpu, bus, s => s.Contains("MAIN MAIN.PAS", StringComparison.Ordinal)
-                                    && s.Contains("T:Pascal Project", StringComparison.Ordinal),
-                "project-aware editor");
-            editor.QueueInput(0x11);
-            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "shell after project editor");
 
             disk.Save("HELLO", Encoding.ASCII.GetBytes("OUTPUT HELLO.BIN\n"), ".CFG");
             QueueLine(editor, "EDIT HELLO.CFG");
@@ -850,13 +1171,13 @@ public class NovaPascalTests
             disk.Save("LABELS", Encoding.ASCII.GetBytes(
                 "Start:\nbra ENTRY\n.byte $DE,$AD\nEntry:\njsr sub\nRTS\n" +
                 "Sub:\nLdA #$7E\nSta $A00E\nrts\n"), ".S");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "ASSEMBLE LABELS.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing LABELS.OBJ", StringComparison.Ordinal)
+            RunUntil(cpu, bus, s => s.Contains("Assembly complete", StringComparison.Ordinal)
                                     || s.Contains(": error:", StringComparison.Ordinal),
-                "generic assembly result");
-            RunSteps(cpu, bus, 100_000);
-            Assert.IsTrue(Snapshot(bus).Contains("Assembly successful", StringComparison.Ordinal),
-                $"NAS failed generic assembly with detail ${bus.Read(0x0276):X2}:\n{Snapshot(bus)}");
+                "generic assembly completion");
+            Assert.IsTrue(Snapshot(bus).Contains("Assembly complete", StringComparison.Ordinal),
+                $"NAS failed generic assembly at ${cpu.Pc:X4} with detail ${bus.Read(0x0276):X2}:\n{Snapshot(bus)}");
 
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "LINK LABELS.OBJ");
@@ -868,7 +1189,8 @@ public class NovaPascalTests
             byte[] labelsObject = disk.Load("LABELS", ".OBJ");
             CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("NOBJ"), labelsObject[..4]);
             Assert.AreEqual(2, labelsObject[4], "NAS must emit section-aware NOBJ v2 files.");
-            Assert.AreEqual(3, labelsObject[10], "All three local labels must be represented as symbols.");
+            Assert.AreEqual(1, labelsObject[10],
+                "NAS must omit private labels that are neither externally visible nor relocation targets.");
             Assert.AreEqual(1, labelsObject[14], "JSR SUB must produce one indexed ABS16 relocation.");
             byte[] labelsCode = labelsObject[32..46];
             CollectionAssert.AreEqual(new byte[]
@@ -896,8 +1218,8 @@ public class NovaPascalTests
                 "cheap-local-label assembly");
             RunSteps(cpu, bus, 500_000);
             byte[] cheapLocalObject = disk.Load("CHEAPLOC", ".OBJ");
-            Assert.AreEqual(4, cheapLocalObject[10],
-                "Repeated @loop labels must become distinct symbols under Start and Next.");
+            Assert.AreEqual(2, cheapLocalObject[10],
+                "NAS must retain the exported entry and relocation target while omitting resolved cheap-local labels.");
             CollectionAssert.AreEqual(new byte[]
             {
                 0xA2, 0x02, 0xCA, 0xD0, 0xFD, 0x20, 0x00, 0x00, 0x60,
@@ -957,8 +1279,8 @@ public class NovaPascalTests
             RunSteps(cpu, bus, 500_000);
             Assert.IsTrue(disk.FileExists("ANON", ".OBJ"), Snapshot(bus));
             byte[] anonymousObject = disk.Load("ANON", ".OBJ");
-            Assert.AreEqual(6, anonymousObject[10],
-                "Each anonymous definition must become a distinct local NOBJ symbol.");
+            Assert.AreEqual(1, anonymousObject[10],
+                "NAS must omit anonymous labels after their branches have been fully resolved.");
             CollectionAssert.AreEqual(new byte[]
             {
                 0xA2, 0x02, 0xCA, 0xD0, 0xFD, 0x80, 0x02, 0xDE, 0xAD,
@@ -980,7 +1302,7 @@ public class NovaPascalTests
                 "Start:\nlda #'^'\nsta $A00E\nrts\n"), ".S");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "ASSEMBLE ASSERTOK.S");
-            RunUntil(cpu, bus, s => s.Contains("Assembly successful", StringComparison.Ordinal)
+            RunUntil(cpu, bus, s => s.Contains("Assembly complete", StringComparison.Ordinal)
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "passing assembly assertion");
             Assert.IsTrue(disk.FileExists("ASSERTOK", ".OBJ"), Snapshot(bus));
@@ -1257,7 +1579,7 @@ public class NovaPascalTests
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "expression assembly result");
             RunSteps(cpu, bus, 500_000);
-            Assert.IsTrue(Snapshot(bus).Contains("Assembly successful", StringComparison.Ordinal),
+            Assert.IsTrue(Snapshot(bus).Contains("Assembly complete", StringComparison.Ordinal),
                 $"NAS expression assembly failed with detail ${bus.Read(0x0276):X2}:\n{Snapshot(bus)}");
             byte[] expressionObject = disk.Load("EXPRESS", ".OBJ");
             CollectionAssert.AreEqual(new byte[]
@@ -1413,12 +1735,40 @@ public class NovaPascalTests
             QueueLine(editor, "RUN INCLUDE.BIN");
             RunUntil(cpu, bus, s => s.Contains('I'), "nested include executable output");
 
+            disk.Save("EARLY2", Encoding.ASCII.GetBytes(".byte Value+1\n"), ".INC");
+            disk.Save("EARLY1", Encoding.ASCII.GetBytes(
+                ".byte Value\n.includetext \"EARLY2.INC\"\n"), ".INC");
+            disk.Save("EARLY", Encoding.ASCII.GetBytes(
+                ".define Value $2A\n.export Start\nStart:\n" +
+                ".includetext \"EARLY1.INC\"\nrts\n"), ".S");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "ASSEMBLE EARLY.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing EARLY.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "recursive preprocessing include result");
+            RunSteps(cpu, bus, 100_000);
+            CollectionAssert.AreEqual(new byte[] { 0x2A, 0x2B, 0x60 },
+                ReadNobjSectionData(disk.Load("EARLY", ".OBJ"), "CODE"),
+                ".INCLUDETEXT must splice recursively before macros and assembly are lowered.");
+
+            disk.Save("EARLYBAD", Encoding.ASCII.GetBytes(
+                ".includetext \"MISSING.INC\"\nrts\n"), ".S");
+            QueueLine(editor, "ASSEMBLE EARLYBAD.S");
+            RunUntil(cpu, bus, s => s.Contains(
+                    "EARLYBAD.S:1:1: error: cannot read include file.", StringComparison.Ordinal),
+                "source-located preprocessing include diagnostic");
+            Assert.IsFalse(disk.FileExists("EARLYBAD", ".OBJ"));
+            RunSteps(cpu, bus, 100_000);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
             disk.Save("ZEROPAGE", Encoding.ASCII.GetBytes(
                 ".globalzp Scratch\n.export Start\nStart:\nlda Scratch\nsta Scratch,x\nrts\n"), ".S");
             QueueLine(editor, "ASSEMBLE ZEROPAGE.S");
             RunUntil(cpu, bus, s => s.Contains("Writing ZEROPAGE.OBJ", StringComparison.Ordinal)
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "global zero-page assembly");
+            RunSteps(cpu, bus, 100_000);
+            Assert.IsTrue(disk.FileExists("ZEROPAGE", ".OBJ"), Snapshot(bus));
             byte[] zeroPageObject = disk.Load("ZEROPAGE", ".OBJ");
             CollectionAssert.AreEqual(new byte[] { 0xA5, 0x00, 0x95, 0x00, 0x60 },
                 ReadNobjSectionData(zeroPageObject, "CODE"),
@@ -1445,6 +1795,7 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Writing NDKDMA.OBJ", StringComparison.Ordinal)
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "canonical NDK source assembly");
+            RunSteps(cpu, bus, 100_000);
             Assert.IsTrue(disk.FileExists("NDKDMA", ".OBJ"), Snapshot(bus));
             QueueLine(editor, "LINK NDKDMA.OBJ");
             RunUntil(cpu, bus, s => s.Contains("Writing NDKDMA.BIN", StringComparison.Ordinal)
@@ -1505,7 +1856,8 @@ public class NovaPascalTests
                                     || s.Contains(": error:", StringComparison.Ordinal),
                 "raw binary inclusion assembly result");
             RunSteps(cpu, bus, 100_000);
-            Assert.IsTrue(disk.FileExists("INCBIN", ".OBJ"), Snapshot(bus));
+            Assert.IsTrue(disk.FileExists("INCBIN", ".OBJ"),
+                $"detail=${bus.Read(0x0276):X2}, fio=${bus.Read(0xB9A2):X2}\n{Snapshot(bus)}");
             CollectionAssert.AreEqual(rawAsset,
                 ReadNobjSectionData(disk.Load("INCBIN", ".OBJ"), "RODATA"),
                 "NAS .INCBIN must preserve arbitrary binary bytes through its XRAM file callback.");
@@ -1570,6 +1922,38 @@ public class NovaPascalTests
                 "NL must align sections, relocate through their placement offsets, and materialize BSS.");
             QueueLine(editor, "RUN SECTIONS.BIN");
             RunUntil(cpu, bus, s => s.Contains('Z'), "named-section executable output");
+
+            disk.Save("TAILBSS", Encoding.ASCII.GetBytes(
+                ".segment \"CODE\"\n.export Start\nStart:\nlda Buffer\nbeq :+\n" +
+                "lda #'X'\nsta $A00E\nrts\n:\nlda #'V'\nsta $A00E\nrts\n" +
+                ".segment \"BSS\"\nBuffer:\n.res 32\n"), ".S");
+            QueueLine(editor, "ASSEMBLE TAILBSS.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing TAILBSS.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "tail-BSS assembly result");
+            QueueLine(editor, "LINK TAILBSS.OBJ");
+            RunUntil(cpu, bus, s => s.Contains("Writing TAILBSS.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Linker error", StringComparison.Ordinal),
+                "tail-BSS link result");
+            byte[] tailBssExecutable = disk.Load("TAILBSS", ".BIN");
+            CollectionAssert.AreEqual("NBS1"u8.ToArray(), tailBssExecutable[^8..^4],
+                "NL must replace a substantial zero-filled tail with the compact executable trailer.");
+            int tailBssLength = tailBssExecutable[^4] | tailBssExecutable[^3] << 8;
+            Assert.AreEqual(32, tailBssLength);
+            Assert.AreEqual((byte)~tailBssExecutable[^4], tailBssExecutable[^2]);
+            Assert.AreEqual((byte)~tailBssExecutable[^3], tailBssExecutable[^1]);
+            int tailBssLoad = tailBssExecutable[0] | tailBssExecutable[1] << 8;
+            int tailBssAddress = tailBssLoad + tailBssExecutable.Length - 2 - 8;
+            for (int offset = 0; offset < tailBssLength; offset++)
+                bus.Write((ushort)(tailBssAddress + offset), 0xA5);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN TAILBSS.BIN");
+            RunUntil(cpu, bus, s => s.Contains('V') || s.Contains('X'),
+                "tail-BSS executable output");
+            StringAssert.Contains(Snapshot(bus), "V",
+                "MEM_EXEC_IMAGE must zero the exact omitted BSS range before transferring control.");
+            Assert.IsFalse(Snapshot(bus).Contains('X'),
+                "Poisoned application RAM must never leak through compact-BSS startup.");
 
             disk.Save("SECTIONS", Encoding.ASCII.GetBytes(
                 "MEMORY {\n" +
@@ -1716,7 +2100,7 @@ public class NovaPascalTests
                 "PHA\nPHP\nPHX\nPHY\nPLA\nPLP\nPLX\nPLY\nRTI\nRTS\nSEC\nSED\n" +
                 "SEI\nSTP\nTAX\nTAY\nTSX\nTXA\nTXS\nTYA\nWAI\n"), ".S");
             QueueLine(editor, "ASSEMBLE IMPLIED.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing IMPLIED.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("IMPLIED", ".OBJ"),
                 "complete implied-opcode assembly result");
             RunSteps(cpu, bus, 100_000);
             byte[] impliedObject = disk.Load("IMPLIED", ".OBJ");
@@ -1735,7 +2119,7 @@ public class NovaPascalTests
                 "adc #$01\nAnD #$02\nBIT #$03\ncmp #$04\nCPx #$05\ncpy #$06\n" +
                 "EOR #$07\nlda #$08\nLdX #$09\nLDY #$0A\nora #$0B\nSbC #$0C\n"), ".S");
             QueueLine(editor, "ASSEMBLE IMMEDIATE.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing IMMEDIATE.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("IMMEDIATE", ".OBJ"),
                 "complete immediate-opcode assembly result");
             RunSteps(cpu, bus, 100_000);
             byte[] immediateObject = disk.Load("IMMEDIATE", ".OBJ");
@@ -1750,7 +2134,7 @@ public class NovaPascalTests
             disk.Save("ACCUM", Encoding.ASCII.GetBytes(
                 "asl a\nDec A\nINC a\nLsR A\nrol a\nRoR A\n"), ".S");
             QueueLine(editor, "ASSEMBLE ACCUM.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing ACCUM.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("ACCUM", ".OBJ"),
                 "complete accumulator-opcode assembly result");
             RunSteps(cpu, bus, 500_000);
             byte[] accumulatorObject = disk.Load("ACCUM", ".OBJ");
@@ -1778,7 +2162,7 @@ public class NovaPascalTests
                 "ADC $1234,Y\nAND $1234,Y\nCMP $1234,Y\nEOR $1234,Y\nLDA $1234,Y\n" +
                 "LDX $1234,Y\nORA $1234,Y\nSBC $1234,Y\nSTA $1234,Y\n"), ".S");
             QueueLine(editor, "ASSEMBLE DIRECT.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing DIRECT.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("DIRECT", ".OBJ"),
                 "complete direct-addressing assembly result");
             RunSteps(cpu, bus, 500_000);
             byte[] directObject = disk.Load("DIRECT", ".OBJ");
@@ -1820,7 +2204,7 @@ public class NovaPascalTests
                 "JMP ($1234)\nJMP ($1234,X)\nTarget:\nRTS\n" +
                 "JMP (target)\nJMP (TARGET,X)\n"), ".S");
             QueueLine(editor, "ASSEMBLE INDIRECT.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing INDIRECT.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("INDIRECT", ".OBJ"),
                 "complete indirect-addressing assembly result");
             RunSteps(cpu, bus, 500_000);
             byte[] indirectObject = disk.Load("INDIRECT", ".OBJ");
@@ -1840,7 +2224,7 @@ public class NovaPascalTests
             Assert.AreEqual(2, indirectObject[14]);
 
             QueueLine(editor, "LINK INDIRECT.OBJ");
-            RunUntil(cpu, bus, s => s.Contains("Writing INDIRECT.BIN", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("INDIRECT", ".BIN"),
                 "indirect-symbol link result");
             RunSteps(cpu, bus, 500_000);
             byte[] indirectExecutable = disk.Load("INDIRECT", ".BIN");
@@ -1857,7 +2241,7 @@ public class NovaPascalTests
                 "BBS4 $12,target\nBBS5 $12,target\nBBS6 $12,target\nBBS7 $12,target\n" +
                 "Target:\nRTS\n"), ".S");
             QueueLine(editor, "ASSEMBLE BITOPS.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing BITOPS.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("BITOPS", ".OBJ"),
                 "complete bit-opcode assembly result");
             RunSteps(cpu, bus, 500_000);
             Assert.IsTrue(disk.FileExists("BITOPS", ".OBJ"),
@@ -1884,7 +2268,7 @@ public class NovaPascalTests
                 "BCC target\nBCS target\nBEQ target\nBMI target\nBNE target\n" +
                 "BPL target\nBRA target\nBVC target\nBVS target\nTarget:\nRTS\n"), ".S");
             QueueLine(editor, "ASSEMBLE BRANCHES.S");
-            RunUntil(cpu, bus, s => s.Contains("Writing BRANCHES.OBJ", StringComparison.Ordinal),
+            RunUntil(cpu, bus, _ => disk.FileExists("BRANCHES", ".OBJ"),
                 "complete relative-branch assembly result");
             RunSteps(cpu, bus, 500_000);
             byte[] branchObject = disk.Load("BRANCHES", ".OBJ");
@@ -1901,8 +2285,8 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("HELLO", ".BIN"), "BUILD must retain the linked binary.");
 
             string assembly = Encoding.ASCII.GetString(disk.Load("HELLO", ".S"));
-            StringAssert.Contains(assembly, ".IMPORT P_WRITE_CHAR");
-            StringAssert.Contains(assembly, ".IMPORT I_P_WRITE_LINE");
+            StringAssert.Contains(assembly, ".IMPORTIFREF P_WRITE_CHAR");
+            StringAssert.Contains(assembly, ".IMPORTIFREF I_P_WRITE_LINE");
             StringAssert.Contains(assembly, "; MAIN.PAS:3 WRITELN");
             StringAssert.Contains(assembly, "JSR I_P_WRITE_LINE");
             StringAssert.Contains(assembly,
@@ -1921,8 +2305,9 @@ public class NovaPascalTests
                 "A 21-character WRITELN should compile to JSR, 22 inline bytes, and RTS.");
             Assert.IsTrue((objectFile[14] | objectFile[15] << 8) > 0,
                 "NAS must preserve external calls as NOBJ relocations.");
-            disk.CurrentDirectory = "/";
+            disk.CurrentDirectory = "SYSTEM";
             byte[] library = disk.Load("PASCAL", ".NLIB");
+            disk.CurrentDirectory = "/";
             disk.CurrentDirectory = "HELLO";
             Assert.AreEqual(2, library[4], "Pascal libraries must use complete NOBJ members.");
             byte[] lineMember = ReadNlibMember(library, "I_P_WRITE_LINE");
@@ -1940,6 +2325,680 @@ public class NovaPascalTests
         }
         finally
         {
+            try { File.Copy(Path.Combine(disks, "fd0.ndi"), "/tmp/shell-debug.ndi", overwrite: true); } catch { }
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void AssemblerSupportsGlobalZeroPageAbsoluteAliases()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-globalzp-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("ZPALIAS", Encoding.ASCII.GetBytes(
+                ".globalzp Ptr\nPtr = $7E\n.export Start\nStart:\n" +
+                "lda (Ptr),y\nsta (Ptr),y\nrts\n"), ".S");
+            QueueLine(editor, "ASSEMBLE ZPALIAS.S");
+            RunUntil(cpu, bus, s => s.Contains("Writing ZPALIAS.OBJ", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "absolute zero-page alias assembly");
+
+            Assert.IsTrue(disk.FileExists("ZPALIAS", ".OBJ"), Snapshot(bus));
+            CollectionAssert.AreEqual(new byte[] { 0xB1, 0x00, 0x91, 0x00, 0x60 },
+                ReadNobjSectionData(disk.Load("ZPALIAS", ".OBJ"), "CODE"),
+                "A declared absolute zero-page symbol must select indirect zero-page opcodes.");
+
+            QueueLine(editor, "LINK ZPALIAS.OBJ");
+            RunUntil(cpu, bus, s => s.Contains("Writing ZPALIAS.BIN", StringComparison.Ordinal)
+                                    || s.Contains("Linker error", StringComparison.Ordinal),
+                "absolute zero-page alias link");
+            CollectionAssert.AreEqual(new byte[] { 0x00, 0x70, 0xB1, 0x7E, 0x91, 0x7E, 0x60 },
+                disk.Load("ZPALIAS", ".BIN"),
+                "NL must resolve the zero-page relocation to the declared absolute value.");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void CompilerExpandsTurboIncludesAndStopsAtCpmLogicalEof()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-include-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.MakeDirectory("INCLUDETEST");
+            disk.CurrentDirectory = "INCLUDETEST";
+            disk.Save("INCLUDETEST", Encoding.ASCII.GetBytes(
+                "NPP 2\nMAIN MAIN.PAS\nUNITPATH SYSTEM\nUNITPATH USER\n" +
+                "OUTPUT INCLUDETEST.BIN\nOPTIMIZE O2\nCONFIG INLINE\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            string mainSource =
+                "program IncludeTest;\n{$R-,U-,V-,X-,A+,C-}\n{$I+}\n" +
+                "type SampleArray = array[1..3] of Byte;\nvar Samples: SampleArray;\n" +
+                "{$I BODY.INC   procedure declarations}\nbegin\n" +
+                "  Samples[1] := 5;\n  Samples[2] := 7;\n  Samples[3] := 9;\n" +
+                "  writeln(Samples[2]);\n  Hello(40);\n  Hello(41);\n  Pair(20,25);\n" +
+                "  writeln(Trunc(Fact(5)));\n" +
+                "  Nested(42);\n  Nested(43);\n{" + new string('M', 17 * 1024) + "}\nend.\n" +
+                "\x1Athis stale CP/M record must not parse\n";
+            string includeSource =
+                "{ ordinary brace comment }\n(* standard Pascal comment *)\n" +
+                "procedure Hello(Value: Byte);\nvar Next: Byte;\nbegin\n  Next := Value + 1;\n" +
+                "  writeln('Included source');\n  writeln(Next);\nend;\n" +
+                "{" + new string('I', 17 * 1024) + "}\n" +
+                "procedure Pair(Left: Integer; Right: Integer);\nbegin\n" +
+                "  writeln(Left + Right);\nend;\n" +
+                "function Fact(I: Integer): Real;\nbegin\n" +
+                "  if I > 0 then Fact := I * Fact(I - 1) else Fact := 1;\nend;\n" +
+                "procedure Nested(Value: Byte);\nvar OuterValue: Byte;\n" +
+                "  procedure ShowOuter;\n  begin\n    writeln(OuterValue);\n  end;\n" +
+                "begin\n  OuterValue := Value + 1;\n  ShowOuter;\n  ShowOuter;\nend;\n" +
+                "\x1Athis stale include record must not parse\n";
+            Assert.IsTrue(Encoding.ASCII.GetByteCount(mainSource) > 16 * 1024,
+                "The primary-source fixture must exceed the former fixed NPC buffer.");
+            Assert.IsTrue(Encoding.ASCII.GetByteCount(includeSource) > 16 * 1024,
+                "The include fixture must exceed the former fixed NPC buffer.");
+            disk.Save("MAIN", Encoding.ASCII.GetBytes(mainSource), ".PAS");
+            disk.Save("BODY", Encoding.ASCII.GetBytes(includeSource), ".INC");
+            disk.CurrentDirectory = "/";
+
+            QueueLine(editor, "BUILD INCLUDETEST");
+            var buildTrace = new ushort[32];
+            int buildTraceIndex = 0;
+            bool buildCommandVisible = false;
+            bool assemblerVisible = false;
+            for (int i = 0; i < 200_000_000; i++)
+            {
+                buildTrace[buildTraceIndex++ & 31] = cpu.Pc;
+                int cycles = cpu.ClocksForNext();
+                cpu.ExecuteNext();
+                bus.AdvanceCycles(cycles);
+                if ((i & 0x3FFF) == 0)
+                {
+                    string screen = Snapshot(bus);
+                    buildCommandVisible |= screen.Contains("BUILD INCLUDETEST", StringComparison.Ordinal);
+                    assemblerVisible |= screen.Contains("Nova Assembler v1.0", StringComparison.Ordinal);
+                    if (screen.Contains("Build complete: INCLUDETEST.BIN", StringComparison.Ordinal)
+                        || screen.Contains("Pascal syntax error.", StringComparison.Ordinal)
+                        || screen.Contains("File I/O error.", StringComparison.Ordinal)
+                        || screen.Contains(": error:", StringComparison.Ordinal)
+                        || (buildCommandVisible
+                            && !screen.Contains("BUILD INCLUDETEST", StringComparison.Ordinal)
+                            && screen.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal)))
+                    {
+                        break;
+                    }
+                }
+            }
+            string buildScreen = Snapshot(bus);
+            CpuState cpuState = cpu.GetState();
+            string stackState = string.Join(' ', Enumerable.Range(1, 16)
+                .Select(offset => bus.Read((ushort)(0x0100 | (byte)(cpuState.Sp + offset))).ToString("X2")));
+            disk.CurrentDirectory = "INCLUDETEST";
+            string generatedSource = disk.FileExists("INCLUDETEST", ".S")
+                ? Encoding.ASCII.GetString(disk.Load("INCLUDETEST", ".S"))
+                : "<no generated assembly>";
+            int diagnosticLine = bus.Read(0x02F3) | bus.Read(0x02F4) << 8;
+            string[] generatedLines = generatedSource.Split('\n');
+            string generatedAssembly = string.Join('\n', generatedLines
+                .Select((line, index) => $"{index + 1}: {line}")
+                .Skip(Math.Max(0, diagnosticLine - 8)).Take(15));
+            string frameAssembly = string.Join('\n', generatedLines
+                .Select((line, index) => $"{index + 1}: {line}").Skip(40).Take(32));
+            disk.CurrentDirectory = "/";
+            Assert.IsTrue(buildScreen.Contains("Build complete: INCLUDETEST.BIN", StringComparison.Ordinal),
+                $"pc=${cpuState.Pc:X4}, sp=${cpuState.Sp:X2}, status=${bus.Read(0x0275):X2}/" +
+                $"${bus.Read(0x0276):X2}, result=${bus.Read(0x0047):X2}, " +
+                $"nl=${bus.Read(0x0D00):X2}/${bus.Read(0x0D06):X2}/" +
+                $"${bus.Read(0x0D07):X2}/${bus.Read(0x0D09):X2}${bus.Read(0x0D08):X2}, " +
+                $"objects=${bus.Read(0x0901):X2}, q=${bus.Read(0x0D0E):X2}, pass=${bus.Read(0x0D0F):X2}, " +
+                $"worker=${bus.Read(0x9215):X2}:sym${bus.Read(0x921D):X2}${bus.Read(0x921C):X2}:" +
+                $"left${bus.Read(0x921B):X2}${bus.Read(0x921A):X2}:" +
+                $"scan${bus.Read(0x9222):X2}:found${bus.Read(0x9223):X2}:" +
+                $"rel${bus.Read(0x921F):X2}${bus.Read(0x921E):X2}:chg${bus.Read(0x9220):X2}, " +
+                $"live={string.Join(' ', Enumerable.Range(0, 5).Select(offset => bus.Read((ushort)(0x0B2E + offset)).ToString("X2")))}, " +
+                $"stack=${stackState}, " +
+                $"trace={string.Join(' ', Enumerable.Range(0, 32).Select(offset => buildTrace[(buildTraceIndex + offset) & 31].ToString("X4")))}, " +
+                $"pcmem={string.Join(' ', Enumerable.Range(-8, 24).Select(offset => bus.Read((ushort)(cpuState.Pc + offset)).ToString("X2")))}, " +
+                $"o2=${bus.Read(0x0D0A):X2}@${bus.Read(0x0D0C):X2}${bus.Read(0x0D0B):X2}/" +
+                $"${bus.Read(0x0D0E):X2}${bus.Read(0x0D0D):X2}, " +
+                $"fio=${bus.Read(0xB9A0):X2}/${bus.Read(0xB9A1):X2}/${bus.Read(0xB9A2):X2}/" +
+                $"${bus.Read(0xB9A9):X2}${bus.Read(0xB9A8):X2}, " +
+                $"xmc=${bus.Read(0xBA00):X2}/${bus.Read(0xBA01):X2}/${bus.Read(0xBA02):X2} " +
+                $"${bus.Read(0xBA06):X2}${bus.Read(0xBA05):X2}${bus.Read(0xBA04):X2}+" +
+                $"${bus.Read(0xBA0A):X2}${bus.Read(0xBA09):X2}, " +
+                $"tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"line={diagnosticLine}, column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}\n" +
+                $"Generated assembly:\n{generatedAssembly}\nScreen:\n{buildScreen}");
+            disk.CurrentDirectory = "INCLUDETEST";
+            Assert.IsTrue(disk.FileExists("INCLUDETEST", ".BIN"),
+                "A source included before CP/M padding must reach the ordinary assembler/linker pipeline.");
+            Assert.AreEqual(1,
+                generatedSource.Split("LDA #<__NP_STACK", StringSplitOptions.None).Length - 1,
+                "A Pascal program must initialize its frame stack once at main entry, not in every routine.");
+            Assert.IsFalse(generatedSource.Contains("ORA __NP_SP+1", StringComparison.Ordinal),
+                "Program routines must not repeat the lazy unit-entry stack check.");
+            StringAssert.Contains(generatedSource, "JSR I_ARRAY_INDEX_ADDR_STACK",
+                "General array addressing must use the shared NDK stack-base helper.");
+            int helloStart = generatedSource.IndexOf("\nHELLO:\n", StringComparison.Ordinal);
+            int helloEnd = generatedSource.IndexOf("\n__NP_R", helloStart + 1, StringComparison.Ordinal);
+            Assert.IsTrue(helloStart >= 0 && helloEnd > helloStart, generatedSource);
+            Assert.IsFalse(generatedSource[helloStart..helloEnd]
+                    .Contains("__NP_DISPLAY", StringComparison.Ordinal),
+                "A routine with no nested declarations must not maintain a lexical-display entry.");
+            StringAssert.Contains(generatedSource,
+                "NESTED:\nSTA NVR1L\nSTX NVR1H\nJSR P_FENTER\n.BYTE $02",
+                "A routine owning a nested procedure must identify its lexical-display slot to P_FENTER.");
+            StringAssert.Contains(generatedSource, "JSR P_FADDR\n.BYTE $02",
+                "A nested routine must address its owner's frame through the matching display slot.");
+            StringAssert.Contains(generatedSource, "\nPAIR:\n",
+                "O2 must retain routines whose parameter frames depend on a caller return address.");
+            StringAssert.Contains(generatedSource, "JSR PAIR",
+                "O2 must call framed routines until it has a dedicated frame-elision transform.");
+            disk.CurrentDirectory = "/";
+
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN INCLUDETEST");
+            RunUntil(cpu, bus, s => s.Contains("120", StringComparison.Ordinal)
+                                    && s.Split('\n').Count(line => line.Trim() == "44") == 2
+                                    && s.Contains("NP> ", StringComparison.Ordinal),
+                "Pascal include executable with recursive and nested frames");
+            string runScreen = Snapshot(bus);
+            Assert.AreEqual(2, runScreen.Split("Included source", StringSplitOptions.None).Length - 1,
+                "A retained parameterized procedure must execute once per call.");
+            Assert.AreEqual(1, runScreen.Split('\n').Count(line => line.Trim() == "7"), runScreen);
+            Assert.AreEqual(1, runScreen.Split('\n').Count(line => line.Trim() == "41"),
+                $"Generated frame assembly:\n{frameAssembly}\nScreen:\n{runScreen}");
+            Assert.AreEqual(1, runScreen.Split('\n').Count(line => line.Trim() == "42"), runScreen);
+            Assert.AreEqual(1, runScreen.Split('\n').Count(line => line.Trim() == "45"),
+                "Integer formals must receive two bytes even when their actual literals fit in one byte.\n" + runScreen);
+            Assert.AreEqual(1, runScreen.Split('\n').Count(line => line.Trim() == "120"),
+                "Recursive Real functions must preserve every lexical frame and return their result pointer in A/X.\n" + runScreen);
+            Assert.AreEqual(2, runScreen.Split('\n').Count(line => line.Trim() == "43"), runScreen);
+            Assert.AreEqual(2, runScreen.Split('\n').Count(line => line.Trim() == "44"), runScreen);
+        }
+        finally
+        {
+            try
+            {
+                File.Copy(Path.Combine(disks, "fd0.ndi"), "/tmp/include-debug.ndi", overwrite: true);
+            }
+            catch { }
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [TestMethod]
+    public void CompilerBuildsTurboPascalMicroCalcCompatibilityProject()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-microcalc-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            QueueLine(editor, "BUILD MICROCALC");
+            try
+            {
+                RunUntil(cpu, bus, s => s.Contains("Build complete: MICROCALC.BIN", StringComparison.Ordinal)
+                                           && s.Split('\n').Any(line => line.TrimEnd() == "NP>")
+                                        || s.Contains(": error:", StringComparison.Ordinal)
+                                        || s.Contains("File is too large for this command.", StringComparison.Ordinal)
+                                        || s.Contains("File I/O error.", StringComparison.Ordinal),
+                    "original Turbo Pascal MicroCalc build", instructionLimit: 1_000_000_000);
+            }
+            catch (AssertFailedException)
+            {
+                // Keep the worker state available to the focused failure report below.
+            }
+            string buildScreen = Snapshot(bus);
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.CurrentDirectory = "MICROCALC";
+            string artifactSizes = string.Join(", ", disk.ListDirectory(null)
+                .Where(entry => !entry.IsDirectory)
+                .Select(entry => $"{entry.Filename}{entry.Extension}={entry.SizeBytes}"));
+            Assert.IsTrue(buildScreen.Contains("Build complete: MICROCALC.BIN", StringComparison.Ordinal),
+                $"pc=${cpu.Pc:X4}, tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                $"link stage=${bus.Read(0x0D00):X2}, linker=${bus.Read(0x4723):X2}, " +
+                $"worker=${bus.Read(0x0903):X2}, objects={bus.Read(0x0901)}, " +
+                $"gc=${bus.Read(0x0D06):X2}/{bus.Read(0x0D07):X2}, symbol=${bus.Read(0x0D09):X2}{bus.Read(0x0D08):X2}, " +
+                $"unresolved={ReadMailboxText(bus, 0x928D, bus.Read(0x9268))}, " +
+                $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
+                $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, " +
+                $"fio=${bus.Read(0xB9A2):X2}, " +
+                $"source={ReadMailboxText(bus, 0x0800, 64)}, " +
+                $"paths={ReadMailboxText(bus, 0x0840, 64)}/{ReadMailboxText(bus, 0x08C0, 64)}, " +
+                $"artifacts: {artifactSizes}\n" +
+                buildScreen);
+
+            Assert.IsTrue(disk.FileExists("MICROCALC", ".BIN"),
+                "The compatibility project must produce a linked executable.");
+            byte[] executable = disk.Load("MICROCALC", ".BIN");
+            byte[] rootObject = disk.Load("MICROCALC", ".OBJ");
+            string generatedAssembly = Encoding.ASCII.GetString(disk.Load("MICROCALC", ".S"));
+            CollectionAssert.AreEqual("NBS1"u8.ToArray(), executable[^8..^4],
+                "MicroCalc's static runtime state must use the compact tail-BSS image format.");
+            int bssLength = executable[^4] | executable[^3] << 8;
+            Assert.IsTrue(bssLength > 0);
+            Assert.AreEqual((byte)~executable[^4], executable[^2]);
+            Assert.AreEqual((byte)~executable[^3], executable[^1]);
+            Assert.IsTrue((rootObject[10] | rootObject[11] << 8) > 255,
+                "The compatibility build must keep exercising NL's 16-bit symbol-table walk.");
+            StringAssert.Contains(generatedAssembly, "SCREENDATA: .RES $0005",
+                "Pascal must retain only the opaque XRAM descriptor in static BSS.");
+            Assert.IsFalse(generatedAssembly.Contains("SCREEN: .RES $2CCA", StringComparison.Ordinal),
+                "The 11,466-byte worksheet must not remain statically allocated in low RAM.");
+            StringAssert.Contains(generatedAssembly, "LDA #$CA\nLDX #$2C",
+                "The XRAM allocation must receive the exact 11,466-byte worksheet size.");
+            Assert.IsFalse(generatedAssembly.Contains("#$00PHX", StringComparison.Ordinal),
+                "NPC must terminate the hidden READ-size load before emitting its argument push.");
+            Assert.IsFalse(generatedAssembly.Contains("LDA NVR0L\nSTA NVR0L", StringComparison.Ordinal),
+                "O2 must remove compiler-scratch self-stores created by folded word operations.");
+            Assert.IsFalse(generatedAssembly.Contains("PHA\nPLA", StringComparison.Ordinal),
+                "O2 must remove generated no-op accumulator stack shuttles.");
+            int typedConstant = generatedAssembly.IndexOf("STANDARDFUNCTIONNAMES:", StringComparison.Ordinal);
+            int followingRoutine = generatedAssembly.IndexOf("__NP_R1B:", typedConstant, StringComparison.Ordinal);
+            int restoredCode = followingRoutine >= 0
+                ? generatedAssembly.LastIndexOf(".SEGMENT \"CODE\"", followingRoutine, StringComparison.Ordinal)
+                : -1;
+            Assert.IsTrue(typedConstant >= 0 && followingRoutine > typedConstant && restoredCode > typedConstant,
+                "A const section must restore CODE before emitting following routines; otherwise inline RODATA is executable fall-through.");
+
+            int generatedAssemblySize = disk.ListDirectory(null)
+                .Single(entry => entry.Filename.Equals("MC", StringComparison.OrdinalIgnoreCase)
+                                 && entry.Extension.Equals(".ASM", StringComparison.OrdinalIgnoreCase)).SizeBytes;
+            int combinedAssemblySize = disk.ListDirectory(null)
+                .Single(entry => entry.Filename.Equals("MICROCALC", StringComparison.OrdinalIgnoreCase)
+                                 && entry.Extension.Equals(".S", StringComparison.OrdinalIgnoreCase)).SizeBytes;
+            Assert.IsTrue(generatedAssemblySize > ushort.MaxValue && combinedAssemblySize > ushort.MaxValue,
+                "The compatibility corpus must keep exercising 24-bit directory sizes.");
+
+            disk.CurrentDirectory = "/";
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "CD MICROCALC");
+            RunUntil(cpu, bus, s => s.Split('\n').Any(line => line.TrimEnd() == "NP>"),
+                "MicroCalc directory before 24-bit listing");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "DIR");
+            RunUntil(cpu, bus, s => s.Contains($"{generatedAssemblySize,8}", StringComparison.Ordinal)
+                                    && s.Contains($"{combinedAssemblySize,8}", StringComparison.Ordinal)
+                                    && s.Split('\n').Any(line => line.TrimEnd() == "NP>"),
+                "MicroCalc 24-bit directory sizes");
+            string directoryScreen = Snapshot(bus);
+            StringAssert.Contains(directoryScreen, $"{generatedAssemblySize,8}",
+                "DIR must display MC.ASM's full 24-bit size instead of wrapping at 64 KiB.");
+            StringAssert.Contains(directoryScreen, $"{combinedAssemblySize,8}",
+                "DIR must display MICROCALC.S's full 24-bit size instead of wrapping at 64 KiB.");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "CD /");
+            RunUntil(cpu, bus, s => s.Split('\n').Any(line => line.TrimEnd() == "NP>"),
+                "shell root directory after 24-bit listing");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD MICROCALC");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: MICROCALC.BIN", StringComparison.Ordinal)
+                                       && s.Split('\n').Any(line => line.TrimEnd() == "NP>")
+                                    || s.Contains(": error:", StringComparison.Ordinal),
+                "repeat MicroCalc build", instructionLimit: 1_000_000_000);
+            string repeatBuildScreen = Snapshot(bus);
+            Assert.IsTrue(repeatBuildScreen.Contains("Build complete: MICROCALC.BIN", StringComparison.Ordinal),
+                "A completed toolchain pass must release every XRAM allocation needed by the next build.\n" +
+                repeatBuildScreen);
+            disk.CurrentDirectory = "/";
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "PWD");
+            RunUntil(cpu, bus, s => s.Contains($"{disk.Prefix}:/", StringComparison.Ordinal)
+                                    && s.Split('\n').Any(line => line.TrimEnd() == "NP>"),
+                "shell root directory before MicroCalc run");
+            StringAssert.Contains(Snapshot(bus), $"{disk.Prefix}:/",
+                "The shell and mounted project disk must agree on the caller directory before RUN.");
+            int pagesBeforeRun = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+                                 | bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8;
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN MICROCALC");
+            RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                "original Turbo Pascal MicroCalc welcome input");
+            string welcomeScreen = Snapshot(bus);
+            StringAssert.Contains(welcomeScreen, "Welcome to MicroCalc",
+                $"The linked compatibility executable must reach its original UI; " +
+                $"exec status=${bus.Read(0x0302):X2}, detail=${bus.Read(0x0314):X2}.\n{welcomeScreen}");
+            editor.QueueInput(0x0D);
+            RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                "MicroCalc worksheet and command input");
+            string worksheetScreen = Snapshot(bus);
+            StringAssert.Contains(worksheetScreen, "Type / for Commands",
+                "MicroCalc must finish drawing its worksheet before waiting for a command.");
+            Assert.IsTrue(worksheetScreen.Split('\n')[1].StartsWith(" 1", StringComparison.Ordinal),
+                "Write(I:2) must right-align one-digit row labels instead of discarding the field width.");
+            Assert.IsFalse(worksheetScreen.Contains("0.00", StringComparison.Ordinal),
+                "Fresh cells are text cells with empty contents; navigating to one must not expose its zero-valued numeric storage.\n" +
+                worksheetScreen);
+            int pagesDuringRun = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+                                  | bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8;
+            Assert.IsTrue(pagesDuringRun >= pagesBeforeRun + 45,
+                "The worksheet must occupy a managed XRAM allocation rather than hidden low-RAM storage.");
+            int contextAddress = -1;
+            var namedBlocks = new System.Collections.Generic.List<string>();
+            bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNDirOpen);
+            while (bus.Read((ushort)VgcConstants.XmcStatus) == VgcConstants.XmcStatusOk)
+            {
+                int nameLength = bus.Read((ushort)VgcConstants.XmcNameLen);
+                string name = new(Enumerable.Range(0, nameLength)
+                    .Select(index => (char)bus.Read((ushort)(VgcConstants.XmcName + index))).ToArray());
+                int address = bus.Read((ushort)VgcConstants.XmcAddrL)
+                              | bus.Read((ushort)VgcConstants.XmcAddrM) << 8
+                              | bus.Read((ushort)VgcConstants.XmcAddrH) << 16;
+                namedBlocks.Add($"{name}@${address:X6}");
+                if (name.Equals("__NPSH.CWD", StringComparison.Ordinal))
+                {
+                    contextAddress = address;
+                    break;
+                }
+
+                bus.Write((ushort)VgcConstants.XmcCmd, VgcConstants.XmcCmdNDirRead);
+            }
+            Assert.IsTrue(contextAddress >= 0,
+                $"RUN project must retain its named shell-directory context while the application executes. " +
+                $"Named blocks: {string.Join(", ", namedBlocks)}; used pages=" +
+                $"{bus.Read((ushort)VgcConstants.XmcPagesUsedL) | bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8}.");
+            byte[] expectedRunCwd = Encoding.ASCII.GetBytes($"{disk.Prefix}:/");
+            byte[] actualRunCwd = Enumerable.Range(0, expectedRunCwd.Length)
+                .Select(offset => bus.ReadXram(contextAddress + offset)).ToArray();
+            CollectionAssert.AreEqual(expectedRunCwd, actualRunCwd,
+                $"RUN project must preserve its caller directory at XRAM ${contextAddress:X6}; " +
+                $"actual={Convert.ToHexString(actualRunCwd)}.");
+            Assert.AreEqual(expectedRunCwd.Length, bus.ReadXram(contextAddress + 64),
+                "The saved shell directory context must retain its path length after executable staging.");
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc help command menu");
+            editor.QueueInput((byte)'H');
+            RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                "project-local MicroCalc help first page");
+            string firstHelpScreen = Snapshot(bus);
+            StringAssert.Contains(firstHelpScreen, "INTRODUCTION",
+                "RUN project must leave the application in its project directory so relative help/data files resolve.");
+            StringAssert.Contains(firstHelpScreen,
+                "provided with the TURBO-Pascal system as an example program.",
+                "ReadLn must preserve the byte whose destination crosses a 256-byte page boundary.");
+            StringAssert.Contains(firstHelpScreen,
+                "Full set of mathematical functions (SIN,COS,LN,EXP etc.)",
+                "Indexed local-string output must reproduce every character read from disk.");
+            bool helpComplete = false;
+            bool sawExamplesPage = false;
+            for (int page = 0; page < 12; page++)
+            {
+                string helpScreen = Snapshot(bus);
+                if (helpScreen.Contains("EXAMPLES", StringComparison.Ordinal))
+                {
+                    sawExamplesPage = true;
+                    Assert.AreEqual(1,
+                        helpScreen.Split("try MicroCalc now", StringSplitOptions.None).Length - 1,
+                        "ReadLn and Eof must treat CP/M $1A as logical EOF instead of displaying stale record padding.\n" +
+                        helpScreen);
+                    Assert.AreEqual(1,
+                        helpScreen.Split("CALCDEMO.", StringSplitOptions.None).Length - 1,
+                        "The final help page must not display bytes beyond CP/M logical EOF.\n" + helpScreen);
+                }
+                if (helpScreen.Contains("<RETURN> to start MicroCalc", StringComparison.Ordinal))
+                {
+                    editor.QueueInput(0x0D);
+                    RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                        "MicroCalc worksheet after help");
+                    helpComplete = true;
+                    break;
+                }
+
+                StringAssert.Contains(helpScreen, "Please press any key to continue",
+                    "Every non-final help page must pause before advancing.");
+                editor.QueueInput((byte)' ');
+                RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                    $"MicroCalc help page {page + 2}");
+            }
+            Assert.IsTrue(sawExamplesPage,
+                "MicroCalc help must display and validate its final content page.");
+            Assert.IsTrue(helpComplete,
+                "MicroCalc help must reach its final Return prompt and resume the worksheet.\n" + Snapshot(bus));
+
+            string highlightedCells = string.Join(", ", Enumerable.Range(0, VgcConstants.ScreenSize)
+                .Where(cell => bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, cell, out byte color)
+                    && color == 0xF0)
+                .Select(cell => $"({cell % VgcConstants.ScreenCols},{cell / VgcConstants.ScreenCols})"));
+            for (int col = 2; col < 13; col++)
+            {
+                int cell = VgcConstants.ScreenCols + col;
+                Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, cell, out byte color));
+                Assert.AreEqual(0xF0, color,
+                    "HighVideo must render the entire active A1 field as an opaque white input bar. " +
+                    $"Cursor=({bus.Read((ushort)VgcConstants.RegCursorX)}," +
+                    $"{bus.Read((ushort)VgcConstants.RegCursorY)}); opaque white cells: {highlightedCells}");
+            }
+            editor.QueueInput((byte)'6');
+            RunUntil(cpu, bus, _ =>
+                    bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceScreen,
+                        23 * VgcConstants.ScreenCols, out byte first) && first == (byte)'6',
+                "MicroCalc first numeric-entry character");
+            editor.QueueInput((byte)'9');
+            RunUntil(cpu, bus, _ =>
+                    bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceScreen,
+                        23 * VgcConstants.ScreenCols + 1, out byte second) && second == (byte)'9',
+                "MicroCalc second numeric-entry character");
+            editor.QueueInput(0x0D);
+            RunUntil(cpu, bus, s => s.Contains("69.00", StringComparison.Ordinal)
+                                    || s.Contains("Error at cursor", StringComparison.Ordinal),
+                "MicroCalc numeric-entry commit");
+            StringAssert.Contains(Snapshot(bus), "69.00",
+                "Typing 69 followed by Enter must commit the value and return to the worksheet loop.");
+            editor.QueueInput(0x1F);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorY) == 2,
+                "MicroCalc down-arrow navigation");
+            Assert.AreEqual(2, bus.Read((ushort)VgcConstants.RegCursorY),
+                "Read(Kbd, Ch) must translate Nova's down-arrow byte to Turbo Pascal's ^X binding.");
+            Assert.IsFalse(Snapshot(bus).Contains("0.00", StringComparison.Ordinal),
+                "Moving onto a fresh cell must leave it visually empty.");
+            for (int col = 2; col < 13; col++)
+            {
+                int oldCell = VgcConstants.ScreenCols + col;
+                int activeCell = 2 * VgcConstants.ScreenCols + col;
+                Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, oldCell, out byte oldColor));
+                Assert.IsTrue(bus.Vgc.TryReadMemorySpace(VgcConstants.MemSpaceColor, activeCell, out byte activeColor));
+                Assert.AreEqual(0x07, oldColor,
+                    "Leaving an empty cell must repaint its reverse-video spaces with the normal attribute.");
+                Assert.AreEqual(0xF0, activeColor,
+                    "Only the current worksheet cell may retain the reverse-video input bar.");
+            }
+
+            editor.QueueInput(0x1D);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorX) == 13,
+                "MicroCalc right-arrow navigation");
+            editor.QueueInput(0x1E);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorY) == 1,
+                "MicroCalc up-arrow navigation");
+            editor.QueueInput(0x1C);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorX) == 2,
+                "MicroCalc left-arrow navigation");
+            editor.QueueInput(0x1F);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorY) == 2,
+                "MicroCalc return to A2");
+
+            QueueLine(editor, "2+3*4");
+            RunUntil(cpu, bus, s => s.Contains("14.00", StringComparison.Ordinal)
+                                    || s.Contains("Error at cursor", StringComparison.Ordinal),
+                "MicroCalc operator precedence");
+            StringAssert.Contains(Snapshot(bus), "14.00",
+                "MicroCalc must evaluate multiplication before addition.");
+
+            editor.QueueInput(0x1F);
+            RunUntil(cpu, bus, _ => bus.Read((ushort)VgcConstants.RegCursorY) == 3,
+                "MicroCalc navigation to A3");
+            QueueLine(editor, "+SQRT(4)");
+            RunUntil(cpu, bus, s => s.Contains("2.00", StringComparison.Ordinal)
+                                    || s.Contains("Error at cursor", StringComparison.Ordinal),
+                "MicroCalc standard function");
+            StringAssert.Contains(Snapshot(bus), "2.00",
+                "Delete must remove the leading plus before standard-function parsing.");
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc save command menu");
+            editor.QueueInput((byte)'S');
+            RunUntil(cpu, bus, s => s.Contains("Save: Enter filename", StringComparison.Ordinal),
+                "MicroCalc save filename prompt");
+            foreach (byte value in "TEST"u8)
+                editor.QueueInput(value);
+            RunUntil(cpu, bus, s => s.Contains("Save: Enter filename  TEST", StringComparison.Ordinal),
+                "MicroCalc character-valued UpCase filename echo");
+            editor.QueueInput(0x0D);
+            RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                "MicroCalc worksheet input after save");
+            disk.CurrentDirectory = "MICROCALC";
+            Assert.IsTrue(disk.FileExists("TEST", ".MCS"),
+                "Typed-file Rewrite must create relative application data inside the running project directory.");
+            Assert.AreEqual(7 * 21 * 78, disk.Load("TEST", ".MCS").Length,
+                "Typed-file Write must serialize every CellRec exactly once.");
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc clear command menu");
+            editor.QueueInput((byte)'C');
+            RunUntil(cpu, bus, s => s.Contains("Clear this worksheet?", StringComparison.Ordinal),
+                "MicroCalc clear confirmation");
+            editor.QueueInput((byte)'Y');
+            RunUntilModuleCall(cpu, bus, 0x03, 0x0B,
+                "MicroCalc worksheet input after clear");
+            string clearedScreen = Snapshot(bus);
+            Assert.IsFalse(clearedScreen.Contains("69.00", StringComparison.Ordinal));
+            Assert.IsFalse(clearedScreen.Contains("14.00", StringComparison.Ordinal));
+            Assert.IsFalse(clearedScreen.Contains("2.00", StringComparison.Ordinal));
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc load command menu");
+            editor.QueueInput((byte)'L');
+            RunUntil(cpu, bus, s => s.Contains("Load: Enter filename", StringComparison.Ordinal),
+                "MicroCalc load filename prompt");
+            QueueLine(editor, "TEST");
+            RunUntil(cpu, bus, s => s.Contains("69.00", StringComparison.Ordinal)
+                                    && s.Contains("14.00", StringComparison.Ordinal)
+                                    && s.Contains("2.00", StringComparison.Ordinal)
+                                    || s.Contains("File not Found", StringComparison.Ordinal),
+                "MicroCalc restored worksheet after load");
+            string loadedScreen = Snapshot(bus);
+            StringAssert.Contains(loadedScreen, "69.00");
+            StringAssert.Contains(loadedScreen, "14.00");
+            StringAssert.Contains(loadedScreen, "2.00");
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc format command menu");
+            editor.QueueInput((byte)'F');
+            RunUntil(cpu, bus, s => s.Contains("Format: Enter number of decimals", StringComparison.Ordinal),
+                "MicroCalc decimal-format prompt");
+            QueueLine(editor, "1");
+            RunUntil(cpu, bus, s => s.Contains("Enter Cell whith", StringComparison.Ordinal),
+                "MicroCalc field-width prompt");
+            QueueLine(editor, "8");
+            RunUntil(cpu, bus, s => s.Contains("From which line in column A", StringComparison.Ordinal),
+                "MicroCalc first formatted row prompt");
+            QueueLine(editor, "1");
+            RunUntil(cpu, bus, s => s.Contains("To which line in column A", StringComparison.Ordinal),
+                "MicroCalc last formatted row prompt");
+            QueueLine(editor, "3");
+            RunUntil(cpu, bus, s => s.Contains("69.0", StringComparison.Ordinal)
+                                    && s.Contains("14.0", StringComparison.Ordinal)
+                                    && s.Contains("2.0", StringComparison.Ordinal)
+                                    && !s.Contains("69.00", StringComparison.Ordinal),
+                "MicroCalc worksheet after formatting");
+            string formattedScreen = Snapshot(bus);
+            StringAssert.Contains(formattedScreen, "69.0");
+            StringAssert.Contains(formattedScreen, "14.0");
+            StringAssert.Contains(formattedScreen, "2.0");
+            Assert.IsFalse(formattedScreen.Contains("69.00", StringComparison.Ordinal),
+                "Write(Value:FW:DEC) must honor the cell's selected decimal precision.\n" + formattedScreen);
+
+            editor.QueueInput((byte)'/');
+            RunUntil(cpu, bus, s => s.Contains("restore, Quit", StringComparison.Ordinal),
+                "MicroCalc command menu");
+            StringAssert.Contains(Snapshot(bus), "restore, Quit",
+                "The slash command must display MicroCalc's command menu.");
+            editor.QueueInput((byte)'Q');
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal),
+                "Pascal Halt from a nested procedure must return to the shell");
+            Assert.IsTrue(Snapshot(bus).Split('\n').Any(line => line.TrimEnd() == "NP>"),
+                "A returning application must receive a fresh shell prompt line even when it exits mid-line.");
+            Assert.AreEqual("/", disk.CurrentDirectory,
+                "The shell must restore the directory from which RUN project was issued after application RAM is discarded. " +
+                $"Fetched RAM=${bus.Read(0x1CA6):X2}/{bus.Read(0x1CE6):X2}, " +
+                $"XRAM=${bus.ReadXram(contextAddress):X2}/{bus.ReadXram(contextAddress + 64):X2}, status=${bus.Read(0x0302):X2}.");
+            int pagesAfterRun = bus.Read((ushort)VgcConstants.XmcPagesUsedL)
+                                 | bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8;
+            Assert.AreEqual(pagesBeforeRun, pagesAfterRun,
+                "XRamFree and RUN cleanup must release both the worksheet and shell context allocations.");
+            Assert.IsTrue(executable.Length <= 26_000,
+                $"Dynamic worksheet storage and tail-BSS compaction should keep MicroCalc below 26,000 bytes; got {executable.Length} bytes.");
+        }
+        finally
+        {
+            try
+            {
+                File.Copy(Path.Combine(disks, "fd0.ndi"), "/tmp/microcalc-debug.ndi", overwrite: true);
+            }
+            catch { }
             try { Directory.Delete(root, recursive: true); } catch { }
         }
     }
@@ -2003,9 +3062,10 @@ public class NovaPascalTests
         editor.QueueInput(0x0D);
     }
 
-    private static void RunUntil(Cpu cpu, CompositeBusDevice bus, Func<string, bool> predicate, string expected)
+    private static void RunUntil(Cpu cpu, CompositeBusDevice bus, Func<string, bool> predicate, string expected,
+        int instructionLimit = 200_000_000)
     {
-        for (int i = 0; i < 200_000_000; i++)
+        for (int i = 0; i < instructionLimit; i++)
         {
             int cycles = cpu.ClocksForNext();
             cpu.ExecuteNext();
@@ -2014,11 +3074,42 @@ public class NovaPascalTests
                 return;
         }
 
-        Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}, " +
+        CpuState state = cpu.GetState();
+        string stack = string.Join(' ', Enumerable.Range(1, Math.Min(16, 0xFF - state.Sp))
+            .Select(offset => bus.Read((ushort)(0x0100 | (byte)(state.Sp + offset))).ToString("X2")));
+        Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}, SP=${state.Sp:X2}, " +
+                    $"exec SP=${bus.Read(0x031F):X2}, stack={stack}, " +
+                    $"module=${bus.Read(0x0300):X2}, function=${bus.Read(0x0301):X2}, " +
                     $"tool status=${bus.Read(0x0275):X2}, detail=${bus.Read(0x0276):X2}, " +
+                    $"xram used={bus.Read(0xBA0E) | bus.Read(0xBA0F) << 8}, " +
+                    $"free={bus.Read(0xBA10) | bus.Read(0xBA11) << 8}, " +
                     $"line={bus.Read(0x02F3) | bus.Read(0x02F4) << 8}, " +
                     $"column={bus.Read(0x02F5) | bus.Read(0x02F6) << 8}, " +
                     $"source={ReadMailboxText(bus, 0x0800, 64)}\n{Snapshot(bus)}");
+    }
+
+    private static void RunUntilModuleCall(Cpu cpu, CompositeBusDevice bus, byte moduleId, byte functionId,
+        string expected, int instructionLimit = 200_000_000)
+    {
+        bool leftCurrentCall = !(bus.Read(0x0300) == moduleId && bus.Read(0x0301) == functionId &&
+                                 cpu.Pc is >= 0xC000 and < 0xF000);
+        for (int i = 0; i < instructionLimit; i++)
+        {
+            bool inCall = bus.Read(0x0300) == moduleId && bus.Read(0x0301) == functionId &&
+                          cpu.Pc is >= 0xC000 and < 0xF000;
+            if (!inCall)
+                leftCurrentCall = true;
+            else if (leftCurrentCall)
+                return;
+
+            int cycles = cpu.ClocksForNext();
+            cpu.ExecuteNext();
+            bus.AdvanceCycles(cycles);
+        }
+
+        Assert.Fail($"Timed out waiting for {expected}. PC=${cpu.Pc:X4}, " +
+                    $"module=${bus.Read(0x0300):X2}, function=${bus.Read(0x0301):X2}, " +
+                    $"irq enable=${bus.Read(0xA0F0):X2}, status=${bus.Read(0xA0F1):X2}.\n{Snapshot(bus)}");
     }
 
     private static string ReadMailboxText(CompositeBusDevice bus, ushort address, int capacity)

@@ -42,8 +42,10 @@ internal static class TextPixelRenderer
             (fgColor, cellBgColor) = (cellBgColor, fgColor);
 
         bool isCursor = cursorEnabled && col == cursorX && displayRow == cursorY;
-        if (isCursor)
-            (fgColor, cellBgColor) = (cellBgColor, fgColor);
+        bool bgTransparent = (textAttr & VgcConstants.TextAttrBgTransparent) != 0;
+        byte resolvedBgColor = bgTransparent
+            ? (byte)(bgColor & 0x0F)
+            : cellBgColor;
 
         int glyphX = srcPx % BitmapFont.GlyphWidth;
         int glyphY = srcPy % BitmapFont.GlyphHeight;
@@ -54,14 +56,15 @@ internal static class TextPixelRenderer
         if ((textAttr & VgcConstants.TextAttrFlash) != 0 && !flashVisible)
             set = false;
 
-        bool bgTransparent = (textAttr & VgcConstants.TextAttrBgTransparent) != 0;
         if (mode == VgcConstants.ModeTextOverGfx && !set && !isCursor && !reverse && bgTransparent)
         {
             colorIndex = 0;
             return false;
         }
 
-        colorIndex = set ? fgColor : cellBgColor;
+        colorIndex = isCursor
+            ? set ? resolvedBgColor : fgColor
+            : set ? fgColor : resolvedBgColor;
         return true;
     }
 

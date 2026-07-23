@@ -104,6 +104,15 @@ SYS_DIALOG          = $08 ; (title,msg,footer,geom)     -> draw the modal dialog
 SYS_DIALOG_WAIT     = $09 ; (title,msg,footer,geom)     -> draw the modal dialog, then wait one key
 SYS_DIALOG_ERROR    = $0A ; (title,msg,footer,geom)     -> draw a modal error dialog + wait one key
 SYS_WAIT_KEY        = $0B ; ()  reporter                -> RESULT b0 = the pressed key byte
+
+; Canonical key bytes returned by SYS_WAIT_KEY. Applications that need a
+; platform-neutral cursor vocabulary should use these instead of terminal
+; escape sequences or host-specific scan codes.
+SYS_KEY_LEFT  = $1C
+SYS_KEY_RIGHT = $1D
+SYS_KEY_UP    = $1E
+SYS_KEY_DOWN  = $1F
+
 SYS_NUI_SAVE_UNDER    = $13 ; (geom,charbuf,colorbuf,attrbuf) -> save text planes into XRAM
 SYS_NUI_RESTORE_UNDER = $14 ; (geom,charbuf,colorbuf,attrbuf) -> restore saved text planes
 SYS_NUI_PICK_LIST     = $15 ; (configptr) reporter -> RESULT b0 selected, b1 OK/CANCEL
@@ -113,6 +122,7 @@ SYS_NUI_SET_STYLE          = $18 ; (shadow,border,panel,text) -> set NUI chrome/
 SYS_NUI_FILE_PICKER        = $19 ; (configptr) reporter -> RESULT b0 namelen, b1 OK/CANCEL
 SYS_NUI_TEXT_INPUT         = $1A ; (configptr) reporter -> RESULT b0 textlen, b1 OK/CANCEL
 SYS_NUI_DRAIN_KEYS         = $1B ; () -> drain pending modal keyboard bytes
+SYS_CONSOLE_CLEAR_EOL      = $1C ; () -> clear cursor through end of text row
 
 ; =====================================================================
 ; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
@@ -157,6 +167,6 @@ SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer f
 
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $1C
+SYS_FN_COUNT  = $1D
 
 .endif

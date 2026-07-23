@@ -59,25 +59,32 @@ public class BootLibrariesTests
     }
 
     [TestMethod]
-    public void StagedBootConfig_IncludesEditorLibraryWithoutFixedBases()
+    public void StagedBootConfig_IncludesResidentToolLibrariesWithoutFixedBases()
     {
         string json = File.ReadAllText(RepoPath("e6502.ESP32", "novahost", "assets", "config", "boot.json"));
         JsonObject cfg = JsonNode.Parse(json)!.AsObject();
         JsonArray libs = cfg["libraries"]!.AsArray();
 
         JsonObject? editor = null;
+        JsonObject? langrt = null;
         foreach (JsonNode? node in libs)
         {
             JsonObject lib = node!.AsObject();
             Assert.IsNull(lib["base"], "firmware assigns shelf slots; boot library entries must not pin XRAM bases");
             if ((string?)lib["name"] == "editor")
                 editor = lib;
+            if ((string?)lib["name"] == "langrt")
+                langrt = lib;
         }
 
         Assert.IsNotNull(editor, "hardware boot config must catalog editor.nmod for EDITOR module calls");
         Assert.AreEqual(8, (int)editor!["id"]!);
         Assert.AreEqual("/lib/editor.nmod", (string?)editor["path"]);
         Assert.AreEqual(16384, (int)editor["size"]!);
+        Assert.IsNotNull(langrt, "hardware boot config must catalog langrt.nmod for compiled-language calls");
+        Assert.AreEqual(9, (int)langrt!["id"]!);
+        Assert.AreEqual("/lib/langrt.nmod", (string?)langrt["path"]);
+        Assert.AreEqual(16384, (int)langrt["size"]!);
     }
 
     private static string RepoPath(params string[] parts)

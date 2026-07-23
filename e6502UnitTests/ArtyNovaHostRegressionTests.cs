@@ -325,6 +325,112 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxNfioStreamingFiles_HonorCurrentDirectoryAndPascalProjectType()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+        string host = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        StringAssert.Contains(src, "#define DT_PASCAL_PROJECT 10",
+            "Linux NovaHost must preserve the shared NDI type value for .NPP files.");
+        StringAssert.Contains(src, "if (!strncasecmp(d, \".npp\", 5)) return DT_PASCAL_PROJECT;",
+            "Files created by the editor must remain Pascal projects instead of becoming BIN files.");
+        StringAssert.Contains(src, "int rooted = (*in == '/');",
+            "A leading slash must remain meaningful after path normalization.");
+        StringAssert.Contains(src, "if (rooted || strchr(in, '/')) snprintf(path, psz, \"%s\", in);",
+            "Slash-qualified UNITPATH files must resolve from the disk root while bare project files use CWD.");
+        foreach (string handler in new[] { "fio_xload", "fio_xpage", "fio_fopen" })
+        {
+            int start = src.IndexOf($"void {handler}(void)", StringComparison.Ordinal);
+            int end = src.IndexOf("\n}", start, StringComparison.Ordinal);
+            Assert.IsTrue(start >= 0 && end > start, $"Linux NovaHost must keep {handler}.");
+            StringAssert.Contains(src[start..end], "nfio_resolve_file(name",
+                $"{handler} must resolve files through the current project directory.");
+        }
+
+        int createStart = src.IndexOf("void fio_fcreate(void)", StringComparison.Ordinal);
+        int createEnd = src.IndexOf("\n}", createStart, StringComparison.Ordinal);
+        Assert.IsTrue(createStart >= 0 && createEnd > createStart, "Linux NovaHost must keep fio_fcreate.");
+        string create = src[createStart..createEnd];
+        StringAssert.Contains(create, "int slot = nfio_resolve(name",
+            "FCREATE must place generated files in the current project directory.");
+        StringAssert.Contains(create, "g_fh[h].wparent = parent",
+            "FCREATE must retain the resolved parent until FCLOSE commits the file.");
+        StringAssert.Contains(src, "slot_image(g_fh[h].slot)",
+            "Open handles must continue reading or committing on the drive they resolved against.");
+
+        int saveStart = src.IndexOf("void fio_xsave(void)", StringComparison.Ordinal);
+        int saveEnd = src.IndexOf("\n}", saveStart, StringComparison.Ordinal);
+        Assert.IsTrue(saveStart >= 0 && saveEnd > saveStart,
+            "Linux NovaHost must implement the XRAM save command used by NAS preprocessing.");
+        string save = src[saveStart..saveEnd];
+        StringAssert.Contains(save, "int slot = nfio_resolve(name",
+            "XSAVE must write generated assembler files into the current project directory.");
+        StringAssert.Contains(save, "xram_read(xaddr, g_fbuf, len)",
+            "XSAVE must copy the requested XRAM range into the generated file.");
+        StringAssert.Contains(save, "fio_name_type(fname)",
+            "XSAVE must preserve the shared NDI type for generated assembler files.");
+        StringAssert.Contains(host, "#define FIO_CMD_XSAVE       0x19",
+            "The Linux host must recognize the shared XSAVE command number.");
+        StringAssert.Contains(host, "case FIO_CMD_XSAVE:       fio_xsave();",
+            "The Linux host dispatcher must route XSAVE instead of reporting file-not-found.");
+    }
+
+    [TestMethod]
+    public void LinuxNfioStreamingFiles_ImplementTheCompleteExactFileCommandBlock()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+        string header = File.ReadAllText(LinuxNovaVmSrc("nfio.h"));
+        string host = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        var commands = new[]
+        {
+            (Name: "FRESIZE", Value: "0x35", Handler: "fio_fresize"),
+            (Name: "FFLUSH", Value: "0x36", Handler: "fio_fflush"),
+            (Name: "FSTATUS", Value: "0x37", Handler: "fio_fstatus"),
+            (Name: "FDELETE", Value: "0x38", Handler: "fio_fdelete"),
+            (Name: "FRENAME", Value: "0x39", Handler: "fio_frename")
+        };
+        foreach (var command in commands)
+        {
+            StringAssert.Contains(host, $"#define FIO_CMD_{command.Name}",
+                $"Arty must recognize the shared {command.Name} command.");
+            StringAssert.Contains(host, $"case FIO_CMD_{command.Name}:",
+                $"Arty must dispatch {command.Name} instead of returning a misleading file-not-found error.");
+            StringAssert.Contains(header, $"void {command.Handler}(void);",
+                $"The Linux NovaHost interface must expose {command.Handler}.");
+            StringAssert.Contains(src, $"void {command.Handler}(void)",
+                $"The Linux NovaHost must implement {command.Handler} ({command.Value}).");
+        }
+
+        StringAssert.Contains(src, "fio_read_cpu_name(new_name",
+            "FRENAME must read its destination from the shared CPU-pointer ABI.");
+        StringAssert.Contains(src, "fio_name_type(new_leaf)",
+            "Renaming optimizer output to .S must update its visible NDI file type to assembly.");
+        StringAssert.Contains(src, "if (old_slot != new_slot)",
+            "Exact rename must reject cross-device moves before switching the host's single mounted-image cache.");
+        StringAssert.Contains(src, "old_entry.start_sector",
+            "Large-file rename must retain the existing data sectors instead of copying the whole file through RAM.");
+    }
+
+    [TestMethod]
+    public void LinuxHost_RngCommandUsesKernelEntropy()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        StringAssert.Contains(src, "#define FIO_CMD_RNG         0x2A",
+            "The Linux host must recognize the RNG command used by the shared NDK.");
+        StringAssert.Contains(src, "getrandom(out + done, sizeof value - done, 0)",
+            "Hardware programs need real host entropy instead of deterministic or uninitialized seed bytes.");
+        foreach (string register in new[] { "FIO_SRC_LO", "FIO_SRC_HI", "FIO_END_LO", "FIO_END_HI" })
+        {
+            StringAssert.Contains(src, $"poke({register},",
+                $"RNG must populate the shared four-byte mailbox, including {register}.");
+        }
+        StringAssert.Contains(src, "case FIO_CMD_RNG:         fio_rng();",
+            "The FIO dispatcher must route NDK random requests to kernel entropy.");
+    }
+
+    [TestMethod]
     public void LinuxNfio_ReopensCachedImageWhenMountedNdiIsReplaced()
     {
         string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
@@ -363,6 +469,23 @@ public class ArtyNovaHostRegressionTests
             "Linux LOAD_MODULE must stream the module into the requested XRAM shelf slot before PGD page-in.");
         StringAssert.Contains(src, "load_module(id, slot)",
             "The FIO dispatch must pass FIO_END_LO's victim slot to load_module.");
+    }
+
+    [TestMethod]
+    public void ArtyHosts_AcceptEveryGeneratedModuleIncludingLangrt()
+    {
+        string linux = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+        string bareMetal = File.ReadAllText(ArtySrc("main.c"));
+        string embedded = File.ReadAllText(LinuxNovaVmSrc("modules_embedded.h"));
+
+        StringAssert.Contains(embedded, "#define EMBEDDED_MOD_COUNT 10",
+            "The generated Arty module table must include module ID 9 instead of silently capping hosts at the editor module.");
+        StringAssert.Contains(embedded, "MOD_LANGRT",
+            "Pascal Real operations require the shared LANGRT module on hardware, not only in the desktop emulator.");
+        StringAssert.Contains(linux, "id >= EMBEDDED_MOD_COUNT",
+            "The Linux host must validate IDs against its generated table so future modules cannot be rejected by a stale literal bound.");
+        StringAssert.Contains(bareMetal, "id >= EMBEDDED_MOD_COUNT",
+            "The bare-metal host must use the same generated module bound as Linux.");
     }
 
     [TestMethod]
@@ -415,6 +538,23 @@ public class ArtyNovaHostRegressionTests
             "Cold boot must clear stale story data, XMC heap bitmap, and allocator metadata from PS-DDR XRAM.");
         StringAssert.Contains(src, "clear_cold_xram();\n    clear_runtime_low_ram();",
             "Cold boot must clear XRAM before releasing the 6502 so NovaZ allocations start from deterministic addresses.");
+    }
+
+    [TestMethod]
+    public void LinuxSharedXram_PublishesTransfersBeforeSignalingThe6502()
+    {
+        string fio = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+        string host = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        StringAssert.Contains(fio,
+            "memcpy((void *)(g_xram + off), src, n);\n    /* Publish every DDR store before FIO_OK lets the 6502 consume it. */\n    __sync_synchronize();",
+            "XLOAD/XPAGE must publish shared-DDR writes before FIO_OK releases the 6502 consumer.");
+        StringAssert.Contains(fio,
+            "/* Observe every PL write before the ARM copies shared DDR out. */\n    __sync_synchronize();\n    memcpy(dst, (const void *)(g_xram + off), n);",
+            "XSAVE/FWRITE must order PL writes before the ARM reads shared DDR.");
+        StringAssert.Contains(host,
+            "memcpy((void *)(g_xram + SHELF_BASE + (unsigned)slot * SHELF_SLOT), img, MODULE_BYTES);\n    __sync_synchronize();",
+            "A module shelf entry must be complete before the 6502 can record or page it in.");
     }
 
     [TestMethod]

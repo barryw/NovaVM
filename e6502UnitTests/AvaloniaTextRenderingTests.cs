@@ -117,6 +117,35 @@ public class AvaloniaTextRenderingTests
     }
 
     [TestMethod]
+    public void TextPixelRenderer_TransparentCellUsesLiveBackgroundInTextMode()
+    {
+        var vgc = new VirtualGraphicsController();
+        var font = SinglePixelAFont();
+        WriteTextCell(vgc, 0, (byte)'A', colorAttr: 0x42,
+            textAttr: VgcConstants.TextAttrBgTransparent);
+
+        bool opaque = TextPixelRenderer.TrySample(
+            vgc,
+            font,
+            px: 1,
+            py: 0,
+            mode: 0,
+            scrollX: 0,
+            scrollY: 0,
+            bgColor: 6,
+            fontIndex: 0,
+            flashVisible: true,
+            cursorX: 10,
+            cursorY: 10,
+            cursorEnabled: false,
+            out byte colorIndex);
+
+        Assert.IsTrue(opaque);
+        Assert.AreEqual(6, colorIndex,
+            "Transparent text cells must follow the live screen background in text mode too.");
+    }
+
+    [TestMethod]
     public void TextPixelRenderer_Mode2KeepsMatchingCellBackgroundOpaqueWithoutTransparentAttr()
     {
         var vgc = new VirtualGraphicsController();

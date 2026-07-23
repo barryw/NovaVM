@@ -562,12 +562,24 @@ public class AvaloniaVgcTests
     [TestMethod]
     public void CharOut_WritesPackedTextColor()
     {
-        _vgc.Write(VgcConstants.RegBgCol, 4);
+        _vgc.Write(VgcConstants.RegTextBackground, 4);
         _vgc.Write(VgcConstants.RegFgCol, 2);
 
         _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
 
         Assert.AreEqual(0x42, _vgc.GetScreenColor(0, 0));
+    }
+
+    [TestMethod]
+    public void CharOut_OpaqueTextBackgroundMatchesFpgaCellAttributes()
+    {
+        _vgc.Write(VgcConstants.RegTextBackground, 0x0F);
+        _vgc.Write(VgcConstants.RegFgCol, 0);
+
+        _vgc.Write(VgcConstants.RegCharOut, (byte)' ');
+
+        Assert.AreEqual(0xF0, _vgc.GetScreenColor(0, 0));
+        Assert.AreEqual(0, _vgc.GetScreenTextAttr(0, 0) & VgcConstants.TextAttrBgTransparent);
     }
 
     [TestMethod]
@@ -580,6 +592,8 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegCharOut, (byte)'A');
 
         Assert.AreEqual(0x24, _vgc.GetScreenColor(0, 0));
+        Assert.AreEqual(0, _vgc.GetScreenTextAttr(0, 0) & VgcConstants.TextAttrBgTransparent,
+            "Reverse output must make its swapped background opaque.");
     }
 
     [TestMethod]
@@ -602,8 +616,9 @@ public class AvaloniaVgcTests
         _vgc.Write(VgcConstants.RegTextFlags, 0);
         _vgc.Write(VgcConstants.RegCharOut, (byte)'B');
 
-        Assert.AreEqual(VgcConstants.TextAttrFlash, _vgc.GetScreenTextAttr(0, 0));
-        Assert.AreEqual(0, _vgc.GetScreenTextAttr(1, 0));
+        Assert.AreEqual(VgcConstants.TextAttrFlash | VgcConstants.TextAttrBgTransparent,
+            _vgc.GetScreenTextAttr(0, 0));
+        Assert.AreEqual(VgcConstants.TextAttrBgTransparent, _vgc.GetScreenTextAttr(1, 0));
     }
 
     [TestMethod]

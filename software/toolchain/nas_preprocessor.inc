@@ -5,8 +5,8 @@ NAS_PREPROCESSOR_INC = 1
 
 .include "libabi.inc"
 
-NASPP_LOAD     = $7000
-NASPP_MAX      = $3000
+NASPP_LOAD     = $4000
+NASPP_MAX      = $4000
 NASPP_NAME_LEN = 10
 
 ; SYS_OVL_MAIN leaves LIB_ARG0..3 intact while calling the overlay.
@@ -21,7 +21,9 @@ NASPP_DEFINE_LEN   = $02F0        ; optional NAME=VALUE definition
 NASPP_DEFINE       = $0970
 
 NASPP_ERR_SYNTAX   = 1
-NASPP_ERR_CAPACITY = 2
+NASPP_ERR_CAPACITY = 7
+; Match NASM_ERR_INCLUDE so the shared frontend reports "include file error".
+NASPP_ERR_INCLUDE  = 5
 NASPP_ERR_NESTING  = 1
 NASPP_ERR_LINE     = 4
 NASPP_ERR_OUTPUT   = 2

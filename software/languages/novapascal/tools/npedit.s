@@ -1,13 +1,21 @@
 ; NovaPascal editor executable. Alt-X returns through tool_main to the shell.
 
       .setcpu "w65c02"
+      .include "nova.inc"
+      .include "editbuf.inc"
+      .include "editui.inc"
       .include "libeditor.inc"
+      .include "libfiles.inc"
       .include "libmemory.inc"
+      .include "libsystem.inc"
+      .include "nui.inc"
       .include "nptool.inc"
       .include "longbranch.inc"
 
 SOURCE_CAP = $1000
 DOCUMENT_CAP = $FFFF
+PICKER_NAME_CAP = 64
+PICKER_ROWS_SIZE = 24 * 36
 
       .segment "BSS"
 source_len:         .res 2
@@ -16,6 +24,14 @@ document_allocated: .res 1
 editor_type_ptr:    .res 2
 editor_hooks:       .res EDITOR_HOOKS_SIZE
 editor_hl_color:    .res 1
+editor_exit:        .res 1
+editor_command_action:.res 1
+editor_saved:       .res 1
+picker_name:        .res PICKER_NAME_CAP
+picker_name_len:    .res 1
+picker_cwd:         .res PICKER_NAME_CAP
+picker_cwd_len:     .res 1
+picker_rows:        .res PICKER_ROWS_SIZE
 
       .segment "NOINIT"
 source_buf:         .res SOURCE_CAP
@@ -88,11 +104,16 @@ tool_main:
 :
 
 @edit:
+      STZ   editor_command_action
       JSR   editor_select_type
       LDA   editor_type_ptr+0
       STA   editor_hooks+EDITOR_HOOKS_TYPEL
       LDA   editor_type_ptr+1
       STA   editor_hooks+EDITOR_HOOKS_TYPEH
+      LDA   #<editor_command_hook
+      STA   editor_hooks+EDITOR_HOOKS_COMMAND_VECL
+      LDA   #>editor_command_hook
+      STA   editor_hooks+EDITOR_HOOKS_COMMAND_VECH
       LDA   document_xaddr+0
       STA   LIB_ARG0+0
       LDA   document_xaddr+1
@@ -132,26 +153,46 @@ tool_main:
       JSR   LIB_LOADER_BAND
       LDA   LIB_STATUS
       BNE   @editor_error
+      LDA   LIB_RESULT+0
+      STA   editor_exit
       LDA   LIB_ARG1+0
       STA   source_len+0
       LDA   LIB_ARG1+1
       STA   source_len+1
       LDA   LIB_RESULT+1
-      BEQ   @ok
+      BEQ   @after_save
       LDA   #1
-      STA   NPTOOL_DETAIL
+      STA   editor_saved
       LDA   source_len+0
       ORA   source_len+1
       BEQ   @save_empty
       JSR   tool_save_document
       BNE   @memory_error
-      BRA   @ok
+      BRA   @after_save
 @save_empty:
       STZ   NPTOOL_IO_LEN+0
       STZ   NPTOOL_IO_LEN+1
       JSR   nptool_save_arg0
       BNE   @fail
+@after_save:
+      LDA   editor_exit
+      CMP   #EDITBUF_EXIT_COMMAND
+      BNE   @ok
+      LDA   editor_command_action
+      BEQ   @ok
+      JSR   tool_pick_file
+      CMP   #2
+      BEQ   @fail
+      CMP   #1
+      BEQ   @reload
+      JSR   tool_use_picker_name
+@reload:
+      JSR   tool_load_current_document
+      BNE   @fail
+      JMP   @edit
 @ok:
+      LDA   editor_saved
+      STA   NPTOOL_DETAIL
       JSR   tool_release_document
       BNE   @memory_error
       LDA   #0
@@ -306,6 +347,178 @@ tool_release_document:
       JMP   tool_mem_call
 @done:
       LDA   #0
+      RTS
+
+; Replace the allocated XRAM document with the text file named by ARG0.
+tool_load_current_document:
+      LDA   #<source_buf
+      STA   NPTOOL_IO_ADDR+0
+      LDA   #>source_buf
+      STA   NPTOOL_IO_ADDR+1
+      LDA   #<SOURCE_CAP
+      STA   NPTOOL_IO_CAP+0
+      LDA   #>SOURCE_CAP
+      STA   NPTOOL_IO_CAP+1
+      JSR   nptool_load_arg0
+      BEQ   @loaded_ram
+      LDA   NPTOOL_STATUS
+      CMP   #NPTOOL_ERR_IO
+      BNE   @failed
+      LDA   NPTOOL_DETAIL
+      CMP   #NPTOOL_IO_TOO_LARGE
+      BNE   @failed
+      LDA   NPTOOL_IO_LEN+0
+      STA   source_len+0
+      LDA   NPTOOL_IO_LEN+1
+      STA   source_len+1
+      STZ   NPTOOL_STATUS
+      STZ   NPTOOL_DETAIL
+      JSR   tool_load_document
+      BEQ   @ok
+      BRA   @memory_error
+@loaded_ram:
+      JSR   nptool_validate_text
+      BNE   @not_text
+      LDA   NPTOOL_IO_LEN+0
+      STA   source_len+0
+      LDA   NPTOOL_IO_LEN+1
+      STA   source_len+1
+      JSR   tool_copy_document
+      BEQ   @ok
+@memory_error:
+      STA   NPTOOL_DETAIL
+      LDA   #NPTOOL_ERR_MEMORY
+      STA   NPTOOL_STATUS
+      LDA   #1
+      RTS
+@not_text:
+      LDA   #NPTOOL_ERR_NOT_TEXT
+      STA   NPTOOL_STATUS
+@failed:
+      LDA   #1
+      RTS
+@ok:
+      LDA   #0
+      RTS
+
+tool_save_picker_cwd:
+      JSR   tool_clear_lib_args
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      LDA   #FILE_PWD
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @done
+      LDA   FIO_NAMELEN
+      CMP   #PICKER_NAME_CAP
+      BCS   @bad
+      STA   picker_cwd_len
+      TAX
+      STZ   picker_cwd,X
+@copy:
+      DEX
+      BMI   @ok
+      LDA   FIO_NAME,X
+      STA   picker_cwd,X
+      BRA   @copy
+@ok:
+      LDA   #0
+@done:
+      RTS
+@bad:
+      LDA   #LERR_FIO_FAIL
+      STA   LIB_STATUS
+      RTS
+
+tool_restore_picker_cwd:
+      JSR   tool_clear_lib_args
+      LDA   #<picker_cwd
+      STA   LIB_ARG0+0
+      LDA   #>picker_cwd
+      STA   LIB_ARG0+1
+      LDA   picker_cwd_len
+      STA   LIB_ARG1+0
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      LDA   #FILE_CD
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+; Return A=0 for a selected file, 1 for cancel, 2 for an NDK failure.
+tool_pick_file:
+      JSR   tool_save_picker_cwd
+      BNE   @error
+      JSR   tool_clear_lib_args
+      LDA   #<picker_config
+      STA   LIB_ARG0+0
+      LDA   #>picker_config
+      STA   LIB_ARG0+1
+      LDA   #MODULE_ID_SYSTEM
+      STA   LIB_MOD_ID
+      LDA   #SYS_NUI_FILE_PICKER
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BNE   @restore_error
+      LDA   LIB_RESULT+1
+      CMP   #NUI_RESULT_CANCEL
+      BEQ   @cancel
+      LDA   LIB_RESULT+0
+      BEQ   @restore_error
+      STA   picker_name_len
+      LDA   #0
+      RTS
+@cancel:
+      JSR   tool_restore_picker_cwd
+      BNE   @error
+      LDA   #1
+      RTS
+@restore_error:
+      LDA   LIB_STATUS
+      BNE   :+
+      LDA   #LERR_SYS_FAIL
+:     STA   NPTOOL_DETAIL
+      JSR   tool_restore_picker_cwd
+      BRA   @publish_error
+@error:
+      LDA   LIB_STATUS
+      STA   NPTOOL_DETAIL
+@publish_error:
+      LDA   #NPTOOL_ERR_EDITOR
+      STA   NPTOOL_STATUS
+      LDA   #2
+      RTS
+
+tool_use_picker_name:
+      LDA   picker_name_len
+      STA   NPTOOL_ARG0_LEN
+      TAX
+      STZ   NPTOOL_ARG0,X
+@copy:
+      DEX
+      BMI   @done
+      LDA   picker_name,X
+      STA   NPTOOL_ARG0,X
+      BRA   @copy
+@done:
+      RTS
+
+editor_command_hook:
+      CMP   #EDITUI_CMD_OPEN
+      BEQ   @open
+      CMP   #EDITUI_CMD_BUFFER_LIST
+      BNE   @ignored
+@open:
+      STA   editor_command_action
+      LDA   #EDITBUF_EXIT_COMMAND
+      STA   EDITOR_HOOK_ABI_RESULT
+      SEC
+      RTS
+@ignored:
+      CLC
       RTS
 
 editor_set_type:
@@ -653,3 +866,11 @@ editor_type_pascal:   .byte "Pascal Source", 0
 editor_type_project:  .byte "Pascal Project", 0
 editor_type_assembly: .byte "Assembly Source", 0
 editor_type_linker:   .byte "Linker Config", 0
+picker_title:         .byte "Open Text File", 0
+picker_footer:        .byte "Enter Open   Esc Cancel", 0
+picker_config:
+      .word picker_title
+      .word picker_name
+      .byte PICKER_NAME_CAP, NUI_FILE_MODE_OPEN, 0, 0, 0, 0, 0, 0
+      .word picker_footer
+      .word picker_rows

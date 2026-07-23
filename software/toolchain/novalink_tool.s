@@ -4,10 +4,14 @@
       .include "novalink.inc"
       .include "nptool.inc"
       .include "longbranch.inc"
+      .include "libmemory.inc"
       .include "libsystem.inc"
+      .include "xram.inc"
 
-LIBRARY_CAP = 4096
-OUTPUT_CAP  = $1800
+LIBRARY_CAP = $3000
+REPORT_CAP  = LIBRARY_CAP
+DEFAULT_OUTPUT_CAP = $3002
+OUTPUT_ALLOC_CAP = NOVA_APP_RAM_SIZE+2
 CONFIG_CAP  = 512
 
 config_ptr  = nptool_io_ptr
@@ -27,10 +31,19 @@ config_match_index:.res 1
 config_min:      .res 2
 config_max:      .res 2
 worker_loaded:   .res 1
+output_allocated:.res 1
+output_xaddr:    .res 3
+report_allocated:.res 1
+report_xaddr:    .res 3
+report_command:  .res 1
+report_result:   .res 1
+object_slot:     .res 1
+object_release_error:.res 1
+state_allocated: .res 1
+state_xaddr:     .res 3
 
       .segment "NOINIT"
 library_buf:.res LIBRARY_CAP
-output_buf: .res OUTPUT_CAP
 config_buf: .res CONFIG_CAP
 
       .segment "CODE"
@@ -90,6 +103,14 @@ tool_main:
       BNE   :+
       JMP   tool_bad_args
 :
+      JSR   tool_allocate_output
+      BEQ   :+
+      JMP   @memory_error
+:
+      JSR   tool_allocate_state
+      BEQ   :+
+      JMP   @memory_error
+:
       JSR   tool_preserve_label
       LDA   #<nl_linking
       LDX   #>nl_linking
@@ -105,29 +126,13 @@ tool_main:
       LDX   #>NPTOOL_ARG2
       JSR   nptool_print_z
       JSR   nptool_newline
-      LDA   #<NLW_OBJECT0
-      STA   NPTOOL_IO_ADDR+0
-      LDA   #>NLW_OBJECT0
-      STA   NPTOOL_IO_ADDR+1
-      LDA   #<NLW_OBJECT0_CAP
-      STA   NPTOOL_IO_CAP+0
-      LDA   #>NLW_OBJECT0_CAP
-      STA   NPTOOL_IO_CAP+1
-      JSR   nptool_load_arg0
-      BEQ   :+
-      JMP   @fail
-:
-      LDA   NPTOOL_IO_LEN+0
-      STA   nlink_object_len_l+0
-      LDA   NPTOOL_IO_LEN+1
-      STA   nlink_object_len_h+0
-      LDA   #<NLW_OBJECT0
-      STA   nlink_object_ptr_l+0
-      LDA   #>NLW_OBJECT0
-      STA   nlink_object_ptr_h+0
-      LDA   #1
-      STA   nlink_object_count
-
+      LDX   #0
+      JSR   tool_load_object
+      BEQ   @object0_loaded
+      LDA   NPTOOL_STATUS
+      long_bne @fail
+      JMP   @memory_error
+@object0_loaded:
       LDA   NPTOOL_ARG3_LEN
       BEQ   @library
       LDA   #<nl_linking
@@ -137,28 +142,13 @@ tool_main:
       LDX   #>NPTOOL_ARG3
       JSR   nptool_print_z
       JSR   nptool_newline
-      LDA   #<NLW_OBJECT1
-      STA   NPTOOL_IO_ADDR+0
-      LDA   #>NLW_OBJECT1
-      STA   NPTOOL_IO_ADDR+1
-      LDA   #<NLW_OBJECT1_CAP
-      STA   NPTOOL_IO_CAP+0
-      LDA   #>NLW_OBJECT1_CAP
-      STA   NPTOOL_IO_CAP+1
-      JSR   nptool_load_arg3
-      BEQ   :+
-      JMP   @fail
-:
-      LDA   NPTOOL_IO_LEN+0
-      STA   nlink_object_len_l+1
-      LDA   NPTOOL_IO_LEN+1
-      STA   nlink_object_len_h+1
-      LDA   #<NLW_OBJECT1
-      STA   nlink_object_ptr_l+1
-      LDA   #>NLW_OBJECT1
-      STA   nlink_object_ptr_h+1
-      INC   nlink_object_count
-
+      LDX   #1
+      JSR   tool_load_object
+      BEQ   @object1_loaded
+      LDA   NPTOOL_STATUS
+      long_bne @fail
+      JMP   @memory_error
+@object1_loaded:
 @library:
       LDA   #<library_buf
       STA   NPTOOL_IO_ADDR+0
@@ -181,10 +171,18 @@ tool_main:
       STA   nlink_library_ptr+0
       LDA   #>library_buf
       STA   nlink_library_ptr+1
-      LDA   #<output_buf
+      LDA   #<library_buf
       STA   nlink_output_ptr+0
-      LDA   #>output_buf
+      LDA   #>library_buf
       STA   nlink_output_ptr+1
+      LDX   #2
+@output_address:
+      LDA   output_xaddr,X
+      STA   nlink_output_xaddr,X
+      DEX
+      BPL   @output_address
+      LDA   #1
+      STA   nlink_output_xram
       LDA   nlink_object_count
       STA   NLW_ROOT_COUNT
       JSR   nlink_prepare
@@ -201,15 +199,6 @@ tool_main:
       long_bne @gc_error
       JSR   nlink_link
       long_bne @link_error
-
-      LDA   #<output_buf
-      STA   NPTOOL_IO_ADDR+0
-      LDA   #>output_buf
-      STA   NPTOOL_IO_ADDR+1
-      LDA   nlink_output_len+0
-      STA   NPTOOL_IO_LEN+0
-      LDA   nlink_output_len+1
-      STA   NPTOOL_IO_LEN+1
       LDA   #<nl_writing
       LDX   #>nl_writing
       JSR   nptool_print_z
@@ -217,8 +206,10 @@ tool_main:
       LDX   #>NPTOOL_ARG1
       JSR   nptool_print_z
       JSR   nptool_newline
-      JSR   nptool_save_arg1
-      BNE   @fail
+      JSR   tool_save_output
+      BNE   @io_error
+      JSR   tool_release_output
+      BNE   @memory_error
       LDA   NPTOOL_ARG5_LEN
       BEQ   @labels
       LDA   #NLW_COMMAND_MAP
@@ -231,6 +222,10 @@ tool_main:
       JSR   tool_write_report
       BNE   @report_error
 @success:
+      JSR   tool_release_objects
+      BNE   @memory_error
+      JSR   tool_release_state
+      BNE   @memory_error
       LDA   #<nl_ok
       LDX   #>nl_ok
       JSR   nptool_print_z
@@ -243,32 +238,47 @@ tool_main:
       LDA   #NPTOOL_ERR_LINK
       STA   NPTOOL_STATUS
 @fail:
+      JSR   tool_release_report
+      JSR   tool_release_output
+      JSR   tool_release_objects
+      JSR   tool_release_state
       LDA   #1
       RTS
+
+@memory_error:
+      LDA   LIB_STATUS
+      STA   NPTOOL_DETAIL
+      LDA   #NPTOOL_ERR_MEMORY
+      STA   NPTOOL_STATUS
+      BRA   @fail
+
+@io_error:
+      LDA   LIB_STATUS
+      STA   NPTOOL_DETAIL
+      LDA   #NPTOOL_ERR_IO
+      STA   NPTOOL_STATUS
+      BRA   @fail
 
 @report_error:
       LDA   #NLINK_ERR_OUTPUT
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_LINK
       STA   NPTOOL_STATUS
-      LDA   #1
-      RTS
+      BRA   @fail
 
 @gc_error:
       LDA   #NLINK_ERR_OBJECT
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_LINK
       STA   NPTOOL_STATUS
-      LDA   #1
-      RTS
+      BRA   @fail
 
 @config_error:
       LDA   #NLINK_ERR_CONFIG
       STA   NPTOOL_DETAIL
       LDA   #NPTOOL_ERR_LINK
       STA   NPTOOL_STATUS
-      LDA   #1
-      RTS
+      BRA   @fail
 
 tool_bad_args:
       LDA   #NPTOOL_ERR_ARGS
@@ -277,19 +287,17 @@ tool_bad_args:
       RTS
 
 tool_default_options:
+      STZ   nlink_object_count
+      STZ   NLW_ROOT_COUNT
       STZ   NLW_GC_READY
-      LDX   #NLINK_OBJECT_CAP-1
-@mask:
-      STZ   NLW_LIVE_MASK,X
-      DEX
-      BPL   @mask
       STZ   nlink_config_enabled
+      STZ   nlink_output_xram
       STZ   nlink_region_count
       STZ   nlink_rule_count
       STZ   nlink_config_symbol_count
-      LDA   #<OUTPUT_CAP
+      LDA   #<DEFAULT_OUTPUT_CAP
       STA   nlink_output_cap+0
-      LDA   #>OUTPUT_CAP
+      LDA   #>DEFAULT_OUTPUT_CAP
       STA   nlink_output_cap+1
       LDA   NPTOOL_LINK_BASE
       STA   nlink_load_base+0
@@ -297,7 +305,7 @@ tool_default_options:
       STA   nlink_load_base+1
       RTS
 
-; NLWORK owns $0900-$0A87, including ARG6. Preserve the label filename in the
+; NLWORK owns the shared mailbox from $0900 upward, including ARG6. Preserve the label filename in the
 ; configuration buffer after parsing has finished and before loading the worker.
 tool_preserve_label:
       LDA   NPTOOL_ARG6_LEN
@@ -314,28 +322,28 @@ tool_preserve_label:
 
 ; A selects map or VICE-label output; both reuse the worker's live-export walk.
 tool_write_report:
-      PHA
+      STA   report_command
+      JSR   tool_allocate_report
+      BNE   @done
       JSR   nlink_export_worker_state
-      LDA   #<output_buf
-      STA   NLW_MAP_PTR
-      LDA   #>output_buf
-      STA   NLW_MAP_PTR+1
-      LDA   #<OUTPUT_CAP
+      STZ   NLW_MAP_PTR
+      STZ   NLW_MAP_PTR+1
+      LDA   #<REPORT_CAP
       STA   NLW_MAP_CAP
-      LDA   #>OUTPUT_CAP
+      LDA   #>REPORT_CAP
       STA   NLW_MAP_CAP+1
-      PLA
+      LDA   #1
+      STA   NLW_MAP_XRAM
+      LDA   report_xaddr
+      STA   NLW_MAP_XADDR_L
+      LDA   report_xaddr+1
+      STA   NLW_MAP_XADDR_M
+      LDA   report_xaddr+2
+      STA   NLW_MAP_XADDR_H
+      LDA   report_command
       STA   NLW_COMMAND
       JSR   tool_run_worker
-      BNE   @done
-      LDA   #<output_buf
-      STA   NPTOOL_IO_ADDR+0
-      LDA   #>output_buf
-      STA   NPTOOL_IO_ADDR+1
-      LDA   NLW_MAP_LEN
-      STA   NPTOOL_IO_LEN+0
-      LDA   NLW_MAP_LEN+1
-      STA   NPTOOL_IO_LEN+1
+      BNE   @release
       LDA   NLW_COMMAND
       CMP   #NLW_COMMAND_MAP
       BNE   @labels
@@ -348,8 +356,7 @@ tool_write_report:
       JSR   nptool_newline
       LDA   #<NPTOOL_ARG5
       LDX   #>NPTOOL_ARG5
-      LDY   NPTOOL_ARG5_LEN
-      JMP   nptool_save_named
+      BRA   @save
 @labels:
       LDA   #<nl_labels
       LDX   #>nl_labels
@@ -360,8 +367,83 @@ tool_write_report:
       JSR   nptool_newline
       LDA   #<config_buf
       LDX   #>config_buf
-      LDY   NPTOOL_ARG6_LEN
-      JMP   nptool_save_named
+@save:
+      JSR   tool_save_report
+@release:
+      STA   report_result
+      JSR   tool_release_report
+      ORA   report_result
+@done:
+      RTS
+
+tool_allocate_report:
+      STZ   report_allocated
+      JSR   tool_clear_args
+      LDA   #<REPORT_CAP
+      STA   LIB_ARG2
+      LDA   #>REPORT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   report_xaddr,X
+      DEX
+      BPL   @copy
+      INC   report_allocated
+      LDA   #0
+@done:
+      RTS
+
+; A/X select the report filename. The generated bytes already live in XRAM,
+; so the standard NDK file-streaming API can write them without a RAM copy.
+tool_save_report:
+      STA   config_start
+      STX   config_start+1
+      JSR   tool_clear_args
+      LDA   config_start
+      STA   LIB_ARG0
+      LDA   config_start+1
+      STA   LIB_ARG0+1
+      LDA   report_command
+      CMP   #NLW_COMMAND_MAP
+      BNE   :+
+      LDA   NPTOOL_ARG5_LEN
+      BRA   :++
+:     LDA   NPTOOL_ARG6_LEN
+:     STA   LIB_ARG1
+      LDX   #2
+@address:
+      LDA   report_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      LDA   NLW_MAP_LEN
+      STA   LIB_ARG3
+      LDA   NLW_MAP_LEN+1
+      STA   LIB_ARG3+1
+      LDA   #MEM_XSAVE
+      JMP   tool_mem_call
+
+tool_release_report:
+      LDA   report_allocated
+      BEQ   @done
+      STZ   report_allocated
+      JSR   tool_clear_args
+      LDX   #2
+@address:
+      LDA   report_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<REPORT_CAP
+      STA   LIB_ARG2
+      LDA   #>REPORT_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JSR   tool_mem_call
 @done:
       RTS
 
@@ -411,6 +493,229 @@ tool_clear_args:
       STZ   LIB_ARG0,X
       DEX
       BPL   @clear
+      RTS
+
+tool_mem_call:
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+; Root NOBJ inputs are allocated and streamed through the standard NDK memory
+; API. Their 16-bit object-relative offsets are read through XRAM window 2.
+tool_load_object:
+      STX   object_slot
+      CPX   #0
+      BNE   @arg3
+      JSR   nptool_size_arg0
+      BRA   @sized
+@arg3:
+      JSR   nptool_size_arg3
+@sized:
+      long_bne @done
+      JSR   tool_clear_args
+      LDA   NPTOOL_IO_LEN
+      STA   LIB_ARG2
+      LDA   NPTOOL_IO_LEN+1
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      long_bne @done
+      LDX   object_slot
+      LDA   LIB_RESULT
+      STA   nlink_object_xaddr_l,X
+      LDA   LIB_RESULT+1
+      STA   nlink_object_xaddr_m,X
+      LDA   LIB_RESULT+2
+      STA   nlink_object_xaddr_h,X
+      LDA   #1
+      STA   nlink_object_xram,X
+      TXA
+      INC
+      CMP   nlink_object_count
+      BCC   :+
+      STA   nlink_object_count
+:
+      LDA   NPTOOL_IO_LEN
+      STA   nlink_object_len_l,X
+      LDA   NPTOOL_IO_LEN+1
+      STA   nlink_object_len_h,X
+      STZ   nlink_object_ptr_l,X
+      STZ   nlink_object_ptr_h,X
+
+      JSR   tool_clear_args
+      LDX   object_slot
+      CPX   #0
+      BNE   @load_arg3
+      LDA   #<NPTOOL_ARG0
+      STA   LIB_ARG0
+      LDA   #>NPTOOL_ARG0
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG0_LEN
+      BRA   @name_ready
+@load_arg3:
+      LDA   #<NPTOOL_ARG3
+      STA   LIB_ARG0
+      LDA   #>NPTOOL_ARG3
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG3_LEN
+@name_ready:
+      STA   LIB_ARG1
+      LDA   nlink_object_xaddr_l,X
+      STA   LIB_ARG2
+      LDA   nlink_object_xaddr_m,X
+      STA   LIB_ARG2+1
+      LDA   nlink_object_xaddr_h,X
+      STA   LIB_ARG2+2
+      LDA   nlink_object_len_l,X
+      STA   LIB_ARG3
+      LDA   nlink_object_len_h,X
+      STA   LIB_ARG3+1
+      LDA   #MEM_XLOAD
+      JSR   tool_mem_call
+@done:
+      RTS
+
+tool_release_objects:
+      STZ   object_release_error
+      LDX   #0
+@object:
+      CPX   nlink_object_count
+      BEQ   @done
+      STX   object_slot
+      LDA   nlink_object_xram,X
+      BEQ   @next
+      STZ   nlink_object_xram,X
+      JSR   tool_clear_args
+      LDX   object_slot
+      LDA   nlink_object_xaddr_l,X
+      STA   LIB_ARG0
+      LDA   nlink_object_xaddr_m,X
+      STA   LIB_ARG0+1
+      LDA   nlink_object_xaddr_h,X
+      STA   LIB_ARG0+2
+      LDA   nlink_object_len_l,X
+      STA   LIB_ARG2
+      LDA   nlink_object_len_h,X
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JSR   tool_mem_call
+      ORA   object_release_error
+      STA   object_release_error
+@next:
+      LDX   object_slot
+      INX
+      BRA   @object
+@done:
+      LDA   object_release_error
+      RTS
+
+tool_allocate_state:
+      STZ   state_allocated
+      JSR   tool_clear_args
+      LDA   #<NLW_STATE_SIZE
+      STA   LIB_ARG2
+      LDA   #>NLW_STATE_SIZE
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   state_xaddr,X
+      STA   NLW_STATE_XADDR_L,X
+      DEX
+      BPL   @copy
+      INC   state_allocated
+      LDA   #0
+@done:
+      RTS
+
+tool_release_state:
+      LDA   state_allocated
+      BEQ   @done
+      STZ   state_allocated
+      JSR   tool_clear_args
+      LDX   #2
+@address:
+      LDA   state_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<NLW_STATE_SIZE
+      STA   LIB_ARG2
+      LDA   #>NLW_STATE_SIZE
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JMP   tool_mem_call
+@done:
+      LDA   #0
+      RTS
+
+tool_allocate_output:
+      STZ   output_allocated
+      JSR   tool_clear_args
+      LDA   #<OUTPUT_ALLOC_CAP
+      STA   LIB_ARG2
+      LDA   #>OUTPUT_ALLOC_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_ALLOC
+      JSR   tool_mem_call
+      BNE   @done
+      LDX   #2
+@copy:
+      LDA   LIB_RESULT,X
+      STA   output_xaddr,X
+      DEX
+      BPL   @copy
+      INC   output_allocated
+      LDA   #0
+@done:
+      RTS
+
+tool_save_output:
+      JSR   tool_clear_args
+      LDA   #<NPTOOL_ARG1
+      STA   LIB_ARG0
+      LDA   #>NPTOOL_ARG1
+      STA   LIB_ARG0+1
+      LDA   NPTOOL_ARG1_LEN
+      STA   LIB_ARG1
+      LDX   #2
+@address:
+      LDA   output_xaddr,X
+      STA   LIB_ARG2,X
+      DEX
+      BPL   @address
+      LDA   nlink_output_len
+      STA   LIB_ARG3
+      LDA   nlink_output_len+1
+      STA   LIB_ARG3+1
+      LDA   #MEM_XSAVE
+      JMP   tool_mem_call
+
+tool_release_output:
+      LDA   output_allocated
+      BEQ   @done
+      STZ   output_allocated
+      STZ   nlink_output_xram
+      JSR   tool_clear_args
+      LDX   #2
+@address:
+      LDA   output_xaddr,X
+      STA   LIB_ARG0,X
+      DEX
+      BPL   @address
+      LDA   #<OUTPUT_ALLOC_CAP
+      STA   LIB_ARG2
+      LDA   #>OUTPUT_ALLOC_CAP
+      STA   LIB_ARG2+1
+      LDA   #MEM_RELEASE
+      JSR   tool_mem_call
+@done:
       RTS
 
 tool_sys_call:
@@ -1000,7 +1305,7 @@ config_finish_layout:
       ORA   nlink_region_size_h,X
       long_beq @bad
       LDA   nlink_region_start_h,X
-      CMP   #$70
+      CMP   #>NOVA_APP_RAM_START
       long_bcc @bad
       CLC
       LDA   nlink_region_start_l,X
@@ -1010,10 +1315,11 @@ config_finish_layout:
       ADC   nlink_region_size_h,X
       STA   config_value+1
       long_bcs @bad
-      CMP   #$A0
+      CMP   #>NOVA_APP_RAM_END
       BCC   @bounds_ok
       long_bne @bad
       LDA   config_value
+      CMP   #<NOVA_APP_RAM_END
       long_bne @bad
 @bounds_ok:
       LDA   nlink_region_start_h,X
@@ -1067,20 +1373,20 @@ config_finish_layout:
       STA   config_size+1
 @configured_cap:
       LDA   config_size+1
-      CMP   #>(OUTPUT_CAP-2)
+      CMP   #>(OUTPUT_ALLOC_CAP-2)
       BCC   @small
       BNE   @too_wide
       LDA   config_size
-      CMP   #<(OUTPUT_CAP-2)
+      CMP   #<(OUTPUT_ALLOC_CAP-2)
       BCC   @small
       BEQ   @full
 @too_wide:
       LDA   nlink_config_enabled
       BNE   @bad
 @full:
-      LDA   #<OUTPUT_CAP
+      LDA   #<OUTPUT_ALLOC_CAP
       STA   nlink_output_cap
-      LDA   #>OUTPUT_CAP
+      LDA   #>OUTPUT_ALLOC_CAP
       STA   nlink_output_cap+1
       CLC
       RTS

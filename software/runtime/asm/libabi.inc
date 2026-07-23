@@ -36,7 +36,8 @@ LIB_ARG3         = LIB_MBOX+15    ; $030F
 LIB_RESULT       = LIB_MBOX+19    ; $0313  32-bit LE cell
 LIB_HOME_BANK    = LIB_MBOX+23    ; $0317  runtime's REG_ROMSWAP home value (set at boot)
 LIB_RESIDENT     = LIB_MBOX+24    ; $0318  currently-mapped module id ($00=none)
-LIB_SCRATCH      = LIB_MBOX+25    ; $0319-$031F  7 bytes loader/module scratch
+LIB_SCRATCH      = LIB_MBOX+25    ; $0319-$031E  6 bytes loader/module scratch
+LIB_EXEC_SP      = LIB_MBOX+31    ; $031F  encoded launch stack pointer (0=no active image)
 LIB_MBOX_END     = LIB_MBOX+32    ; $0320 (exclusive)
 
 ; --- Resident loader band (fixed low-RAM, carved $0320-$041F in every runtime) ---
@@ -58,6 +59,13 @@ LIB_LOADER_BAND_END = $0420           ; (exclusive)
 ; graphics.cfg MODBSS places the GRAPHICS module's state here. 1248 B.
 MODULE_BSS_BAND     = LIB_LOADER_BAND_END  ; $0420  module-private low-RAM working store
 MODULE_BSS_BAND_END = $0900                ; (exclusive)
+
+; --- Standalone application RAM ---------------------------------------------
+; Language shells may use this range while resident, but a launched native
+; executable owns it from entry transfer until the host runtime restarts.
+NOVA_APP_RAM_START  = MODULE_BSS_BAND_END  ; $0900
+NOVA_APP_RAM_END    = $A000                ; exclusive; MMIO begins here
+NOVA_APP_RAM_SIZE   = NOVA_APP_RAM_END-NOVA_APP_RAM_START
 
 ; --- Module-private ZP pointer for (zp),Y BYTES deref (cross-runtime free) ---
 LIB_ZP           = $14            ; $14-$17 reserved for module pointer pairs
@@ -95,6 +103,7 @@ MODULE_ID_MEMORY   = $05   ; xram + xmc   (expansion RAM + memory controller)
 MODULE_ID_NET      = $06   ; nic + gameserver (networking)
 MODULE_ID_TURTLE   = $07   ; turtle graphics (FD/RT/pen/heading + rotate-blit render)
 MODULE_ID_EDITOR   = $08   ; full-screen source editor (EDITUI/EDITBUF)
+MODULE_ID_LANGRT   = $09   ; shared compiler-language numeric/runtime services
 MODULE_ID_TEST     = $7F
 
 ; --- XRAM library shelf (option A: fixed, unmanaged high 256KB) ---

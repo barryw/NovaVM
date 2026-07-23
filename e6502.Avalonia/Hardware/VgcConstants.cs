@@ -822,6 +822,9 @@ public static class VgcConstants
     public const byte MouseCtrlAutoContrast = 0x02;
     public const byte MouseCtrlColorize     = 0x04;
 
+    public const int RegTextBackground = 0xA0C0; // bit4=transparent; low nibble=opaque per-cell background
+    public const byte TextBackgroundTransparent = 0x10;
+
     // VDC-style VRAM port registers ($A0E0-$A0E4). This is the only CPU-visible
     // path for text/color/gfx/sprite/text-attribute memory; direct text/color windows are gone.
     public const int VramRegBase       = 0xA0E0;

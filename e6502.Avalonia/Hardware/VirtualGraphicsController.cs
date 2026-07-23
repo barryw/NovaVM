@@ -128,6 +128,7 @@ public class VirtualGraphicsController : IBusDevice
     private byte _vramReadLatch;
     private byte _displayDim;
     private byte _textFlags;
+    private byte _textBackground;
     private byte _textTopRow;   // ring-scroll base within the active text scroll window
     private byte _textScrollStart;
     private byte _textScrollRows;
@@ -224,7 +225,7 @@ public class VirtualGraphicsController : IBusDevice
 
         // Color RAM packs background in the high nibble and foreground in the low nibble.
         Array.Fill(_colorRam, (byte)0x0F);
-        Array.Clear(_textAttrRam);
+        Array.Fill(_textAttrRam, VgcConstants.TextAttrBgTransparent);
 
         // Match FPGA reset defaults: light-grey text, black background, dark-grey border.
         _regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] = 15;
@@ -232,6 +233,7 @@ public class VirtualGraphicsController : IBusDevice
         _regs[VgcConstants.RegBorder - VgcConstants.VgcBase] = 11;
         _regs[VgcConstants.RegCursorEnable - VgcConstants.VgcBase] = 0;
         _textFlags = 0;
+        _textBackground = VgcConstants.TextBackgroundTransparent;
         _textReverseAttr = 0xF0;
 
         SysResetRequested = false;
@@ -261,7 +263,8 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
             return true;
 
-        if (address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
+        if (address == VgcConstants.RegTextBackground ||
+            address == VgcConstants.RegTextFlags || address == VgcConstants.RegTextReverseAttr ||
             address == VgcConstants.RegGfxTransparentColor || address == VgcConstants.RegPaletteMode ||
             address == VgcConstants.RegScrollCtl || address == VgcConstants.RegColStHi ||
             address == VgcConstants.RegColBgHi || address == VgcConstants.RegTextTopRow ||
@@ -293,6 +296,9 @@ public class VirtualGraphicsController : IBusDevice
 
         if (address == VgcConstants.DisplayDim)
             return _displayDim;
+
+        if (address == VgcConstants.RegTextBackground)
+            return _textBackground;
 
         if (address == VgcConstants.RegTextFlags)
             return _textFlags;
@@ -394,6 +400,12 @@ public class VirtualGraphicsController : IBusDevice
         if (address == VgcConstants.DisplayDim)
         {
             _displayDim = (byte)(data & 0x0F);
+            return;
+        }
+
+        if (address == VgcConstants.RegTextBackground)
+        {
+            _textBackground = (byte)(data & 0x1F);
             return;
         }
 
@@ -1625,7 +1637,9 @@ public class VirtualGraphicsController : IBusDevice
     private byte CurrentTextColorAttr()
     {
         byte fg = (byte)(_regs[VgcConstants.RegFgCol - VgcConstants.VgcBase] & 0x0F);
-        byte bg = (byte)(_regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] & 0x0F);
+        byte bg = (_textBackground & VgcConstants.TextBackgroundTransparent) != 0
+            ? (byte)(_regs[VgcConstants.RegBgCol - VgcConstants.VgcBase] & 0x0F)
+            : (byte)(_textBackground & 0x0F);
 
         if ((_textFlags & VgcConstants.TextFlagReverse) == 0)
             return PackTextColor(bg, fg);
@@ -1643,6 +1657,9 @@ public class VirtualGraphicsController : IBusDevice
             attr |= VgcConstants.TextAttrFlash;
         if ((_textFlags & VgcConstants.TextFlagBold) != 0)
             attr |= VgcConstants.TextAttrBold;
+        if ((_textBackground & VgcConstants.TextBackgroundTransparent) != 0 &&
+            (_textFlags & VgcConstants.TextFlagReverse) == 0)
+            attr |= VgcConstants.TextAttrBgTransparent;
         return attr;
     }
 

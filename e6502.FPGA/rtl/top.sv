@@ -719,6 +719,7 @@ module top (
     wire usb_hid_sel = (mem_addr >= USB_HID_BASE && mem_addr <= USB_HID_END);
     wire vgc_read_sel = (mem_addr >= 16'hA000 && mem_addr <= 16'hA01F) ||
                         (mem_addr >= 16'hA040 && mem_addr <= 16'hA0BF) ||
+                        (mem_addr == 16'hA0C0) ||
                         (mem_addr >= 16'hA0D0 && mem_addr <= 16'hA0DF) ||
                         (mem_addr >= 16'hA0E0 && mem_addr <= 16'hA0ED) ||
                         (mem_addr >= 16'hA0F0 && mem_addr <= 16'hA0FF) ||
@@ -1433,6 +1434,7 @@ wire dbg_poke_vgc = dbg_poke_en &&
     wire usb_hid_sel = (cpu_addr >= USB_HID_BASE && cpu_addr <= USB_HID_END);
     wire vgc_read_sel = (cpu_addr >= 16'hA000 && cpu_addr <= 16'hA01F) ||
                         (cpu_addr >= 16'hA040 && cpu_addr <= 16'hA0BF) ||
+                        (cpu_addr == 16'hA0C0) ||
                         (cpu_addr >= 16'hA0D0 && cpu_addr <= 16'hA0DF) ||
                         (cpu_addr >= 16'hA0E0 && cpu_addr <= 16'hA0ED) ||
                         (cpu_addr >= 16'hA0F0 && cpu_addr <= 16'hA0FF) ||

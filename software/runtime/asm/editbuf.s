@@ -322,19 +322,13 @@ editbuf_dispatch_key:
 editbuf_dispatch_command:
       CMP   #EDITUI_CMD_NEW
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :     CMP   #EDITUI_CMD_OPEN
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :     CMP   #EDITUI_CMD_SAVE_AS
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :     CMP   #EDITUI_CMD_SAVE
       BNE   :+
       JSR   editbuf_do_save
@@ -400,19 +394,13 @@ editbuf_dispatch_command:
       RTS
 :     CMP   #EDITUI_CMD_BUFFER_NEXT
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :     CMP   #EDITUI_CMD_BUFFER_PREVIOUS
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :     CMP   #EDITUI_CMD_BUFFER_LIST
       BNE   :+
-      JSR   editbuf_do_host_command
-      CLC
-      RTS
+      JMP   editbuf_do_host_command
 :
       CLC
       RTS
@@ -3014,6 +3002,18 @@ editbuf_parse_goto_line:
 ; =====================================================================
 editbuf_do_host_command:
       JSR   editbuf_call_command
+      LDA   EDITBUF_RESULT
+      CMP   #EDITBUF_EXIT_COMMAND
+      BNE   editbuf_after_host_command
+      JSR   editbuf_do_quit
+      BCC   @cancel
+      LDA   #EDITBUF_EXIT_COMMAND
+      STA   EDITBUF_RESULT
+      SEC
+      RTS
+@cancel:
+      STZ   EDITBUF_RESULT
+      RTS
 editbuf_after_host_command:
       JSR   editbuf_clamp_cursor_len
       JSR   editbuf_build_title
@@ -3023,7 +3023,9 @@ editbuf_after_host_command:
       JSR   editbuf_redraw_all
       JSR   editbuf_apply_status
       JSR   editui_draw_status
-      JMP   editbuf_place_cursor
+      JSR   editbuf_place_cursor
+      CLC
+      RTS
 
 editbuf_clamp_cursor_len:
       LDA   EDITBUF_LENL

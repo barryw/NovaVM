@@ -28,53 +28,45 @@ ep_buffer:       .res 2
 ep_buffer_cap:   .res 2
 ep_saved_winctl: .res 1
 ep_saved_win3:   .res 3
+ep_host_command: .res 2
+ep_host_changed: .res 2
 
       .segment "CODE"
 
 ; EDITOR_FN_EDIT_XRAM entry. The caller owns allocation and disk I/O; this
 ; generic module owns paging and editing only.
 sys_edit_xram:
-      LDA   LIB_ARG0+0
-      STA   ep_base+0
-      LDA   LIB_ARG0+1
-      STA   ep_base+1
+      LDX   #1
+@copy_args:
+      LDA   LIB_ARG0,X
+      STA   ep_base,X
+      LDA   LIB_ARG1,X
+      STA   ep_doc_len,X
+      LDA   LIB_ARG1+2,X
+      STA   ep_buffer,X
+      LDA   LIB_ARG2,X
+      STA   ep_doc_cap,X
+      LDA   LIB_ARG2+2,X
+      STA   ep_buffer_cap,X
+      LDA   LIB_ARG3,X
+      STA   ep_title,X
+      LDA   LIB_ARG3+2,X
+      STA   ep_type,X
+      DEX
+      BPL   @copy_args
       LDA   LIB_ARG0+2
       STA   ep_base+2
-      LDA   LIB_ARG1+0
-      STA   ep_doc_len+0
-      LDA   LIB_ARG1+1
-      STA   ep_doc_len+1
-      LDA   LIB_ARG1+2
-      STA   ep_buffer+0
-      LDA   LIB_ARG1+3
-      STA   ep_buffer+1
-      LDA   LIB_ARG2+0
-      STA   ep_doc_cap+0
-      LDA   LIB_ARG2+1
-      STA   ep_doc_cap+1
-      LDA   LIB_ARG2+2
-      STA   ep_buffer_cap+0
-      LDA   LIB_ARG2+3
-      STA   ep_buffer_cap+1
-      LDA   LIB_ARG3+0
-      STA   ep_title+0
-      LDA   LIB_ARG3+1
-      STA   ep_title+1
-      LDA   LIB_ARG3+2
-      STA   ep_type+0
-      LDA   LIB_ARG3+3
-      STA   ep_type+1
 
       LDA   XMC_WINCTL
       STA   ep_saved_winctl
       ORA   #$08
       STA   XMC_WINCTL
-      LDA   WIN3_LO
-      STA   ep_saved_win3+0
-      LDA   WIN3_MI
-      STA   ep_saved_win3+1
-      LDA   WIN3_HI
-      STA   ep_saved_win3+2
+      LDX   #2
+@save_window:
+      LDA   WIN3_LO,X
+      STA   ep_saved_win3,X
+      DEX
+      BPL   @save_window
 
       LDA   ep_buffer_cap+0
       ORA   ep_buffer_cap+1
@@ -122,33 +114,23 @@ sys_edit_xram:
       LDA   #>ep_hooks
       STA   ep_type+1
 @hooks_ready:
-
-      LDA   ep_buffer+0
-      STA   LIB_ARG0+0
-      LDA   ep_buffer+1
-      STA   LIB_ARG0+1
-      STZ   LIB_ARG0+2
-      STZ   LIB_ARG0+3
-      LDA   ep_window_span+0
-      STA   LIB_ARG1+0
-      LDA   ep_window_span+1
-      STA   LIB_ARG1+1
-      STZ   LIB_ARG1+2
-      STZ   LIB_ARG1+3
-      LDA   ep_buffer_cap+0
-      STA   LIB_ARG2+0
-      LDA   ep_buffer_cap+1
-      STA   LIB_ARG2+1
-      STZ   LIB_ARG2+2
-      STZ   LIB_ARG2+3
-      LDA   ep_title+0
-      STA   LIB_ARG3+0
-      LDA   ep_title+1
-      STA   LIB_ARG3+1
-      LDA   ep_type+0
-      STA   LIB_ARG3+2
-      LDA   ep_type+1
-      STA   LIB_ARG3+3
+      LDX   #1
+@publish_window:
+      LDA   ep_buffer,X
+      STA   LIB_ARG0,X
+      LDA   ep_window_span,X
+      STA   LIB_ARG1,X
+      LDA   ep_buffer_cap,X
+      STA   LIB_ARG2,X
+      LDA   ep_title,X
+      STA   LIB_ARG3,X
+      LDA   ep_type,X
+      STA   LIB_ARG3+2,X
+      STZ   LIB_ARG0+2,X
+      STZ   LIB_ARG1+2,X
+      STZ   LIB_ARG2+2,X
+      DEX
+      BPL   @publish_window
       JSR   sys_edit
       LDA   LIB_STATUS
       BNE   @done
@@ -165,12 +147,12 @@ sys_edit_xram:
       STZ   LIB_ARG1+2
       STZ   LIB_ARG1+3
 @done:
-      LDA   ep_saved_win3+0
-      STA   WIN3_LO
-      LDA   ep_saved_win3+1
-      STA   WIN3_MI
-      LDA   ep_saved_win3+2
-      STA   WIN3_HI
+      LDX   #2
+@restore_window:
+      LDA   ep_saved_win3,X
+      STA   WIN3_LO,X
+      DEX
+      BPL   @restore_window
       LDA   ep_saved_winctl
       STA   XMC_WINCTL
       RTS
@@ -363,6 +345,11 @@ ep_load_window:
 ep_changed_hook:
       LDA   #1
       STA   ep_dirty
+      LDA   ep_host_changed+0
+      ORA   ep_host_changed+1
+      BEQ   @done
+      JMP   (ep_host_changed)
+@done:
       RTS
 
 ep_command_hook:
@@ -373,7 +360,17 @@ ep_command_hook:
       CMP   #EDITUI_CMD_WINDOW_FIRST
       BEQ   ep_window_first
       CMP   #EDITUI_CMD_WINDOW_LAST
-      BEQ   ep_window_last
+      BNE   :+
+      JMP   ep_window_last
+:
+      PHA
+      LDA   ep_host_command+0
+      ORA   ep_host_command+1
+      BEQ   @none
+      PLA
+      JMP   (ep_host_command)
+@none:
+      PLA
       CLC
       RTS
 

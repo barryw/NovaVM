@@ -115,7 +115,25 @@ MEM_UNMAP_WINDOW = $19 ; (win:ARG3 b0 -> X)                                  -> 
 ; =====================================================================
 MEM_COMMAND_STATUS = $1A ; ()             -> RESULT b0 = 0 on XMC_OK else 1 (preloaded XMC_CMD path)
 
+; =====================================================================
+; Standalone executable transfer
+; =====================================================================
+; Takes ownership of an allocator-backed Nova .BIN image in XRAM. The image's
+; two-byte load/entry header is validated against the canonical application RAM
+; window, its payload is DMA-copied into CPU RAM, and the XRAM allocation is
+; released before control transfers. If the application returns, execution
+; resumes at the caller-supplied cold-start vector. Success does not return.
+MEM_EXEC_IMAGE = $1B ; (xaddr:ARG0 u24, len:ARG1 u16, restart:ARG2 u16) -> transfer control or LERR_MEM_FAIL
+; Ends an image launched by MEM_EXEC_IMAGE from any hardware-stack depth. This
+; is the native application equivalent of a language runtime's Halt/Exit.
+MEM_EXIT_IMAGE = $1C ; () -> transfer through the launcher's restart vector or LERR_MEM_FAIL
+
+MEM_EXEC_ERR_IMAGE = $01
+MEM_EXEC_ERR_RANGE = $02
+MEM_EXEC_ERR_XRAM  = $03
+MEM_EXEC_ERR_INACTIVE = $04
+
 ; Highest implemented fn-id + 1. Gaps / ids >= MEM_FN_COUNT -> LERR_NO_FN.
-MEM_FN_COUNT   = $1B
+MEM_FN_COUNT   = $1D
 
 .endif

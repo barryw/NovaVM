@@ -1,5 +1,7 @@
 NPP 2
 MAIN MAIN.PAS
+UNITPATH SYSTEM
+UNITPATH USER
 OUTPUT HELLO.BIN
 CONFIG INLINE
 MAP HELLO.MAP
@@ -10,5 +12,6 @@ MEMORY {
 
 SEGMENTS {
     CODE: load = RAM, type = ro;
+    RODATA: load = RAM, type = ro;
     BSS: load = RAM, type = bss;
 }
