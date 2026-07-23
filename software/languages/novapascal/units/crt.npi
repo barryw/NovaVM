@@ -1,0 +1,88 @@
+; Compiled interface for CRT.PAS.
+.ifndef NPI_CRT
+NPI_CRT = 1
+
+; Turbo color names mapped to Nova's default palette.
+BLACK = $00
+BLUE = $06
+GREEN = $05
+CYAN = $03
+RED = $02
+MAGENTA = $04
+BROWN = $09
+LIGHTGRAY = $0F
+DARKGRAY = $0B
+LIGHTBLUE = $0E
+LIGHTGREEN = $0D
+LIGHTCYAN = $03
+LIGHTRED = $0A
+LIGHTMAGENTA = $04
+YELLOW = $07
+WHITE = $01
+
+.ifndef __CD41BA2
+__CD41BA2 = 1 ; Black
+.endif
+.ifndef __C828F0D
+__C828F0D = 1 ; Blue
+.endif
+.ifndef __C31F1B6
+__C31F1B6 = 1 ; Green
+.endif
+.ifndef __C835030
+__C835030 = 1 ; Cyan
+.endif
+.ifndef __C8818E0
+__C8818E0 = 1 ; Red
+.endif
+.ifndef __CCF2D22
+__CCF2D22 = 1 ; Magenta
+.endif
+.ifndef __CD7A40D
+__CD7A40D = 1 ; Brown
+.endif
+.ifndef __C4670B0
+__C4670B0 = 1 ; LightGray
+.endif
+.ifndef __C75C89A
+__C75C89A = 1 ; DarkGray
+.endif
+.ifndef __C439BC5
+__C439BC5 = 1 ; LightBlue
+.endif
+.ifndef __C14956E
+__C14956E = 1 ; LightGreen
+.endif
+.ifndef __C445CE8
+__C445CE8 = 1 ; LightCyan
+.endif
+.ifndef __C7E6E98
+__C7E6E98 = 1 ; LightRed
+.endif
+.ifndef __CE99EDA
+__CE99EDA = 1 ; LightMagenta
+.endif
+.ifndef __C85BA21
+__C85BA21 = 1 ; Yellow
+.endif
+.ifndef __C4E10E6
+__C4E10E6 = 1 ; White
+.endif
+
+.ifndef __S99D16A
+__S99D16A = $02 ; ReadKey
+.endif
+.ifndef __S0DF3F8
+__S0DF3F8 = $02 ; WhereX
+.endif
+.ifndef __S0DF3F9
+__S0DF3F9 = $02 ; WhereY
+.endif
+.ifndef __S8F4049
+__S8F4049 = $01 ; TextColor
+.endif
+.ifndef __S9D880A
+__S9D880A = $01 ; TextBackground
+.endif
+
+.endif

@@ -122,7 +122,8 @@ NDI_DIRECTORY_SECTORS := 128
 PASCAL_UNIT_SOURCES := pascal.inc units/novagfx.pas units/graphics.inc units/graphics.npi units/graphics.s \
 	units/novainput.pas units/input.inc units/input.npi units/input.s \
 	units/novarand.pas units/random.inc units/random.npi units/random.s \
-	units/novamemory.pas units/memory.inc units/memory.npi units/memory.s
+	units/novamemory.pas units/memory.inc units/memory.npi units/memory.s \
+	units/crt.pas units/crt.asm units/crt.npi
 MICROCALC_SOURCES := microcalc/MC.PAS microcalc/MC-MOD00.INC microcalc/MC-MOD01.INC \
 	microcalc/MC-MOD02.INC microcalc/MC-MOD03.INC microcalc/MC-MOD04.INC \
 	microcalc/MC-MOD05.INC microcalc/MC.HLP microcalc/MCDEMO.MCS \
@@ -160,6 +161,9 @@ NDI_ASSETS := --asset hello.pas:HELLO/MAIN.PAS --asset hello.npp:HELLO/HELLO.NPP
 	--asset units/memory.inc:SYSTEM/MEMORY.INC \
 	--asset units/memory.npi:SYSTEM/MEMORY.NPI \
 	--asset units/memory.s:SYSTEM/MEMORY.S \
+	--asset units/crt.pas:SYSTEM/CRT.PAS \
+	--asset units/crt.asm:SYSTEM/CRT.ASM \
+	--asset units/crt.npi:SYSTEM/CRT.NPI \
 	--asset $(NOVA_ASM)/libabi.inc:SYSTEM/LIBABI.INC \
 	--asset $(NOVA_ASM)/libmemory.inc:SYSTEM/LIBMEMORY.INC \
 	--asset user-readme.txt:USER/README.TXT \

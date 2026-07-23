@@ -2147,7 +2147,7 @@ system_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 15
+      .word 20
       .word system_symbols-system_object
       .word 0
       .word system_object_end-system_object
@@ -2186,22 +2186,58 @@ system_lowvideo:
       RTS
 
 system_delay:
-      LSR
-      LSR
-      LSR
-      LSR
-      BNE   :+
-      INC
-:     STA   LIB_ARG0
+      STA   NVR0L
+      STX   NVR0H
+      AND   #$0F
+      STA   NVR1L
+      LSR   NVR0H
+      ROR   NVR0L
+      LSR   NVR0H
+      ROR   NVR0L
+      LSR   NVR0H
+      ROR   NVR0L
+      LSR   NVR0H
+      ROR   NVR0L
+      LDA   NVR1L
+      BEQ   @wait
+      INC   NVR0L
+      BNE   @wait
+      INC   NVR0H
+@wait:
+      LDA   NVR0H
+      BNE   @chunk
+      LDA   NVR0L
+      BEQ   @done
+      STA   LIB_ARG0
       STZ   LIB_ARG0+1
       STZ   LIB_ARG0+2
       STZ   LIB_ARG0+3
-      LDA   #MODULE_ID_SYSTEM
-      STA   LIB_MOD_ID
-      LDA   #SYS_FN_WAIT
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
+      PASCAL_SYSTEM_CALL SYS_FN_WAIT
+@done:
       RTS
+@chunk:
+      LDA   NVR0H
+      PHA
+      LDA   NVR0L
+      PHA
+      LDA   #$FF
+      STA   LIB_ARG0
+      STZ   LIB_ARG0+1
+      STZ   LIB_ARG0+2
+      STZ   LIB_ARG0+3
+      PASCAL_SYSTEM_CALL SYS_FN_WAIT
+      PLA
+      STA   NVR0L
+      PLA
+      STA   NVR0H
+      SEC
+      LDA   NVR0L
+      SBC   #$FF
+      STA   NVR0L
+      LDA   NVR0H
+      SBC   #0
+      STA   NVR0H
+      BRA   @wait
 
 system_upcase:
       CMP   #'a'
@@ -2214,6 +2250,34 @@ system_upcase:
 system_clrscr:
       LDA   #$0C
       STA   VGC_CHAROUT
+      RTS
+
+system_readkey:
+      PASCAL_SYSTEM_CALL SYS_WAIT_KEY
+      LDA   LIB_RESULT
+      LDX   #0
+      RTS
+
+system_wherex:
+      LDA   VGC_CURSX
+      INC
+      LDX   #0
+      RTS
+
+system_wherey:
+      LDA   VGC_CURSY
+      INC
+      LDX   #0
+      RTS
+
+system_textcolor:
+      AND   #$0F
+      STA   VGC_FGCOL
+      RTS
+
+system_textbackground:
+      AND   #$0F
+      STA   VGC_TEXT_BG
       RTS
 
 system_succ:
@@ -2259,6 +2323,16 @@ system_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 6, "LENGTH"
       .word system_halt-system_code
       .byte 0, NOBJ_SYM_GLOBAL, 4, "HALT"
+      .word system_readkey-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "READKEY"
+      .word system_wherex-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "WHEREX"
+      .word system_wherey-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "WHEREY"
+      .word system_textcolor-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "TEXTCOLOR"
+      .word system_textbackground-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "TEXTBACKGROUND"
       .word VGC_CHARIN
       .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 3, "KBD"
       .word VGC_CHARIN

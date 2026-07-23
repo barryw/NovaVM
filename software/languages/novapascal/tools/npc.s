@@ -139,6 +139,7 @@ p_unit_len:        .res P_UNIT_CAP
 p_unit_kind:       .res P_UNIT_CAP
 p_unit_iter:       .res 1
 p_emit_error:      .res 1
+p_external_macro_emitted: .res 1
 p_saved_ident:     .res P_IDENT_CAP
 p_call_ident:      .res P_IDENT_CAP
 p_unit_names:      .res P_UNIT_STORAGE
@@ -442,6 +443,7 @@ pascal_compile:
       STZ   p_output_used
       STZ   p_output_used+1
       STZ   p_unit_count
+      STZ   p_external_macro_emitted
       STZ   p_in_argument
       STZ   p_symbol_count
       STZ   p_label
@@ -8254,6 +8256,23 @@ p_emit_saved_identifier:
       SEC
       RTS
 
+p_emit_call_identifier:
+      LDX   #0
+@char:
+      CPX   p_call_ident_len
+      BCS   @ok
+      LDA   p_call_ident,X
+      JSR   p_emit
+      BCS   @fail
+      INX
+      BRA   @char
+@ok:
+      CLC
+      RTS
+@fail:
+      SEC
+      RTS
+
 p_emit_global_saved:
       LDA   #<asm_global_start
       LDX   #>asm_global_start
@@ -8858,6 +8877,37 @@ p_emit_load_identifier:
       JSR   p_emit_text
       BCS   @fail
       JSR   p_emit_identifier
+      BCS   @fail
+      LDA   #$0A
+      JMP   p_emit
+@fail:
+      SEC
+      RTS
+
+; Imported .NPI metadata marks byte constants with __C<hash>. Let the
+; assembler choose immediate versus storage after it has loaded the metadata.
+p_emit_external_value_identifier:
+      LDA   p_external_macro_emitted
+      BNE   @load
+      INC   p_external_macro_emitted
+      LDA   #<asm_external_macro
+      LDX   #>asm_external_macro
+      JSR   p_emit_ax_text
+      BCS   @fail
+@load:
+      LDA   #<asm_external_const_start
+      LDX   #>asm_external_const_start
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_emit_call_identifier
+      BCS   @fail
+      LDA   #<asm_external_const_else
+      LDX   #>asm_external_const_else
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDX   #<p_call_hash
+      LDY   #>p_call_hash
+      JSR   p_emit_hash
       BCS   @fail
       LDA   #$0A
       JMP   p_emit
@@ -9786,6 +9836,55 @@ p_parse_byte_value:
       CLC
       RTS
 @external_identifier:
+      LDX   #0
+@system_noarg:
+      CPX   #SYSTEM_NOARG_FUNCTION_COUNT
+      BCS   @external_value_check
+      LDA   p_call_hash
+      CMP   system_noarg_hash0,X
+      BNE   @system_noarg_next
+      LDA   p_call_hash+1
+      CMP   system_noarg_hash1,X
+      BNE   @system_noarg_next
+      LDA   p_call_hash+2
+      CMP   system_noarg_hash2,X
+      BEQ   @system_noarg_call
+@system_noarg_next:
+      INX
+      BRA   @system_noarg
+@system_noarg_call:
+      LDA   #2
+      JSR   p_emit_sig_call
+      long_bcs @bad
+      JSR   p_emit_call_buffered
+      long_bcs @bad
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      CLC
+      RTS
+@external_value_check:
+      LDX   #0
+@system_storage:
+      CPX   #SYSTEM_STORAGE_COUNT
+      BCS   @kbd_check
+      LDA   p_call_hash
+      CMP   system_storage_hash0,X
+      BNE   @system_storage_next
+      LDA   p_call_hash+1
+      CMP   system_storage_hash1,X
+      BNE   @system_storage_next
+      LDA   p_call_hash+2
+      CMP   system_storage_hash2,X
+      BEQ   @system_storage_load
+@system_storage_next:
+      INX
+      BRA   @system_storage
+@system_storage_load:
+      LDA   #TYPE_BYTE
+      STA   p_expr_type
+      JSR   p_emit_load_identifier
+      RTS
+@kbd_check:
       LDA   p_call_ident_len
       CMP   #3
       BNE   @external_value
@@ -9805,7 +9904,7 @@ p_parse_byte_value:
 @external_value:
       LDA   #TYPE_BYTE
       STA   p_expr_type
-      JSR   p_emit_load_identifier
+      JSR   p_emit_external_value_identifier
       RTS
 @character:
       JSR   p_next
@@ -10987,20 +11086,22 @@ p_next:
       RTS
 
       .segment "NPCFE_RODATA"
-SYSTEM_CALL_METADATA_COUNT = 20
+SYSTEM_CALL_METADATA_COUNT = 21
 SYSTEM_FUNCTION_COUNT = 12
+SYSTEM_NOARG_FUNCTION_COUNT = 3
+SYSTEM_STORAGE_COUNT = 2
 p_argument_bits:  .byte $01, $02, $04, $08, $10, $20, $40, $80
 ; Hash bytes are little-endian DJB2-24 values. Arity disambiguates the two
 ; classic READ and READLN forms.
 ; Reference and Integer-width masks for the classic System interface plus the
 ; Pascal-shaped NovaMemory adapter. Hashes remain generated ABI identities;
 ; no NDK address or function id is embedded in NPC.
-system_call_hash0: .byte $C1,$C1,$1B,$1B,$EA,$E8,$B8,$27,$BB,$68,$DA,$CF,$C8,$5F,$19,$08,$D0,$67,$21,$10
-system_call_hash1: .byte $34,$34,$73,$73,$0A,$19,$47,$93,$71,$29,$C5,$44,$6B,$65,$C2,$C5,$52,$8B,$E8,$AC
-system_call_hash2: .byte $8B,$8B,$2B,$2B,$8B,$F2,$89,$2F,$E6,$88,$D9,$42,$E3,$B4,$BA,$74,$B3,$1F,$25,$44
-system_call_arity: .byte $01,$02,$01,$02,$02,$01,$03,$01,$01,$03,$03,$02,$02,$01,$04,$04,$02,$01,$04,$04
-system_call_refmask: .byte $01,$02,$01,$02,$01,$01,$01,$01,$01,$06,$02,$00,$01,$01,$05,$05,$01,$01,$05,$05
-system_call_widthmask: .byte $00,$00,$00,$00,$00,$00,$06,$00,$00,$00,$04,$03,$02,$00,$0A,$0A,$02,$00,$0A,$0A
+system_call_hash0: .byte $C1,$C1,$1B,$1B,$EA,$E8,$B8,$27,$BB,$68,$DA,$CF,$C8,$5F,$19,$08,$D0,$67,$21,$10,$94
+system_call_hash1: .byte $34,$34,$73,$73,$0A,$19,$47,$93,$71,$29,$C5,$44,$6B,$65,$C2,$C5,$52,$8B,$E8,$AC,$A4
+system_call_hash2: .byte $8B,$8B,$2B,$2B,$8B,$F2,$89,$2F,$E6,$88,$D9,$42,$E3,$B4,$BA,$74,$B3,$1F,$25,$44,$F4
+system_call_arity: .byte $01,$02,$01,$02,$02,$01,$03,$01,$01,$03,$03,$02,$02,$01,$04,$04,$02,$01,$04,$04,$01
+system_call_refmask: .byte $01,$02,$01,$02,$01,$01,$01,$01,$01,$06,$02,$00,$01,$01,$05,$05,$01,$01,$05,$05,$00
+system_call_widthmask: .byte $00,$00,$00,$00,$00,$00,$06,$00,$00,$00,$04,$03,$02,$00,$0A,$0A,$02,$00,$0A,$0A,$01
 ; ABS, SQRT, SQR, SIN, COS, ARCTAN, LN, EXP, TRUNC, UPCASE, SUCC, PRED.
 system_function_hash0: .byte $3B,$6F,$BB,$AF,$6A,$5E,$5F,$12,$71,$66,$73,$D0
 system_function_hash1: .byte $D0,$F6,$1E,$1D,$DA,$5A,$74,$E4,$75,$07,$05,$53
@@ -11008,6 +11109,15 @@ system_function_hash2: .byte $87,$8B,$88,$88,$87,$70,$59,$87,$1D,$F3,$8C,$8A
 system_function_kind:  .byte SYSFN_SAME,SYSFN_REAL,SYSFN_SAME,SYSFN_REAL
                        .byte SYSFN_REAL,SYSFN_REAL,SYSFN_REAL,SYSFN_REAL,SYSFN_WORD
                        .byte SYSFN_SAME,SYSFN_SAME,SYSFN_SAME
+; Turbo Crt functions may be called without an empty parenthesized argument list.
+; READKEY, WHEREX, WHEREY.
+system_noarg_hash0: .byte $6A,$F8,$F9
+system_noarg_hash1: .byte $D1,$F3,$F3
+system_noarg_hash2: .byte $99,$0D,$0D
+; Implicit System byte storage: KEYPRESSED, IORESULT.
+system_storage_hash0: .byte $C4,$3C
+system_storage_hash1: .byte $63,$53
+system_storage_hash2: .byte $BD,$08
 kw_program: .byte "PROGRAM", 0
 kw_unit:    .byte "UNIT", 0
 kw_interface: .byte "INTERFACE", 0
@@ -11082,7 +11192,8 @@ asm_import_footer:
       .byte ".IMPORTIFREF I_P_AGET,I_P_ASETB,I_P_ASETW,P_ADDW,P_SUBW,P_CMPW,P_EQ,P_NE,P_LT,P_LE,P_GT,P_GE", $0A
       .byte ".IMPORTIFREF GOTOXY,CLREOL,HIGHVIDEO,LOWVIDEO,DELAY,READ,UPCASE,CLRSCR,SUCC,PRED,ASSIGN,RESET,LENGTH", $0A
       .byte ".IMPORTIFREF DELETE,REWRITE,CLOSE,EOF,READLN,VAL,ABS,SQRT,SQR,SIN,COS,ARCTAN,LN,EXP,TRUNC,INSERT", $0A
-      .byte ".IMPORTIFREF NORMVIDEO,HALT,KEYPRESSED,IORESULT,KBD", $0A
+      .byte ".IMPORTIFREF NORMVIDEO,HALT,READKEY,WHEREX,WHEREY,TEXTCOLOR,TEXTBACKGROUND", $0A
+      .byte ".IMPORTIFREF KEYPRESSED,IORESULT,KBD", $0A
       .byte 0
 asm_bss:    .byte ".SEGMENT ", 34, "BSS", 34, $0A, 0
 asm_rodata: .byte ".SEGMENT ", 34, "RODATA", 34, $0A, 0
@@ -11307,5 +11418,17 @@ asm_sig2_end: .byte ") = $02", $0A, 0
 asm_sig3_end: .byte ") = $03", $0A, 0
 asm_const_start: .byte ".ASSERT __C", 0
 asm_const_end: .byte " = 1", $0A, "LDA #", 0
+asm_external_macro:
+      .byte ".IFNDEF __NP_LOAD_EXTERNAL", $0A
+      .byte ".MACRO __NP_LOAD_EXTERNAL value, marker", $0A
+      .byte ".IFDEF marker", $0A
+      .byte "LDA #value", $0A
+      .byte ".ELSE", $0A
+      .byte "LDA value", $0A
+      .byte ".ENDIF", $0A
+      .byte ".ENDMACRO", $0A
+      .byte ".ENDIF", $0A, 0
+asm_external_const_start: .byte "__NP_LOAD_EXTERNAL ", 0
+asm_external_const_else: .byte ", __C", 0
 sig_suffix_lo: .byte <asm_sig0_end, <asm_sig1_end, <asm_sig2_end, <asm_sig3_end
 sig_suffix_hi: .byte >asm_sig0_end, >asm_sig1_end, >asm_sig2_end, >asm_sig3_end

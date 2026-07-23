@@ -47,5 +47,10 @@ __S1D7571 = $03 ; Trunc
 __PD9C5DA = $03 ; Insert
 __S59C618 = $00 ; NormVideo
 __S85A96E = $00 ; Halt
+__S99D16A = $02 ; ReadKey
+__S0DF3F8 = $02 ; WhereX
+__S0DF3F9 = $02 ; WhereY
+__S8F4049 = $01 ; TextColor
+__S9D880A = $01 ; TextBackground
 
 .endif

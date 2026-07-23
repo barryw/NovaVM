@@ -134,8 +134,16 @@ language contracts.
 ## Pascal standard units
 
 Pascal programs consume Nova hardware through typed Pascal units, not raw NDK
-registers or assembly calling conventions. The first native adapter is
-`NovaGraphics`:
+registers or assembly calling conventions. `Crt` provides the familiar Turbo
+console surface over the existing Pascal System runtime and canonical NDK
+services: `ClrScr`, `ClrEol`, `GotoXY`, video intensity, `Delay`, `KeyPressed`,
+`ReadKey`, `WhereX`, `WhereY`, `TextColor`, and `TextBackground`. Parameterless
+functions accept Turbo syntax without empty parentheses, and `Delay` accepts a
+16-bit millisecond value while delegating frame waits to the System module. The
+unit publishes Turbo's 16 named colors from `Black` through `White` using
+Nova's default palette indexes.
+
+The first Nova-specific native adapter is `NovaGraphics`:
 
 ```pascal
 uses NovaGraphics;
@@ -212,7 +220,7 @@ uses NovaRng, NovaFio;
 var Status, Sample: Byte;
 begin
   Status := rng_get8();
-  Status := fio_exec(Byte(FIO_CMD_RNG));
+  Status := fio_exec(FIO_CMD_RNG);
   fio_issue(Status);
   Sample := RNG_VALUE0;
   VGC_BORDER := Sample;
@@ -226,10 +234,11 @@ segment, NL omits its zero bytes and appends the eight-byte `NBS1` trailer;
 Legacy flat binaries remain valid. A
 no-argument `function()` returns its byte in A; a one-byte routine argument is
 passed in A. Decimal, `$` hexadecimal, and single-character byte values are
-accepted. `Byte(NDK_CONSTANT)` loads a generated, range-checked canonical byte
-constant such as `FIO_CMD_RNG`. An identifier used as a value or assignment
-target remains a symbolic byte address, which gives Pascal direct access to NDK
-pseudo-registers such as `RNG_VALUE0` without teaching NPC their addresses.
+accepted. Generated `.NPI` markers let NAS choose an immediate load for a byte
+constant such as `FIO_CMD_RNG` and a memory load for byte storage such as
+`RNG_VALUE0`; callers do not need an explicit `Byte(...)` cast. Assignment
+targets remain symbolic byte addresses, giving Pascal direct access to NDK
+pseudo-registers without teaching NPC their addresses.
 
 NPC emits declaration includes before program code and implementation includes
 after its terminating `RTS`. NAS uses `.referenced()`/`.REFTO` to omit unused

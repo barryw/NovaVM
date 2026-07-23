@@ -302,12 +302,20 @@ sources. `uses NovaRng, NovaFio;` remains the lower-level binding path for those
 canonical declarations and implementations. `Byte` variables live in zero-fill `BSS`,
 `status := rng_get8();` receives A, `fio_issue(status);` passes A, and named
 pseudo-register assignments remain symbolic through NPC, NAS, and NL.
-Generated `.NPI` bindings validate byte call signatures, while
-`Byte(FIO_CMD_RNG)` uses a generated canonical byte constant. `EDIT` opens text
-files and `Alt-X` or `Ctrl-Q` returns to the shell. The language-neutral Editor
-module keeps large documents in XRAM and pages complete-line windows through
-lower RAM as navigation crosses them; NPEDIT only supplies disk I/O and the
-file-type label.
+
+`uses Crt;` provides the familiar Turbo console surface over the shared System
+runtime: screen/cursor control, video intensity, text colors, `KeyPressed`,
+blocking `ReadKey`, cursor-position functions, and 16-bit `Delay`. Turbo-style
+parameterless functions may be called without an empty parentheses pair. The
+unit also publishes Turbo's 16 named colors from `Black` through `White` using
+Nova's default palette indexes.
+Generated `.NPI` bindings validate byte call signatures and distinguish byte
+constants from storage, so `FIO_CMD_RNG` lowers to an immediate while
+`RNG_VALUE0` remains a memory read; no explicit `Byte(...)` cast is required.
+`EDIT` opens text files and `Alt-X` or `Ctrl-Q` returns to the shell. The
+language-neutral Editor module keeps large documents in XRAM and pages
+complete-line windows through lower RAM as navigation crosses them; NPEDIT only
+supplies disk I/O and the file-type label.
 The disk also includes FizzBuzz and Conway's Game of Life projects. FizzBuzz
 uses nested structured statements, byte expressions, `mod`, comparisons,
 `while`, `if`/`else`, and numeric `writeln`. Life adds zero-based
@@ -367,7 +375,9 @@ NDK source. Canonical declaration includes also drive implementation dependencie
 which are appended after callers so source-level dead stripping sees live edges
 without a hand-maintained dependency table or order-sensitive `USES` clause.
 `.NPI` files encode byte constants, byte storage, and supported
-A-register routine signatures directly from annotations. Inline-parameter and
+A-register routine signatures directly from annotations. NPC carries an
+external value's generated marker into assembly, where NAS selects immediate
+addressing for constants and memory addressing for storage. Inline-parameter and
 wider register routines remain assembly-callable but are omitted from the typed
 Pascal contract and implementation facade until NovaPascal can express their ABI.
 

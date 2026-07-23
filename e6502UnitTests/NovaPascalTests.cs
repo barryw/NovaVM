@@ -169,6 +169,9 @@ public class NovaPascalTests
             Assert.IsTrue(disk.FileExists("NOVAMEMORY", ".PAS"), "Managed RAM and XRAM must be exposed as a native Pascal unit.");
             Assert.IsTrue(disk.FileExists("MEMORY", ".NPI"), "The memory unit must carry its compiled Pascal interface.");
             Assert.IsTrue(disk.FileExists("MEMORY", ".S"), "The memory unit must adapt the canonical NDK allocators.");
+            Assert.IsTrue(disk.FileExists("CRT", ".PAS"), "Turbo Crt must ship as a readable Pascal contract.");
+            Assert.IsTrue(disk.FileExists("CRT", ".ASM"), "Turbo Crt must use the normal external-unit facade.");
+            Assert.IsTrue(disk.FileExists("CRT", ".NPI"), "Turbo Crt must carry checked call signatures.");
             disk.CurrentDirectory = "/";
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x1D }, disk.Load("NAS", ".BIN")[..2]);
             CollectionAssert.AreEqual(new byte[] { 0x00, 0x1D }, disk.Load("NL", ".BIN")[..2]);
@@ -995,7 +998,7 @@ public class NovaPascalTests
                 "  Status := $00;\n" +
                 "  Status := 'A';\n" +
                 "  Status := rng_get8();\n" +
-                "  Status := fio_exec(Byte(FIO_CMD_RNG));\n" +
+                "  Status := fio_exec(FIO_CMD_RNG);\n" +
                 "  fio_issue(Status);\n" +
                 "  Sample := RNG_VALUE0;\n" +
                 "  VGC_BORDER := Sample;\n" +
@@ -1025,14 +1028,17 @@ public class NovaPascalTests
             StringAssert.Contains(ndkAssembly, ".INCLUDE \"RNG.NPI\"");
             StringAssert.Contains(ndkAssembly, "JSR RNG_GET8");
             StringAssert.Contains(ndkAssembly, ".ASSERT (__S8578E3) = $02");
-            StringAssert.Contains(ndkAssembly, ".ASSERT __CBAB93C = 1\nLDA #FIO_CMD_RNG");
+            StringAssert.Contains(ndkAssembly,
+                ".IFDEF __CBAB93C\nLDA #FIO_CMD_RNG\n.ELSE\nLDA FIO_CMD_RNG\n.ENDIF");
             StringAssert.Contains(ndkAssembly, ".ASSERT (__S34C9C7) = $03\nJSR FIO_EXEC");
             StringAssert.Contains(ndkAssembly, ".ASSERT (__S13E4EB & $01) = $01");
             StringAssert.Contains(ndkAssembly, "LDA #$41\nSTA STATUS");
             StringAssert.Contains(ndkAssembly, "STA STATUS");
             StringAssert.Contains(ndkAssembly,
                 "LDA STATUS\n.ASSERT (__S13E4EB & $01) = $01\nJSR FIO_ISSUE");
-            StringAssert.Contains(ndkAssembly, "LDA RNG_VALUE0\nSTA SAMPLE");
+            StringAssert.Contains(ndkAssembly,
+                ".IFDEF __C785E78\nLDA #RNG_VALUE0\n.ELSE\nLDA RNG_VALUE0\n.ENDIF");
+            StringAssert.Contains(ndkAssembly, "STA SAMPLE");
             StringAssert.Contains(ndkAssembly, "LDA SAMPLE\nSTA VGC_BORDER");
             StringAssert.Contains(ndkAssembly,
                 ".SEGMENT \"BSS\"\nSTATUS: .RES 1\nSAMPLE: .RES 1");
@@ -1085,6 +1091,45 @@ public class NovaPascalTests
                 if (disk.FileExists("NDKCAT", extension))
                     disk.Delete("NDKCAT", extension);
             }
+
+            disk.Save("CRTTEST", Encoding.ASCII.GetBytes(
+                "program CrtTest;\nuses Crt;\nvar Ch: Char;\nbegin\n" +
+                "  ClrScr;\n  NormVideo;\n  TextColor(Yellow);\n  TextBackground(Blue);\n  GotoXY(1, 1);\n" +
+                "  if (WhereX = 1) and (WhereY = 1) then writeln('CRT');\n" +
+                "  Delay(257);\n  Ch := ReadKey;\n" +
+                "  if Ch = 'Q' then writeln('Crt OK');\n  Ch := ReadKey\nend.\n"), ".PAS");
+            disk.Save("CRTTEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN CRTTEST.PAS\nUNITPATH SYSTEM\nOUTPUT CRTTEST.BIN\nOPTIMIZE O2\n" +
+                "CONFIG INLINE\nMAP CRTTEST.MAP\nLABEL CRTTEST.LBL\n" +
+                "MEMORY {\n    RAM: start = $8000, size = $1000, file = %O;\n}\n\n" +
+                "SEGMENTS {\n    CODE: load = RAM, type = ro;\n" +
+                "    RODATA: load = RAM, type = ro;\n    BSS: load = RAM, type = bss;\n}\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD CRTTEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: CRTTEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains("error", StringComparison.OrdinalIgnoreCase),
+                "Turbo Crt build");
+            Assert.IsTrue(disk.FileExists("CRTTEST", ".BIN"), Snapshot(bus));
+            string crtAssembly = Encoding.ASCII.GetString(disk.Load("CRTTEST", ".S"));
+            StringAssert.Contains(crtAssembly, ".INCLUDE \"CRT.NPI\"");
+            StringAssert.Contains(crtAssembly, "JSR WHEREX");
+            StringAssert.Contains(crtAssembly, "JSR WHEREY");
+            StringAssert.Contains(crtAssembly, "JSR READKEY");
+            StringAssert.Contains(crtAssembly, "JSR TEXTCOLOR");
+            StringAssert.Contains(crtAssembly, "JSR TEXTBACKGROUND");
+            StringAssert.Contains(crtAssembly,
+                ".IFDEF __C85BA21\nLDA #YELLOW\n.ELSE\nLDA YELLOW\n.ENDIF");
+            StringAssert.Contains(crtAssembly,
+                ".IFDEF __C828F0D\nLDA #BLUE\n.ELSE\nLDA BLUE\n.ENDIF");
+            QueueLine(editor, "RUN CRTTEST.BIN");
+            editor.QueueInput((byte)'Q');
+            RunUntil(cpu, bus, s => s.Contains("Crt OK", StringComparison.Ordinal), "Turbo Crt runtime");
+            Assert.AreEqual(7, bus.Read((ushort)VgcConstants.RegFgCol),
+                "Turbo Yellow must map to Nova's default yellow palette index.");
+            Assert.AreEqual(6, bus.Read((ushort)VgcConstants.RegTextBackground),
+                "Turbo Blue must map to Nova's default blue palette index.");
+            editor.QueueInput(0x0D);
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "Turbo Crt return to shell");
 
             disk.Save("BADABI", Encoding.ASCII.GetBytes(
                 "program BadAbi;\nuses NovaRng, NovaFio;\nbegin\n  rng_get8(0);\nend.\n"), ".PAS");
