@@ -84,5 +84,13 @@ __S8F4049 = $01 ; TextColor
 .ifndef __S9D880A
 __S9D880A = $01 ; TextBackground
 .endif
-
+.ifndef __SB5E802
+__SB5E802 = $00 ; DelLine
+.endif
+.ifndef __S1630F7
+__S1630F7 = $00 ; InsLine
+.endif
+.ifndef __P24C19D
+__P24C19D = $04 ; Window
+.endif
 .endif

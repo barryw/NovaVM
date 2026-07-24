@@ -675,6 +675,11 @@ public class RuntimeLibraryAbiTests
             scroll[(copyChar + "LDA   #VTEXT_PLANE_CHAR".Length)..],
             "vtext_scroll_up bottom-row clear");
 
+        string scrollDown = File.ReadAllText(RepoPath("software", "runtime", "asm", "vtext_scroll_down.s"));
+        AssertPlaneOrder(scrollDown, "vtext_scroll_down copy");
+        StringAssert.Contains(scrollDown, "JSR   vtext_clear_region",
+            "vtext_scroll_down must reuse the already style-ordered region clear.");
+
         static string SliceRoutine(string source, string startMarker, string endMarker)
         {
             int start = source.IndexOf(startMarker, StringComparison.Ordinal);

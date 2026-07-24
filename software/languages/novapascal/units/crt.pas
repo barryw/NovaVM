@@ -23,7 +23,10 @@ const
 
 procedure ClrScr; external;
 procedure ClrEol; external;
+procedure DelLine; external;
+procedure InsLine; external;
 procedure GotoXY(X, Y: Byte); external;
+procedure Window(X1, Y1, X2, Y2: Byte); external;
 procedure HighVideo; external;
 procedure LowVideo; external;
 procedure NormVideo; external;

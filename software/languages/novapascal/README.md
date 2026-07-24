@@ -137,7 +137,12 @@ Pascal programs consume Nova hardware through typed Pascal units, not raw NDK
 registers or assembly calling conventions. `Crt` provides the familiar Turbo
 console surface over the existing Pascal System runtime and canonical NDK
 services: `ClrScr`, `ClrEol`, `GotoXY`, video intensity, `Delay`, `KeyPressed`,
-`ReadKey`, `WhereX`, `WhereY`, `TextColor`, and `TextBackground`. Parameterless
+`ReadKey`, `WhereX`, `WhereY`, `TextColor`, `TextBackground`, `DelLine`, and
+`InsLine`. `Window(X1, Y1, X2, Y2)` uses Turbo's absolute one-based corners;
+afterward, cursor coordinates, output wrapping/scrolling, clears, and line edits
+are relative to that window and cannot disturb cells outside it. Those operations
+move characters, colors, and attributes together through Nova's shared
+blitter-backed text-region API. Parameterless
 functions accept Turbo syntax without empty parentheses, and `Delay` accepts a
 16-bit millisecond value while delegating frame waits to the System module. The
 unit publishes Turbo's 16 named colors from `Black` through `White` using

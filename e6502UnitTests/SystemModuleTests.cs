@@ -15,11 +15,11 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($03  MODULE_ID_SYSTEM)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($1D  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
+///   $C007  fn count      ($21  retired EDIT slot + WAIT/WAITVBL/TIMER + RNG8/16/32 +
 ///                              DIALOG_DEFAULTS/DIALOG/DIALOG_WAIT/DIALOG_ERROR/WAIT_KEY +
 ///                              OVL_LOAD/UNLOAD/INIT/MAIN/TICK + ADDR_LOOKUP + SCREEN_READLINE +
 ///                              NUI save-under/picker/full save-under/style/file picker/text input/drain +
-///                              console clear-to-end-of-line)
+///                              bounded console clear/line-edit/character services)
 /// The header bytes are defined by runtime/asm/libmod.inc + libabi.inc + libsystem.inc;
 /// this is the byte-exact guard the loader (lib_call) depends on when paging SYSTEM.
 /// </summary>
@@ -37,7 +37,7 @@ public class SystemModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x03, img[5]);   // MODULE_ID_SYSTEM
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x1D, img[7]);   // SYS_FN_COUNT (through SYS_CONSOLE_CLEAR_EOL)
+        Assert.AreEqual(0x21, img[7]);   // SYS_FN_COUNT (through SYS_CONSOLE_PUT_CHAR)
     }
 
     // =====================================================================
@@ -61,6 +61,8 @@ public class SystemModuleTests
     private const byte   SYS_NUI_SET_STYLE = 0x18;
     private const byte   SYS_NUI_FILE_PICKER = 0x19, SYS_NUI_TEXT_INPUT = 0x1A, SYS_NUI_DRAIN_KEYS = 0x1B;
     private const byte   SYS_CONSOLE_CLEAR_EOL = 0x1C;
+    private const byte   SYS_CONSOLE_DELETE_LINE = 0x1D, SYS_CONSOLE_INSERT_LINE = 0x1E;
+    private const byte   SYS_CONSOLE_CLEAR_REGION = 0x1F, SYS_CONSOLE_PUT_CHAR = 0x20;
     private const byte   LERR_OK = 0x00;
     private const ushort Sentinel = 0xFFF9;          // module RTS lands here; loop stops
     // VGC register / window addresses (runtime/asm/nova.inc).
@@ -218,13 +220,79 @@ public class SystemModuleTests
         WriteScreenWindowRow(bus, 7, 0, new string('X', ScreenCols));
         bus.Write(VGC_CURSX, 5);
         bus.Write(VGC_CURSY, 7);
+        SetArg(bus, ARG0, 3 | (7 << 8) | (5 << 16) | (3 << 24));
 
         RunFn(bus, SYS_CONSOLE_CLEAR_EOL);
 
-        Assert.AreEqual("XXXXX" + new string(' ', ScreenCols - 5),
+        Assert.AreEqual("XXXXX" + new string(' ', 3) + new string('X', ScreenCols - 8),
             ReadScreenWindowRow(bus, 7, 0, ScreenCols));
         Assert.AreEqual(5, bus.Read(VGC_CURSX));
         Assert.AreEqual(7, bus.Read(VGC_CURSY));
+    }
+
+    /// <summary>
+    /// Turbo-style line insertion/deletion must shift every text plane together;
+    /// moving only glyphs leaves colors and attributes attached to the wrong row.
+    /// </summary>
+    [TestMethod]
+    public void ConsoleLineEditing_ShiftsAllPlanesAndPreservesCursor()
+    {
+        using var bus = MakeSystemBus();
+        const int row = 11;
+        bus.Write(VGC_CURSX, 3);
+        bus.Write(VGC_CURSY, row);
+        bus.Write((ushort)VgcConstants.RegFgCol, 7);
+        bus.Write((ushort)VgcConstants.RegTextBackground, 6);
+        SetArg(bus, ARG0, 2 | (row << 8) | (3 << 16) | (3 << 24));
+
+        for (int y = row; y <= row + 1; y++)
+        {
+            WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, y, 2, (byte)('A' + y - row));
+            WriteScreenWindowCell(bus, VGC_SCREENWIN_COLOR, y, 2, (byte)(0x21 + y - row));
+            WriteScreenWindowCell(bus, VGC_SCREENWIN_ATTR, y, 2, (byte)(0x41 + y - row));
+        }
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 1, (byte)'L');
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 5, (byte)'R');
+
+        RunFn(bus, SYS_CONSOLE_INSERT_LINE);
+
+        Assert.AreEqual((byte)' ', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 2));
+        Assert.AreEqual(0x67, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, row, 2));
+        Assert.AreEqual(0, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, row, 2));
+        Assert.AreEqual((byte)'A', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row + 1, 2));
+        Assert.AreEqual(0x21, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, row + 1, 2));
+        Assert.AreEqual(0x41, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, row + 1, 2));
+        Assert.AreEqual((byte)'L', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 1));
+        Assert.AreEqual((byte)'R', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 5));
+
+        RunFn(bus, SYS_CONSOLE_DELETE_LINE);
+
+        Assert.AreEqual((byte)'A', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, row, 2));
+        Assert.AreEqual(0x21, ReadScreenWindowCell(bus, VGC_SCREENWIN_COLOR, row, 2));
+        Assert.AreEqual(0x41, ReadScreenWindowCell(bus, VGC_SCREENWIN_ATTR, row, 2));
+        Assert.AreEqual(3, bus.Read(VGC_CURSX));
+        Assert.AreEqual(row, bus.Read(VGC_CURSY));
+    }
+
+    [TestMethod]
+    public void ConsolePutChar_ScrollsOnlyTheCallerWindowAtPhysicalBottomRight()
+    {
+        using var bus = MakeSystemBus();
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 48, 77, (byte)'L');
+        WriteScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 49, 77, (byte)'R');
+        bus.Write(VGC_CURSX, 79);
+        bus.Write(VGC_CURSY, 49);
+        SetArg(bus, ARG0, 78 | (48 << 8) | (2 << 16) | (2 << 24));
+        SetArg(bus, ARG1, 'Z');
+
+        RunFn(bus, SYS_CONSOLE_PUT_CHAR);
+
+        Assert.AreEqual((byte)'Z', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 48, 79));
+        Assert.AreEqual((byte)' ', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 49, 79));
+        Assert.AreEqual((byte)'L', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 48, 77));
+        Assert.AreEqual((byte)'R', ReadScreenWindowCell(bus, VGC_SCREENWIN_CHAR, 49, 77));
+        Assert.AreEqual(78, bus.Read(VGC_CURSX));
+        Assert.AreEqual(49, bus.Read(VGC_CURSY));
     }
 
     private static void WriteRamBytes(CompositeBusDevice bus, ushort address, ReadOnlySpan<byte> bytes)

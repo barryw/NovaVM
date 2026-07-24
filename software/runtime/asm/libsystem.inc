@@ -122,7 +122,11 @@ SYS_NUI_SET_STYLE          = $18 ; (shadow,border,panel,text) -> set NUI chrome/
 SYS_NUI_FILE_PICKER        = $19 ; (configptr) reporter -> RESULT b0 namelen, b1 OK/CANCEL
 SYS_NUI_TEXT_INPUT         = $1A ; (configptr) reporter -> RESULT b0 textlen, b1 OK/CANCEL
 SYS_NUI_DRAIN_KEYS         = $1B ; () -> drain pending modal keyboard bytes
-SYS_CONSOLE_CLEAR_EOL      = $1C ; () -> clear cursor through end of text row
+SYS_CONSOLE_CLEAR_EOL       = $1C ; (geom) -> clear cursor through window row
+SYS_CONSOLE_DELETE_LINE     = $1D ; (geom) -> delete cursor row inside window
+SYS_CONSOLE_INSERT_LINE     = $1E ; (geom) -> insert cursor row inside window
+SYS_CONSOLE_CLEAR_REGION    = $1F ; (geom) -> clear caller window
+SYS_CONSOLE_PUT_CHAR        = $20 ; (geom,char) -> bounded character output
 
 ; =====================================================================
 ; Fixed-address overlay manager (overlay.s, streams a NOVO overlay into CPU RAM
@@ -167,6 +171,6 @@ SYS_SCREEN_READLINE = $12 ; (bufptr,maxlen) -> RESULT b0 = line length, buffer f
 
 ; Highest implemented fn-id + 1. Gaps and ids >= SYS_FN_COUNT resolve to
 ; LERR_NO_FN via the dispatch bounds-check.
-SYS_FN_COUNT  = $1D
+SYS_FN_COUNT  = $21
 
 .endif

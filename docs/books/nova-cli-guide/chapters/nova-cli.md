@@ -305,7 +305,9 @@ pseudo-register assignments remain symbolic through NPC, NAS, and NL.
 
 `uses Crt;` provides the familiar Turbo console surface over the shared System
 runtime: screen/cursor control, video intensity, text colors, `KeyPressed`,
-blocking `ReadKey`, cursor-position functions, and 16-bit `Delay`. Turbo-style
+blocking `ReadKey`, cursor-position functions, blitter-backed `DelLine` and
+`InsLine`, `Window(X1,Y1,X2,Y2)` with window-relative output and cursor
+coordinates, and 16-bit `Delay`. Turbo-style
 parameterless functions may be called without an empty parentheses pair. The
 unit also publishes Turbo's 16 named colors from `Black` through `White` using
 Nova's default palette indexes.

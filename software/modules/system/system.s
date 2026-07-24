@@ -108,9 +108,39 @@ sys_ptr2H:         .res 1
 ;@status LERR_OK
 ;
 ;@fn SYS_CONSOLE_CLEAR_EOL
-;@ndk vgc_clear_eol
+;@ndk vtext_clear_region
+;@arg geom u32 left/top/width/height (ARG0 byte0,1,2,3)
 ;@ret void
-;@status LERR_OK
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_CONSOLE_DELETE_LINE
+;@ndk vtext_scroll_up
+;@brief Delete the cursor row and scroll the remaining window rows up.
+;@arg geom u32 left/top/width/height (ARG0 byte0,1,2,3)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_CONSOLE_INSERT_LINE
+;@ndk vtext_scroll_down
+;@brief Insert a blank cursor row and scroll the remaining window rows down.
+;@arg geom u32 left/top/width/height (ARG0 byte0,1,2,3)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_CONSOLE_CLEAR_REGION
+;@ndk vtext_clear_region
+;@brief Clear a caller-defined text window using the active VGC text style.
+;@arg geom u32 left/top/width/height (ARG0 byte0,1,2,3)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
+;
+;@fn SYS_CONSOLE_PUT_CHAR
+;@ndk vtext_put_char
+;@brief Write one character without allowing hardware wrap to escape the window.
+;@arg geom u32 left/top/width/height (ARG0 byte0,1,2,3)
+;@arg ch u8 character (ARG1 byte0)
+;@ret void
+;@status LERR_OK, LERR_SYS_FAIL
 ;
 ;@fn SYS_NUI_SAVE_UNDER
 ;@ndk nui_save_under
@@ -237,7 +267,7 @@ sys_ptr2H:         .res 1
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router. RTS-trick: push (target-1) hi/lo, RTS jumps to target.
-; SYS_FN_COUNT is small (29) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
+; SYS_FN_COUNT is small (33) so fn*2 cannot exceed 255; an 8-bit asl/tax is safe.
 ; ---------------------------------------------------------------------------
 dispatch:
       lda     LIB_FN_ID
@@ -285,18 +315,172 @@ sys_jtable:
       .word   sys_nui_text_input-1     ; $1A SYS_NUI_TEXT_INPUT
       .word   sys_nui_drain_keys-1     ; $1B SYS_NUI_DRAIN_KEYS
       .word   sys_console_clear_eol-1  ; $1C SYS_CONSOLE_CLEAR_EOL
+      .word   sys_console_delete_line-1 ; $1D SYS_CONSOLE_DELETE_LINE
+      .word   sys_console_insert_line-1 ; $1E SYS_CONSOLE_INSERT_LINE
+      .word   sys_console_clear_region-1 ; $1F SYS_CONSOLE_CLEAR_REGION
+      .word   sys_console_put_char-1  ; $20 SYS_CONSOLE_PUT_CHAR
 
 sys_no_fn:
       lda     #LERR_NO_FN
       sta     LIB_STATUS
       rts
 
-; --- $1C SYS_CONSOLE_CLEAR_EOL: clear through the end of the cursor row ---
+; Configure a caller-provided VTEXT region. Blank cells mirror the active VGC
+; text style so clear and line operations behave like ordinary console output.
+sys_console_region:
+      LDA   LIB_ARG0
+      STA   VTEXT_LEFT
+      LDA   LIB_ARG0+1
+      STA   VTEXT_TOP
+      LDA   LIB_ARG0+2
+      STA   VTEXT_WIDTH
+      LDA   LIB_ARG0+3
+      STA   VTEXT_HEIGHT
+      STZ   VTEXT_CURX
+      STZ   VTEXT_CURY
+      LDA   #VTEXT_FLAG_WRAP | VTEXT_FLAG_SCROLL
+      STA   VTEXT_FLAGS
+      STZ   VTEXT_SCROLL_HOOKL
+      STZ   VTEXT_SCROLL_HOOKH
+      JSR   vtext_validate_region
+      BNE   @bad
+      LDA   VGC_FGCOL
+      AND   #$0F
+      STA   VTEXT_COLOR
+      LDA   VGC_TEXT_BG
+      CMP   #VGC_TEXT_BG_TRANSPARENT
+      BEQ   @transparent
+      AND   #$0F
+      ASL
+      ASL
+      ASL
+      ASL
+      ORA   VTEXT_COLOR
+      STA   VTEXT_COLOR
+      STZ   VTEXT_ATTR
+      LDA   #VTEXT_OK
+      RTS
+@transparent:
+      LDA   #VTEXT_ATTR_BGTRANS
+      STA   VTEXT_ATTR
+      LDA   #VTEXT_OK
+      RTS
+@bad:
+      LDA   #VTEXT_ERR
+      RTS
+
+; Ensure the physical VGC cursor is inside the configured caller window.
+sys_console_cursor_in_region:
+      LDA   VGC_CURSX
+      CMP   VTEXT_LEFT
+      BCC   @bad
+      LDA   VTEXT_LEFT
+      CLC
+      ADC   VTEXT_WIDTH
+      STA   sys_ptr0L
+      LDA   VGC_CURSX
+      CMP   sys_ptr0L
+      BCS   @bad
+      LDA   VGC_CURSY
+      CMP   VTEXT_TOP
+      BCC   @bad
+      LDA   VTEXT_TOP
+      CLC
+      ADC   VTEXT_HEIGHT
+      STA   sys_ptr0H
+      LDA   VGC_CURSY
+      CMP   sys_ptr0H
+      BCS   @bad
+      LDA   #VTEXT_OK
+      RTS
+@bad:
+      LDA   #VTEXT_ERR
+      RTS
+
+; --- $1C SYS_CONSOLE_CLEAR_EOL: clear through the window's right edge ---
 sys_console_clear_eol:
+      LDA   LIB_ARG0
+      ORA   LIB_ARG0+1
+      BNE   @window
+      LDA   LIB_ARG0+2
+      CMP   #NOVA_SCREEN_COLS
+      BNE   @window
+      LDA   LIB_ARG0+3
+      CMP   #NOVA_SCREEN_ROWS
+      BNE   @window
       JSR   vgc_clear_eol
       LDA   #LERR_OK
       STA   LIB_STATUS
       RTS
+@window:
+      JSR   sys_console_region
+      BNE   :+
+      JSR   sys_console_cursor_in_region
+      BNE   :+
+      LDA   VGC_CURSX
+      STA   VTEXT_LEFT
+      LDA   sys_ptr0L
+      SEC
+      SBC   VGC_CURSX
+      STA   VTEXT_WIDTH
+      LDA   VGC_CURSY
+      STA   VTEXT_TOP
+      LDA   #1
+      STA   VTEXT_HEIGHT
+      JSR   vtext_clear_region
+:     JMP   sys_finish_status
+
+; Restrict the configured window to the cursor row through its bottom edge.
+sys_console_line_region:
+      JSR   sys_console_region
+      BNE   @done
+      JSR   sys_console_cursor_in_region
+      BNE   @done
+      LDA   VGC_CURSY
+      STA   VTEXT_TOP
+      LDA   sys_ptr0H
+      SEC
+      SBC   VGC_CURSY
+      STA   VTEXT_HEIGHT
+      LDA   #VTEXT_OK
+@done:
+      RTS
+
+sys_console_delete_line:
+      JSR   sys_console_line_region
+      BNE   :+
+      JSR   vtext_scroll_up
+:     JMP   sys_finish_status
+
+sys_console_insert_line:
+      JSR   sys_console_line_region
+      BNE   :+
+      JSR   vtext_scroll_down
+:     JMP   sys_finish_status
+
+sys_console_clear_region:
+      JSR   sys_console_region
+      BNE   :+
+      JSR   vtext_clear_region
+:     JMP   sys_finish_status
+
+sys_console_put_char:
+      JSR   sys_console_region
+      BNE   :+
+      JSR   sys_console_cursor_in_region
+      BNE   :+
+      LDA   VGC_CURSX
+      SEC
+      SBC   VTEXT_LEFT
+      STA   VTEXT_CURX
+      LDA   VGC_CURSY
+      SEC
+      SBC   VTEXT_TOP
+      STA   VTEXT_CURY
+      LDA   LIB_ARG1
+      STA   VTEXT_CHAR
+      JSR   vtext_put_char
+:     JMP   sys_finish_status
 
 ; ===========================================================================
 ; Timing services (moved from the NovaLogo extension ROM in Phase B). THIN wrappers

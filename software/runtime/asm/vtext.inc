@@ -117,6 +117,7 @@ VTEXT_REGION_SIZE = 10
 .global vtext_expose_gfx_spaces_region
 .global vtext_clear_line
 .global vtext_scroll_up
+.global vtext_scroll_down
 .global vtext_scroll_mixed_up
 .global vtext_scroll_composite_up
 .global vtext_fill_gfx_region

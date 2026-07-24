@@ -523,8 +523,11 @@ public class NovaPascalTests
             StringAssert.Contains(helloMap, "Sections\n");
             StringAssert.Contains(helloMap, "Exports\n");
             StringAssert.Contains(helloMap, "I_P_WRITE_LINE");
+            StringAssert.Contains(helloMap, "P_CHAR_DEVICE");
             Assert.IsFalse(helloMap.Contains("P_WRITE_CHAR", StringComparison.Ordinal),
                 "NL must strip the single-character writer when a program only uses inline line data.");
+            Assert.IsFalse(helloMap.Contains(" WINDOW\n", StringComparison.Ordinal),
+                "NL must not retain the bounded window writer unless Crt.Window is referenced.");
             Assert.IsFalse(helloMap.Contains('\r'), "NL maps must use Nova's LF-only text convention.");
             string helloLabels = Encoding.ASCII.GetString(disk.Load("HELLO", ".LBL"));
             StringAssert.Contains(helloLabels, "al 00");
@@ -1086,6 +1089,8 @@ public class NovaPascalTests
             StringAssert.Contains(catalogAssembly, "JSR AUDIO_STATUS");
             Assert.IsTrue(disk.Load("NDKCAT", ".BIN").Length <= 768,
                 "Cross-unit dependency closure must retain only selected XRAM and DMA routines.");
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal),
+                "generated NDK catalog return to shell");
             foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP", ".LBL" })
             {
                 if (disk.FileExists("NDKCAT", extension))
@@ -1094,8 +1099,12 @@ public class NovaPascalTests
 
             disk.Save("CRTTEST", Encoding.ASCII.GetBytes(
                 "program CrtTest;\nuses Crt;\nvar Ch: Char;\nbegin\n" +
-                "  ClrScr;\n  NormVideo;\n  TextColor(Yellow);\n  TextBackground(Blue);\n  GotoXY(1, 1);\n" +
-                "  if (WhereX = 1) and (WhereY = 1) then writeln('CRT');\n" +
+                "  ClrScr;\n  NormVideo;\n  TextColor(Yellow);\n  TextBackground(Blue);\n" +
+                "  Window(3, 2, 14, 7);\n  ClrScr;\n  GotoXY(2, 2);\n  write('WIN');\n" +
+                "  if (WhereX = 5) and (WhereY = 2) then writeln(' CRT');\n" +
+                "  GotoXY(1, 3);\n  InsLine;\n  DelLine;\n" +
+                "  if (WhereX = 1) and (WhereY = 3) then writeln('Window OK');\n" +
+                "  Window(1, 1, 80, 50);\n" +
                 "  Delay(257);\n  Ch := ReadKey;\n" +
                 "  if Ch = 'Q' then writeln('Crt OK');\n  Ch := ReadKey\nend.\n"), ".PAS");
             disk.Save("CRTTEST", Encoding.ASCII.GetBytes(
@@ -1115,6 +1124,10 @@ public class NovaPascalTests
             StringAssert.Contains(crtAssembly, "JSR WHEREX");
             StringAssert.Contains(crtAssembly, "JSR WHEREY");
             StringAssert.Contains(crtAssembly, "JSR READKEY");
+            StringAssert.Contains(crtAssembly, "JSR INSLINE");
+            StringAssert.Contains(crtAssembly, "JSR DELLINE");
+            StringAssert.Contains(crtAssembly, "JSR WINDOW");
+            StringAssert.Contains(crtAssembly, ".ASSERT __P24C19D = $04");
             StringAssert.Contains(crtAssembly, "JSR TEXTCOLOR");
             StringAssert.Contains(crtAssembly, "JSR TEXTBACKGROUND");
             StringAssert.Contains(crtAssembly,
@@ -1122,6 +1135,8 @@ public class NovaPascalTests
             StringAssert.Contains(crtAssembly,
                 ".IFDEF __C828F0D\nLDA #BLUE\n.ELSE\nLDA BLUE\n.ENDIF");
             QueueLine(editor, "RUN CRTTEST.BIN");
+            RunUntil(cpu, bus, s => s.Contains("Window OK", StringComparison.Ordinal),
+                "Turbo Crt window-relative output");
             editor.QueueInput((byte)'Q');
             RunUntil(cpu, bus, s => s.Contains("Crt OK", StringComparison.Ordinal), "Turbo Crt runtime");
             Assert.AreEqual(7, bus.Read((ushort)VgcConstants.RegFgCol),
@@ -2356,14 +2371,16 @@ public class NovaPascalTests
             disk.CurrentDirectory = "HELLO";
             Assert.AreEqual(2, library[4], "Pascal libraries must use complete NOBJ members.");
             byte[] lineMember = ReadNlibMember(library, "I_P_WRITE_LINE");
+            byte[] deviceMember = ReadNlibMember(library, "P_CHAR_DEVICE");
             byte[] unusedMember = ReadNlibMember(library, "P_UNUSED");
             byte[] lineCode = ReadNobjSectionData(lineMember, "CODE");
+            byte[] deviceCode = ReadNobjSectionData(deviceMember, "CODE");
             byte[] unusedCode = ReadNobjSectionData(unusedMember, "CODE");
             byte[] executable = disk.Load("HELLO", ".BIN");
-            Assert.AreEqual(2 + codeLength + lineCode.Length, executable.Length,
-                "NL must extract the complete transitive member set without NOBJ metadata or padding.");
-            CollectionAssert.AreEqual(new byte[] { 0xA9, 0x0A, 0x8D, 0x0E, 0xA0, 0x60 }, executable[^6..],
-                "The inline line writer must end by emitting Nova LF through the NDK address.");
+            Assert.AreEqual(2 + codeLength + lineCode.Length + deviceCode.Length + 7, executable.Length,
+                "NL must extract the complete transitive member set and materialize its seven-byte device state.");
+            Assert.IsTrue(ContainsSequence(executable, new byte[] { 0x68, 0x28, 0x8D, 0x0E, 0xA0, 0x60 }),
+                "The default character device must emit through Nova's VGC register.");
             Assert.IsFalse(ContainsSequence(executable, unusedCode),
                 "NL must strip unreferenced library members.");
             disk.CurrentDirectory = "/";

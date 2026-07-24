@@ -8,7 +8,9 @@
       .include "libmemory.inc"
       .include "liblangrt.inc"
       .include "nobj.inc"
-      .include "pascal.inc"
+.include "pascal.inc"
+
+NP_WINDOW_ACTIVE = $A5
 
 .macro PASCAL_FILE_CALL function_id
       LDA   #MODULE_ID_FILES
@@ -46,7 +48,7 @@
 
       .segment "LIBRARY"
       .byte NLIB_MAGIC0, NLIB_MAGIC1, NLIB_MAGIC2, NLIB_MAGIC3
-      .byte NLIB_VERSION, 20
+      .byte NLIB_VERSION, 21
 
       ; P_WRITE_CHAR deliberately imports P_CHAR_DEVICE from the next member.
       ; This keeps the Pascal-facing routine independent of the hardware shim
@@ -91,9 +93,9 @@ line_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 2
+      .word 3
       .word line_symbols-line_object
-      .word 2
+      .word 4
       .word line_relocations-line_object
       .word 0
 
@@ -108,10 +110,15 @@ line_code:
       .byte $BD,$01,$01,$8D,$00,$00        ; patch inline-byte load address
       .byte $BD,$02,$01,$8D,$00,$00
       .byte $AD,$FF,$FF,$F0,$05            ; load until zero
-      .byte $8D,<VGC_CHAROUT,>VGC_CHAROUT   ; NDK character device / loop
+      .byte $20
+line_char_call = *
+      .word 0                              ; JSR P_CHAR_DEVICE
       .byte $80,$E2
       .byte $A9,$0A                         ; LF
-      .byte $8D,<VGC_CHAROUT,>VGC_CHAROUT,$60
+      .byte $20
+line_newline_call = *
+      .word 0                              ; JSR P_CHAR_DEVICE
+      .byte $60
 line_code_end:
 
 line_symbols:
@@ -119,12 +126,18 @@ line_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_WRITE_LINE"
       .word $0015
       .byte 0, 0, 8, "PWL_LOAD"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 13, "P_CHAR_DEVICE"
 
 line_relocations:
       .byte 0, NOBJ_RELOC_ABS16
       .word $000D, 1, 1
       .byte 0, NOBJ_RELOC_ABS16
       .word $0013, 1, 2
+      .byte 0, NOBJ_RELOC_ABS16
+      .word line_char_call-line_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word line_newline_call-line_code, 2, 0
 line_object_end:
 
       ; Byte-sized decimal output. Keeping this in its own archive member means
@@ -134,9 +147,9 @@ byte_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 5
+      .word 6
       .word byte_symbols-byte_object
-      .word 1
+      .word 9
       .word byte_relocations-byte_object
       .word 0
 
@@ -146,11 +159,22 @@ byte_object:
       .byte "CODE"
 byte_code:
       .byte $20,$00,$00                     ; JSR P_WRITE_BYTE
-      .byte $A9,$0A,$8D,<VGC_CHAROUT,>VGC_CHAROUT,$60
+      .byte $A9,$0A,$20
+write_byte_newline_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
+      .byte $60
       .byte $A0,$00,$A2,$30,$C9,$64,$90,$06,$38,$E9,$64,$E8,$80,$F6,$E0,$30
-      .byte $F0,$07,$48,$8A,$8D,<VGC_CHAROUT,>VGC_CHAROUT,$68,$C8,$A2,$30,$C9,$0A,$90,$06,$38
-      .byte $E9,$0A,$E8,$80,$F6,$C0,$00,$D0,$04,$E0,$30,$F0,$06,$48,$8A,$8D
-      .byte <VGC_CHAROUT,>VGC_CHAROUT,$68,$18,$69,$30,$8D,<VGC_CHAROUT,>VGC_CHAROUT,$60
+      .byte $F0,$07,$48,$8A,$20
+write_byte_hundreds_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
+      .byte $68,$C8,$A2,$30,$C9,$0A,$90,$06,$38
+      .byte $E9,$0A,$E8,$80,$F6,$C0,$00,$D0,$04,$E0,$30,$F0,$06,$48,$8A,$20
+write_byte_tens_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
+      .byte $68,$18,$69,$30,$20
+write_byte_ones_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
+      .byte $60
 
 write_word:
       STZ   NVR2L                         ; no minimum field width
@@ -170,7 +194,7 @@ write_word_field:
 write_word_common:
       STZ   NVR2H                         ; sign character count
       LDA   NVR0H
-      BPL   @magnitude
+      BPL   write_word_magnitude
       INC   NVR2H
       SEC
       LDA   #0
@@ -179,12 +203,12 @@ write_word_common:
       LDA   #0
       SBC   NVR0H
       STA   NVR0H
-@magnitude:
+write_word_magnitude:
       STZ   NVR1L
-@divide:
+write_word_divide:
       LDA   #0
       LDX   #16
-@bit:
+write_word_bit:
       ASL   NVR0L
       ROL   NVR0H
       ROL
@@ -193,40 +217,46 @@ write_word_common:
       SBC   #10
       INC   NVR0L
 :     DEX
-      BNE   @bit
+      BNE   write_word_bit
       CLC
       ADC   #'0'
       PHA
       INC   NVR1L
       LDA   NVR0L
       ORA   NVR0H
-      BNE   @divide
+      BNE   write_word_divide
       CLC
       LDA   NVR1L
       ADC   NVR2H
       STA   NVR3L
       LDA   NVR2L
       CMP   NVR3L
-      BCC   @sign
-      BEQ   @sign
+      BCC   write_word_sign
+      BEQ   write_word_sign
       SEC
       SBC   NVR3L
       TAX
       LDA   #' '
-@padding:
-      STA   VGC_CHAROUT
+write_word_padding:
+      .byte $20
+write_word_padding_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
       DEX
-      BNE   @padding
-@sign:
+      BNE   write_word_padding
+write_word_sign:
       LDA   NVR2H
-      BEQ   @digits
+      BEQ   write_word_digits
       LDA   #'-'
-      STA   VGC_CHAROUT
-@digits:
+      .byte $20
+write_word_sign_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
+write_word_digits:
       PLA
-      STA   VGC_CHAROUT
+      .byte $20
+write_word_digit_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
       DEC   NVR1L
-      BNE   @digits
+      BNE   write_word_digits
       RTS
 
 write_string:
@@ -235,14 +265,16 @@ write_string:
       LDY   #0
       LDA   (NVR0L),Y
       TAX
-      BEQ   @done
-@character:
+      BEQ   write_string_done
+write_string_character:
       INY
       LDA   (NVR0L),Y
-      STA   VGC_CHAROUT
+      .byte $20
+write_string_char_call = *
+      .word 0                                ; JSR P_CHAR_DEVICE
       DEX
-      BNE   @character
-@done:
+      BNE   write_string_character
+write_string_done:
       RTS
 byte_code_end:
 
@@ -257,10 +289,28 @@ byte_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 14, "P_WRITE_STRING"
       .word write_word_field-byte_code
       .byte 0, NOBJ_SYM_GLOBAL, 18, "P_WRITE_WORD_FIELD"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 13, "P_CHAR_DEVICE"
 
 byte_relocations:
       .byte 0, NOBJ_RELOC_ABS16
       .word 1, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_byte_newline_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_byte_hundreds_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_byte_tens_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_byte_ones_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_word_padding_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_word_sign_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_word_digit_call-byte_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_string_char_call-byte_code, 5, 0
 byte_object_end:
 
       ; Formatted Real output depends on the paged numeric runtime. Keeping it
@@ -415,12 +465,66 @@ format_object_end:
       .word device_object_end-device_object
 device_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 2, $FF
+      .word 0
+      .word 2
+      .word device_symbols-device_object
+      .word 2
+      .word device_relocations-device_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_WRITE | NOBJ_SEC_ZEROFILL, 0, 3, 0
+      .word 7
+      .word 0
+      .byte "BSS"
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word char_device_code_end-char_device_code
+      .word char_device_code_end-char_device_code
+      .byte "CODE"
+char_device_code:
+char_device:
+      PHP
+      PHA
+      .byte $AD
+char_device_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   char_device_window
+      PLA
+      PLP
+      STA   VGC_CHAROUT
+      RTS
+char_device_window:
+      PLA
+      PLP
+      .byte $6C                           ; JMP (__NP_WINDOW+5)
+char_device_vector: .word 0
+char_device_code_end:
+
+device_symbols:
+      .word 0
+      .byte 0, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+      .word char_device-char_device_code
+      .byte 1, NOBJ_SYM_GLOBAL, 13, "P_CHAR_DEVICE"
+
+device_relocations:
+      .byte 1, NOBJ_RELOC_ABS16
+      .word char_device_active-char_device_code, 0, 4
+      .byte 1, NOBJ_RELOC_ABS16
+      .word char_device_vector-char_device_code, 0, 5
+device_object_end:
+
+      ; Window's bounded writer is a separate archive member. Programs that do
+      ; not reference WINDOW keep the direct character device above.
+      .word window_object_end-window_object
+window_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 1
-      .word device_symbols-device_object
-      .word 0
-      .word device_object_end-device_object
+      .word 14
+      .word window_symbols-window_object
+      .word 23
+      .word window_relocations-window_object
       .word 0
 
       .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
@@ -428,14 +532,397 @@ device_object:
       .word device_code_end-device_code
       .byte "CODE"
 device_code:
-      .byte $8D, <VGC_CHAROUT, >VGC_CHAROUT ; STA VGC_CHAROUT
-      .byte $60                             ; RTS
+device_window_pointer:
+      .byte $A9
+device_window_low: .byte 0
+      STA   NVR6L
+      .byte $A9
+device_window_high: .byte 0
+      STA   NVR6H
+      RTS
+
+device_stage_window:
+      LDY   #0
+@copy:
+      LDA   (NVR6L),Y
+      STA   LIB_ARG0,Y
+      INY
+      CPY   #4
+      BNE   @copy
+      RTS
+
+; SYSTEM owns bounded VTEXT operations. Preserve the pseudo-registers used by
+; numeric/string emitters; this slow path runs only for clear or window scroll.
+device_system_call:
+      STA   NVR7H
+      LDX   #11
+@save:
+      LDA   NVR0L,X
+      PHA
+      DEX
+      BPL   @save
+      LDA   #MODULE_ID_SYSTEM
+      STA   LIB_MOD_ID
+      LDA   NVR7H
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDX   #0
+@restore:
+      PLA
+      STA   NVR0L,X
+      INX
+      CPX   #12
+      BNE   @restore
+      BRA   device_window_pointer
+
+device_home:
+      LDY   #0
+      LDA   (NVR6L),Y
+      STA   VGC_CURSX
+      INY
+      LDA   (NVR6L),Y
+      STA   VGC_CURSY
+      RTS
+
+device_scroll:
+      ; Delete the window's top row, then park at its bottom-left cell.
+      .byte $20
+window_scroll_home_call: .word 0
+      .byte $20
+window_scroll_stage_call: .word 0
+      LDA   #SYS_CONSOLE_DELETE_LINE
+      .byte $20
+window_scroll_system_call: .word 0
+      LDY   #0
+      LDA   (NVR6L),Y
+      STA   VGC_CURSX
+      INY
+      LDA   (NVR6L),Y
+      INY
+      INY
+      CLC
+      ADC   (NVR6L),Y
+      DEC
+      STA   VGC_CURSY
+      RTS
+
+device_advance_row:
+      INC   NVR7L
+      LDY   #1
+      LDA   (NVR6L),Y
+      INY
+      INY
+      CLC
+      ADC   (NVR6L),Y
+      CMP   NVR7L
+      BEQ   device_scroll
+      LDA   NVR7L
+      STA   VGC_CURSY
+      RTS
+
+device_clear:
+      .byte $20
+window_clear_stage_call: .word 0
+      LDA   #SYS_CONSOLE_CLEAR_REGION
+      .byte $20
+window_clear_system_call: .word 0
+      BRA   device_home
+
+; Window-aware character device. Only a bottom-edge scroll pages SYSTEM and
+; invokes VTEXT; ordinary cells still use direct VGC MMIO.
+window_char:
+      PHP
+      PHA
+      PHX
+      PHY
+      LDA   NVR6L
+      PHA
+      LDA   NVR6H
+      PHA
+      LDA   NVR7L
+      PHA
+      LDA   NVR7H
+      PHA
+      .byte $20
+window_char_pointer_call: .word 0
+      TSX
+      LDA   $0107,X                       ; original character
+      CMP   #$20
+      BCS   window_char_printable
+      CMP   #$08
+      BNE   :+
+      BRA   window_char_backspace
+:
+      CMP   #$0A
+      BNE   :+
+      .byte $4C
+window_char_newline_jump: .word 0
+:
+      CMP   #$0C
+      BNE   :+
+      .byte $4C
+window_char_clear_jump: .word 0
+: 
+      CMP   #$0D
+      BNE   :+
+      .byte $4C
+window_char_carriage_jump: .word 0
+:
+      CMP   #$13
+      BNE   :+
+      .byte $4C
+window_char_home_jump: .word 0
+:
+      STA   VGC_CHAROUT
+      .byte $4C
+window_char_done_jump: .word 0
+window_char_printable:
+      LDY   #0
+      LDA   (NVR6L),Y
+      INY
+      INY
+      CLC
+      ADC   (NVR6L),Y
+      DEC
+      CMP   VGC_CURSX
+      BNE   window_char_write
+      CMP   #NOVA_SCREEN_COLS-1
+      BNE   window_char_right_edge
+      LDA   VGC_CURSY
+      CMP   #NOVA_SCREEN_ROWS-1
+      BNE   window_char_right_edge
+      TSX
+      LDA   $0107,X
+      STA   LIB_ARG1
+      STZ   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+      .byte $20
+window_char_stage_call: .word 0
+      LDA   #SYS_CONSOLE_PUT_CHAR
+      .byte $20
+window_char_system_call: .word 0
+      BRA   window_char_done
+window_char_right_edge:
+      LDA   VGC_CURSY
+      STA   NVR7L
+      TSX
+      LDA   $0107,X
+      STA   VGC_CHAROUT
+      LDY   #0
+      LDA   (NVR6L),Y
+      STA   VGC_CURSX
+      .byte $20
+window_char_advance_right_call: .word 0
+      BRA   window_char_done
+window_char_write:
+      TSX
+      LDA   $0107,X
+      STA   VGC_CHAROUT
+      BRA   window_char_done
+window_char_backspace:
+      LDY   #0
+      LDA   VGC_CURSX
+      CMP   (NVR6L),Y
+      BEQ   window_char_done
+      LDA   #$08
+      STA   VGC_CHAROUT
+      BRA   window_char_done
+window_char_newline:
+      LDA   VGC_CURSY
+      STA   NVR7L
+      LDY   #0
+      LDA   (NVR6L),Y
+      STA   VGC_CURSX
+      .byte $20
+window_char_advance_line_call: .word 0
+      BRA   window_char_done
+window_char_clear:
+      .byte $20
+window_char_clear_call: .word 0
+      BRA   window_char_done
+window_char_carriage_return:
+      LDY   #0
+      LDA   (NVR6L),Y
+      STA   VGC_CURSX
+      BRA   window_char_done
+window_char_home:
+      .byte $20
+window_char_home_call: .word 0
+window_char_done:
+      PLA
+      STA   NVR7H
+      PLA
+      STA   NVR7L
+      PLA
+      STA   NVR6H
+      PLA
+      STA   NVR6L
+      PLY
+      PLX
+      PLA
+      PLP
+      RTS
+
+; Turbo Window uses absolute, one-based corners and homes the relative cursor.
+; Invalid rectangles leave both the current window and cursor unchanged.
+window_set:
+      TSX
+      LDA   $0106,X                       ; X1
+      BEQ   window_set_done
+      CMP   #NOVA_SCREEN_COLS+1
+      BCS   window_set_done
+      STA   NVR0L
+      LDA   $0105,X                       ; Y1
+      BEQ   window_set_done
+      CMP   #NOVA_SCREEN_ROWS+1
+      BCS   window_set_done
+      STA   NVR0H
+      LDA   $0104,X                       ; X2
+      CMP   NVR0L
+      BCC   window_set_done
+      CMP   #NOVA_SCREEN_COLS+1
+      BCS   window_set_done
+      STA   NVR1L
+      LDA   $0103,X                       ; Y2
+      CMP   NVR0H
+      BCC   window_set_done
+      CMP   #NOVA_SCREEN_ROWS+1
+      BCS   window_set_done
+      STA   NVR1H
+      LDA   #NP_WINDOW_ACTIVE
+      STA   NVR2L
+      LDA   NVR0L
+      CMP   #1
+      BNE   @active_ready
+      LDA   NVR0H
+      CMP   #1
+      BNE   @active_ready
+      LDA   NVR1L
+      CMP   #NOVA_SCREEN_COLS
+      BNE   @active_ready
+      LDA   NVR1H
+      CMP   #NOVA_SCREEN_ROWS
+      BNE   @active_ready
+      STZ   NVR2L
+@active_ready:
+      .byte $20
+window_set_pointer_call: .word 0
+      LDY   #0
+      LDA   NVR0L
+      DEC
+      STA   (NVR6L),Y
+      INY
+      LDA   NVR0H
+      DEC
+      STA   (NVR6L),Y
+      INY
+      SEC
+      LDA   NVR1L
+      SBC   NVR0L
+      INC
+      STA   (NVR6L),Y
+      INY
+      SEC
+      LDA   NVR1H
+      SBC   NVR0H
+      INC
+      STA   (NVR6L),Y
+      INY
+      LDA   NVR2L
+      STA   (NVR6L),Y
+      INY
+      .byte $A9
+window_vector_low: .byte 0
+      STA   (NVR6L),Y
+      INY
+      .byte $A9
+window_vector_high: .byte 0
+      STA   (NVR6L),Y
+      .byte $4C
+window_set_home_jump: .word 0
+window_set_done:
+      RTS
 device_code_end:
 
-device_symbols:
+window_symbols:
+      .word window_set-device_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "WINDOW"
+      .word window_char-device_code
+      .byte 0, 0, 11, "WINDOW_CHAR"
+      .word device_window_pointer-device_code
+      .byte 0, 0, 3, "DWP"
+      .word device_stage_window-device_code
+      .byte 0, 0, 6, "DSTAGE"
+      .word device_system_call-device_code
+      .byte 0, 0, 5, "DSYSC"
+      .word device_home-device_code
+      .byte 0, 0, 5, "DHOME"
+      .word device_advance_row-device_code
+      .byte 0, 0, 4, "DADV"
+      .word device_clear-device_code
+      .byte 0, 0, 6, "DCLEAR"
+      .word window_char_clear-device_code
+      .byte 0, 0, 6, "WCLEAR"
+      .word window_char_carriage_return-device_code
+      .byte 0, 0, 3, "WCR"
+      .word window_char_home-device_code
+      .byte 0, 0, 5, "WHOME"
+      .word window_char_done-device_code
+      .byte 0, 0, 5, "WDONE"
+      .word window_char_newline-device_code
+      .byte 0, 0, 3, "WNL"
       .word 0
-      .byte 0, NOBJ_SYM_GLOBAL, 13, "P_CHAR_DEVICE"
-device_object_end:
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+
+window_relocations:
+      .byte 0, NOBJ_RELOC_LO8
+      .word device_window_low-device_code, 13, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word device_window_high-device_code, 13, 0
+      .byte 0, NOBJ_RELOC_LO8
+      .word window_vector_low-device_code, 1, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word window_vector_high-device_code, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_scroll_home_call-device_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_scroll_stage_call-device_code, 3, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_scroll_system_call-device_code, 4, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_clear_stage_call-device_code, 3, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_clear_system_call-device_code, 4, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_pointer_call-device_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_stage_call-device_code, 3, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_system_call-device_code, 4, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_advance_right_call-device_code, 6, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_advance_line_call-device_code, 6, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_clear_call-device_code, 7, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_home_call-device_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_set_pointer_call-device_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_set_home_jump-device_code, 5, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_clear_jump-device_code, 8, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_carriage_jump-device_code, 9, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_home_jump-device_code, 10, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_done_jump-device_code, 11, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word window_char_newline_jump-device_code, 12, 0
+window_object_end:
 
       ; Deliberately unused. Its marker bytes let the emulator test prove that
       ; NL copied the referenced member rather than concatenating the archive.
@@ -2147,10 +2634,10 @@ system_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 20
+      .word 23
       .word system_symbols-system_object
-      .word 0
-      .word system_object_end-system_object
+      .word 17
+      .word system_relocations-system_object
       .word 0
 
       .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
@@ -2158,7 +2645,47 @@ system_object:
       .word system_code_end-system_code
       .byte "CODE"
 system_code:
+system_window_args:
+      .byte $AD
+system_args_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   system_args_state
+      STZ   LIB_ARG0
+      STZ   LIB_ARG0+1
+      LDA   #NOVA_SCREEN_COLS
+      STA   LIB_ARG0+2
+      LDA   #NOVA_SCREEN_ROWS
+      STA   LIB_ARG0+3
+      RTS
+system_args_state:
+      .byte $AD
+system_args_left: .word 0
+      STA   LIB_ARG0
+      .byte $AD
+system_args_top: .word 0
+      STA   LIB_ARG0+1
+      .byte $AD
+system_args_width: .word 0
+      STA   LIB_ARG0+2
+      .byte $AD
+system_args_height: .word 0
+      STA   LIB_ARG0+3
+      RTS
+
+system_window_home:
+      .byte $AD
+system_home_left: .word 0
+      STA   VGC_CURSX
+      .byte $AD
+system_home_top: .word 0
+      STA   VGC_CURSY
+      RTS
+
 system_gotoxy:
+      .byte $AD
+system_gotoxy_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   system_gotoxy_window
       TSX
       LDA   $0105,X
       DEC
@@ -2167,8 +2694,39 @@ system_gotoxy:
       DEC
       STA   VGC_CURSY
       RTS
+system_gotoxy_window:
+      TSX
+      LDA   $0103,X
+      BEQ   system_gotoxy_done
+      .byte $CD
+system_gotoxy_height: .word 0
+      BEQ   system_gotoxy_y_ok
+      BCS   system_gotoxy_done
+system_gotoxy_y_ok:
+      LDA   $0105,X
+      BEQ   system_gotoxy_done
+      .byte $CD
+system_gotoxy_width: .word 0
+      BEQ   system_gotoxy_x_ok
+      BCS   system_gotoxy_done
+system_gotoxy_x_ok:
+      LDA   $0105,X
+      DEC
+      CLC
+      .byte $6D
+system_gotoxy_left: .word 0
+      STA   VGC_CURSX
+      LDA   $0103,X
+      DEC
+      CLC
+      .byte $6D
+system_gotoxy_top: .word 0
+      STA   VGC_CURSY
+system_gotoxy_done:
+      RTS
 
 system_clreol:
+      JSR   system_window_args
       PASCAL_SYSTEM_CALL SYS_CONSOLE_CLEAR_EOL
       RTS
 
@@ -2248,9 +2806,17 @@ system_upcase:
 :     RTS
 
 system_clrscr:
+      .byte $AD
+system_clrscr_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   @window
       LDA   #$0C
       STA   VGC_CHAROUT
       RTS
+@window:
+      JSR   system_window_args
+      PASCAL_SYSTEM_CALL SYS_CONSOLE_CLEAR_REGION
+      JMP   system_window_home
 
 system_readkey:
       PASCAL_SYSTEM_CALL SYS_WAIT_KEY
@@ -2259,13 +2825,37 @@ system_readkey:
       RTS
 
 system_wherex:
+      .byte $AD
+system_wherex_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   system_wherex_relative
       LDA   VGC_CURSX
+      INC
+      LDX   #0
+      RTS
+system_wherex_relative:
+      LDA   VGC_CURSX
+      SEC
+      .byte $ED
+system_wherex_left: .word 0
       INC
       LDX   #0
       RTS
 
 system_wherey:
+      .byte $AD
+system_wherey_active: .word 0
+      CMP   #NP_WINDOW_ACTIVE
+      BEQ   system_wherey_relative
       LDA   VGC_CURSY
+      INC
+      LDX   #0
+      RTS
+system_wherey_relative:
+      LDA   VGC_CURSY
+      SEC
+      .byte $ED
+system_wherey_top: .word 0
       INC
       LDX   #0
       RTS
@@ -2278,6 +2868,16 @@ system_textcolor:
 system_textbackground:
       AND   #$0F
       STA   VGC_TEXT_BG
+      RTS
+
+system_delline:
+      JSR   system_window_args
+      PASCAL_SYSTEM_CALL SYS_CONSOLE_DELETE_LINE
+      RTS
+
+system_insline:
+      JSR   system_window_args
+      PASCAL_SYSTEM_CALL SYS_CONSOLE_INSERT_LINE
       RTS
 
 system_succ:
@@ -2333,12 +2933,55 @@ system_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 9, "TEXTCOLOR"
       .word system_textbackground-system_code
       .byte 0, NOBJ_SYM_GLOBAL, 14, "TEXTBACKGROUND"
+      .word system_delline-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "DELLINE"
+      .word system_insline-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "INSLINE"
       .word VGC_CHARIN
       .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 3, "KBD"
       .word VGC_CHARIN
       .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 10, "KEYPRESSED"
       .word FIO_ERRCODE
       .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 8, "IORESULT"
+
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+
+system_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_active-system_code, 22, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_left-system_code, 22, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_top-system_code, 22, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_width-system_code, 22, 2
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_height-system_code, 22, 3
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_home_left-system_code, 22, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_home_top-system_code, 22, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_active-system_code, 22, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_height-system_code, 22, 3
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_width-system_code, 22, 2
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_left-system_code, 22, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_top-system_code, 22, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_clrscr_active-system_code, 22, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_wherex_active-system_code, 22, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_wherex_left-system_code, 22, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_wherey_active-system_code, 22, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_wherey_top-system_code, 22, 1
 system_object_end:
 
       ; Pascal file variables are compact 16-byte descriptors:

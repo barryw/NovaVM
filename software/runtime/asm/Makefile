@@ -60,6 +60,7 @@ NOVA_LIB_SRCS := \
 	vgc_palette.s \
 	vsprite.s \
 	vtext.s \
+	vtext_scroll_down.s \
 	vtext_inline.s \
 	vtext_mixed.s \
 	xmc.s \
