@@ -64,29 +64,11 @@ call_site: .word 0
       STA   value3
 .endmacro
 
-; Convert an unsigned 16x16 product into LIB_ARG0. Nova's coprocessor is
-; signed, so operands with bit 15 set contribute one correction word each.
+; Convert an unsigned 16x16 product into LIB_ARG0. The unsigned-multiply
+; correction itself is a canonical NDK primitive; this is only the LIB_ARG0
+; binding the real routines expect.
 .macro REAL_MUL_U16 a_lo, a_hi, b_lo, b_hi
-      MATHC_MUL16 a_lo, a_hi, b_lo, b_hi, LIB_ARG0, LIB_ARG0+1, LIB_ARG0+2, LIB_ARG0+3
-      LDA   a_hi
-      BPL   :+
-      CLC
-      LDA   LIB_ARG0+2
-      ADC   b_lo
-      STA   LIB_ARG0+2
-      LDA   LIB_ARG0+3
-      ADC   b_hi
-      STA   LIB_ARG0+3
-:     LDA   b_hi
-      BPL   :+
-      CLC
-      LDA   LIB_ARG0+2
-      ADC   a_lo
-      STA   LIB_ARG0+2
-      LDA   LIB_ARG0+3
-      ADC   a_hi
-      STA   LIB_ARG0+3
-:
+      MATHC_MUL16_U a_lo, a_hi, b_lo, b_hi, LIB_ARG0, LIB_ARG0+1, LIB_ARG0+2, LIB_ARG0+3
 .endmacro
 
 .ifndef PASCAL_REAL_MODULE

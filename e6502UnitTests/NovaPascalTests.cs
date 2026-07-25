@@ -116,6 +116,125 @@ public class NovaPascalTests
     }
 
     [TestMethod]
+    public void CompilerSupportsTurboFileAndByteServices()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-fileio-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal), "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("FILETEST", Encoding.ASCII.GetBytes(
+                "program FileTest;\nvar F: file; Buf: array[0..15] of Byte; I: Byte;\nbegin\n" +
+                "  Assign(F, 'FTEST.DAT');\n  Rewrite(F);\n" +
+                "  for I := 0 to 15 do Buf[I] := I + 65;\n" +
+                "  BlockWrite(F, Buf, 16);\n" +
+                "  if FilePos(F) = 16 then writeln('POS OK') else writeln('POS BAD');\n" +
+                "  if FileSize(F) = 16 then writeln('SIZE OK') else writeln('SIZE BAD');\n" +
+                "  Seek(F, 4);\n" +
+                "  if FilePos(F) = 4 then writeln('SEEK OK') else writeln('SEEK BAD');\n" +
+                "  for I := 0 to 15 do Buf[I] := 0;\n" +
+                "  BlockRead(F, Buf, 4);\n" +
+                "  if (Buf[0] = 69) and (Buf[3] = 72) then writeln('BLOCK OK')\n" +
+                "  else writeln('BLOCK BAD');\n" +
+                "  Close(F);\n" +
+                "  Append(F);\n" +
+                "  if FilePos(F) = 16 then writeln('APPEND OK') else writeln('APPEND BAD');\n" +
+                "  Buf[0] := 90;\n  BlockWrite(F, Buf, 1);\n" +
+                "  if FileSize(F) = 17 then writeln('GROW OK') else writeln('GROW BAD');\n" +
+                "  Seek(F, 8);\n  Truncate(F);\n" +
+                "  if FileSize(F) = 8 then writeln('TRUNC OK') else writeln('TRUNC BAD');\n" +
+                "  Flush(F);\n  Close(F);\n" +
+                "  Rename(F, 'FTEST2.DAT');\n" +
+                "  Reset(F);\n" +
+                "  if FileSize(F) = 8 then writeln('RENAME OK') else writeln('RENAME BAD');\n" +
+                "  Close(F);\n  Erase(F);\n" +
+                "  writeln('FILE DONE')\nend.\n"), ".PAS");
+            disk.Save("FILETEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN FILETEST.PAS\nOUTPUT FILETEST.BIN\nOPTIMIZE O2\nMAP FILETEST.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD FILETEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: FILETEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "file-services build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: FILETEST.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN FILETEST.BIN");
+            string fileRun = RunUntilProgramReturns(cpu, bus, "FILE DONE", "file-services execution");
+            foreach (string expected in new[]
+                     {
+                         "POS OK", "SIZE OK", "SEEK OK", "BLOCK OK",
+                         "APPEND OK", "GROW OK", "TRUNC OK", "RENAME OK",
+                     })
+                StringAssert.Contains(fileRun, expected);
+            Assert.IsFalse(disk.FileExists("FTEST2", ".DAT"),
+                "Erase must remove the file the variable now names after Rename.");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("FILETEST", extension);
+
+            disk.Save("BATCH", Encoding.ASCII.GetBytes(
+                "program BatchTest;\ntype Pair = packed record\n  A: Byte;\n  B: Byte;\n  end;\n" +
+                "var W: Word; B: Byte; R: Pair;\n" +
+                "  Cell: Byte absolute $AA00;\n" +
+                "  Neighbour: Byte absolute $AA01;\n" +
+                "  Mirror: array[0..15] of Byte absolute $AA00;\nbegin\n" +
+                "  W := 4660;\n" +
+                "  if Hi(W) = 18 then writeln('HI OK') else writeln('HI BAD');\n" +
+                "  if Lo(W) = 52 then writeln('LO OK') else writeln('LO BAD');\n" +
+                "  if Swap(W) = 13330 then writeln('SWAP OK') else writeln('SWAP BAD');\n" +
+                "  B := 200;\n" +
+                "  if Hi(B) = 0 then writeln('HIB OK') else writeln('HIB BAD');\n" +
+                "  if Lo(B) = 200 then writeln('LOB OK') else writeln('LOB BAD');\n" +
+                "  R.A := 7; R.B := 9;\n" +
+                "  if (R.A = 7) and (R.B = 9) then writeln('PACKED OK') else writeln('PACKED BAD');\n" +
+                "  Cell := 65;\n" +
+                "  if Mirror[0] = 65 then writeln('ABS OK') else writeln('ABS BAD');\n" +
+                "  Mirror[1] := 66;\n" +
+                "  if Neighbour = 66 then writeln('ABS ALIAS OK') else writeln('ABS ALIAS BAD');\n" +
+                "  writeln('BATCH DONE')\nend.\n"), ".PAS");
+            disk.Save("BATCH", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN BATCH.PAS\nOUTPUT BATCH.BIN\nOPTIMIZE O2\nMAP BATCH.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD BATCH.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: BATCH.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "byte-helper build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: BATCH.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN BATCH.BIN");
+            string batchRun = RunUntilProgramReturns(cpu, bus, "BATCH DONE", "byte-helper execution");
+            foreach (string expected in new[]
+                     {
+                         "HI OK", "LO OK", "SWAP OK", "HIB OK", "LOB OK", "PACKED OK",
+                         "ABS OK", "ABS ALIAS OK",
+                     })
+                StringAssert.Contains(batchRun, expected);
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("BATCH", extension);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void TurboGraphBuildsAndDrawsThroughVgc()
     {
         string root = Path.Combine(Path.GetTempPath(), $"novapascal-graph-{Guid.NewGuid():N}");
@@ -795,8 +914,17 @@ public class NovaPascalTests
                                                      !candidate.Contains("Offs=", StringComparison.Ordinal));
             return Convert.ToInt32(line.Split(' ', StringSplitOptions.RemoveEmptyEntries)[3], 16);
         });
-        Assert.IsTrue(0x8200 - frontendBytes >= 0x1000,
-            $"NPCFE must retain at least 4 KiB for the approved Turbo Pascal feature work; " +
+        // The 4 KiB originally reserved here has been progressively spent by the
+        // Turbo compatibility work it was reserved for: LongInt mul/div/mod plus
+        // Write/Str, xor/shl/shr, {$IFDEF} conditional compilation, case-label
+        // ranges, Random/Randomize, the full file-services surface, Hi/Lo/Swap,
+        // `packed`, and `absolute` variables. Roughly 700 bytes of that cost were
+        // paid back first by hoisting the shared scalar4 operand prologue and the
+        // single-call scalar4 helpers out of the frontend into NPO2 recipes.
+        // Keep this floor moving down only for deliberate feature work, never to
+        // absorb incidental growth.
+        Assert.IsTrue(0x8200 - frontendBytes >= 0x0800,
+            $"NPCFE must retain at least 2 KiB for further Turbo Pascal feature work; " +
             $"only {0x8200 - frontendBytes} bytes remain.");
         string workLine = npcMap.Single(candidate => candidate.StartsWith("NPCFE_WORK", StringComparison.Ordinal) &&
                                                     !candidate.Contains("Offs=", StringComparison.Ordinal));
@@ -1740,9 +1868,25 @@ public class NovaPascalTests
                 "typed-pointer project cleanup");
 
             disk.Save("LONGTEST", Encoding.ASCII.GetBytes(
-                "program LongTest;\nvar Value: LongInt;\nbegin\n" +
+                "program LongTest;\nvar Value, A, B, C: LongInt; Text: string[16];\nbegin\n" +
                 "  Value := 70000;\n  Value := Value + 5;\n" +
-                "  if Value = 70005 then writeln('LONGINT OK') else writeln('LONGINT BAD')\nend.\n"), ".PAS");
+                "  if Value = 70005 then writeln('LONGINT OK') else writeln('LONGINT BAD');\n" +
+                "  A := 100000;\n  A := A * 20;\n" +
+                "  if A = 2000000 then writeln('LONGMUL OK') else writeln('LONGMUL BAD');\n" +
+                "  B := A div 7;\n" +
+                "  if B = 285714 then writeln('LONGDIV OK') else writeln('LONGDIV BAD');\n" +
+                "  B := A mod 7;\n" +
+                "  if B = 2 then writeln('LONGMOD OK') else writeln('LONGMOD BAD');\n" +
+                "  A := -7;\n  C := -3;\n" +
+                "  if (A div 2) = C then writeln('LONGNEGDIV OK') else writeln('LONGNEGDIV BAD');\n" +
+                "  C := -1;\n" +
+                "  if (A mod 2) = C then writeln('LONGNEGMOD OK') else writeln('LONGNEGMOD BAD');\n" +
+                "  A := 2000000000;\n  A := A + A;\n" +
+                "  if A > 0 then writeln('LONGWRAP BAD') else writeln('LONGWRAP OK');\n" +
+                "  writeln(Value);\n" +
+                "  A := -1234567;\n  Str(A, Text);\n" +
+                "  if Text = '-1234567' then writeln('LONGSTR OK') else writeln('LONGSTR BAD');\n" +
+                "  writeln(A)\nend.\n"), ".PAS");
             disk.Save("LONGTEST", Encoding.ASCII.GetBytes(
                 "NPP 1\nMAIN LONGTEST.PAS\nOUTPUT LONGTEST.BIN\nOPTIMIZE O2\nMAP LONGTEST.MAP\n"), ".NPP");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
@@ -1754,10 +1898,192 @@ public class NovaPascalTests
             StringAssert.Contains(Snapshot(bus), "Build complete: LONGTEST.BIN");
             bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
             QueueLine(editor, "RUN LONGTEST.BIN");
-            StringAssert.Contains(RunUntilProgramReturns(cpu, bus, "LONGINT OK", "LongInt execution"),
-                "LONGINT OK");
+            string longRun = RunUntilProgramReturns(cpu, bus, "-1234567", "LongInt execution");
+            StringAssert.Contains(longRun, "LONGINT OK");
+            StringAssert.Contains(longRun, "LONGMUL OK");
+            StringAssert.Contains(longRun, "LONGDIV OK");
+            StringAssert.Contains(longRun, "LONGMOD OK");
+            StringAssert.Contains(longRun, "LONGNEGDIV OK");
+            StringAssert.Contains(longRun, "LONGNEGMOD OK");
+            StringAssert.Contains(longRun, "LONGWRAP OK");
+            StringAssert.Contains(longRun, "LONGSTR OK");
+            StringAssert.Contains(longRun, "70005");
             foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
                 disk.Delete("LONGTEST", extension);
+
+            disk.Save("BITTEST", Encoding.ASCII.GetBytes(
+                "program BitTest;\nvar A, B: Byte; W, V: Word; Flag: Boolean;\nbegin\n" +
+                "  A := 240; B := 60;\n" +
+                "  if (A xor B) = 204 then writeln('XOR OK') else writeln('XOR BAD');\n" +
+                "  if (A and B) = 48 then writeln('AND OK') else writeln('AND BAD');\n" +
+                "  if (A or B) = 252 then writeln('OR OK') else writeln('OR BAD');\n" +
+                "  A := 3;\n" +
+                "  if (A shl 4) = 48 then writeln('SHL OK') else writeln('SHL BAD');\n" +
+                "  A := 240;\n" +
+                "  if (A shr 4) = 15 then writeln('SHR OK') else writeln('SHR BAD');\n" +
+                "  A := 5;\n" +
+                "  if (A shl 0) = 5 then writeln('SHL0 OK') else writeln('SHL0 BAD');\n" +
+                "  W := 4660; V := 255;\n" +
+                "  if (W xor V) = 4811 then writeln('WXOR OK') else writeln('WXOR BAD');\n" +
+                "  if (W and V) = 52 then writeln('WAND OK') else writeln('WAND BAD');\n" +
+                "  W := 1;\n" +
+                "  if (W shl 12) = 4096 then writeln('WSHL OK') else writeln('WSHL BAD');\n" +
+                "  W := 4096;\n" +
+                "  if (W shr 8) = 16 then writeln('WSHR OK') else writeln('WSHR BAD');\n" +
+                "  Flag := (A > 1) and (B > 1);\n" +
+                "  if Flag then writeln('BOOL AND OK') else writeln('BOOL AND BAD');\n" +
+                "  Flag := (A > 250) or (B > 1);\n" +
+                "  if Flag then writeln('BOOL OR OK') else writeln('BOOL OR BAD');\n" +
+                "  B := A and 15;\n" +
+                "  if B = 5 then writeln('MASK OK') else writeln('MASK BAD')\nend.\n"), ".PAS");
+            disk.Save("BITTEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN BITTEST.PAS\nOUTPUT BITTEST.BIN\nOPTIMIZE O2\nMAP BITTEST.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD BITTEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: BITTEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "bitwise build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: BITTEST.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN BITTEST.BIN");
+            string bitRun = RunUntilProgramReturns(cpu, bus, "MASK OK", "bitwise execution");
+            foreach (string expected in new[]
+                     {
+                         "XOR OK", "AND OK", "OR OK", "SHL OK", "SHR OK", "SHL0 OK",
+                         "WXOR OK", "WAND OK", "WSHL OK", "WSHR OK",
+                         "BOOL AND OK", "BOOL OR OK", "MASK OK",
+                     })
+                StringAssert.Contains(bitRun, expected);
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("BITTEST", extension);
+
+            disk.Save("CASETEST", Encoding.ASCII.GetBytes(
+                "program CaseTest;\nvar C: Char; N: Byte; W: Word;\n" +
+                "procedure Classify(Ch: Char);\nbegin\n" +
+                "  case Ch of\n" +
+                "    'a'..'z': writeln('LOWER');\n" +
+                "    'A'..'Z': writeln('UPPER');\n" +
+                "    '0'..'9': writeln('DIGIT');\n" +
+                "    '+', '-': writeln('SIGN')\n" +
+                "  else writeln('OTHER')\n  end\nend;\n" +
+                "begin\n" +
+                "  Classify('m'); Classify('Q'); Classify('7');\n" +
+                "  Classify('-'); Classify('#');\n" +
+                "  Classify('a'); Classify('z');\n" +
+                "  N := 5;\n" +
+                "  case N of\n    0: writeln('N BAD');\n" +
+                "    1..4: writeln('N BAD');\n    5..9: writeln('N RANGE OK')\n" +
+                "  else writeln('N BAD')\n  end;\n" +
+                "  N := 255;\n" +
+                "  case N of\n    200..255: writeln('N TOP OK')\n" +
+                "  else writeln('N TOP BAD')\n  end;\n" +
+                "  W := 1500;\n" +
+                "  case W of\n    0..999: writeln('W BAD');\n" +
+                "    1000..2000: writeln('W RANGE OK')\n" +
+                "  else writeln('W BAD')\n  end;\n" +
+                "  W := 999;\n" +
+                "  case W of\n    1000..2000: writeln('W EDGE BAD')\n" +
+                "  else writeln('W EDGE OK')\n  end\nend.\n"), ".PAS");
+            disk.Save("CASETEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN CASETEST.PAS\nOUTPUT CASETEST.BIN\nOPTIMIZE O2\nMAP CASETEST.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD CASETEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: CASETEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "case-range build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: CASETEST.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN CASETEST.BIN");
+            string caseRun = RunUntilProgramReturns(cpu, bus, "W EDGE OK", "case-range execution");
+            foreach (string expected in new[]
+                     {
+                         "LOWER", "UPPER", "DIGIT", "SIGN", "OTHER",
+                         "N RANGE OK", "N TOP OK", "W RANGE OK", "W EDGE OK",
+                     })
+                StringAssert.Contains(caseRun, expected);
+            Assert.AreEqual(3, caseRun.Split("LOWER", StringSplitOptions.None).Length - 1,
+                "Both range endpoints must be inclusive.");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("CASETEST", extension);
+
+            disk.Save("CONDTEST", Encoding.ASCII.GetBytes(
+                "program CondTest;\n{$DEFINE NOVA}\n{$DEFINE DEBUG}\n{$UNDEF DEBUG}\nbegin\n" +
+                "{$IFDEF NOVA}\n  writeln('NOVA ON');\n{$ELSE}\n  writeln('NOVA OFF');\n{$ENDIF}\n" +
+                "{$IFDEF DEBUG}\n  writeln('UNDEF BAD');\n{$ELSE}\n  writeln('UNDEF OK');\n{$ENDIF}\n" +
+                "{$IFNDEF MISSING}\n  writeln('IFNDEF OK');\n{$ELSE}\n  writeln('IFNDEF BAD');\n{$ENDIF}\n" +
+                "{$IFDEF MISSING}\n  writeln('SKIP BAD');\n" +
+                "  {$IFDEF NOVA}\n  writeln('NESTED BAD');\n  {$ENDIF}\n" +
+                "{$ELSE}\n  writeln('NEST ELSE OK');\n" +
+                "  {$IFDEF NOVA}\n  writeln('NEST INNER OK');\n  {$ENDIF}\n" +
+                "{$ENDIF}\n" +
+                "{$IFDEF NOVA}\n  {$IFDEF MISSING}\n  writeln('INNER SKIP BAD');\n" +
+                "  {$ELSE}\n  writeln('INNER ELSE OK');\n  {$ENDIF}\n" +
+                "  writeln('OUTER RESUMES');\n{$ENDIF}\n" +
+                "  writeln('DONE')\nend.\n"), ".PAS");
+            disk.Save("CONDTEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN CONDTEST.PAS\nOUTPUT CONDTEST.BIN\nOPTIMIZE O2\nMAP CONDTEST.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD CONDTEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: CONDTEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "conditional build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: CONDTEST.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN CONDTEST.BIN");
+            string condRun = RunUntilProgramReturns(cpu, bus, "DONE", "conditional execution");
+            foreach (string expected in new[]
+                     {
+                         "NOVA ON", "UNDEF OK", "IFNDEF OK",
+                         "NEST ELSE OK", "NEST INNER OK", "INNER ELSE OK", "OUTER RESUMES",
+                     })
+                StringAssert.Contains(condRun, expected);
+            foreach (string forbidden in new[]
+                     {
+                         "NOVA OFF", "UNDEF BAD", "IFNDEF BAD", "SKIP BAD",
+                         "NESTED BAD", "INNER SKIP BAD",
+                     })
+                Assert.IsFalse(condRun.Contains(forbidden, StringComparison.Ordinal),
+                    $"Inactive conditional region must not be compiled: {forbidden}");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("CONDTEST", extension);
+
+            disk.Save("RANDTEST", Encoding.ASCII.GetBytes(
+                "program RandTest;\nvar I: Byte; V, Seen: Word; Spread: Boolean;\nbegin\n" +
+                "  Randomize;\n" +
+                "  Spread := false; Seen := 0;\n" +
+                "  for I := 1 to 60 do\n  begin\n" +
+                "    V := Random(6);\n" +
+                "    if V > 5 then writeln('RANGE BAD');\n" +
+                "    if V <> Seen then Spread := true;\n" +
+                "    Seen := V\n  end;\n" +
+                "  if Spread then writeln('SPREAD OK') else writeln('SPREAD BAD');\n" +
+                "  if Random(1) = 0 then writeln('ONE OK') else writeln('ONE BAD');\n" +
+                "  if Random(0) = 0 then writeln('ZERO OK') else writeln('ZERO BAD');\n" +
+                "  V := Random(1000);\n" +
+                "  if V < 1000 then writeln('WIDE OK') else writeln('WIDE BAD');\n" +
+                "  writeln('RAND DONE')\nend.\n"), ".PAS");
+            disk.Save("RANDTEST", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN RANDTEST.PAS\nOUTPUT RANDTEST.BIN\nOPTIMIZE O2\nMAP RANDTEST.MAP\n"), ".NPP");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "BUILD RANDTEST.NPP");
+            RunUntil(cpu, bus, s => s.Contains("Build complete: RANDTEST.BIN", StringComparison.Ordinal)
+                                    || s.Contains(": error:", StringComparison.Ordinal)
+                                    || s.Contains("syntax error.", StringComparison.Ordinal),
+                "Random build");
+            StringAssert.Contains(Snapshot(bus), "Build complete: RANDTEST.BIN");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "RUN RANDTEST.BIN");
+            string randRun = RunUntilProgramReturns(cpu, bus, "RAND DONE", "Random execution");
+            foreach (string expected in new[] { "SPREAD OK", "ONE OK", "ZERO OK", "WIDE OK" })
+                StringAssert.Contains(randRun, expected);
+            Assert.IsFalse(randRun.Contains("RANGE BAD", StringComparison.Ordinal),
+                "Random(N) must stay below N.");
+            foreach (string extension in new[] { ".PAS", ".NPP", ".S", ".OBJ", ".BIN", ".MAP" })
+                disk.Delete("RANDTEST", extension);
+
 
             (string Name, string Source)[] invalidPrograms =
             [
@@ -3123,6 +3449,8 @@ public class NovaPascalTests
             RunUntil(cpu, bus, s => s.Contains("Writing TAILBSS.BIN", StringComparison.Ordinal)
                                     || s.Contains("Linker error", StringComparison.Ordinal),
                 "tail-BSS link result");
+            StringAssert.Contains(Snapshot(bus), "Writing TAILBSS.BIN",
+                "The tail-BSS link must succeed before its output can be inspected.");
             byte[] tailBssExecutable = disk.Load("TAILBSS", ".BIN");
             CollectionAssert.AreEqual("NBS1"u8.ToArray(), tailBssExecutable[^8..^4],
                 "NL must replace a substantial zero-filled tail with the compact executable trailer.");
@@ -4423,8 +4751,12 @@ public class NovaPascalTests
                                  | bus.Read((ushort)VgcConstants.XmcPagesUsedH) << 8;
             Assert.AreEqual(pagesBeforeRun, pagesAfterRun,
                 "XRamFree and RUN cleanup must release both the worksheet and shell context allocations.");
-            Assert.IsTrue(executable.Length <= 26_000,
-                $"Dynamic worksheet storage and tail-BSS compaction should keep MicroCalc below 26,000 bytes; got {executable.Length} bytes.");
+            // Raised from 26,000 when the Turbo LongInt services landed: the
+            // LongInt thunks and the Real/LongInt formatter are single NOBJ
+            // archive members, so referencing any one service links all of
+            // them. That is the cost of keeping NL free of per-symbol members.
+            Assert.IsTrue(executable.Length <= 26_100,
+                $"Dynamic worksheet storage and tail-BSS compaction should keep MicroCalc below 26,100 bytes; got {executable.Length} bytes.");
         }
         finally
         {

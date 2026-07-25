@@ -616,6 +616,29 @@ Play a sawtooth tone on SID voice 0 for a number of video frames.
 Inputs:
 - `NVR0L/NVR0H`: SID frequency word (lo/hi). A: duration in frames.
 
+## AUDIO.TONE_HZ
+
+Start a continuous sawtooth tone on SID voice 0 from a frequency in hertz.
+
+- Kind: `routine`
+- Symbol: `audio_tone_hz`
+- ABI: `pseudo-register`
+
+Inputs:
+- `NVR0L/NVR0H`: Frequency in hertz, 0..32767; values beyond the SID range saturate.
+
+Requires:
+- `NVR0L`
+- `NVR0H`
+
+## AUDIO.TONE_STOP
+
+Stop the continuous tone on SID voice 0.
+
+- Kind: `routine`
+- Symbol: `audio_tone_stop`
+- ABI: `register`
+
 ## AUDIO.VOICE
 
 Voice selector. Use 0 for SID master volume or 1..6 for SID voice volume.
@@ -1230,6 +1253,21 @@ FOPEN/FCREATE access bit pattern for write-only file handles.
 - Kind: `const`
 - Symbol: `FIO_FILE_ACCESS_WRITE`
 - Address: `$02`
+
+## FIO.FILE_HASH
+
+Compute the standard CRC-32 of FIO.NAME and return it in FIO.HASH0..3.
+
+- Kind: `routine`
+- Symbol: `fio_file_hash`
+
+Outputs:
+- `A`: 0 on success, 1 on error.
+- `FIO_HASH0`: FIO_HASH1 FIO_HASH2 FIO_HASH3
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
 
 ## FIO.FILE_INFO_GET
 

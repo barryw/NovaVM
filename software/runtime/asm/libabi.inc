@@ -81,6 +81,7 @@ LERR_BAD_MAGIC   = $80
 LERR_BAD_MODULE  = $81
 LERR_BAD_VER     = $82
 LERR_NO_FN       = $83
+LERR_DIV0        = $84
 
 ; --- Module header (image is ORG $C000) ---
 MOD_ENTRY        = $C000          ; JMP dispatch (trampoline JSRs here)

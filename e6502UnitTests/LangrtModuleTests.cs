@@ -39,6 +39,9 @@ public class LangrtModuleTests
     private const byte LongFromInteger = 0x20;
     private const byte LongAdd = 0x22;
     private const byte LongCompare = 0x24;
+    private const byte LongMultiply = 0x25;
+    private const byte LongDivide = 0x26;
+    private const byte LongModulo = 0x27;
 
     [TestMethod]
     public void LangrtModule_Header_IsWellFormed()
@@ -51,7 +54,7 @@ public class LangrtModuleTests
         Assert.AreEqual((byte)'L', image[4]);
         Assert.AreEqual(0x09, image[5], "MODULE_ID_LANGRT");
         Assert.AreEqual(0x01, image[6], "LIB_ABI_VERSION");
-        Assert.AreEqual(0x25, image[7], "LANGRT_FN_COUNT");
+        Assert.AreEqual(0x29, image[7], "LANGRT_FN_COUNT");
     }
 
     [TestMethod]
@@ -108,6 +111,105 @@ public class LangrtModuleTests
         byte flags = bus.ReadRam((ushort)(Result + 2));
         Assert.AreEqual(0, flags & 0x01, "signed -1 must compare below +1");
         Assert.AreEqual(0, flags & 0x02, "different LongInt values must clear zero");
+    }
+
+    [TestMethod]
+    public void LongMultiply_KeepsLowThirtyTwoBitsForEitherSign()
+    {
+        using var bus = MakeBus();
+
+        // 100000 * 20 = 2000000
+        WriteBytes(bus, Arg1, 0xA0, 0x86, 0x01, 0x00);
+        WriteBytes(bus, Right, 0x14, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongMultiply);
+        CollectionAssert.AreEqual(new byte[] { 0x80, 0x84, 0x1E, 0x00 }, ReadBytes(bus, Result, 4));
+
+        // -3 * 5 = -15: the low 32 bits are sign-agnostic.
+        WriteBytes(bus, Arg1, 0xFD, 0xFF, 0xFF, 0xFF);
+        WriteBytes(bus, Right, 0x05, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongMultiply);
+        CollectionAssert.AreEqual(new byte[] { 0xF1, 0xFF, 0xFF, 0xFF }, ReadBytes(bus, Result, 4));
+
+        // Both cross terms must contribute: 65536 * 65536 wraps to zero.
+        WriteBytes(bus, Arg1, 0x00, 0x00, 0x01, 0x00);
+        WriteBytes(bus, Right, 0x00, 0x00, 0x01, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongMultiply);
+        CollectionAssert.AreEqual(new byte[] { 0x00, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        // 65537 * 3 exercises the low product and both cross terms together.
+        WriteBytes(bus, Arg1, 0x01, 0x00, 0x01, 0x00);
+        WriteBytes(bus, Right, 0x03, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongMultiply);
+        CollectionAssert.AreEqual(new byte[] { 0x03, 0x00, 0x03, 0x00 }, ReadBytes(bus, Result, 4));
+    }
+
+    [TestMethod]
+    public void LongDivideAndModulo_TruncateTowardZeroWithDividendSignedRemainder()
+    {
+        using var bus = MakeBus();
+
+        // 2000000 div 7 = 285714 remainder 2
+        WriteBytes(bus, Arg1, 0x80, 0x84, 0x1E, 0x00);
+        WriteBytes(bus, Right, 0x07, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongDivide);
+        CollectionAssert.AreEqual(new byte[] { 0x12, 0x5C, 0x04, 0x00 }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0x80, 0x84, 0x1E, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongModulo);
+        CollectionAssert.AreEqual(new byte[] { 0x02, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        // -7 div 2 = -3 and -7 mod 2 = -1: truncation toward zero leaves the
+        // remainder carrying the dividend's sign, as in Turbo.
+        WriteBytes(bus, Arg1, 0xF9, 0xFF, 0xFF, 0xFF);
+        WriteBytes(bus, Right, 0x02, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongDivide);
+        CollectionAssert.AreEqual(new byte[] { 0xFD, 0xFF, 0xFF, 0xFF }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0xF9, 0xFF, 0xFF, 0xFF);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongModulo);
+        CollectionAssert.AreEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, ReadBytes(bus, Result, 4));
+
+        // 7 div -2 = -3, remainder keeps the positive dividend's sign.
+        WriteBytes(bus, Arg1, 0x07, 0x00, 0x00, 0x00);
+        WriteBytes(bus, Right, 0xFE, 0xFF, 0xFF, 0xFF);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongDivide);
+        CollectionAssert.AreEqual(new byte[] { 0xFD, 0xFF, 0xFF, 0xFF }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0x07, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongModulo);
+        CollectionAssert.AreEqual(new byte[] { 0x01, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        // A divisor larger than the dividend yields a zero quotient and passes
+        // the dividend through as the remainder.
+        WriteBytes(bus, Arg1, 0x05, 0x00, 0x00, 0x00);
+        WriteBytes(bus, Right, 0x00, 0x00, 0x01, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongDivide);
+        CollectionAssert.AreEqual(new byte[] { 0x00, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0x05, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongModulo);
+        CollectionAssert.AreEqual(new byte[] { 0x05, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        // A remainder whose doubled value overflows 32 bits must still divide:
+        // $FFFFFFFF div $80000000 is 1 remainder $7FFFFFFF when both are read
+        // as magnitudes.
+        WriteBytes(bus, Arg1, 0xFF, 0xFF, 0xFF, 0x7F);
+        WriteBytes(bus, Right, 0x00, 0x00, 0x00, 0x40);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongDivide);
+        CollectionAssert.AreEqual(new byte[] { 0x01, 0x00, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
     }
 
     [TestMethod]

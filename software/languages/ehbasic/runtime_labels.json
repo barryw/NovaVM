@@ -40,7 +40,7 @@
     {
       "label": "AUDIO.INIT",
       "source": "../../runtime/asm/audio.s",
-      "line": 439,
+      "line": 515,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -52,7 +52,7 @@
     {
       "label": "AUDIO.INSTRUMENT_SET",
       "source": "../../runtime/asm/audio.s",
-      "line": 393,
+      "line": 469,
       "inputs": [],
       "outputs": [
         {
@@ -292,7 +292,7 @@
     {
       "label": "AUDIO.MIDPLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 613,
+      "line": 689,
       "inputs": [],
       "outputs": [
         {
@@ -312,7 +312,7 @@
     {
       "label": "AUDIO.MIDPLAY_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 703,
+      "line": 779,
       "inputs": [],
       "outputs": [
         {
@@ -333,7 +333,7 @@
     {
       "label": "AUDIO.MIDSTOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 630,
+      "line": 706,
       "inputs": [],
       "outputs": [
         {
@@ -350,7 +350,7 @@
     {
       "label": "AUDIO.MUSIC_LOOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 791,
+      "line": 867,
       "inputs": [],
       "outputs": [
         {
@@ -369,7 +369,7 @@
     {
       "label": "AUDIO.MUSIC_NOTE",
       "source": "../../runtime/asm/audio.s",
-      "line": 858,
+      "line": 934,
       "inputs": [
         {
           "name": "X",
@@ -391,7 +391,7 @@
     {
       "label": "AUDIO.MUSIC_PLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 750,
+      "line": 826,
       "inputs": [],
       "outputs": [
         {
@@ -408,7 +408,7 @@
     {
       "label": "AUDIO.MUSIC_PLAYING",
       "source": "../../runtime/asm/audio.s",
-      "line": 842,
+      "line": 918,
       "inputs": [],
       "outputs": [
         {
@@ -425,7 +425,7 @@
     {
       "label": "AUDIO.MUSIC_PRIORITY",
       "source": "../../runtime/asm/audio.s",
-      "line": 804,
+      "line": 880,
       "inputs": [],
       "outputs": [
         {
@@ -444,7 +444,7 @@
     {
       "label": "AUDIO.MUSIC_SEQUENCE",
       "source": "../../runtime/asm/audio.s",
-      "line": 737,
+      "line": 813,
       "inputs": [],
       "outputs": [
         {
@@ -466,7 +466,7 @@
     {
       "label": "AUDIO.MUSIC_STOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 766,
+      "line": 842,
       "inputs": [],
       "outputs": [
         {
@@ -483,7 +483,7 @@
     {
       "label": "AUDIO.MUSIC_TEMPO",
       "source": "../../runtime/asm/audio.s",
-      "line": 778,
+      "line": 854,
       "inputs": [],
       "outputs": [
         {
@@ -503,7 +503,7 @@
     {
       "label": "AUDIO.NOISE",
       "source": "../../runtime/asm/audio.s",
-      "line": 365,
+      "line": 441,
       "inputs": [
         {
           "name": "A",
@@ -532,7 +532,7 @@
     {
       "label": "AUDIO.PLAY_SOUND",
       "source": "../../runtime/asm/audio.s",
-      "line": 191,
+      "line": 204,
       "inputs": [
         {
           "name": "A",
@@ -574,7 +574,7 @@
     {
       "label": "AUDIO.SET_VOLUME",
       "source": "../../runtime/asm/audio.s",
-      "line": 208,
+      "line": 221,
       "inputs": [
         {
           "name": "A",
@@ -600,7 +600,7 @@
     {
       "label": "AUDIO.SFLOAD",
       "source": "../../runtime/asm/audio.s",
-      "line": 642,
+      "line": 718,
       "inputs": [],
       "outputs": [
         {
@@ -620,7 +620,7 @@
     {
       "label": "AUDIO.SFLOAD_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 719,
+      "line": 795,
       "inputs": [],
       "outputs": [
         {
@@ -641,7 +641,7 @@
     {
       "label": "AUDIO.SFX_PLAYING",
       "source": "../../runtime/asm/audio.s",
-      "line": 829,
+      "line": 905,
       "inputs": [],
       "outputs": [
         {
@@ -658,7 +658,7 @@
     {
       "label": "AUDIO.SIDPLAY",
       "source": "../../runtime/asm/audio.s",
-      "line": 583,
+      "line": 659,
       "inputs": [],
       "outputs": [
         {
@@ -679,7 +679,7 @@
     {
       "label": "AUDIO.SIDPLAY_FILE",
       "source": "../../runtime/asm/audio.s",
-      "line": 687,
+      "line": 763,
       "inputs": [],
       "outputs": [
         {
@@ -701,7 +701,7 @@
     {
       "label": "AUDIO.SIDSTOP",
       "source": "../../runtime/asm/audio.s",
-      "line": 601,
+      "line": 677,
       "inputs": [],
       "outputs": [
         {
@@ -718,7 +718,7 @@
     {
       "label": "AUDIO.SOUND",
       "source": "../../runtime/asm/audio.s",
-      "line": 223,
+      "line": 236,
       "inputs": [],
       "outputs": [
         {
@@ -751,7 +751,7 @@
     {
       "label": "AUDIO.STATUS",
       "source": "../../runtime/asm/audio.s",
-      "line": 817,
+      "line": 893,
       "inputs": [],
       "outputs": [
         {
@@ -876,7 +876,7 @@
     {
       "label": "AUDIO.TICK",
       "source": "../../runtime/asm/audio.s",
-      "line": 476,
+      "line": 552,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -888,7 +888,7 @@
     {
       "label": "AUDIO.TONE",
       "source": "../../runtime/asm/audio.s",
-      "line": 337,
+      "line": 350,
       "inputs": [
         {
           "name": "NVR0L/NVR0H",
@@ -901,6 +901,38 @@
       "symbol": "audio_tone",
       "abi": "register",
       "summary": "Play a sawtooth tone on SID voice 0 for a number of video frames."
+    },
+    {
+      "label": "AUDIO.TONE_HZ",
+      "source": "../../runtime/asm/audio.s",
+      "line": 365,
+      "inputs": [
+        {
+          "name": "NVR0L/NVR0H",
+          "description": "Frequency in hertz, 0..32767; values beyond the SID range saturate."
+        }
+      ],
+      "outputs": [],
+      "requires": [
+        "NVR0L",
+        "NVR0H"
+      ],
+      "kind": "routine",
+      "symbol": "audio_tone_hz",
+      "abi": "pseudo-register",
+      "summary": "Start a continuous sawtooth tone on SID voice 0 from a frequency in hertz."
+    },
+    {
+      "label": "AUDIO.TONE_STOP",
+      "source": "../../runtime/asm/audio.s",
+      "line": 423,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "audio_tone_stop",
+      "abi": "register",
+      "summary": "Stop the continuous tone on SID voice 0."
     },
     {
       "label": "AUDIO.VOICE",
@@ -917,7 +949,7 @@
     {
       "label": "AUDIO.VOLUME",
       "source": "../../runtime/asm/audio.s",
-      "line": 298,
+      "line": 311,
       "inputs": [],
       "outputs": [
         {
@@ -949,7 +981,7 @@
     {
       "label": "AUDIO.WAIT_LOADING",
       "source": "../../runtime/asm/audio.s",
-      "line": 659,
+      "line": 735,
       "inputs": [],
       "outputs": [
         {
@@ -1708,7 +1740,7 @@
     {
       "label": "FIO.FCLOSE",
       "source": "../../runtime/asm/fio.s",
-      "line": 488,
+      "line": 501,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1719,7 +1751,7 @@
     {
       "label": "FIO.FCREATE",
       "source": "../../runtime/asm/fio.s",
-      "line": 478,
+      "line": 491,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1730,7 +1762,7 @@
     {
       "label": "FIO.FDELETE_EXACT",
       "source": "../../runtime/asm/fio.s",
-      "line": 578,
+      "line": 591,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1741,7 +1773,7 @@
     {
       "label": "FIO.FFLUSH",
       "source": "../../runtime/asm/fio.s",
-      "line": 558,
+      "line": 571,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1784,6 +1816,29 @@
       "symbol": "FIO_FILE_ACCESS_WRITE",
       "summary": "FOPEN/FCREATE access bit pattern for write-only file handles.",
       "address": "$02"
+    },
+    {
+      "label": "FIO.FILE_HASH",
+      "source": "../../runtime/asm/fio.s",
+      "line": 441,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "A",
+          "description": "0 on success, 1 on error."
+        },
+        {
+          "name": "FIO_HASH0",
+          "description": "FIO_HASH1 FIO_HASH2 FIO_HASH3"
+        }
+      ],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_file_hash",
+      "summary": "Compute the standard CRC-32 of FIO.NAME and return it in FIO.HASH0..3."
     },
     {
       "label": "FIO.FILE_INFO_GET",
@@ -1862,7 +1917,7 @@
     {
       "label": "FIO.FOPEN",
       "source": "../../runtime/asm/fio.s",
-      "line": 468,
+      "line": 481,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1873,7 +1928,7 @@
     {
       "label": "FIO.FREAD",
       "source": "../../runtime/asm/fio.s",
-      "line": 498,
+      "line": 511,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1884,7 +1939,7 @@
     {
       "label": "FIO.FRENAME",
       "source": "../../runtime/asm/fio.s",
-      "line": 588,
+      "line": 601,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1895,7 +1950,7 @@
     {
       "label": "FIO.FRESIZE",
       "source": "../../runtime/asm/fio.s",
-      "line": 548,
+      "line": 561,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1906,7 +1961,7 @@
     {
       "label": "FIO.FSEEK",
       "source": "../../runtime/asm/fio.s",
-      "line": 518,
+      "line": 531,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1917,7 +1972,7 @@
     {
       "label": "FIO.FSIZE",
       "source": "../../runtime/asm/fio.s",
-      "line": 538,
+      "line": 551,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1928,7 +1983,7 @@
     {
       "label": "FIO.FSTATUS",
       "source": "../../runtime/asm/fio.s",
-      "line": 568,
+      "line": 581,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1939,7 +1994,7 @@
     {
       "label": "FIO.FTELL",
       "source": "../../runtime/asm/fio.s",
-      "line": 528,
+      "line": 541,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1950,7 +2005,7 @@
     {
       "label": "FIO.FWRITE",
       "source": "../../runtime/asm/fio.s",
-      "line": 508,
+      "line": 521,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2031,7 +2086,7 @@
     {
       "label": "FIO.LOAD_RUNTIME",
       "source": "../../runtime/asm/fio.s",
-      "line": 444,
+      "line": 457,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2083,7 +2138,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "../../runtime/asm/fio.s",
-      "line": 610,
+      "line": 623,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2128,7 +2183,7 @@
     {
       "label": "FIO.RNG",
       "source": "../../runtime/asm/fio.s",
-      "line": 456,
+      "line": 469,
       "inputs": [],
       "outputs": [
         {
@@ -2148,7 +2203,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1442,
+      "line": 1450,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2160,7 +2215,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1449,
+      "line": 1457,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2172,7 +2227,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1456,
+      "line": 1464,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2184,7 +2239,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1463,
+      "line": 1471,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2196,7 +2251,7 @@
     {
       "label": "FIO.RUN",
       "source": "../../runtime/asm/fio.s",
-      "line": 600,
+      "line": 613,
       "inputs": [],
       "outputs": [],
       "requires": [],

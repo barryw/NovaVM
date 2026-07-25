@@ -58,7 +58,8 @@ NPC now uses recursive-descent statement and expression parsers rather than a
 single fixed statement loop. The implemented language core is case-insensitive
 and supports `Byte`, `Boolean`, `Char`, and unsigned 16-bit `Word` variables;
 nested `begin`/`end`; assignment; `if`/`then`/
-`else`, `while`/`do`, `+`, `-`, `mod`, parentheses, all six byte comparisons,
+`else`, `while`/`do`, `+`, `-`, `mod`, the bitwise and shift operators,
+parentheses, all six byte comparisons,
 unsigned `Word` arithmetic and comparisons, zero-based `array[0..N] of Byte`
 and `array[0..N] of Boolean` storage with byte or word indices, Boolean
 literals, string `writeln`, decimal byte `writeln`, parameterless procedures,
@@ -148,9 +149,96 @@ match the interface exactly. Unit initialization runs once in dependency order
 before the program body. Finalization and Object Pascal are not yet language
 contracts.
 
+`LongInt` is a full signed 32-bit type: `+`, `-`, `*`, `div`, `mod`, the six
+comparisons, `Write`/`WriteLn`, and `Str` all accept it. Multiply keeps the low
+32 bits, `div` truncates toward zero, and `mod` takes the sign of the dividend,
+matching Turbo. Multiplication builds on the coprocessor's unsigned 16x16
+partial products; division is a restoring shift/subtract in `LANGRT`, which
+reports a divide-by-zero status rather than returning a wrong quotient. A mixed
+expression promotes the right operand, so `L * 2` works while `2 * L` still
+requires the LongInt on the left.
+
+The bitwise operators are `and`, `or`, `xor`, `not`, `shl`, and `shr`, at
+Turbo's precedence: `xor` joins `or` at additive level, `shl`/`shr` join `and`
+at multiplying level. They apply to byte and word ordinals and keep the left
+operand's type, so `Flags and $0F` stays a `Byte`; Boolean operands still yield
+`Boolean` because that is their own type. A shift count of zero leaves the value
+unchanged.
+
+`case` labels accept Turbo ranges alongside comma lists and `else`, for both
+byte-width and word-width selectors:
+
+```pascal
+case Ch of
+  'a'..'z': Fold(Ch);
+  '0'..'9', '.': Number(Ch)
+else
+  Other(Ch)
+end;
+```
+
+Conditional compilation supports `{$DEFINE}`, `{$UNDEF}`, `{$IFDEF}`,
+`{$IFNDEF}`, `{$ELSE}`, and `{$ENDIF}`, nested to any depth, which is what lets
+one source build both on Nova and under real Turbo. Up to eight symbols may be
+defined at once; unknown directives are ignored the way Turbo ignores them.
+
 The built-in `System` surface includes Turbo-compatible ordinal/string helpers,
-`Move`, `FillChar`, `Inc`, `Dec`, `Break`, `Continue`, `Exit`, `Halt`, and
-runtime-check switches. Typed pointers and `Pointer` support `nil`, `@`, `^`,
+`Move`, `FillChar`, `Inc`, `Dec`, `Break`, `Continue`, `Exit`, `Halt`,
+`Random`/`Randomize`, and runtime-check switches. `Random(N)` returns a `Word`
+below `N` by scaling host-backed random bits through the coprocessor, so the
+distribution stays even instead of carrying a modulo bias. Nova's entropy is
+hardware- or host-backed rather than a seeded sequence, so `Randomize` has no
+seed to install and exists for source compatibility; `RandSeed` and the
+parameterless `Real` form of `Random` are therefore not provided.
+
+`Hi`, `Lo`, and `Swap` take an ordinal and widen it to a word first, so
+`Hi(SomeByte)` is zero rather than whatever happened to be in the high byte.
+`packed` is accepted and ignored: Nova already lays structured types out without
+padding, so the keyword has nothing left to request.
+
+## File services
+
+Beyond `Assign`, `Reset`, `Rewrite`, `Close`, `Eof`, `Read`, `ReadLn`, `Write`,
+`WriteLn`, and `IOResult`, the file surface now covers random access, bulk
+transfer, and file management: `Seek`, `FilePos`, `FileSize`, `Truncate`,
+`Append`, `Flush`, `BlockRead`, `BlockWrite`, `Erase`, `Rename`, and `Eoln`.
+These sit directly on the FILES module's byte-stream handles.
+
+`Reset` and `Rewrite` open read/write as Turbo does, so a file written and then
+rewound can be read back without reopening.
+
+```pascal
+var F: file; Buffer: array[0..255] of Byte;
+begin
+  Assign(F, 'SAVE.DAT');
+  Rewrite(F);
+  BlockWrite(F, Buffer, 256);
+  Seek(F, 0);
+  BlockRead(F, Buffer, 256);
+  Close(F)
+end.
+```
+
+Positions and counts are **byte offsets**, not Turbo's record counts, and are
+16-bit. Nova's FIO layer is byte-addressed and a Pascal-held file cannot exceed
+the 64 KB address space, so bytes are both the natural and the sufficient unit;
+use `Seek(F, N * SizeOf(Rec))` for record addressing. `Truncate` cuts at the
+current position, `Append` reopens read/write and seeks to the end, and `Rename`
+also updates the file variable so a later `Erase` or `Append` follows the file.
+
+## Fixed-address variables
+
+A variable group may be bound to a fixed address instead of BSS, which is how
+Pascal reaches Nova's memory-mapped hardware without inline assembly:
+
+```pascal
+var
+  Screen: array[0..1999] of Byte absolute $AA00;
+  Border: Byte absolute $A005;
+```
+
+The declaration emits an absolute symbol rather than reserving storage, so the
+variable aliases exactly that address and costs nothing. Typed pointers and `Pointer` support `nil`, `@`, `^`,
 record-field traversal, comparison, `New`/`Dispose`, and `GetMem`/`FreeMem` over
 the canonical low-RAM heap. Procedural and function types are assignable and
 callable. Fixed arrays and scalars can be passed to `const`, `var`, and value

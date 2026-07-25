@@ -104,6 +104,7 @@ FioCmdFileInfoGet                   = $3B
 FioCmdFileInfoSet                   = $3C
 FioCmdClockGet                      = $3D
 FioCmdClockSet                      = $3E
+FioCmdFileHash                      = $3F
 ShelfBaseAddr                       = $60000
 ShelfSlotBytes                      = $4000
 ShelfN                              = $04

@@ -56,5 +56,21 @@ __S0DF3F9 = $02 ; WhereY
 __S08533C = $02 ; IOResult
 __S8F4049 = $01 ; TextColor
 __S9D880A = $01 ; TextBackground
+__SEA3266 = $03 ; Random(Range)
+__S4E230E = $00 ; Randomize
+__P8BC1AD = $02 ; Seek(F, Position)
+__S646B6B = $01 ; Truncate(F)
+__S1CD4C7 = $01 ; Flush(F)
+__S0DB175 = $01 ; Erase(F)
+__P32875D = $02 ; Rename(F, NewName)
+__S530C1D = $01 ; Append(F)
+__PBA946C = $03 ; BlockRead(F, Buffer, Count)
+__P6EE1BB = $03 ; BlockWrite(F, Buffer, Count)
+__SFB4B57 = $03 ; FilePos(F)
+__S664300 = $03 ; FileSize(F)
+__S843FD3 = $03 ; Eoln(F)
+__S5973D6 = $03 ; Hi(Value)
+__S597460 = $03 ; Lo(Value)
+__S8C0DC0 = $03 ; Swap(Value)
 
 .endif

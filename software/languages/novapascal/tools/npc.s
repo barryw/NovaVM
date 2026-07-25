@@ -118,7 +118,11 @@ P_STATE_TYPE_PARAM_OFFSET = P_STATE_UNIT_NAME_OFFSET + P_UNIT_STORAGE
 P_STATE_FIELD_NAME_OFFSET = P_STATE_TYPE_PARAM_OFFSET + P_TYPE_CAP * P_ROUTINE_PARAM_CAP
 P_STATE_INCLUDE_NAME_OFFSET = P_STATE_FIELD_NAME_OFFSET + P_FIELD_NAME_POOL_CAP
 P_STATE_ASSIGN_NAME_OFFSET = P_STATE_INCLUDE_NAME_OFFSET + P_INCLUDE_DEPTH_CAP * P_SOURCE_NAME_CAP
-P_STATE_SIZE = P_STATE_ASSIGN_NAME_OFFSET + P_IDENT_CAP
+; Conditional-compilation symbols. A zero first byte marks a free slot, so the
+; pool needs no separate count and survives in the same allocator-backed state.
+P_COND_CAP = 8
+P_STATE_COND_NAME_OFFSET = P_STATE_ASSIGN_NAME_OFFSET + P_IDENT_CAP
+P_STATE_SIZE = P_STATE_COND_NAME_OFFSET + P_COND_CAP * P_IDENT_CAP
 TYPE_KIND_ORDINAL = 1
 TYPE_KIND_STRING = 2
 TYPE_KIND_SET = 3
@@ -150,6 +154,14 @@ TYPE_LONGINT       = 13
 SYSFN_SAME = 1
 SYSFN_REAL = 2
 SYSFN_WORD = 3
+; Takes an ordinal and returns Word without the Real normalization the other
+; kinds apply to their argument.
+SYSFN_ORDINAL = 4
+; Takes a file variable by reference and returns Word; the argument is already
+; an address, so it must not be widened the way an ordinal would be.
+SYSFN_FILE = 5
+; Widens an ordinal argument to a word like SYSFN_ORDINAL, but yields a Byte.
+SYSFN_BYTE = 6
 
 INTRINSIC_LOW    = 0
 INTRINSIC_HIGH   = 1
@@ -433,6 +445,8 @@ p_open_expected:   .res 1
 p_open_element:    .res 1
 
       .segment "NPCFE_WORK"
+p_cond_depth:       .res 1
+p_cond_skip:        .res 1
 p_set_start:        .res 1
 p_set_end:          .res 1
 p_set_large:        .res 1
@@ -1431,14 +1445,43 @@ p_parse_global_var_section:
       BNE   @type
       JSR   p_next
       JSR   p_capture_identifier
-      BCS   @fail
+      long_bcs @fail
       BRA   @name
 @type:
       LDA   #':'
       JSR   p_expect_char
-      BCS   @fail
+      long_bcs @fail
       JSR   p_parse_decl_type
-      BCS   @fail
+      long_bcs @fail
+      ; `absolute <address>` binds the group to fixed storage instead of BSS.
+      ; The address parks in the type-work fields, which are spent once the type
+      ; is parsed; p_decimal cannot hold it because p_symbol_pointer uses that as
+      ; scratch for every name in the group. The declared type goes on the stack
+      ; because the constant parser types through p_decl_type.
+      STZ   p_type_work_high
+      LDA   #<kw_absolute
+      LDX   #>kw_absolute
+      JSR   p_peek_keyword
+      BCC   @allocate
+      LDA   #<kw_absolute
+      LDX   #>kw_absolute
+      JSR   p_expect_ax_word
+      long_bcs @fail
+      LDA   p_decl_type
+      PHA
+      LDA   #TYPE_WORD
+      STA   p_decl_type
+      JSR   p_parse_const_scalar
+      PLA
+      STA   p_decl_type
+      long_bcs @fail
+      LDA   p_decimal
+      STA   p_type_work_low
+      LDA   p_decimal+1
+      STA   p_type_work_low+1
+      LDA   #$FF
+      STA   p_type_work_high
+@allocate:
       JSR   p_emit_symbol_group
       BCS   @output
       LDA   #';'
@@ -3565,8 +3608,15 @@ p_parse_str:
       long_bcs @fail
       LDA   p_expr_type
       JSR   p_type_is_real
-      BCC   @ordinal
+      BCC   @try_longint
       LDA   #WRITE_REAL
+      BRA   @scalar4
+@try_longint:
+      LDA   p_expr_type
+      JSR   p_type_is_longint
+      BCC   @ordinal
+      LDA   #WRITE_LONGINT
+@scalar4:
       STA   p_write_kind
       LDA   #<asm_phx_pha
       LDX   #>asm_phx_pha
@@ -3674,10 +3724,16 @@ p_parse_str:
       LDA   p_write_kind
       CMP   #WRITE_REAL
       BEQ   @real
+      CMP   #WRITE_LONGINT
+      BEQ   @longint
       CMP   #WRITE_UWORD
       BEQ   @unsigned
       LDA   #<asm_str_integer
       LDX   #>asm_str_integer
+      BRA   @emit_ordinal
+@longint:
+      LDA   #<asm_str_long
+      LDX   #>asm_str_long
       BRA   @emit_ordinal
 @unsigned:
       LDA   #<asm_str_uword
@@ -3731,6 +3787,9 @@ p_emit_push_word_value:
 ; Collapse concrete and named Pascal types to the output operation they need.
 ; Named character subranges retain TYPE_CHAR as their element marker.
 p_classify_write_type:
+      LDA   p_write_type
+      JSR   p_type_is_longint
+      BCS   @longint
       LDA   p_write_type
       CMP   #TYPE_CHAR
       BEQ   @char
@@ -3795,6 +3854,10 @@ p_classify_write_type:
       RTS
 @real:
       LDA   #WRITE_REAL
+      CLC
+      RTS
+@longint:
+      LDA   #WRITE_LONGINT
       CLC
       RTS
 @file:
@@ -3906,7 +3969,7 @@ p_emit_write_value:
       CMP   #WRITE_BLOCK
       BEQ   @block
       LDA   p_write_file_text
-      BNE   p_emit_text_file_value
+      long_bne p_emit_text_file_value
       LDA   p_write_kind
       CMP   #WRITE_CHAR
       BEQ   @char
@@ -3918,6 +3981,8 @@ p_emit_write_value:
       BEQ   @string
       CMP   #WRITE_REAL
       BEQ   @real
+      CMP   #WRITE_LONGINT
+      BEQ   @longint
       CMP   #WRITE_BYTE
       BNE   @fail
       LDA   p_write_newline
@@ -3952,6 +4017,10 @@ p_emit_write_value:
 @real:
       LDA   #<asm_jsr_write_real
       LDX   #>asm_jsr_write_real
+      JMP   p_emit_ax_text
+@longint:
+      LDA   #<asm_write_long
+      LDX   #>asm_write_long
       JMP   p_emit_ax_text
 @block:
       LDA   #<asm_file_write_block
@@ -4382,15 +4451,38 @@ p_parse_case:
       STA   p_decl_type
       JSR   p_parse_const_scalar
       long_bcs @fail
+      ; A lone '.' cannot follow a case constant, so seeing one means a Turbo
+      ; range label. The low half is emitted before the high constant is parsed,
+      ; which keeps both bounds streaming without a second constant slot.
+      JSR   p_skip_ws
+      JSR   p_peek
+      long_bcc @fail
+      CMP   #'.'
+      BNE   @single_label
+      JSR   p_next
+      LDA   #'.'
+      JSR   p_expect_char
+      long_bcs @fail
+      JSR   p_emit_case_range_low
+      long_bcs @output
+      LDA   #TYPE_WORD
+      STA   p_decl_type
+      JSR   p_parse_const_scalar
+      long_bcs @fail
+      JSR   p_emit_case_range_high
+      long_bcs @output
+      BRA   @label_delimiter
+@single_label:
       JSR   p_emit_case_compare
       long_bcs @output
+@label_delimiter:
       JSR   p_skip_ws
       JSR   p_peek
       long_bcc @fail
       CMP   #','
       BNE   @colon
       JSR   p_next
-      BRA   @case_label
+      JMP   @case_label
 @colon:
       LDA   #':'
       JSR   p_expect_char
@@ -4461,6 +4553,110 @@ p_parse_case:
       RTS
 @output:
       INC   p_emit_error
+@fail:
+      SEC
+      RTS
+
+; Turbo range labels compare against both bounds without disturbing the
+; selector, which stays live in A (byte) or A/X (word) for the remaining arms.
+; Testing `<= high` directly rather than `< high+1` keeps an upper bound of 255
+; or $FFFF working.
+p_emit_case_range_low:
+      LDX   p_control_depth
+      DEX
+      LDA   p_case_word,X
+      BEQ   @byte
+      LDA   #<asm_case_word_high
+      LDX   #>asm_case_word_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal+1
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #<asm_case_wrange_low
+      LDX   #>asm_case_wrange_low
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal
+      JMP   p_emit_hex_byte
+@byte:
+      LDA   p_decimal+1
+      BNE   @fail
+      LDA   #<asm_case_byte
+      LDX   #>asm_case_byte
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal
+      JMP   p_emit_hex_byte
+@fail:
+      SEC
+      RTS
+
+p_emit_case_range_high:
+      LDX   p_control_depth
+      DEX
+      LDA   p_case_word,X
+      BEQ   @byte
+      LDA   #<asm_case_wrange_high
+      LDX   #>asm_case_wrange_high
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal+1
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #<asm_case_range_branch
+      LDX   #>asm_case_range_branch
+      JSR   p_emit_case_arm_label
+      BCS   @fail
+      LDA   #<asm_case_word_low
+      LDX   #>asm_case_word_low
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #<asm_case_branch
+      LDX   #>asm_case_branch
+      JSR   p_emit_case_arm_label
+      BCS   @fail
+      BRA   @close
+@byte:
+      LDA   p_decimal+1
+      BNE   @fail
+      LDA   #<asm_case_range_mid
+      LDX   #>asm_case_range_mid
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_decimal
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #<asm_case_branch
+      LDX   #>asm_case_branch
+      JSR   p_emit_case_arm_label
+      BCS   @fail
+@close:
+      LDA   #<asm_case_range_branch
+      LDX   #>asm_case_range_branch
+      JSR   p_emit_case_arm_label
+      BCS   @fail
+      LDA   #<asm_case_word_end
+      LDX   #>asm_case_word_end
+      JMP   p_emit_ax_text
+@fail:
+      SEC
+      RTS
+
+; Emit the branch text in A/X followed by this arm's generated label id.
+p_emit_case_arm_label:
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDX   p_control_depth
+      DEX
+      LDA   p_case_body_lo,X
+      STA   p_label_saved
+      LDA   p_case_body_hi,X
+      STA   p_label_saved+1
+      JMP   p_emit_label_id
 @fail:
       SEC
       RTS
@@ -5316,6 +5512,156 @@ p_emit_longint_conversion:
       SEC
       RTS
 
+; Emit one bitwise operator: and/or/xor/shl/shr for byte or word operands.
+; The result keeps the left operand's ordinal type, so a Byte mask stays a Byte
+; instead of collapsing to Boolean; Boolean operands still yield Boolean because
+; that is their own type.
+p_emit_bitwise:
+      LDA   p_left_type
+      JSR   p_type_is_ordinal
+      BCC   @fail
+      LDA   p_expr_type
+      JSR   p_type_is_ordinal
+      BCC   @fail
+      LDA   p_left_type
+      JSR   p_type_is_word_value
+      BNE   @word
+      LDA   p_expr_type
+      JSR   p_type_is_word_value
+      BNE   @word
+      JSR   p_bitwise_recipe
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   p_left_type
+      STA   p_expr_type
+      CLC
+      RTS
+@word:
+      JSR   p_emit_wide_operands
+      BCS   @fail
+      JSR   p_bitwise_recipe_word
+      JSR   p_emit_ax_text
+      BCS   @fail
+      JSR   p_binary_is_signed
+      BEQ   :+
+      LDA   #TYPE_INTEGER
+      BRA   :++
+:     LDA   #TYPE_WORD
+:     STA   p_expr_type
+      CLC
+      RTS
+@fail:
+      SEC
+      RTS
+
+; A shift keeps the left operand's width, so its count is always a byte and the
+; word forms cannot reuse the symmetric wide-operand setup.
+p_bitwise_recipe:
+      LDA   p_operator
+      CMP   #'O'
+      BEQ   @or
+      CMP   #'X'
+      BEQ   @xor
+      CMP   #'L'
+      BEQ   @shl
+      CMP   #'R'
+      BEQ   @shr
+      LDA   #<asm_and
+      LDX   #>asm_and
+      RTS
+@or:
+      LDA   #<asm_or
+      LDX   #>asm_or
+      RTS
+@xor:
+      LDA   #<asm_xor
+      LDX   #>asm_xor
+      RTS
+@shl:
+      LDA   #<asm_shl
+      LDX   #>asm_shl
+      RTS
+@shr:
+      LDA   #<asm_shr
+      LDX   #>asm_shr
+      RTS
+
+p_bitwise_recipe_word:
+      LDA   p_operator
+      CMP   #'O'
+      BEQ   @or
+      CMP   #'X'
+      BEQ   @xor
+      CMP   #'L'
+      BEQ   @shl
+      CMP   #'R'
+      BEQ   @shr
+      LDA   #<asm_and_word
+      LDX   #>asm_and_word
+      RTS
+@or:
+      LDA   #<asm_or_word
+      LDX   #>asm_or_word
+      RTS
+@xor:
+      LDA   #<asm_xor_word
+      LDX   #>asm_xor_word
+      RTS
+@shl:
+      LDA   #<asm_shl_word
+      LDX   #>asm_shl_word
+      RTS
+@shr:
+      LDA   #<asm_shr_word
+      LDX   #>asm_shr_word
+      RTS
+
+p_emit_scalar4_prologue:
+      LDA   #<asm_scalar4_prologue
+      LDX   #>asm_scalar4_prologue
+      JMP   p_emit_ax_text
+
+; Emit the shared four-byte operand prologue, then the call recipe in A/X.
+; Used by the Real operators, whose operands are already both scalar4.
+p_emit_scalar4_binary:
+      PHA
+      PHX
+      JSR   p_emit_scalar4_prologue
+      BCS   @drop
+      PLX
+      PLA
+      JMP   p_emit_ax_text
+@drop:
+      PLX
+      PLA
+      SEC
+      RTS
+
+; Emit one LongInt binary operator whose recipe address is in A/X: promote the
+; right operand to 32 bits, emit the recipe, and type the result. Every LongInt
+; operator shares this shape, so the arithmetic parsers only choose a recipe.
+p_emit_longint_binary:
+      PHA
+      PHX
+      JSR   p_emit_longint_conversion
+      BCS   @drop
+      JSR   p_emit_scalar4_prologue
+      BCS   @drop
+      PLX
+      PLA
+      JSR   p_emit_ax_text
+      BCS   @fail
+      LDA   #TYPE_LONGINT
+      STA   p_expr_type
+      CLC
+      RTS
+@drop:
+      PLX
+      PLA
+@fail:
+      SEC
+      RTS
+
 p_parse_if:
       JSR   p_parse_expression
       long_bcs @fail
@@ -5850,12 +6196,23 @@ p_parse_additive:
       LDA   #<kw_or
       LDX   #>kw_or
       JSR   p_peek_keyword
-      BCC   @symbol_operator
+      BCC   @xor_keyword
       LDA   #<kw_or
       LDX   #>kw_or
       JSR   p_expect_ax_word
       long_bcs @fail
       LDA   #'O'
+      BRA   @have
+@xor_keyword:
+      LDA   #<kw_xor
+      LDX   #>kw_xor
+      JSR   p_peek_keyword
+      BCC   @symbol_operator
+      LDA   #<kw_xor
+      LDX   #>kw_xor
+      JSR   p_expect_ax_word
+      long_bcs @fail
+      LDA   #'X'
       BRA   @have
 @symbol_operator:
       JSR   p_skip_ws
@@ -5885,6 +6242,8 @@ p_parse_additive:
       LDA   p_operator
       CMP   #'O'
       long_beq @logical_or
+      CMP   #'X'
+      long_beq @logical_xor
       CMP   #'+'
       BNE   @set_operation
       LDA   p_left_type
@@ -5941,18 +6300,9 @@ p_parse_additive:
       STA   p_expr_type
       JMP   @operator
 @logical_or:
-      LDA   p_left_type
-      JSR   p_type_is_word_value
-      long_bne @fail
-      LDA   p_expr_type
-      JSR   p_type_is_word_value
-      long_bne @fail
-      LDA   #<asm_or
-      LDX   #>asm_or
-      JSR   p_emit_ax_text
+@logical_xor:
+      JSR   p_emit_bitwise
       long_bcs @fail
-      LDA   #TYPE_BOOLEAN
-      STA   p_expr_type
       JMP   @operator
 @ordinal:
       LDA   p_left_type
@@ -5971,7 +6321,7 @@ p_parse_additive:
       LDA   #<asm_real_subtract
       LDX   #>asm_real_subtract
 @real_emit:
-      JSR   p_emit_ax_text
+      JSR   p_emit_scalar4_binary
       long_bcs @fail
       LDA   #TYPE_REAL
       STA   p_expr_type
@@ -6034,8 +6384,6 @@ p_parse_additive:
 :     STA   p_expr_type
       JMP   @operator
 @left_longint:
-      JSR   p_emit_longint_conversion
-      BCS   @fail
       LDA   p_operator
       CMP   #'+'
       BNE   @longint_subtract
@@ -6046,10 +6394,8 @@ p_parse_additive:
       LDA   #<asm_longint_subtract
       LDX   #>asm_longint_subtract
 @longint_emit:
-      JSR   p_emit_ax_text
+      JSR   p_emit_longint_binary
       BCS   @fail
-      LDA   #TYPE_LONGINT
-      STA   p_expr_type
       JMP   @operator
 @ok:
       CLC
@@ -6089,12 +6435,34 @@ p_parse_term:
       LDA   #<kw_div
       LDX   #>kw_div
       JSR   p_peek_keyword
-      BCC   @multiply
+      BCC   @shl_keyword
       LDA   #<kw_div
       LDX   #>kw_div
       JSR   p_expect_ax_word
       long_bcs @fail
       LDA   #'D'
+      BRA   @have
+@shl_keyword:
+      LDA   #<kw_shl
+      LDX   #>kw_shl
+      JSR   p_peek_keyword
+      BCC   @shr_keyword
+      LDA   #<kw_shl
+      LDX   #>kw_shl
+      JSR   p_expect_ax_word
+      long_bcs @fail
+      LDA   #'L'
+      BRA   @have
+@shr_keyword:
+      LDA   #<kw_shr
+      LDX   #>kw_shr
+      JSR   p_peek_keyword
+      BCC   @multiply
+      LDA   #<kw_shr
+      LDX   #>kw_shr
+      JSR   p_expect_ax_word
+      long_bcs @fail
+      LDA   #'R'
       BRA   @have
 @multiply:
       JSR   p_skip_ws
@@ -6123,6 +6491,10 @@ p_parse_term:
       LDA   p_operator
       CMP   #'A'
       long_beq @logical_and
+      CMP   #'L'
+      long_beq @shift
+      CMP   #'R'
+      long_beq @shift
       CMP   #'*'
       long_beq @multiply_value
       CMP   #'/'
@@ -6151,6 +6523,12 @@ p_parse_term:
       LDA   p_expr_type
       JSR   p_type_is_real
       long_bcs @right_real
+      LDA   p_left_type
+      JSR   p_type_is_longint
+      long_bcs @longint_multiply
+      LDA   p_expr_type
+      JSR   p_type_is_longint
+      long_bcs @fail
       JSR   p_emit_wide_operands
       long_bcs @fail
       LDA   #<asm_multiply_word
@@ -6192,6 +6570,8 @@ p_parse_term:
       LDX   #>asm_word_multiply_real
       BRA   @emit_real
 @both_real:
+      JSR   p_emit_scalar4_prologue
+      long_bcs @fail
       LDA   #<asm_real_multiply
       LDX   #>asm_real_multiply
 @emit_real:
@@ -6201,18 +6581,9 @@ p_parse_term:
       STA   p_expr_type
       JMP   @operator
 @logical_and:
-      LDA   p_left_type
-      JSR   p_type_is_word_value
-      long_bne @fail
-      LDA   p_expr_type
-      JSR   p_type_is_word_value
-      long_bne @fail
-      LDA   #<asm_and
-      LDX   #>asm_and
-      JSR   p_emit_ax_text
+@shift:
+      JSR   p_emit_bitwise
       long_bcs @fail
-      LDA   #TYPE_BOOLEAN
-      STA   p_expr_type
       JMP   @operator
 @integer_divide:
       LDA   p_left_type
@@ -6220,6 +6591,12 @@ p_parse_term:
       long_bcs @fail
       LDA   p_expr_type
       JSR   p_type_is_real
+      long_bcs @fail
+      LDA   p_left_type
+      JSR   p_type_is_longint
+      long_bcs @longint_divide
+      LDA   p_expr_type
+      JSR   p_type_is_longint
       long_bcs @fail
       JSR   p_emit_zero_check
       long_bcs @fail
@@ -6281,6 +6658,8 @@ p_parse_term:
       LDX   #>asm_real_divide_byte
       BRA   @emit_divide_real
 @divide_real_word:
+      JSR   p_emit_scalar4_prologue
+      long_bcs @fail
       LDA   #<asm_real_divide_word
       LDX   #>asm_real_divide_word
       BRA   @emit_divide_real
@@ -6296,6 +6675,8 @@ p_parse_term:
       LDX   #>asm_word_divide_real
       BRA   @emit_divide_real
 @divide_both_real:
+      JSR   p_emit_scalar4_prologue
+      long_bcs @fail
       LDA   #<asm_real_divide
       LDX   #>asm_real_divide
 @emit_divide_real:
@@ -6305,6 +6686,12 @@ p_parse_term:
       STA   p_expr_type
       JMP   @operator
 @modulo:
+      LDA   p_left_type
+      JSR   p_type_is_longint
+      long_bcs @longint_modulo
+      LDA   p_expr_type
+      JSR   p_type_is_longint
+      long_bcs @fail
       JSR   p_emit_zero_check
       BCS   @fail
       JSR   p_emit_divide_overflow_check
@@ -6341,6 +6728,23 @@ p_parse_term:
       BCS   @fail
       LDA   #TYPE_WORD
       STA   p_expr_type
+      JMP   @operator
+; LANGRT raises the divide-by-zero status for the 32-bit forms, so the inline
+; ordinal zero checks do not apply here.
+@longint_multiply:
+      LDA   #<asm_longint_multiply
+      LDX   #>asm_longint_multiply
+      BRA   @longint_emit
+@longint_divide:
+      LDA   #<asm_longint_divide
+      LDX   #>asm_longint_divide
+      BRA   @longint_emit
+@longint_modulo:
+      LDA   #<asm_longint_modulo
+      LDX   #>asm_longint_modulo
+@longint_emit:
+      JSR   p_emit_longint_binary
+      BCS   @fail
       JMP   @operator
 @ok:
       CLC
@@ -7957,6 +8361,17 @@ p_parse_type_spec:
       STZ   p_type_work_high
       STZ   p_type_work_high+1
       STZ   p_type_work_element
+      ; `packed` is accepted and ignored: Nova already lays structured types out
+      ; without padding, so the Turbo keyword has nothing left to request.
+      LDA   #<kw_packed
+      LDX   #>kw_packed
+      JSR   p_peek_keyword
+      BCC   @unpacked
+      LDA   #<kw_packed
+      LDX   #>kw_packed
+      JSR   p_expect_ax_word
+      long_bcs @fail
+@unpacked:
       JSR   p_skip_ws
       JSR   p_peek
       long_bcc @fail
@@ -10400,7 +10815,7 @@ p_emit_symbol_group:
       LDX   p_symbol_group
 @symbol:
       CPX   p_symbol_count
-      BCS   @done
+      long_bcs @done
       STX   p_symbol_iter
       JSR   p_symbol_pointer
       LDY   #1
@@ -10408,8 +10823,26 @@ p_emit_symbol_group:
       STA   (p_word),Y
       LDX   p_symbol_iter
       JSR   p_emit_symbol_name
-      BCS   @fail
+      long_bcs @fail
 @suffix:
+      LDA   p_type_work_high
+      CMP   #$FF
+      BNE   @sized
+      LDA   #<asm_absolute_eq
+      LDX   #>asm_absolute_eq
+      JSR   p_emit_ax_text
+      long_bcs @fail
+      LDA   p_type_work_low+1
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   p_type_work_low
+      JSR   p_emit_hex_byte
+      BCS   @fail
+      LDA   #$0A
+      JSR   p_emit
+      BCS   @fail
+      BRA   @next
+@sized:
       LDA   p_decl_type
       CMP   #TYPE_ARRAY_BYTE
       BEQ   @array
@@ -10450,7 +10883,7 @@ p_emit_symbol_group:
 @next:
       LDX   p_symbol_iter
       INX
-      BRA   @symbol
+      JMP   @symbol
 @done:
       CLC
 @fail:
@@ -10675,7 +11108,7 @@ p_emit_compare:
       LDX   #>asm_char_string_compare
       JSR   p_emit_ax_text
       long_bcs @fail
-      BRA   @suffix
+      JMP   @suffix
 @ordinal:
       LDA   p_left_type
       JSR   p_type_is_real
@@ -10685,7 +11118,7 @@ p_emit_compare:
       long_bcc @fail
       LDA   #<asm_real_compare
       LDX   #>asm_real_compare
-      JSR   p_emit_ax_text
+      JSR   p_emit_scalar4_binary
       BCS   @fail
       BRA   @suffix
 @right_real:
@@ -10726,6 +11159,8 @@ p_emit_compare:
       BRA   @suffix
 @left_longint:
       JSR   p_emit_longint_conversion
+      BCS   @fail
+      JSR   p_emit_scalar4_prologue
       BCS   @fail
       LDA   #<asm_longint_compare
       LDX   #>asm_longint_compare
@@ -13457,7 +13892,7 @@ p_prepare_system_function:
       LDX   #0
 @find:
       CPX   #SYSTEM_FUNCTION_COUNT
-      BCS   @done
+      long_bcs @done
       LDA   p_call_hash
       CMP   system_function_hash0,X
       BNE   @next
@@ -13474,11 +13909,34 @@ p_prepare_system_function:
       LDA   system_function_kind,X
       CMP   #SYSFN_SAME
       BEQ   @same
+      CMP   #SYSFN_ORDINAL
+      BEQ   @ordinal
+      CMP   #SYSFN_FILE
+      BEQ   @file
+      CMP   #SYSFN_BYTE
+      BEQ   @byte_result
       CMP   #SYSFN_WORD
       BEQ   @word
       LDA   #TYPE_REAL
       STA   p_function_result_type
       BRA   @normalize_real
+@ordinal:
+      LDA   #TYPE_WORD
+      BRA   @ordinal_typed
+@byte_result:
+      LDA   #TYPE_BYTE
+@ordinal_typed:
+      STA   p_function_result_type
+      LDA   p_function_arg_type
+      JSR   p_type_is_word_value
+      BNE   @done
+      LDA   #<asm_index_high_zero
+      LDX   #>asm_index_high_zero
+      JMP   p_emit_ax_text
+@file:
+      LDA   #TYPE_WORD
+      STA   p_function_result_type
+      BRA   @done
 @same:
       LDA   p_function_arg_type
       STA   p_function_result_type
@@ -15588,15 +16046,362 @@ p_skip_brace_tail:
 ; Called after "{$". The classic R/Q/I/S switches update compiler state;
 ; comma-separated switches share one directive. {$I file} changes the active
 ; source frame after consuming the directive.
+; ---------------------------------------------------------------------------
+; Conditional compilation.
+;
+; p_cond_depth counts open {$IFDEF}/{$IFNDEF} levels. p_cond_skip is zero while
+; source is being compiled, otherwise it holds the depth at which the inactive
+; region began. Because Turbo has no {$ELSEIF}, that single depth is enough to
+; decide when {$ELSE} and {$ENDIF} resume compilation, and nested conditionals
+; inside an inactive region are tracked by depth alone without being evaluated.
+;
+; The directive's leading letter is already in p_char.
+p_cond_word:
+      LDA   p_char
+      STA   p_ident
+      LDA   #1
+      STA   p_ident_len
+@more:
+      JSR   p_peek_upper
+      long_bcc p_cond_dispatch
+      JSR   p_is_ident
+      long_bcc p_cond_dispatch
+      JSR   p_read_upper
+      long_bcc p_cond_fail
+      LDX   p_ident_len
+      CPX   #P_IDENT_CAP
+      long_bcs p_cond_fail
+      STA   p_ident,X
+      INC   p_ident_len
+      BRA   @more
+
+; Act on the directive named in p_ident, then consume through the closing brace
+; and skip an inactive region if one is now open.
+p_cond_dispatch:
+      LDA   #<kw_ifdef
+      LDX   #>kw_ifdef
+      JSR   p_ident_is
+      BCS   p_cond_ifdef
+      LDA   #<kw_ifndef
+      LDX   #>kw_ifndef
+      JSR   p_ident_is
+      BCS   p_cond_ifndef
+      LDA   #<kw_else
+      LDX   #>kw_else
+      JSR   p_ident_is
+      BCS   p_cond_else
+      LDA   #<kw_endif
+      LDX   #>kw_endif
+      JSR   p_ident_is
+      BCS   p_cond_endif
+      LDA   #<kw_define
+      LDX   #>kw_define
+      JSR   p_ident_is
+      long_bcs p_cond_define
+      LDA   #<kw_undef
+      LDX   #>kw_undef
+      JSR   p_ident_is
+      long_bcs p_cond_undef
+      ; Unknown directive: Turbo ignores these, so consume it and continue.
+      JMP   p_cond_close
+
+p_cond_ifdef:
+      JSR   p_cond_open
+      long_bcs p_cond_fail
+      JSR   p_cond_symbol_defined
+      long_bcs p_cond_close                 ; defined: compile this branch
+      JMP   p_cond_begin_skip
+p_cond_ifndef:
+      JSR   p_cond_open
+      long_bcs p_cond_fail
+      JSR   p_cond_symbol_defined
+      long_bcc p_cond_close
+p_cond_begin_skip:
+      ; Already inside an inactive region? The outer skip depth must win.
+      LDA   p_cond_skip
+      BNE   p_cond_close
+      LDA   p_cond_depth
+      STA   p_cond_skip
+      JMP   p_cond_close
+
+p_cond_else:
+      LDA   p_cond_depth
+      BEQ   p_cond_fail                  ; {$ELSE} without {$IFDEF}
+      LDA   p_cond_skip
+      BEQ   @start_skip
+      CMP   p_cond_depth
+      BNE   p_cond_close                 ; inactive region opened further out
+      STZ   p_cond_skip                  ; this branch resumes compilation
+      JMP   p_cond_close
+@start_skip:
+      LDA   p_cond_depth
+      STA   p_cond_skip
+      JMP   p_cond_close
+
+p_cond_endif:
+      LDA   p_cond_depth
+      BEQ   p_cond_fail                  ; {$ENDIF} without {$IFDEF}
+      LDA   p_cond_skip
+      BEQ   @pop
+      CMP   p_cond_depth
+      BNE   @pop
+      STZ   p_cond_skip
+@pop:
+      DEC   p_cond_depth
+      JMP   p_cond_close
+
+p_cond_define:
+      JSR   p_capture_identifier
+      long_bcs p_cond_fail
+      LDA   p_cond_skip
+      BNE   p_cond_close
+      JSR   p_cond_find
+      BCS   p_cond_close                 ; already defined
+      JSR   p_cond_add
+      BCS   p_cond_fail                  ; pool exhausted
+      JMP   p_cond_close
+
+p_cond_undef:
+      JSR   p_capture_identifier
+      long_bcs p_cond_fail
+      LDA   p_cond_skip
+      BNE   p_cond_close
+      JSR   p_cond_find
+      long_bcc p_cond_close
+      JSR   p_cond_remove
+
+; Consume the rest of the directive, then skip source while a region is
+; inactive. Returning here always leaves the scanner past the closing brace.
+p_cond_close:
+      JSR   p_peek
+      long_bcc p_cond_fail
+      CMP   #'}'
+      BEQ   @close
+      JSR   p_next
+      JMP   p_cond_close
+@close:
+      JSR   p_next
+      LDA   p_cond_skip
+      BNE   p_cond_skip_region
+      CLC
+      RTS
+p_cond_fail:
+      SEC
+      RTS
+
+
+; Carry set when the symbol operand is currently defined.
+p_cond_symbol_defined:
+      JSR   p_capture_identifier
+      BCS   @no
+      JMP   p_cond_find
+@no:
+      CLC
+      RTS
+
+; Push a conditional level. Carry set when nesting is exhausted.
+p_cond_open:
+      LDA   p_cond_depth
+      CMP   #$FF
+      BCS   @full
+      INC   p_cond_depth
+      CLC
+      RTS
+@full:
+      SEC
+      RTS
+
+; Consume source until the inactive region ends, tracking nested conditionals
+; but evaluating none of them.
+p_cond_skip_region:
+@scan:
+      JSR   p_next
+      BCC   p_cond_fail                  ; end of source inside {$IFDEF}
+      CMP   #'{'
+      BNE   @scan
+      JSR   p_peek
+      BCC   p_cond_fail
+      CMP   #'$'
+      BNE   @comment
+      JSR   p_next
+      JSR   p_capture_identifier
+      BCS   @comment
+      JSR   p_cond_skip_dispatch
+      BCS   p_cond_fail
+@comment:
+      JSR   p_peek
+      BCC   p_cond_fail
+      CMP   #'}'
+      BEQ   @closed
+      JSR   p_next
+      BRA   @comment
+@closed:
+      JSR   p_next
+      LDA   p_cond_skip
+      BNE   @scan
+      CLC
+      RTS
+
+; Only the four nesting directives matter inside an inactive region.
+p_cond_skip_dispatch:
+      LDA   #<kw_ifdef
+      LDX   #>kw_ifdef
+      JSR   p_ident_is
+      BCS   p_cond_open
+      LDA   #<kw_ifndef
+      LDX   #>kw_ifndef
+      JSR   p_ident_is
+      BCS   p_cond_open
+      LDA   #<kw_else
+      LDX   #>kw_else
+      JSR   p_ident_is
+      BCS   @else
+      LDA   #<kw_endif
+      LDX   #>kw_endif
+      JSR   p_ident_is
+      BCS   @endif
+      CLC
+      RTS
+@else:
+      LDA   p_cond_skip
+      CMP   p_cond_depth
+      BNE   @ok
+      STZ   p_cond_skip
+@ok:
+      CLC
+      RTS
+@endif:
+      LDA   p_cond_depth
+      BEQ   @bad
+      LDA   p_cond_skip
+      CMP   p_cond_depth
+      BNE   @pop
+      STZ   p_cond_skip
+@pop:
+      DEC   p_cond_depth
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+; --- conditional symbol pool ------------------------------------------------
+; Slot X lives at P_STATE_COND_NAME_OFFSET + X * P_IDENT_CAP in the XRAM state.
+p_cond_slot_pointer:
+      TXA
+      ASL
+      ASL
+      ASL
+      ASL
+      ASL
+      CLC
+      ADC   #<P_STATE_COND_NAME_OFFSET
+      STA   p_state_offset
+      LDA   #>P_STATE_COND_NAME_OFFSET
+      ADC   #0
+      STA   p_state_offset+1
+      JMP   p_state_pointer
+
+; Carry set when p_ident matches an occupied slot; X holds that slot.
+p_cond_find:
+      LDX   #0
+@slot:
+      PHX
+      JSR   p_cond_slot_pointer
+      LDY   #0
+      LDA   (p_word),Y
+      BEQ   @next                        ; free slot
+      JSR   p_cond_slot_matches
+      BCS   @found
+@next:
+      PLX
+      INX
+      CPX   #P_COND_CAP
+      BNE   @slot
+      CLC
+      RTS
+@found:
+      PLX
+      SEC
+      RTS
+
+; Compare the slot at (p_word) with p_ident/p_ident_len.
+p_cond_slot_matches:
+      LDY   #0
+@char:
+      CPY   p_ident_len
+      BEQ   @end
+      LDA   (p_word),Y
+      BEQ   @no
+      CMP   p_ident,Y
+      BNE   @no
+      INY
+      BRA   @char
+@end:
+      LDA   (p_word),Y
+      BNE   @no
+      SEC
+      RTS
+@no:
+      CLC
+      RTS
+
+; Store p_ident in the first free slot. Carry set when the pool is full.
+p_cond_add:
+      LDX   #0
+@slot:
+      PHX
+      JSR   p_cond_slot_pointer
+      LDY   #0
+      LDA   (p_word),Y
+      BEQ   @store
+      PLX
+      INX
+      CPX   #P_COND_CAP
+      BNE   @slot
+      SEC
+      RTS
+@store:
+      PLX
+      LDY   #0
+@char:
+      CPY   p_ident_len
+      BEQ   @terminate
+      LDA   p_ident,Y
+      STA   (p_word),Y
+      INY
+      BRA   @char
+@terminate:
+      LDA   #0
+      STA   (p_word),Y
+      CLC
+      RTS
+
+; Free the slot in X.
+p_cond_remove:
+      JSR   p_cond_slot_pointer
+      LDY   #0
+      LDA   #0
+      STA   (p_word),Y
+      RTS
+
 p_parse_directive:
 @switch:
       JSR   p_read_upper
       long_bcc @fail
       STA   p_char
+      CMP   #'D'
+      long_beq p_cond_word
+      CMP   #'U'
+      long_beq p_cond_word
+      CMP   #'E'
+      long_beq p_cond_word
       CMP   #'I'
       BNE   @classify
-      JSR   p_peek
+      JSR   p_peek_upper
       long_bcc @fail
+      CMP   #'F'
+      long_beq p_cond_word
       CMP   #' '
       long_beq @include
       CMP   #$09
@@ -16053,32 +16858,36 @@ p_next:
 
       .segment "NPCFE_RODATA"
 p_dependency_lf: .byte $0A
-SYSTEM_CALL_METADATA_COUNT = 23
+SYSTEM_CALL_METADATA_COUNT = 32
 SYSTEM_CALL_VAL = 9
 SYSTEM_CALL_INSERT = 10
-SYSTEM_FUNCTION_COUNT = 13
+SYSTEM_FUNCTION_COUNT = 19
 SYSTEM_NOARG_FUNCTION_COUNT = 4
 SYSTEM_STORAGE_COUNT = 1
 p_argument_bits:  .byte $01, $02, $04, $08, $10, $20, $40, $80
 ; Hash bytes are little-endian DJB2-24 values. Arity disambiguates the two
 ; classic READ and READLN forms.
+; RANDOMIZE is the zero-argument entry; the file-handle operations follow it.
 ; Reference and Integer-width masks for the classic System interface plus the
 ; Pascal-shaped NovaMemory adapter. Hashes remain generated ABI identities;
 ; no NDK address or function id is embedded in NPC.
-system_call_hash0: .byte $C1,$C1,$1B,$1B,$EA,$E8,$B8,$27,$BB,$68,$DA,$CF,$C8,$5F,$19,$08,$D0,$67,$21,$10,$94,$1C,$0A
-system_call_hash1: .byte $34,$34,$73,$73,$0A,$19,$47,$93,$71,$29,$C5,$44,$6B,$65,$C2,$C5,$52,$8B,$E8,$AC,$A4,$A4,$21
-system_call_hash2: .byte $8B,$8B,$2B,$2B,$8B,$F2,$89,$2F,$E6,$88,$D9,$42,$E3,$B4,$BA,$74,$B3,$1F,$25,$44,$F4,$88,$DC
-system_call_arity: .byte $01,$02,$01,$02,$02,$01,$03,$01,$01,$03,$03,$02,$02,$01,$04,$04,$02,$01,$04,$04,$01,$03,$03
-system_call_refmask: .byte $01,$02,$01,$02,$01,$01,$01,$01,$01,$06,$02,$00,$01,$01,$05,$05,$01,$01,$05,$05,$00,$03,$01
-system_call_widthmask: .byte $00,$00,$00,$00,$00,$00,$06,$00,$00,$00,$04,$03,$02,$00,$0A,$0A,$02,$00,$0A,$0A,$01,$04,$06
+system_call_hash0: .byte $C1,$C1,$1B,$1B,$EA,$E8,$B8,$27,$BB,$68,$DA,$CF,$C8,$5F,$19,$08,$D0,$67,$21,$10,$94,$1C,$0A,$0E,$AD,$6B,$C7,$75,$5D,$1D,$6C,$BB
+system_call_hash1: .byte $34,$34,$73,$73,$0A,$19,$47,$93,$71,$29,$C5,$44,$6B,$65,$C2,$C5,$52,$8B,$E8,$AC,$A4,$A4,$21,$23,$C1,$6B,$D4,$B1,$87,$0C,$94,$E1
+system_call_hash2: .byte $8B,$8B,$2B,$2B,$8B,$F2,$89,$2F,$E6,$88,$D9,$42,$E3,$B4,$BA,$74,$B3,$1F,$25,$44,$F4,$88,$DC,$4E,$8B,$64,$1C,$0D,$32,$53,$BA,$6E
+system_call_arity: .byte $01,$02,$01,$02,$02,$01,$03,$01,$01,$03,$03,$02,$02,$01,$04,$04,$02,$01,$04,$04,$01,$03,$03,$00,$02,$01,$01,$01,$02,$01,$03,$03
+system_call_refmask: .byte $01,$02,$01,$02,$01,$01,$01,$01,$01,$06,$02,$00,$01,$01,$05,$05,$01,$01,$05,$05,$00,$03,$01,$00,$01,$01,$01,$01,$01,$01,$03,$03
+system_call_widthmask: .byte $00,$00,$00,$00,$00,$00,$06,$00,$00,$00,$04,$03,$02,$00,$0A,$0A,$02,$00,$0A,$0A,$01,$04,$06,$00,$02,$00,$00,$00,$00,$00,$04,$04
       .segment "NPCFE_RODATA"
-; ABS, SQRT, SQR, SIN, COS, ARCTAN, LN, EXP, TRUNC, ROUND, UPCASE, SUCC, PRED.
-system_function_hash0: .byte $3B,$6F,$BB,$AF,$6A,$5E,$5F,$12,$71,$4D,$66,$73,$D0
-system_function_hash1: .byte $D0,$F6,$1E,$1D,$DA,$5A,$74,$E4,$75,$9F,$07,$05,$53
-system_function_hash2: .byte $87,$8B,$88,$88,$87,$70,$59,$87,$1D,$F7,$F3,$8C,$8A
+; ABS, SQRT, SQR, SIN, COS, ARCTAN, LN, EXP, TRUNC, ROUND, UPCASE, SUCC, PRED,
+; RANDOM, FILEPOS, FILESIZE, HI, LO, SWAP.
+system_function_hash0: .byte $3B,$6F,$BB,$AF,$6A,$5E,$5F,$12,$71,$4D,$66,$73,$D0,$66,$57,$00,$D6,$60,$C0
+system_function_hash1: .byte $D0,$F6,$1E,$1D,$DA,$5A,$74,$E4,$75,$9F,$07,$05,$53,$32,$4B,$43,$73,$74,$0D
+system_function_hash2: .byte $87,$8B,$88,$88,$87,$70,$59,$87,$1D,$F7,$F3,$8C,$8A,$EA,$FB,$66,$59,$59,$8C
 system_function_kind:  .byte SYSFN_SAME,SYSFN_REAL,SYSFN_SAME,SYSFN_REAL
                        .byte SYSFN_REAL,SYSFN_REAL,SYSFN_REAL,SYSFN_REAL,SYSFN_WORD,SYSFN_WORD
-                       .byte SYSFN_SAME,SYSFN_SAME,SYSFN_SAME
+                       .byte SYSFN_SAME,SYSFN_SAME,SYSFN_SAME,SYSFN_ORDINAL
+                       .byte SYSFN_FILE,SYSFN_FILE
+                       .byte SYSFN_BYTE,SYSFN_BYTE,SYSFN_ORDINAL
 ; Turbo Crt functions may be called without an empty parenthesized argument list.
 ; READKEY, WHEREX, WHEREY, IORESULT.
 system_noarg_hash0: .byte $6A,$F8,$F9,$3C
@@ -16158,6 +16967,16 @@ kw_downto:  .byte "DOWNTO", 0
 kw_to = kw_downto+4
 kw_or = kw_for+1
 kw_and:     .byte "AND", 0
+kw_xor:     .byte "XOR", 0
+kw_shl:     .byte "SHL", 0
+kw_shr:     .byte "SHR", 0
+kw_define:  .byte "DEFINE", 0
+kw_undef:   .byte "UNDEF", 0
+kw_ifdef:   .byte "IFDEF", 0
+kw_ifndef:  .byte "IFNDEF", 0
+kw_endif:   .byte "ENDIF", 0
+kw_packed:  .byte "PACKED", 0
+kw_absolute: .byte "ABSOLUTE", 0
 kw_mod:     .byte "MOD", 0
 kw_div:     .byte "DIV", 0
 kw_in = kw_begin+3
@@ -16185,6 +17004,7 @@ asm_main_label: .byte "__NP_MAIN:", $0A, 0
 asm_overlay_return: .byte "LDA #0", $0A, 0
 asm_main_label_frames:
       np_lowering_marker NP_LOWER_MAIN_LABEL_FRAMES
+asm_absolute_eq: .byte " = $", 0
 asm_byte_res: .byte ": .RES 1", $0A, 0
 asm_word_res: .byte ": .RES 2", $0A, 0
 asm_array_res: .byte ": .RES $", 0
@@ -16383,6 +17203,22 @@ asm_or:
       np_lowering_marker NP_LOWER_OR
 asm_and:
       np_lowering_marker NP_LOWER_AND
+asm_xor:
+      np_lowering_marker NP_LOWER_XOR
+asm_or_word:
+      np_lowering_marker NP_LOWER_OR_WORD
+asm_and_word:
+      np_lowering_marker NP_LOWER_AND_WORD
+asm_xor_word:
+      np_lowering_marker NP_LOWER_XOR_WORD
+asm_shl:
+      np_lowering_marker NP_LOWER_SHL
+asm_shr:
+      np_lowering_marker NP_LOWER_SHR
+asm_shl_word:
+      np_lowering_marker NP_LOWER_SHL_WORD
+asm_shr_word:
+      np_lowering_marker NP_LOWER_SHR_WORD
 asm_set_union:
       np_lowering_marker NP_LOWER_OR
 asm_set_difference:
@@ -16477,19 +17313,38 @@ asm_add_word: .byte ".O2A", $0A, 0
 asm_subtract_word: .byte ".O2S", $0A, 0
 asm_negate_word:
       np_lowering_marker NP_LOWER_NEGATE_WORD
-asm_negate_real: .byte "JSR P_REAL_NEGATE", $0A, 0
-asm_real_from_byte: .byte "JSR P_REAL_FROM_BYTE", $0A, 0
-asm_real_from_word: .byte "JSR P_REAL_FROM_WORD", $0A, 0
-asm_long_from_byte: .byte "JSR P_LONG_FROM_BYTE", $0A, 0
-asm_long_from_uword: .byte "JSR P_LONG_FROM_UWORD", $0A, 0
-asm_long_from_integer: .byte "JSR P_LONG_FROM_INTEGER", $0A, 0
-asm_negate_longint: .byte "JSR P_LONG_NEGATE", $0A, 0
+asm_negate_real:
+      np_lowering_marker NP_LOWER_REAL_NEGATE_CALL
+asm_real_from_byte:
+      np_lowering_marker NP_LOWER_REAL_FROM_BYTE
+asm_real_from_word:
+      np_lowering_marker NP_LOWER_REAL_FROM_WORD
+asm_long_from_byte:
+      np_lowering_marker NP_LOWER_LONG_FROM_BYTE
+asm_long_from_uword:
+      np_lowering_marker NP_LOWER_LONG_FROM_UWORD
+asm_long_from_integer:
+      np_lowering_marker NP_LOWER_LONG_FROM_INTEGER
+asm_negate_longint:
+      np_lowering_marker NP_LOWER_LONG_NEGATE_CALL
 asm_longint_add:
       np_lowering_marker NP_LOWER_LONG_ADD
 asm_longint_subtract:
       np_lowering_marker NP_LOWER_LONG_SUBTRACT
 asm_longint_compare:
       np_lowering_marker NP_LOWER_LONG_COMPARE
+asm_scalar4_prologue:
+      np_lowering_marker NP_LOWER_SCALAR4_PROLOGUE
+asm_longint_multiply:
+      np_lowering_marker NP_LOWER_LONG_MULTIPLY
+asm_longint_divide:
+      np_lowering_marker NP_LOWER_LONG_DIVIDE
+asm_longint_modulo:
+      np_lowering_marker NP_LOWER_LONG_MODULO
+asm_write_long:
+      np_lowering_marker NP_LOWER_WRITE_LONG_CALL
+asm_str_long:
+      np_lowering_marker NP_LOWER_STR_LONG_CALL
 asm_real_add:
       np_lowering_marker NP_LOWER_REAL_ADD
 asm_real_subtract:
@@ -16521,7 +17376,8 @@ asm_word_divide_real:
       np_lowering_marker NP_LOWER_WORD_DIVIDE_REAL
 asm_byte_divide_real:
       np_lowering_marker NP_LOWER_BYTE_DIVIDE_REAL
-asm_ordinal_divide_real: .byte "JSR P_ORDINAL_DIV_REAL", $0A, 0
+asm_ordinal_divide_real:
+      np_lowering_marker NP_LOWER_ORDINAL_DIVIDE_REAL
 asm_divide:
       np_lowering_marker NP_LOWER_DIVIDE_BYTE
 asm_mod:
@@ -16542,6 +17398,10 @@ asm_case_word_high: .byte "CPX #$", 0
 asm_case_word_low: .byte $0A, "BNE :+", $0A, "CMP #$", 0
 asm_case_branch: .byte $0A, "BEQ __NP_L", 0
 asm_case_word_end: .byte $0A, ":", $0A, 0
+asm_case_range_mid: .byte $0A, "BCC :+", $0A, "CMP #$", 0
+asm_case_range_branch: .byte $0A, "BCC __NP_L", 0
+asm_case_wrange_low: .byte $0A, "BCC :++", $0A, "BNE :+", $0A, "CMP #$", 0
+asm_case_wrange_high: .byte $0A, "BCC :++", $0A, ":", $0A, "CPX #$", 0
 compare_suffix_lo: .byte <asm_compare_eq, <asm_compare_ne, <asm_compare_lt, <asm_compare_le, <asm_compare_gt, <asm_compare_ge
 compare_suffix_hi: .byte >asm_compare_eq, >asm_compare_ne, >asm_compare_lt, >asm_compare_le, >asm_compare_gt, >asm_compare_ge
 asm_label_prefix: .byte "__NP_L", 0

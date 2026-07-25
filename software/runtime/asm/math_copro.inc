@@ -37,6 +37,33 @@ MATH_COPRO_INC_INCLUDED = 1
         sta dst3
 .endmacro
 
+; Unsigned 16x16 multiply.
+; The coprocessor multiplier is signed, so an operand with bit 15 set is short
+; by the other operand shifted up 16; each such operand contributes one
+; correction word to the high half.
+.macro MATHC_MUL16_U a_lo, a_hi, b_lo, b_hi, dst0, dst1, dst2, dst3
+        MATHC_MUL16 a_lo, a_hi, b_lo, b_hi, dst0, dst1, dst2, dst3
+        lda a_hi
+        bpl :+
+        clc
+        lda dst2
+        adc b_lo
+        sta dst2
+        lda dst3
+        adc b_hi
+        sta dst3
+:       lda b_hi
+        bpl :+
+        clc
+        lda dst2
+        adc a_lo
+        sta dst2
+        lda dst3
+        adc a_hi
+        sta dst3
+:
+.endmacro
+
 ; Signed Q8.8 multiply with a saturated Q8.8 result.
 .macro MATHC_MULFX a_lo, a_hi, b_lo, b_hi, dst_lo, dst_hi
         lda a_lo

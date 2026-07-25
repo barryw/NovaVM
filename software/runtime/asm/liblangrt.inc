@@ -48,7 +48,11 @@ LANGRT_LONG_NEGATE          = $21
 LANGRT_LONG_ADD             = $22
 LANGRT_LONG_SUB             = $23
 LANGRT_LONG_CMP             = $24
-LANGRT_FN_COUNT             = $25
+LANGRT_LONG_MUL             = $25
+LANGRT_LONG_DIV             = $26
+LANGRT_LONG_MOD             = $27
+LANGRT_STR_LONG             = $28
+LANGRT_FN_COUNT             = $29
 
 ; LIB_SCRATCH byte zero belongs to the resident loader. The Pascal adapter uses
 ; two otherwise-free bytes while translating its native ABI; LANGRT itself

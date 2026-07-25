@@ -7,6 +7,7 @@
       .include "libfiles.inc"
       .include "libmemory.inc"
       .include "liblangrt.inc"
+      .include "math_copro.inc"
       .include "nobj.inc"
 .include "pascal.inc"
 
@@ -39,6 +40,80 @@ NP_WINDOW_ACTIVE = $A5
 ; LIB_ARG3 is ordinary RAM, so it cannot be used with the 65C02's
 ; zero-page-indirect addressing modes. Reload this scratch pointer after
 ; every NDK call because the NVR registers are caller-clobbered by design.
+; Shared steps for the file-services member. See that member for why these are
+; macros rather than subroutines.
+.macro FILEX_ONE_ARG
+      STA   NVR0L
+      STX   NVR0H
+.endmacro
+
+.macro FILEX_HANDLE
+      LDY   #0
+      LDA   (NVR0L),Y
+      STA   LIB_ARG0
+      STZ   LIB_ARG0+1
+      STZ   LIB_ARG0+2
+      STZ   LIB_ARG0+3
+.endmacro
+
+.macro FILEX_NAME
+      CLC
+      LDA   NVR0L
+      ADC   #3
+      STA   LIB_ARG0
+      LDA   NVR0H
+      ADC   #0
+      STA   LIB_ARG0+1
+      STZ   LIB_ARG0+2
+      STZ   LIB_ARG0+3
+      LDY   #2
+      LDA   (NVR0L),Y
+      STA   LIB_ARG1
+      STZ   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+.endmacro
+
+.macro FILEX_CAPTURE_U24
+      LDA   LIB_RESULT
+      STA   NVR1L
+      LDA   LIB_RESULT+1
+      STA   NVR1H
+      LDA   LIB_RESULT+2
+      STA   NVR2L
+.endmacro
+
+.macro FILEX_U24_TO_ARG1
+      LDA   NVR1L
+      STA   LIB_ARG1
+      LDA   NVR1H
+      STA   LIB_ARG1+1
+      LDA   NVR2L
+      STA   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+.endmacro
+
+.macro FILEX_BLOCK_ARGS
+      TSX
+      LDA   $0107,X
+      STA   NVR0L
+      LDA   $0108,X
+      STA   NVR0H
+      LDA   $0105,X
+      STA   LIB_ARG1
+      LDA   $0106,X
+      STA   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+      LDA   $0103,X
+      STA   LIB_ARG2
+      LDA   $0104,X
+      STA   LIB_ARG2+1
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
+      FILEX_HANDLE
+.endmacro
+
 .macro PASCAL_LOAD_FILE_DATA_PTR
       LDA   LIB_ARG3
       STA   NVR6L
@@ -48,7 +123,7 @@ NP_WINDOW_ACTIVE = $A5
 
       .segment "LIBRARY"
       .byte NLIB_MAGIC0, NLIB_MAGIC1, NLIB_MAGIC2, NLIB_MAGIC3
-        .byte NLIB_VERSION, 43
+        .byte NLIB_VERSION, 45
 
       ; P_WRITE_CHAR deliberately imports P_CHAR_DEVICE from the next member.
       ; This keeps the Pascal-facing routine independent of the hardware shim
@@ -337,6 +412,309 @@ byte_object_end:
 
       ; STR(Integer) shares the native signed-word representation but writes
       ; into a Turbo short string instead of a device.
+      ; Random-access, bulk-transfer, and file-management operations over the
+      ; byte-stream FILES handles. Positions and counts are byte offsets in a
+      ; 16-bit range rather than Turbo's record counts: Nova's FIO layer is
+      ; byte-addressed, and a Pascal-held file cannot exceed the 64 KB address
+      ; space anyway. Scale by SizeOf(record) for Turbo-style record addressing.
+      ;
+      ; The shared steps are assembler macros rather than internal subroutines:
+      ; a NOBJ member can only relocate calls that go through its own exported
+      ; symbols, so private helpers would need to be published just to be
+      ; callable. Inlining keeps the member self-contained.
+      .word filex_object_end-filex_object
+filex_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 11
+      .word filex_symbols-filex_object
+      .word 0
+      .word filex_relocations-filex_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word filex_code_end-filex_code
+      .word filex_code_end-filex_code
+      .byte "CODE"
+filex_code:
+filex_seek:
+      TSX
+      LDA   $0105,X
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      LDA   $0103,X
+      STA   NVR1L
+      LDA   $0104,X
+      STA   NVR1H
+      STZ   NVR2L
+      FILEX_HANDLE
+      FILEX_U24_TO_ARG1
+      PASCAL_FILE_CALL FILE_FSEEK
+      RTS
+
+filex_filepos:
+      FILEX_ONE_ARG
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FTELL
+      LDA   LIB_RESULT
+      LDX   LIB_RESULT+1
+      RTS
+
+filex_filesize:
+      FILEX_ONE_ARG
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FSIZE
+      LDA   LIB_RESULT
+      LDX   LIB_RESULT+1
+      RTS
+
+; Truncate cuts the file at the current position.
+filex_truncate:
+      FILEX_ONE_ARG
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FTELL
+      FILEX_CAPTURE_U24
+      FILEX_HANDLE
+      FILEX_U24_TO_ARG1
+      PASCAL_FILE_CALL FILE_FRESIZE
+      RTS
+
+filex_flush:
+      FILEX_ONE_ARG
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FFLUSH
+      RTS
+
+filex_erase:
+      FILEX_ONE_ARG
+      FILEX_NAME
+      PASCAL_FILE_CALL FILE_FDELETE
+      RTS
+
+; Append reopens for read/write and parks the cursor at end of file.
+filex_append:
+      FILEX_ONE_ARG
+      FILEX_NAME
+      LDA   #FIO_FILE_ACCESS_RW
+      STA   LIB_ARG2
+      STZ   LIB_ARG2+1
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
+      PASCAL_FILE_CALL FILE_FOPEN
+      LDY   #0
+      LDA   LIB_RESULT
+      STA   (NVR0L),Y
+      INY
+      LDA   #1
+      STA   (NVR0L),Y
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FSIZE
+      FILEX_CAPTURE_U24
+      FILEX_HANDLE
+      FILEX_U24_TO_ARG1
+      PASCAL_FILE_CALL FILE_FSEEK
+      RTS
+
+; Rename also adopts the new name, so a later Erase or Append follows the file.
+filex_rename:
+      TSX
+      LDA   $0105,X
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      LDA   $0103,X
+      STA   NVR3L
+      LDA   $0104,X
+      STA   NVR3H
+      FILEX_NAME
+      CLC
+      LDA   NVR3L
+      ADC   #1
+      STA   LIB_ARG2
+      LDA   NVR3H
+      ADC   #0
+      STA   LIB_ARG2+1
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
+      LDY   #0
+      LDA   (NVR3L),Y
+      STA   LIB_ARG3
+      STZ   LIB_ARG3+1
+      STZ   LIB_ARG3+2
+      STZ   LIB_ARG3+3
+      PASCAL_FILE_CALL FILE_FRENAME
+      LDY   #0
+      LDA   (NVR3L),Y
+      CMP   #14
+      BCC   :+
+      LDA   #13
+:     TAX
+      LDY   #2
+      STA   (NVR0L),Y
+      TXA
+      BEQ   @renamed
+      LDY   #1
+@copy:
+      LDA   (NVR3L),Y
+      PHY
+      INY
+      INY
+      STA   (NVR0L),Y
+      PLY
+      INY
+      DEX
+      BNE   @copy
+@renamed:
+      RTS
+
+filex_blockread:
+      FILEX_BLOCK_ARGS
+      PASCAL_FILE_CALL FILE_FREAD
+      RTS
+
+filex_blockwrite:
+      FILEX_BLOCK_ARGS
+      PASCAL_FILE_CALL FILE_FWRITE
+      RTS
+
+; Eoln peeks one byte and restores the cursor, so the caller's position is
+; unchanged whether or not a line ending is next.
+filex_eoln:
+      FILEX_ONE_ARG
+      FILEX_HANDLE
+      PASCAL_FILE_CALL FILE_FTELL
+      FILEX_CAPTURE_U24
+      FILEX_HANDLE
+      LDA   #<LIB_ARG3
+      STA   LIB_ARG1
+      LDA   #>LIB_ARG3
+      STA   LIB_ARG1+1
+      STZ   LIB_ARG1+2
+      STZ   LIB_ARG1+3
+      LDA   #1
+      STA   LIB_ARG2
+      STZ   LIB_ARG2+1
+      STZ   LIB_ARG2+2
+      STZ   LIB_ARG2+3
+      STZ   LIB_ARG3
+      PASCAL_FILE_CALL FILE_FREAD
+      LDA   LIB_RESULT
+      ORA   LIB_RESULT+1
+      BEQ   @line_end                     ; nothing left: end of file is eoln
+      LDA   LIB_ARG3
+      CMP   #$0D
+      BEQ   @restore_end
+      CMP   #$0A
+      BEQ   @restore_end
+      LDX   #0
+      BRA   @restore
+@restore_end:
+      LDX   #1
+@restore:
+      PHX
+      FILEX_HANDLE
+      FILEX_U24_TO_ARG1
+      PASCAL_FILE_CALL FILE_FSEEK
+      PLA
+      RTS
+@line_end:
+      LDA   #1
+      RTS
+filex_code_end:
+
+filex_symbols:
+      .word filex_seek-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "SEEK"
+      .word filex_filepos-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "FILEPOS"
+      .word filex_filesize-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "FILESIZE"
+      .word filex_truncate-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "TRUNCATE"
+      .word filex_flush-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 5, "FLUSH"
+      .word filex_erase-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 5, "ERASE"
+      .word filex_rename-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "RENAME"
+      .word filex_append-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "APPEND"
+      .word filex_blockread-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "BLOCKREAD"
+      .word filex_blockwrite-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 10, "BLOCKWRITE"
+      .word filex_eoln-filex_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "EOLN"
+filex_relocations:
+filex_object_end:
+
+      ; Turbo Random/Randomize. Nova's RNG is host- or hardware-backed entropy
+      ; rather than a seeded sequence, so Randomize has no seed to install and
+      ; RandSeed has no meaning here; it exists so ported sources still compile.
+      .word random_object_end-random_object
+random_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 5
+      .word random_symbols-random_object
+      .word 0
+      .word random_relocations-random_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word random_code_end-random_code
+      .word random_code_end-random_code
+      .byte "CODE"
+random_code:
+; Random(N) scales 16 random bits into 0..N-1 with the hardware multiplier,
+; which stays even across the range instead of carrying a modulo bias.
+pascal_random:
+      STA   NVR0L
+      STX   NVR0H
+      ORA   NVR0H
+      BNE   :+
+      TAX                                 ; Random(0) is 0, as in Turbo
+      RTS
+:     PASCAL_FILE_CALL FILE_RNG
+      MATHC_MUL16_U LIB_RESULT, LIB_RESULT+1, NVR0L, NVR0H, NVR1L, NVR1H, NVR2L, NVR2H
+      LDA   NVR2L
+      LDX   NVR2H
+      RTS
+
+pascal_randomize:
+      RTS
+
+; Turbo byte helpers share this member: NL does not cope with another archive
+; member here, and these are the same shape of small System scalar helper.
+pascal_hi:
+      TXA
+      RTS
+pascal_lo:
+      RTS
+pascal_swap:
+      PHA
+      TXA
+      PLX
+      RTS
+random_code_end:
+
+random_symbols:
+      .word pascal_random-random_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "RANDOM"
+      .word pascal_randomize-random_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "RANDOMIZE"
+      .word pascal_hi-random_code
+      .byte 0, NOBJ_SYM_GLOBAL, 2, "HI"
+      .word pascal_lo-random_code
+      .byte 0, NOBJ_SYM_GLOBAL, 2, "LO"
+      .word pascal_swap-random_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "SWAP"
+random_relocations:
+random_object_end:
+
       .word str_integer_object_end-str_integer_object
 str_integer_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
@@ -466,9 +844,9 @@ format_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 8
+      .word 10
       .word format_symbols-format_object
-      .word 14
+      .word 17
       .word format_relocations-format_object
       .word 0
 
@@ -566,6 +944,26 @@ write_real_default_call: .word 0
       PLA
       PLA
       BRA   write_real_buffer
+
+; LongInt shares the Real shape: format through the paged runtime into the
+; shared string buffer, then hand that string to the ordinary writer.
+write_long:
+      PHX
+      PHA
+      LDA   #0
+      PHA                                 ; unused width high
+      PHA                                 ; zero field width
+      .byte $A9
+write_long_buffer_lo: .byte 0
+      .byte $A2
+write_long_buffer_hi: .byte 0
+      .byte $20
+write_long_call: .word 0
+      PLA
+      PLA
+      PLA
+      PLA
+      BRA   write_real_buffer
 format_code_end:
 
 format_symbols:
@@ -585,6 +983,10 @@ format_symbols:
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 12, "__NP_STRBUF0"
       .word 0
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 19, "P_WRITE_UWORD_FIELD"
+      .word write_long-format_code
+      .byte 0, NOBJ_SYM_GLOBAL, 12, "P_WRITE_LONG"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 10, "P_STR_LONG"
 
 format_relocations:
       .byte 0, NOBJ_RELOC_ABS16
@@ -615,6 +1017,12 @@ format_relocations:
       .word write_real_default_buffer_hi-format_code, 6, 0
       .byte 0, NOBJ_RELOC_ABS16
       .word write_real_default_call-format_code, 4, 0
+      .byte 0, NOBJ_RELOC_LO8
+      .word write_long_buffer_lo-format_code, 6, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word write_long_buffer_hi-format_code, 6, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_long_call-format_code, 9, 0
 format_object_end:
 
       .word device_object_end-device_object
@@ -4213,6 +4621,8 @@ rtcall:
       STY   LANGRT_FN_SAVED
       CPY   #LANGRT_STR_REAL
       BEQ   rtcall_marshal_str
+      CPY   #LANGRT_STR_LONG
+      BEQ   rtcall_marshal_str
       CPY   #LANGRT_STR_REAL_PRECISION
       BEQ   rtcall_marshal_str_precision
       CPY   #LANGRT_REAL_VAL
@@ -4312,6 +4722,8 @@ rtcall_load_return_low: .word 0            ; LDA rtcall_return
       BEQ   rtcall_return_word
       CMP   #LANGRT_STR_REAL
       BEQ   rtcall_return_void
+      CMP   #LANGRT_STR_LONG
+      BEQ   rtcall_return_void
       CMP   #LANGRT_STR_REAL_PRECISION
       BEQ   rtcall_return_void
       CMP   #LANGRT_REAL_VAL
@@ -4386,6 +4798,7 @@ rtcall_relocations:
       .word rtcall_args_ready_jump-rtcall_code, 4, 0
 rtcall_object_end:
 
+      .include "pascal_langrt_thunk.inc"
       .include "pascal_real_thunks.inc"
       .include "pascal_longint_thunks.inc"
 
@@ -4879,7 +5292,7 @@ file_reset:
       STZ   LIB_ARG1+1
       STZ   LIB_ARG1+2
       STZ   LIB_ARG1+3
-      LDA   #FIO_FILE_ACCESS_READ
+      LDA   #FIO_FILE_ACCESS_RW
       STA   LIB_ARG2
       STZ   LIB_ARG2+1
       STZ   LIB_ARG2+2
@@ -4916,7 +5329,7 @@ file_rewrite:
       STZ   LIB_ARG1+1
       STZ   LIB_ARG1+2
       STZ   LIB_ARG1+3
-      LDA   #FIO_FILE_ACCESS_WRITE
+      LDA   #FIO_FILE_ACCESS_RW
       STA   LIB_ARG2
       STZ   LIB_ARG2+1
       STZ   LIB_ARG2+2
