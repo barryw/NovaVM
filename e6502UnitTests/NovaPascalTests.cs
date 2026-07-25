@@ -258,6 +258,57 @@ public class NovaPascalTests
     /// matching line. The needle and the walk position are paged out, so they
     /// survive NPEDIT being reloaded between hits.
     /// </summary>
+    /// <summary>
+    /// The compiler resyncs at the next statement boundary and keeps parsing,
+    /// so one build reports every syntax error it can find rather than only
+    /// the first. F8 then walks them: the caret moves to the second error.
+    /// </summary>
+    [TestMethod]
+    public void CompilerReportsEveryErrorAndF8WalksThem()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-errs-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            // Two bad statements, on lines 5 and 7, with good ones between.
+            disk.Save("TWOBAD", Encoding.ASCII.GetBytes(
+                "program TwoBad;\nvar A: Byte;\nbegin\n  A := 1;\n  A := @@@;\n  A := 2;\n  A := ###;\n  A := 3\nend.\n"), ".PAS");
+
+            QueueLine(editor, "EDIT TWOBAD.PAS");
+            RunUntil(cpu, bus, s => s.Contains("program TwoBad", StringComparison.Ordinal), "source opened");
+            RunSteps(cpu, bus, 200_000);
+
+            editor.QueueInput(0x8C);           // F9: build
+            RunUntil(cpu, bus, s => s.Contains("error:", StringComparison.Ordinal), "compiler reports an error");
+            RunUntil(cpu, bus, s => s.Contains("TWOBAD.PAS", StringComparison.Ordinal), "editor reopens on the error");
+            RunUntil(cpu, bus, s => s.Contains("Y:5", StringComparison.Ordinal),
+                "caret on the first error");
+
+            // F8 walks to the second diagnostic from the same build.
+            editor.QueueInput(0x8B);           // F8
+            RunUntil(cpu, bus, s => s.Contains("Y:7", StringComparison.Ordinal),
+                "F8 moved to the second error");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [TestMethod]
     public void EditorSearchesTheWholeProject()
     {

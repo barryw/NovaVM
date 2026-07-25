@@ -34,6 +34,9 @@ SEARCH_CAP   = 24
 SEARCH_FILES = 16
 SEARCH_NAME  = 14
 
+; Diagnostics the compiler collected for the last build. F8 walks them.
+ERR_MAX      = 8
+
       .segment "ZEROPAGE"
 search_ptr:         .res 2            ; indirect cursor over search_names
 
@@ -73,6 +76,9 @@ search_scan_line:   .res 2
 search_typed:       .res SEARCH_CAP
 search_typed_len:   .res 1
 search_hit:         .res 1            ; the goto below came from a search, not a build
+err_count:          .res 1            ; fetched as one block, count first
+err_list:           .res ERR_MAX * 3  ; line low, line high, column
+err_index:          .res 1
 
 
       .segment "NOINIT"
@@ -159,6 +165,8 @@ tool_main:
       ; the message only has to name the cause.
       STZ   editor_hooks+EDITOR_HOOKS_STATUSL
       STZ   editor_hooks+EDITOR_HOOKS_STATUSH
+      JSR   err_load
+      STZ   err_index
       LDA   search_hit
       BNE   :+                         ; a search hit explains itself
       LDA   editor_hooks+EDITOR_HOOKS_GOTO_LINEL
@@ -257,6 +265,11 @@ tool_main:
       BEQ   @toolchain
       CMP   #EDITUI_CMD_RUN
       BEQ   @toolchain
+      CMP   #EDITUI_CMD_ERROR_NEXT
+      BNE   @not_error
+      JSR   tool_error_next
+      JMP   @edit
+@not_error:
       CMP   #EDITUI_CMD_SEARCH_PROJECT
       BNE   @picker
       JSR   tool_search_project
@@ -596,6 +609,76 @@ tool_use_picker_name:
       STA   NPTOOL_ARG0,X
       BRA   @copy
 @done:
+      RTS
+
+; =====================================================================
+; Walk the diagnostics the compiler collected for the last build.
+; =====================================================================
+
+err_load:
+      JSR   nptool_clear_args
+      LDA   #<err_block_name
+      STA   LIB_ARG0+0
+      LDA   #>err_block_name
+      STA   LIB_ARG0+1
+      LDA   #err_block_name_end-err_block_name
+      STA   LIB_ARG1+0
+      LDA   #<err_count
+      STA   LIB_ARG1+2
+      LDA   #>err_count
+      STA   LIB_ARG1+3
+      LDA   #1 + ERR_MAX * 3
+      STA   LIB_ARG2+0
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      LDA   #MEM_NAMED_FETCH
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      BEQ   @ok
+      STZ   err_count                  ; no block: nothing to walk
+@ok:
+      LDA   err_count
+      CMP   #ERR_MAX+1
+      BCC   :+
+      STZ   err_count                  ; refuse a block that is not ours
+:     RTS
+
+; Move to the next diagnostic and point the goto at it. Carry set = reopen.
+tool_error_next:
+      LDA   err_count
+      BEQ   @none
+      LDA   err_index
+      INC   A
+      CMP   err_count
+      BCC   :+
+      LDA   #0                         ; past the last one: wrap to the first
+:     STA   err_index
+      ASL   A
+      CLC
+      ADC   err_index                  ; index * 3
+      TAX
+      LDA   err_list+0,X
+      STA   NPTOOL_DIAG_LINE+0
+      LDA   err_list+1,X
+      STA   NPTOOL_DIAG_LINE+1
+      LDA   err_list+2,X
+      STA   NPTOOL_DIAG_COL+0
+      STZ   NPTOOL_DIAG_COL+1
+      LDA   #<err_next_msg
+      STA   editor_hooks+EDITOR_HOOKS_STATUSL
+      LDA   #>err_next_msg
+      STA   editor_hooks+EDITOR_HOOKS_STATUSH
+      INC   search_hit                 ; the message above is ours, not the build's
+      SEC
+      RTS
+@none:
+      LDA   #<err_none_msg
+      STA   editor_hooks+EDITOR_HOOKS_STATUSL
+      LDA   #>err_none_msg
+      STA   editor_hooks+EDITOR_HOOKS_STATUSH
+      INC   search_hit
+      CLC
       RTS
 
 ; =====================================================================
@@ -1113,6 +1196,8 @@ editor_command_hook:
       BEQ   @open
       CMP   #EDITUI_CMD_SEARCH_PROJECT
       BEQ   @open
+      CMP   #EDITUI_CMD_ERROR_NEXT
+      BEQ   @open
       CMP   #EDITUI_CMD_BUFFER_LIST
       BNE   @ignored
 @open:
@@ -1465,6 +1550,14 @@ EDITOR_PASCAL_COLOR_WORD    = $63
 EDITOR_PASCAL_COLOR_STRING  = $65
 EDITOR_PASCAL_COLOR_NUMBER  = $67
 EDITOR_PASCAL_COLOR_COMMENT = $6C
+err_block_name:
+      .byte "__NPC.ERRS"
+err_block_name_end:
+err_next_msg:
+      .byte "Next error", 0
+err_none_msg:
+      .byte "No further errors from the last build", 0
+
 search_block_name:
       .byte "__NPED.SRC"
 search_block_name_end:

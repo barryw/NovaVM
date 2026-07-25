@@ -94,7 +94,17 @@ P_WORK_CONTEXTS = P_WORK_TYPE_DECL_NAME + P_TYPE_NAME_CAP
 P_WORK_ROUTINES = P_WORK_CONTEXTS + P_ROUTINE_DEPTH_CAP * 14
 P_WORK_ROUTINE_PARAMS = P_WORK_ROUTINES + P_ROUTINE_CAP * 5
 P_WORK_WITH_TYPES = P_WORK_ROUTINE_PARAMS + P_ROUTINE_PARAM_CAP
-P_WORK_END = P_WORK_WITH_TYPES + P_WITH_CAP
+; Syntax-error recovery state. The parser resyncs at the next statement
+; boundary and keeps parsing with output suppressed, so one compile reports
+; several errors instead of only the first.
+P_DIAG_MAX = 8
+P_WORK_RECOVER_SP = P_WORK_WITH_TYPES + P_WITH_CAP
+P_WORK_RECOVER_ARMED = P_WORK_RECOVER_SP + 1
+; Count and list are adjacent: they are stashed as one block.
+P_WORK_HAD_ERROR = P_WORK_RECOVER_ARMED + 1
+P_WORK_DIAG_COUNT = P_WORK_HAD_ERROR + 1
+P_WORK_DIAG_LIST = P_WORK_DIAG_COUNT + 1
+P_WORK_END = P_WORK_DIAG_LIST + P_DIAG_MAX * 3
 .assert P_WORK_END <= $1000, error, "NPC scratch exceeds the resident shell buffer"
 CONTROL_IF     = 1
 CONTROL_WHILE  = 2
@@ -317,6 +327,11 @@ p_compiling_unit:  .res 1
 p_in_unit_interface:.res 1
 p_importing_interface:.res 1
 p_suppress_output: .res 1
+; Syntax-error recovery. The parser resyncs at the next statement boundary and
+; keeps going with output suppressed, so one compile reports several errors
+; instead of only the first. p_recover_sp is the stack as it stood just before
+; the failing statement.
+
 p_interface_count: .res 1
 p_interface_index: .res 1
 p_control_depth:   .res 1
@@ -481,6 +496,11 @@ npcfe_work_end:
       .segment "NPCFE_BSS"
 ; The shell is suspended while NPC runs. Its file buffer is therefore the
 ; compiler's low-RAM scratch arena; bytes $000-$0FF stage generated output.
+p_diag_count        = source_buf + P_WORK_DIAG_COUNT
+p_recover_sp        = source_buf + P_WORK_RECOVER_SP
+p_recover_armed     = source_buf + P_WORK_RECOVER_ARMED
+p_had_error         = source_buf + P_WORK_HAD_ERROR
+p_diag_list         = source_buf + P_WORK_DIAG_LIST
 p_type_name_len     = source_buf + P_WORK_TYPE_NAME_LEN
 p_type_kind         = source_buf + P_WORK_TYPE_KIND
 p_type_size_l       = source_buf + P_WORK_TYPE_SIZE_L
@@ -546,7 +566,10 @@ npcfe_main:
       BRA   @publish
 @compile:
       JSR   pascal_compile
-      STA   p_frontend_status
+      LDX   p_had_error               ; recovered errors still fail the build
+      BEQ   :+
+      LDA   #1
+:     STA   p_frontend_status
       JSR   p_finalize_output
       JSR   p_finalize_dependencies
       JSR   p_release_includes
@@ -568,6 +591,7 @@ npcfe_main:
       LDA   #1
       STA   p_frontend_status
 @publish:
+      JSR   p_publish_diags
       LDA   generated_asm_len
       STA   LIB_RESULT
       LDA   generated_asm_len+1
@@ -605,6 +629,9 @@ pascal_compile:
       STZ   p_in_unit_interface
       STZ   p_importing_interface
       STZ   p_suppress_output
+      STZ   p_diag_count
+      STZ   p_had_error
+      STZ   p_recover_armed
       STZ   p_interface_count
       STZ   p_interface_index
       STZ   p_control_depth
@@ -1398,6 +1425,10 @@ p_validate_interface_routine:
       SEC
       RTS
 
+p_diag_block_name:
+      .byte "__NPC.ERRS"
+p_diag_block_name_end:
+
 p_syntax_error:
       LDA   #PASCAL_ERR_SYNTAX
       BRA   p_compile_fail
@@ -1409,6 +1440,8 @@ p_compile_fail:
       TXA
 :
       STA   pascal_error
+      LDA   p_diag_count
+      BNE   @recorded                ; the mailbox keeps the first error
       JSR   p_publish_diag_source
       LDA   p_line
       STA   NPTOOL_DIAG_LINE
@@ -1418,8 +1451,86 @@ p_compile_fail:
       STA   NPTOOL_DIAG_COL
       LDA   p_column+1
       STA   NPTOOL_DIAG_COL+1
+@recorded:
+      JSR   p_diag_record
       LDA   #1
       RTS
+
+; Record one diagnostic. The first also goes to the NPTOOL mailbox, which is
+; what the shell prints and what the editor opens on.
+p_diag_record:
+      LDA   p_diag_count
+      CMP   #P_DIAG_MAX
+      BCS   @full
+      ASL   A
+      CLC
+      ADC   p_diag_count             ; index * 3
+      TAX
+      LDA   p_line
+      STA   p_diag_list+0,X
+      LDA   p_line+1
+      STA   p_diag_list+1,X
+      LDA   p_column
+      STA   p_diag_list+2,X
+      INC   p_diag_count
+@full:
+      RTS
+
+; Note a failed statement. The first one fills the mailbox the shell prints and
+; the editor opens on; every one lands in the list F8 walks. Carry set means
+; parsing can continue.
+p_diag_note:
+      LDA   p_diag_count
+      BNE   @more
+      LDA   #PASCAL_ERR_SYNTAX
+      STA   pascal_error
+      LDX   p_source_error
+      BEQ   :+
+      STX   pascal_error
+:     JSR   p_publish_diag_source
+      LDA   p_line
+      STA   NPTOOL_DIAG_LINE
+      LDA   p_line+1
+      STA   NPTOOL_DIAG_LINE+1
+      LDA   p_column
+      STA   NPTOOL_DIAG_COL
+      LDA   p_column+1
+      STA   NPTOOL_DIAG_COL+1
+@more:
+      JSR   p_diag_record
+      LDA   #1
+      STA   p_suppress_output
+      STA   p_had_error
+      LDA   p_diag_count
+      CMP   #P_DIAG_MAX
+      BCS   @full
+      SEC
+      RTS
+@full:
+      CLC
+      RTS
+
+; Skip to the next statement boundary so parsing can continue.
+p_recover_resync:
+      STZ   p_recover_armed
+      LDA   #1
+      STA   p_suppress_output        ; nothing after the first error is emitted
+@skip:
+      JSR   p_skip_ws
+      JSR   p_peek
+      BCC   @stop                    ; end of source
+      CMP   #';'
+      BEQ   @separator
+      LDA   #<kw_end
+      LDX   #>kw_end
+      JSR   p_peek_keyword
+      BCS   @stop                    ; let the statement list see END itself
+      JSR   p_next
+      BRA   @skip
+@separator:
+      JSR   p_next
+@stop:
+      JMP   p_parse_statement_list
 
 ; Parse a top-level VAR section and leave the first following declaration or
 ; BEGIN keyword captured in p_ident. Includes may introduce these sections
@@ -1985,7 +2096,7 @@ p_parse_statement_list:
       JMP   p_expect_ax_word
 @statement:
       JSR   p_parse_statement
-      BCS   @fail
+      BCS   @recover
       JSR   p_skip_ws
       JSR   p_peek
       long_bcc @fail
@@ -1999,6 +2110,10 @@ p_parse_statement_list:
 @separator:
       JSR   p_next
       BRA   @next
+@recover:
+      JSR   p_diag_note
+      BCC   @fail                    ; cannot carry on: report what we have
+      JMP   p_recover_resync
 @fail:
       SEC
       RTS
@@ -15595,6 +15710,30 @@ p_finalize_dependencies:
       JSR   p_delete_dependencies
 @done:
       RTS
+
+; Hand the collected diagnostics to whoever opens the editor next. Nothing to
+; say when the compile succeeded, and a stale block would be worse than none.
+p_publish_diags:
+      JSR   p_clear_lib_args
+      LDA   #<p_diag_block_name
+      STA   LIB_ARG0+0
+      LDA   #>p_diag_block_name
+      STA   LIB_ARG0+1
+      LDA   #p_diag_block_name_end-p_diag_block_name
+      STA   LIB_ARG1+0
+      LDA   #<p_diag_count
+      STA   LIB_ARG1+2
+      LDA   #>p_diag_count
+      STA   LIB_ARG1+3
+      LDA   #1 + P_DIAG_MAX * 3
+      STA   LIB_ARG2+0
+      LDA   p_diag_count
+      BEQ   @drop
+      LDA   #MEM_NAMED_STASH
+      JMP   p_memory_call
+@drop:
+      LDA   #MEM_NAMED_DELETE
+      JMP   p_memory_call
 
 p_memory_call:
       STA   LIB_FN_ID
