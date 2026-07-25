@@ -90,6 +90,8 @@ EB_SELL:            .res 1       ; selection anchor offset (16-bit)
 EB_SELH:            .res 1
 EDITBUF_SELACT:     .res 1       ; selection active flag
 EB_GOALCOL:         .res 1       ; sticky column for up/down
+      .export EB_CURLINEL
+      .export EB_CURLINEH
 EB_CURLINEL:        .res 1       ; computed cursor line (16-bit)
 EB_CURLINEH:        .res 1
 EB_CURCOL:          .res 1       ; computed cursor column
@@ -482,6 +484,9 @@ editbuf_dispatch_command:
 :     CMP   #EDITUI_CMD_ERROR_NEXT
       BNE   :+
       JMP   editbuf_do_host_command
+:     CMP   #EDITUI_CMD_SEARCH_PROJECT
+      BNE   :+
+      JMP   editbuf_do_host_command
 :
       CLC
       RTS
@@ -568,6 +573,10 @@ editbuf_key_to_command:
 :     CMP   #EDITUI_KEY_F8
       BNE   :+
       LDA   #EDITUI_CMD_ERROR_NEXT
+      RTS
+:     CMP   #EDITUI_KEY_F7
+      BNE   :+
+      LDA   #EDITUI_CMD_SEARCH_PROJECT
       RTS
 :     CMP   #EDITUI_KEY_ALT_PREFIX
       BNE   @none

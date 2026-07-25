@@ -234,8 +234,15 @@ sys_edit:
       STA   LIB_RESULT+0               ; editbuf exit reason
       LDA   se_saved_flag
       STA   LIB_RESULT+1               ; nonzero => save requested
-      STZ   LIB_RESULT+2
-      STZ   LIB_RESULT+3
+      ; Where the caret finished, one-based, so a host can reopen here later.
+      ; Zero means "not known"; the pager clears it for a scrolled document.
+      CLC
+      LDA   EB_CURLINEL
+      ADC   #1
+      STA   LIB_RESULT+2
+      LDA   EB_CURLINEH
+      ADC   #0
+      STA   LIB_RESULT+3
       LDA   EDITBUF_LENL
       STA   LIB_ARG1+0                 ; final length back to the host
       LDA   EDITBUF_LENH

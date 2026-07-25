@@ -132,7 +132,14 @@ sys_edit_xram:
       DEX
       BPL   @publish_window
       JSR   sys_edit
-      LDA   LIB_STATUS
+      ; sys_edit reports the caret line within the loaded window. That only
+      ; describes the document when the first window is the one on screen.
+      LDA   ep_window_off+0
+      ORA   ep_window_off+1
+      BEQ   :+
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+:     LDA   LIB_STATUS
       BNE   @done
       JSR   ep_commit_window
       BCC   :+

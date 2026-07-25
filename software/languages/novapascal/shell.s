@@ -413,8 +413,7 @@ shell_cmd_dir:
       JSR   shell_check_lib
       JMP   shell_loop
 @usage:
-      JSR   shell_print_usage
-      JMP   shell_loop
+      JMP   shell_usage_loop
 
 shell_cmd_pwd:
       STZ   shell_name_len
@@ -474,11 +473,8 @@ shell_cmd_rmdir:
       JMP   shell_loop
 
 shell_cmd_ren:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BEQ   @usage
       STZ   shell_load_error
       STZ   shell_fio_error
@@ -502,8 +498,7 @@ shell_cmd_ren:
       JSR   shell_check_lib
       JMP   shell_loop
 @usage:
-      JSR   shell_print_usage
-      JMP   shell_loop
+      JMP   shell_usage_loop
 
 shell_cmd_type:
       JSR   shell_require_name
@@ -550,11 +545,8 @@ shell_type_name:
       JMP   shell_loop
 
 shell_cmd_new:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BNE   @usage
       LDA   #NPP_OP_NEW
       JSR   shell_launch_project_op
@@ -567,11 +559,8 @@ shell_cmd_new:
       JMP   shell_loop
 
 shell_cmd_newunit:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BNE   @usage
       STZ   shell_project_scoped
       JSR   shell_enter_user_root
@@ -591,11 +580,8 @@ shell_cmd_newunit:
       JMP   shell_loop
 
 shell_cmd_addunit:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BEQ   @usage
       LDA   #NPP_OP_ADD_UNIT
       JSR   shell_launch_project_op_with_user_fallback
@@ -608,11 +594,8 @@ shell_cmd_addunit:
       JMP   shell_loop
 
 shell_cmd_delunit:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BEQ   @usage
       LDA   #NPP_OP_DEL_UNIT
       JSR   shell_launch_project_op_with_user_fallback
@@ -625,11 +608,8 @@ shell_cmd_delunit:
       JMP   shell_loop
 
 shell_cmd_delproject:
-      JSR   shell_read_args
+      JSR   shell_read_names
       BCS   @usage
-      LDA   shell_name_len
-      BEQ   @usage
-      LDA   shell_name2_len
       BNE   @usage
       LDA   #NPP_OP_DEL_PROJECT
       JSR   shell_launch_project_op_with_user_fallback
@@ -1056,6 +1036,44 @@ shell_cmd_run_named:
 ; ---------------------------------------------------------------------
 ; External tool execution.
 ; ---------------------------------------------------------------------
+; Read both argument slots and report whether they are usable. Carry set means
+; the line was malformed or the first name is missing; on success Z reflects
+; whether a second name was supplied, which is all six callers need to know.
+; Copy a NUL-terminated name into shell_name. A/Y point at the source, X is
+; its length. Four call sites open-coded this loop.
+shell_copy_to_name:
+      STA   p_word
+      STY   p_word+1
+      STX   shell_name_len
+      TXA
+      TAY
+      LDA   #0
+      STA   shell_name,Y
+@copy:
+      DEY
+      BMI   @done
+      LDA   (p_word),Y
+      STA   shell_name,Y
+      BRA   @copy
+@done:
+      RTS
+
+shell_read_names:
+      JSR   shell_read_args
+      BCS   @bad
+      LDA   shell_name_len
+      BEQ   @bad
+      LDA   shell_name2_len
+      CLC
+      RTS
+@bad:
+      SEC
+      RTS
+
+shell_usage_loop:
+      JSR   shell_print_usage
+      JMP   shell_loop
+
 shell_print_usage:
       LDA   #<shell_usage
       LDY   #>shell_usage
@@ -1175,16 +1193,10 @@ shell_save_project_name:
       RTS
 
 shell_restore_project_name:
-      LDA   shell_project_dir_len
-      STA   shell_name_len
-      TAX
-      STZ   shell_name,X
-@copy:
-      DEX
-      BMI   @done
-      LDA   shell_project_dir,X
-      STA   shell_name,X
-      BRA   @copy
+      LDA   #<shell_project_dir
+      LDY   #>shell_project_dir
+      LDX   shell_project_dir_len
+      JSR   shell_copy_to_name
 @done:
       RTS
 
@@ -1223,16 +1235,10 @@ shell_leave_project:
       LDA   shell_project_scoped
       BEQ   @done
       STZ   shell_project_scoped
-      LDA   shell_saved_cwd_len
-      STA   shell_name_len
-      TAX
-      STZ   shell_name,X
-@copy:
-      DEX
-      BMI   @cd
-      LDA   shell_saved_cwd,X
-      STA   shell_name,X
-      BRA   @copy
+      LDA   #<shell_saved_cwd
+      LDY   #>shell_saved_cwd
+      LDX   shell_saved_cwd_len
+      JSR   shell_copy_to_name
 @cd:
       LDA   #FILE_CD
       JSR   shell_call_file_name
@@ -1322,30 +1328,18 @@ shell_run_cwd_args:
       RTS
 
 shell_restore_project_file:
-      LDA   shell_project_file_len
-      STA   shell_name_len
-      TAX
-      STZ   shell_name,X
-@copy:
-      DEX
-      BMI   @done
-      LDA   shell_project_file,X
-      STA   shell_name,X
-      BRA   @copy
+      LDA   #<shell_project_file
+      LDY   #>shell_project_file
+      LDX   shell_project_file_len
+      JSR   shell_copy_to_name
 @done:
       RTS
 
 shell_copy_arg0_to_name:
-      LDA   NPTOOL_ARG0_LEN
-      STA   shell_name_len
-      TAX
-      STZ   shell_name,X
-@copy:
-      DEX
-      BMI   @done
-      LDA   NPTOOL_ARG0,X
-      STA   shell_name,X
-      BRA   @copy
+      LDA   #<NPTOOL_ARG0
+      LDY   #>NPTOOL_ARG0
+      LDX   NPTOOL_ARG0_LEN
+      JSR   shell_copy_to_name
 @done:
       RTS
 

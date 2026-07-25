@@ -169,6 +169,10 @@ EDITUI_CMD_BUILD     = $1B
 EDITUI_CMD_RUN       = $1C
 EDITUI_CMD_STOP      = $1D
 EDITUI_CMD_ERROR_NEXT = $1E
+; Search every file in the project, not just this buffer. Like BUILD it is the
+; host's business: the editor holds one document and knows nothing about the
+; rest of the project.
+EDITUI_CMD_SEARCH_PROJECT = $1F
 
 EDITUI_MENU_ENTRY_SIZE = 6
 EDITUI_MENU_ITEM_SIZE  = 4

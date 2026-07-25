@@ -130,6 +130,11 @@ EDITBUF_COLOR_SEL    = $30      ; selection: black on cyan
 .global EDITBUF_HL_LEN
 .global EDITBUF_HL_COLORS     ; 80-byte color buffer
 
+; Zero-based cursor line, recomputed on every move. The editor module reports
+; it back to its caller so a host can reopen a file where it was left.
+.global EB_CURLINEL
+.global EB_CURLINEH
+
 ; --- Entry points -------------------------------------------------------
 .global editbuf_run
 ; Seek to a one-based line/column: A/X = line, Y = column. A zero line is a

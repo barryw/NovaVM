@@ -247,6 +247,128 @@ public class NovaPascalTests
     /// End, word movement and Ctrl-Backspace all edit in place. Each step here
     /// builds a command that only runs if the caret went where it was asked.
     /// </summary>
+    /// <summary>
+    /// Reopening a file puts the caret back where it was left. The position is
+    /// paged out to a named XRAM block, so it survives NPEDIT being reloaded
+    /// from disk on every EDIT.
+    /// </summary>
+    /// <summary>
+    /// F7 searches every file in the directory, not just the open buffer, and
+    /// walks hit to hit: each press opens the next matching file on the
+    /// matching line. The needle and the walk position are paged out, so they
+    /// survive NPEDIT being reloaded between hits.
+    /// </summary>
+    [TestMethod]
+    public void EditorSearchesTheWholeProject()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-find-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("FINDA", Encoding.ASCII.GetBytes(
+                "alpha one\nalpha two\nNEEDLE here\nalpha four\n"), ".TXT");
+            disk.Save("FINDB", Encoding.ASCII.GetBytes(
+                "beta one\nbeta two\n"), ".TXT");
+
+            QueueLine(editor, "EDIT FINDB.TXT");
+            RunUntil(cpu, bus, s => s.Contains("beta one", StringComparison.Ordinal), "FINDB opened");
+            RunSteps(cpu, bus, 200_000);
+
+            // F7, type the needle, accept.
+            editor.QueueInput(0x8A);           // F7
+            RunUntil(cpu, bus, s => s.Contains("Search project", StringComparison.Ordinal),
+                "project search prompt");
+            Type(editor, "NEEDLE\r");
+
+            // The hit lives in the other file, on line 3.
+            RunUntil(cpu, bus, s => s.Contains("NEEDLE here", StringComparison.Ordinal),
+                "search opened the file holding the match");
+            RunUntil(cpu, bus, s => s.Contains("Y:3", StringComparison.Ordinal),
+                "caret parked on the matching line");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    public void EditorRemembersCaretPositionPerFile()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-pos-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("POSA", Encoding.ASCII.GetBytes(
+                "line one\nline two\nline three\nline four\nline five\nline six\n"), ".TXT");
+            disk.Save("POSB", Encoding.ASCII.GetBytes(
+                "bee one\nbee two\nbee three\nbee four\n"), ".TXT");
+
+            // Park the caret on line 4 of the first file and leave.
+            QueueLine(editor, "EDIT POSA.TXT");
+            RunUntil(cpu, bus, s => s.Contains("line one", StringComparison.Ordinal), "POSA opened");
+            RunSteps(cpu, bus, 200_000);
+            for (int i = 0; i < 3; i++)
+                editor.QueueInput(0x1F);       // Down x3 -> line 4
+            RunUntil(cpu, bus, s => s.Contains("Y:4", StringComparison.Ordinal), "caret moved to line 4");
+            editor.QueueInput(0x11);           // Ctrl-Q
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "back at the shell");
+
+            // A different file must not inherit that position.
+            QueueLine(editor, "EDIT POSB.TXT");
+            RunUntil(cpu, bus, s => s.Contains("bee one", StringComparison.Ordinal), "POSB opened");
+            RunSteps(cpu, bus, 200_000);
+            StringAssert.Contains(StatusLine(bus), "Y:1",
+                "A file with no remembered position opens at the top.");
+            editor.QueueInput(0x11);
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "back at the shell again");
+
+            // Reopening the first file returns to line 4.
+            QueueLine(editor, "EDIT POSA.TXT");
+            RunUntil(cpu, bus, s => s.Contains("line one", StringComparison.Ordinal), "POSA reopened");
+            RunUntil(cpu, bus, s => s.Contains("Y:4", StringComparison.Ordinal),
+                "caret restored to the remembered line");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private static string StatusLine(CompositeBusDevice bus)
+    {
+        string[] lines = Snapshot(bus).Split('\n');
+        return lines[lines.Length - 2].Trim();
+    }
+
     [TestMethod]
     public void ShellPromptEditsTheLineInPlace()
     {
