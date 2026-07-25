@@ -77,10 +77,7 @@ eval_list:
       BNE   :+
       JMP   @err_no_bracket
 :
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -299,10 +296,7 @@ do_first:
       ORA   eval_val_hi
       BEQ   @err_empty
 
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #CONS_CAR_TYPE
       LDA   (ptr_lo),Y
       STA   eval_type
@@ -347,10 +341,7 @@ do_butfirst:
       ORA   eval_val_hi
       BEQ   @err_empty
 
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       STA   eval_val_lo
@@ -404,10 +395,7 @@ do_count:
       BNE   :+
       INC   list_count_hi
 :
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -493,10 +481,7 @@ do_last:
       STA   list_ptr_hi
 
 @walk:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -560,10 +545,7 @@ do_butlast:
 :
 
       ; Single element? (cdr = null → return empty list)
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -588,10 +570,7 @@ do_butlast:
 
 @bl_loop:
       ; If cdr of current cell is null, this is the last — stop
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -759,10 +738,7 @@ do_item:
       BEQ   @item_found
 
       ; Follow cdr
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -773,10 +749,7 @@ do_item:
       BRA   @item_walk
 
 @item_found:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CAR_TYPE
       LDA   (ptr_lo),Y
       STA   eval_type
@@ -851,10 +824,7 @@ do_memberp:
       ORA   list_ptr_hi
       BEQ   @mem_false
 
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
 
       ; Compare type
       LDY   #CONS_CAR_TYPE
@@ -906,10 +876,7 @@ do_memberp:
       JMP   eval_continue
 
 @mem_next:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -966,10 +933,7 @@ do_show:
       JMP   eval_continue
 
 @show_word:
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y
       TAX
@@ -1196,10 +1160,7 @@ do_lput:
       LDA   list_head_hi
       STA   list_ptr_hi
 @lput_walk:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -1566,10 +1527,7 @@ do_sentence:
       LDA   list_head_hi
       STA   list_ptr_hi
 @se_walk:
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX
@@ -1895,10 +1853,7 @@ render_list_to_buf:
       LDX   #1                     ; subsequent elements get space
 
       ; Read car type
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CAR_TYPE
       LDA   (ptr_lo),Y
 
@@ -2010,10 +1965,7 @@ render_list_to_buf:
 
 @rl_advance:
       ; Follow cdr
-      LDA   list_ptr_lo
-      STA   ptr_lo
-      LDA   list_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_list_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX

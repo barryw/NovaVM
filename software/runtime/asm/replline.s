@@ -39,7 +39,7 @@ REPLLINE_IMPLEMENTATION_INCLUDED = 1
 ; =====================================================================
       .segment "ZEROPAGE"
 
-buf_idx:      .res 1          ; current position in input_buf
+buf_idx:      .res 1          ; number of characters in input_buf
 REPL_PTRL     = buf_idx       ; private history pointer low during copy helpers
 REPL_PTRH:    .res 1
 
@@ -65,6 +65,14 @@ HIST_NAV      = HIST_BASE+2     ; 0 = live (in-progress) line, 1..COUNT = recall
 HIST_SX       = HIST_BASE+3     ; input-start cursor X (captured after the prompt)
 HIST_SY       = HIST_BASE+4     ; input-start cursor Y
 HIST_OLDLEN   = HIST_BASE+5     ; on-screen length to clear on a redraw
+; Caret position within input_buf (0..buf_idx). It lives in the reserved header
+; rather than zero page: Logo's ZP is full, and the reader is shared.
+repl_cur      = HIST_BASE+8
+; Set once the host asks for another line. Multi-line entry keeps the earlier
+; lines in input_buf but off-screen, so the caret arithmetic below no longer
+; describes anything visible; the reader stays append-only for the rest of the
+; entry rather than repainting text that is not there.
+repl_cont     = HIST_BASE+9
 HIST_K        = HIST_BASE+6     ; scratch: entry ordinal
 HIST_IDX      = HIST_BASE+7     ; scratch: ring slot index
 input_buf     = HIST_BASE+$10   ; line buffer ($9810-$988F, 128) -- in-band, not BSS
@@ -76,6 +84,12 @@ KEY_UP        = $1E
 KEY_DOWN      = $1F
 KEY_LEFT      = $1C
 KEY_RIGHT     = $1D
+KEY_HOME      = $83
+KEY_END       = $05
+KEY_CTRL_END  = $81
+KEY_CTRL_LEFT = $94
+KEY_CTRL_RIGHT= $95
+KEY_CTRL_BS   = $96
 
 ; =====================================================================
 ; CODE segment — the reader and history ring
@@ -102,6 +116,8 @@ repl_init:
 ; ---------------------------------------------------------------------
 repl_read_line:
       STZ   buf_idx            ; reset buffer index to 0
+      STZ   repl_cur
+      STZ   repl_cont
       LDA   #$01
       STA   VGC_CURSEN
       ; Remember where the typed line starts (just after the prompt) so history
@@ -129,6 +145,8 @@ repl_read_line:
       LDA   #$0A               ; newline separator (tokenizer treats it as space)
       STA   input_buf,X
       INC   buf_idx
+      INC   repl_cur
+      INC   repl_cont
       LDA   #$0D
       STA   VGC_CHAROUT
       LDA   #$0A
@@ -154,10 +172,113 @@ repl_read_line:
       BEQ   @key_up
       CMP   #KEY_DOWN
       BEQ   @key_down
-      CMP   #KEY_LEFT          ; left/right: swallow (no inline editing yet) so
-      BEQ   @poll              ; they don't corrupt the line or move the cursor
+      LDX   repl_cont         ; continuation lines stay append-only
+      BEQ   :+
+      JMP   @not_edit
+:     CMP   #KEY_LEFT
+      BEQ   @key_left
       CMP   #KEY_RIGHT
-      BEQ   @poll
+      BEQ   @key_right
+      CMP   #KEY_HOME
+      BEQ   @key_home
+      CMP   #KEY_END
+      BEQ   @key_end
+      CMP   #KEY_CTRL_END
+      BEQ   @key_end
+      CMP   #KEY_CTRL_LEFT
+      BEQ   @key_wleft
+      CMP   #KEY_CTRL_RIGHT
+      BEQ   @key_wright
+      CMP   #KEY_CTRL_BS
+      BEQ   @key_wdelete
+      JMP   @not_edit
+
+@key_up:
+      JSR   hist_up
+      JMP   @poll
+@key_down:
+      JSR   hist_down
+      JMP   @poll
+@poll_j:
+      JMP   @poll
+
+; --- caret movement -------------------------------------------------
+@key_left:
+      LDA   repl_cur
+      BEQ   @poll_j
+      DEC   repl_cur
+      BRA   @place
+@key_right:
+      LDA   repl_cur
+      CMP   buf_idx
+      BCS   @poll_j
+      INC   repl_cur
+      BRA   @place
+@key_home:
+      STZ   repl_cur
+      BRA   @place
+@key_end:
+      LDA   buf_idx
+      STA   repl_cur
+@place:
+      JSR   repl_place_caret
+      JMP   @poll
+
+; Repaint the whole line, then put the caret back. HIST_OLDLEN must already
+; hold the on-screen length before the edit.
+@redraw:
+      JSR   hist_show
+      BRA   @place
+
+; Ctrl-Left/Ctrl-Right: skip the run under the caret, then the gap beyond it.
+@key_wleft:
+      JSR   repl_word_left
+      STX   repl_cur
+      BRA   @place
+@key_wright:
+      LDX   repl_cur
+@wr_word:
+      CPX   buf_idx
+      BCS   @wr_set
+      LDA   input_buf,X
+      CMP   #' '+1
+      BCC   @wr_gap
+      INX
+      BRA   @wr_word
+@wr_gap:
+      CPX   buf_idx
+      BCS   @wr_set
+      LDA   input_buf,X
+      CMP   #' '+1
+      BCS   @wr_set
+      INX
+      BRA   @wr_gap
+@wr_set:
+      STX   repl_cur
+      BRA   @place
+
+; Ctrl-Backspace: drop everything from the previous word start to the caret.
+@key_wdelete:
+      LDA   repl_cur
+      BEQ   @poll_j
+      LDA   buf_idx
+      STA   HIST_OLDLEN        ; on-screen length before the edit
+      JSR   repl_word_left     ; X = where the caret lands
+      LDY   repl_cur
+      STX   repl_cur
+@wd_shift:
+      CPY   buf_idx
+      BCS   @wd_done
+      LDA   input_buf,Y
+      STA   input_buf,X
+      INX
+      INY
+      BRA   @wd_shift
+@wd_done:
+      STX   buf_idx
+      BRA   @redraw
+
+@not_edit:
 
       ; --- handle backspace ($08, $14, $7F) ---
       CMP   #$08
@@ -170,29 +291,93 @@ repl_read_line:
       ; --- buffer full? ---
       LDX   buf_idx
       CPX   #127
-      BCS   @poll              ; at capacity — ignore keystroke
+      BCS   @poll_k            ; at capacity — ignore keystroke
 
-      ; --- store and echo printable character ---
-      STA   input_buf,X        ; store in buffer
-      STA   VGC_CHAROUT        ; echo to screen
+      ; --- insert at the caret ---
+      LDX   repl_cur
+      CPX   buf_idx
+      BCC   @insert            ; caret is inside the line: make room first
+      LDX   buf_idx
+      STA   input_buf,X        ; append: echo is enough, no repaint
+      STA   VGC_CHAROUT
       INC   buf_idx
-      BRA   @poll
+      INC   repl_cur
+      BRA   @poll_k
+@insert:
+      PHA
+      LDX   buf_idx
+@ins_shift:
+      LDA   input_buf-1,X
+      STA   input_buf,X
+      DEX
+      CPX   repl_cur
+      BNE   @ins_shift
+      PLA
+      STA   input_buf,X
+      LDA   buf_idx
+      STA   HIST_OLDLEN
+      INC   buf_idx
+      INC   repl_cur
+      BRA   @redraw_k
+
+; Trampolines: the editing handlers sit far enough above for a short branch.
+@poll_k:
+      JMP   @poll
+@redraw_k:
+      JMP   @redraw
 
 @backspace:
-      LDX   buf_idx
-      BEQ   @poll              ; nothing to delete — ignore
-      DEX
-      STX   buf_idx
+      LDX   repl_cur
+      BEQ   @poll_k            ; caret at the start — nothing to delete
+      CPX   buf_idx
+      BCC   @bs_inner
+      DEC   buf_idx            ; at the end: erase in place, no repaint
+      DEC   repl_cur
       LDA   #$08
-      STA   VGC_CHAROUT        ; move cursor left and erase
-      BRA   @poll
+      STA   VGC_CHAROUT
+      BRA   @poll_k
+@bs_inner:
+      LDA   buf_idx
+      STA   HIST_OLDLEN
+@bs_shift:
+      LDA   input_buf,X
+      STA   input_buf-1,X
+      INX
+      CPX   buf_idx
+      BNE   @bs_shift
+      DEC   buf_idx
+      DEC   repl_cur
+      BRA   @redraw_k
 
-@key_up:
-      JSR   hist_up
-      JMP   @poll
-@key_down:
-      JSR   hist_down
-      JMP   @poll
+; repl_place_caret: park the hardware cursor on the caret. The reader already
+; assumes the prompt line does not wrap, the same assumption hist_show makes.
+repl_place_caret:
+      LDA   HIST_SX
+      CLC
+      ADC   repl_cur
+      STA   VGC_CURSX
+      LDA   HIST_SY
+      STA   VGC_CURSY
+      RTS
+
+; repl_word_left: X = the caret position one word to the left of repl_cur.
+repl_word_left:
+      LDX   repl_cur
+      BEQ   @wl_done
+@wl_gap:
+      DEX
+      BEQ   @wl_done
+      LDA   input_buf,X
+      CMP   #' '+1
+      BCC   @wl_gap
+@wl_word:
+      LDA   input_buf-1,X
+      CMP   #' '+1
+      BCC   @wl_done
+      DEX
+      BNE   @wl_word
+@wl_done:
+      RTS
 
 ; ---------------------------------------------------------------------
 ; Command-history subroutines. The ring stores up to HIST_MAX entered lines.
@@ -336,6 +521,7 @@ hist_copy_in:
       BCC   @ci_loop
 @ci_done:
       STY   buf_idx
+      STY   repl_cur
       LDA   #0
       STA   input_buf,Y        ; keep input_buf NUL-terminated
       RTS

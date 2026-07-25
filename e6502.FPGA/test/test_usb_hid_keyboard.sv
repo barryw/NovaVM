@@ -117,7 +117,7 @@ module test_usb_hid_keyboard;
     int fail_count = 0;
     int test_num = 0;
     int event_count = 0;
-    logic [7:0] events [0:15];
+    logic [7:0] events [0:63];
 
     usb_hid_keyboard dut (
         .clk_usb(clk_usb),
@@ -174,9 +174,37 @@ module test_usb_hid_keyboard;
     endtask
 
     task automatic emit_report(input logic [7:0] scan);
+        emit_report_mod(scan, 8'h00);
+    endtask
+
+    // Press one key and assert the byte it delivers to the 6502.
+    task automatic check_nav(input string name, input logic [7:0] scan,
+                             input logic [7:0] mods, input logic [7:0] expected);
+        int unsigned prior_count;
+        begin
+            prior_count = event_count;
+            press(scan, mods);
+            if (event_count != prior_count + 1) begin
+                fail_count = fail_count + 1;
+                $display("FAIL: %s produced no key event", name);
+            end else begin
+                check_eq8(name, events[event_count - 1], expected);
+            end
+        end
+    endtask
+
+    // Two blank reports are a stable release, so this models a fresh press of a
+    // key that may have been pressed before.
+    task automatic press(input logic [7:0] scan, input logic [7:0] mods);
+        emit_report(8'h00);
+        emit_report(8'h00);
+        emit_report_mod(scan, mods);
+    endtask
+
+    task automatic emit_report_mod(input logic [7:0] scan, input logic [7:0] mods);
         @(negedge clk_usb);
         dut.usb_host.typ = 2'd1;
-        dut.usb_host.key_modifiers = 8'h00;
+        dut.usb_host.key_modifiers = mods;
         dut.usb_host.key_0 = scan;
         dut.usb_host.key_1 = 8'h00;
         dut.usb_host.key_2 = 8'h00;
@@ -229,6 +257,38 @@ module test_usb_hid_keyboard;
         check("different scan code emits while previous key is tracked",
               event_count == 3);
         check_eq8("third event is lowercase u", events[2], 8'h75);
+
+        // Navigation and function keys. Without these the full-screen editor
+        // has no cursor movement on hardware. Codes are the ones defined by
+        // software/runtime/asm/editui.inc.
+        check_nav("Left",         8'd80, 8'h00, 8'h1C);
+        check_nav("Right",        8'd79, 8'h00, 8'h1D);
+        check_nav("Up",           8'd82, 8'h00, 8'h1E);
+        check_nav("Down",         8'd81, 8'h00, 8'h1F);
+        check_nav("Home",         8'd74, 8'h00, 8'h83);
+        check_nav("End",          8'd77, 8'h00, 8'h05);
+        check_nav("Page Up",      8'd75, 8'h00, 8'h10);
+        check_nav("Page Down",    8'd78, 8'h00, 8'h12);
+        check_nav("Ctrl-Home",    8'd74, 8'h01, 8'h80);
+        check_nav("Ctrl-End",     8'd77, 8'h01, 8'h81);
+        check_nav("Ctrl-Left",    8'd80, 8'h01, 8'h94);
+        check_nav("Ctrl-Right",   8'd79, 8'h01, 8'h95);
+        check_nav("Shift-Tab",    8'd43, 8'h02, 8'h8F);
+        check_nav("Ctrl-Backspace", 8'd42, 8'h01, 8'h96);
+        check_nav("F1",           8'd58, 8'h00, 8'h86);
+        check_nav("F3",           8'd60, 8'h00, 8'h82);
+        check_nav("F6",           8'd63, 8'h00, 8'h84);
+        check_nav("Shift-F6",     8'd63, 8'h02, 8'h85);
+        check_nav("F9 build",     8'd66, 8'h00, 8'h8C);
+        check_nav("Ctrl-F9 run",  8'd66, 8'h01, 8'h92);
+        check_nav("F12",          8'd69, 8'h00, 8'h91);
+        // Shift + navigation extends a selection.
+        check_nav("Shift-Left",   8'd80, 8'h02, 8'h97);
+        check_nav("Shift-Right",  8'd79, 8'h02, 8'h98);
+        check_nav("Shift-Up",     8'd82, 8'h02, 8'h99);
+        check_nav("Shift-Down",   8'd81, 8'h02, 8'h9A);
+        check_nav("Shift-Home",   8'd74, 8'h02, 8'h9B);
+        check_nav("Shift-End",    8'd77, 8'h02, 8'h9C);
 
         if (fail_count == 0)
             $display("=== PASS: %0d checks ===", pass_count);

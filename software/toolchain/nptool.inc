@@ -64,6 +64,13 @@ NPTOOL_ERR_NOT_TEXT = 7
 NPTOOL_ERR_MEMORY   = 8
 NPTOOL_ERR_PROJECT  = 9
 NPTOOL_ERR_BUILD    = 10
+; NPTOOL_DETAIL values returned by the editor tool. Anything beyond SAVED asks
+; the shell to run a toolchain step and then reopen the editor, which is how F9
+; and Ctrl-F9 close the edit/build loop without the editor owning a compiler.
+NPTOOL_EDIT_SAVED   = 1
+NPTOOL_EDIT_BUILD   = 2
+NPTOOL_EDIT_RUN     = 3
+
 NPTOOL_IO_SHORT      = $FD
 NPTOOL_IO_TOO_LARGE = $FE
 

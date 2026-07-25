@@ -70,7 +70,19 @@ EDITOR_HOOKS_COMMAND_VECL = 12
 EDITOR_HOOKS_COMMAND_VECH = 13
 EDITOR_HOOKS_CHANGED_VECL = 14
 EDITOR_HOOKS_CHANGED_VECH = 15
-EDITOR_HOOKS_SIZE         = 16
+; The module overlays exactly these bytes onto its EDITBUF config block.
+EDITOR_HOOKS_COPY_SIZE    = 16
+
+; Optional one-based line/column to open on, carried past the copied block. The
+; module seeks there once the document window is loaded, which is how a host
+; reopens the editor on a compiler diagnostic. Zero line means "open at the top",
+; so a host that never writes these gets the old behaviour for free -- but every
+; host must still allocate the full EDITOR_HOOKS_SIZE, or the module reads past
+; the end of its table.
+EDITOR_HOOKS_GOTO_LINEL   = 16
+EDITOR_HOOKS_GOTO_LINEH   = 17
+EDITOR_HOOKS_GOTO_COL     = 18
+EDITOR_HOOKS_SIZE         = 19
 
 ; Low-RAM EDITBUF addresses visible to caller-owned hook code while the EDITOR
 ; module is paged in. Hook code that lives outside the editor module cannot link

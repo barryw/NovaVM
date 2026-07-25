@@ -6,6 +6,9 @@
 ; =====================================================================
 
 SHELL_NAME_CAP = 64
+SHELL_PENDING_BUILD = 1
+SHELL_PENDING_RUN   = 2
+SHELL_PENDING_EDIT  = 3
 SHELL_RUN_CWD_SIZE = SHELL_NAME_CAP + 1
 SHELL_RUN_CWD_NAME_SIZE = 10
 
@@ -24,6 +27,12 @@ shell_token_len:  .res 1
 shell_args_error: .res 1
 shell_tool_result:.res 1
 shell_tool_load_error_code:.res 1
+; A queued follow-up step. The editor cannot run the compiler itself, so F9 and
+; Ctrl-F9 come back here as a request: run BUILD (or RUN), then reopen the
+; editor on the same source. It lives in zero page because BSS already runs up
+; to the $1D00 tool slot, where a loaded tool image would overwrite it.
+shell_pending:        .res 1
+shell_pending_len:    .res 1
 
       .segment "BSS"
 shell_project_plan:   .res NPP_PLAN_SIZE
@@ -78,10 +87,8 @@ shell_stage_cached:    .res 1
 
 .macro shell_try word, handler
       LDA   #<word
-      STA   p_word
-      LDA   #>word
-      STA   p_word+1
-      JSR   shell_match
+      LDY   #>word
+      JSR   shell_match_ay
       BCC   :+
       JMP   handler
 :
@@ -89,16 +96,18 @@ shell_stage_cached:    .res 1
 
 shell_start:
       STZ   LIB_EXEC_SP
+      STZ   shell_project_scoped
+      STZ   shell_program_allocated
+      STZ   shell_pending
+      STZ   shell_pending_len
       JSR   shell_reset_link_base
       JSR   shell_delete_run_cwd
       LDA   #$0C
       STA   VGC_CHAROUT
       JSR   repl_init
       LDA   #<shell_banner
-      STA   p_word
-      LDA   #>shell_banner
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_banner
+      JSR   print_ay
       JMP   shell_loop
 
 ; A standalone application may replace every byte of the shell's BSS. Rebuild
@@ -114,19 +123,25 @@ shell_warm_start:
       STZ   LIB_EXEC_SP
       STZ   shell_project_scoped
       STZ   shell_program_allocated
+      STZ   shell_pending
+      STZ   shell_pending_len
       JSR   shell_reset_link_base
       JSR   repl_init
       JSR   shell_restore_run_cwd
       LDA   VGC_CURSX
       BEQ   shell_loop
       JSR   shell_newline
+      ; Falls through. Nothing may be inserted between here and shell_loop:
+      ; a routine parked in this gap runs on every return from a program.
 
 shell_loop:
+      LDA   shell_pending
+      BEQ   :+
+      JMP   shell_run_pending
+:
       LDA   #<shell_prompt
-      STA   p_word
-      LDA   #>shell_prompt
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_prompt
+      JSR   print_ay
       JSR   repl_read_line
       LDA   buf_idx
       BEQ   shell_loop
@@ -153,11 +168,64 @@ shell_loop:
       shell_try shell_kw_run,      shell_cmd_run
 
       LDA   #<shell_unknown
-      STA   p_word
-      LDA   #>shell_unknown
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_unknown
+      JSR   print_ay
       JMP   shell_loop
+
+; Run the queued step and queue the editor behind it, so the loop lands back on
+; the source instead of the prompt.
+shell_run_pending:
+      LDX   shell_pending
+      LDA   #SHELL_PENDING_EDIT
+      STA   shell_pending
+      CPX   #SHELL_PENDING_BUILD
+      BNE   :+
+      JMP   shell_cmd_build_named
+:     CPX   #SHELL_PENDING_RUN
+      BNE   :+
+      JMP   shell_cmd_run_named
+      ; Only the reopen needs the paged name: the toolchain step still has the
+      ; source in shell_name, and it is the build that overwrites it.
+:     SEC
+      JSR   shell_pending_name_copy
+      JMP   shell_cmd_edit_named
+
+; The queued source name is paged out to a named XRAM block. The shell's RAM
+; below the $1D00 tool slot has no room for a second 64-byte name, and a build
+; rewrites shell_name on its way to the object file, so the name is stashed
+; through the same allocator API that carries the RUN directory across a
+; standalone program. Carry clear saves, set restores.
+shell_pending_name_copy:
+      BCS   @restore
+      LDA   shell_name_len
+      STA   shell_pending_len
+      LDA   #MEM_NAMED_STASH
+      BRA   shell_pending_call
+@restore:
+      LDA   shell_pending_len
+      STA   shell_name_len
+      LDA   #MEM_NAMED_FETCH
+      BRA   shell_pending_call
+
+; Release the paged name once the editor has reopened on it.
+shell_pending_free:
+      LDA   #MEM_NAMED_DELETE
+shell_pending_call:
+      PHA
+      JSR   shell_run_cwd_args
+      LDA   #'P'                 ; "__NPSH.CWD" -> "__NPSH.PWD"
+      STA   shell_run_cwd_name_buf+7
+      LDA   #<shell_name
+      STA   LIB_ARG1+2
+      LDA   #>shell_name
+      STA   LIB_ARG1+3
+      LDA   #SHELL_NAME_CAP
+      STA   LIB_ARG2+0
+      PLA
+      STA   LIB_FN_ID
+      LDA   #MODULE_ID_MEMORY
+      STA   LIB_MOD_ID
+      JMP   LIB_LOADER_BAND
 
 ; Pascal and shell commands are always complete after one line.
 repl_line_complete:
@@ -166,6 +234,11 @@ repl_line_complete:
 
 ; Compare input_buf's first token with the uppercase Z string at p_word.
 ; Carry set means matched; shell_scan points to the first argument.
+; A/Y name the keyword. Twenty-one call sites, so the pointer setup is worth
+; folding into the routine.
+shell_match_ay:
+      STA   p_word
+      STY   p_word+1
 shell_match:
       LDX   #0
 @skip:
@@ -310,11 +383,7 @@ shell_require_name:
       LDA   shell_name_len
       BNE   @ok
 @bad:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
       SEC
       RTS
 @ok:
@@ -344,11 +413,7 @@ shell_cmd_dir:
       JSR   shell_check_lib
       JMP   shell_loop
 @usage:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
       JMP   shell_loop
 
 shell_cmd_pwd:
@@ -437,11 +502,7 @@ shell_cmd_ren:
       JSR   shell_check_lib
       JMP   shell_loop
 @usage:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
       JMP   shell_loop
 
 shell_cmd_type:
@@ -481,11 +542,7 @@ shell_type_name:
       JSR   shell_newline
       BRA   @done
 @not_text:
-      LDA   #<shell_not_text
-      STA   p_word
-      LDA   #>shell_not_text
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_not_text
       BRA   @done
 @file_error:
       JSR   shell_print_file_error
@@ -505,11 +562,7 @@ shell_cmd_new:
       JSR   shell_print_tool_error
       BRA   @done
 @usage:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
 @done:
       JMP   shell_loop
 
@@ -590,7 +643,9 @@ shell_cmd_delproject:
 
 shell_cmd_edit:
       JSR   shell_require_name
-      BCS   @done
+      BCC   shell_cmd_edit_named
+      JMP   shell_loop
+shell_cmd_edit_named:
       STZ   shell_project_scoped
       JSR   shell_name_has_dot
       BCS   @launch
@@ -606,20 +661,32 @@ shell_cmd_edit:
 @launch:
       STZ   shell_name2_len
       JSR   shell_prepare_tool_args
+      LDA   shell_pending
+      BEQ   :+
+      STZ   shell_pending          ; consumed: do not reopen again on exit
+      JSR   shell_pending_free
+:
       LDA   #<shell_tool_editor
-      STA   p_word
-      LDA   #>shell_tool_editor
-      STA   p_word+1
-      LDA   #shell_tool_editor_end-shell_tool_editor
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_editor
+      LDX   #shell_tool_editor_end-shell_tool_editor
+      JSR   shell_launch_tool_ay
       BCS   @tool_error
+      ; NPTOOL_EDIT_BUILD/RUN sit one above SHELL_PENDING_BUILD/RUN, so the
+      ; requests convert with a subtract rather than a branch tree.
       LDA   NPTOOL_DETAIL
       BEQ   @done
+      CMP   #NPTOOL_EDIT_BUILD
+      BCC   @saved
+      SEC
+      SBC   #NPTOOL_EDIT_BUILD-SHELL_PENDING_BUILD
+      STA   shell_pending
+      CLC
+      JSR   shell_pending_name_copy
+      BRA   @done
+@saved:
       LDA   #<shell_saved
-      STA   p_word
-      LDA   #>shell_saved
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_saved
+      JSR   print_ay
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
@@ -635,10 +702,8 @@ shell_cmd_compile:
       STZ   shell_project_file_len
       STZ   shell_unit_path_count
       LDA   #<shell_ext_s
-      STA   p_word
-      LDA   #>shell_ext_s
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_s
+      JSR   shell_derive_name_ay
       JSR   shell_compile_cached
       BCC   :+
       JMP   @tool_error
@@ -668,30 +733,22 @@ shell_cmd_assemble:
       BRA   @output_ready
 @default_output:
       LDA   #<shell_ext_obj
-      STA   p_word
-      LDA   #>shell_ext_obj
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_obj
+      JSR   shell_derive_name_ay
 @output_ready:
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_nas_define
       LDA   #<shell_tool_assembler
-      STA   p_word
-      LDA   #>shell_tool_assembler
-      STA   p_word+1
-      LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_assembler
+      LDX   #shell_tool_assembler_end-shell_tool_assembler
+      JSR   shell_launch_tool_ay
       BCS   @tool_error
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
       BRA   @done
 @usage:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
 @done:
       JMP   shell_loop
 
@@ -703,40 +760,32 @@ shell_cmd_link:
       JSR   shell_reset_link_base
       JSR   shell_save_link_object2
       LDA   #<shell_ext_bin
-      STA   p_word
-      LDA   #>shell_ext_bin
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_bin
+      JSR   shell_derive_name_ay
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_link_object2
       JSR   shell_prepare_link_config
       JSR   shell_prepare_link_map
       JSR   shell_prepare_link_label
       LDA   #<shell_tool_linker
-      STA   p_word
-      LDA   #>shell_tool_linker
-      STA   p_word+1
-      LDA   #shell_tool_linker_end-shell_tool_linker
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_linker
+      LDX   #shell_tool_linker_end-shell_tool_linker
+      JSR   shell_launch_tool_ay
       BCS   @tool_error
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
       BRA   @done
 @usage:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_usage
 @done:
       JMP   shell_loop
 
 shell_cmd_build:
       JSR   shell_require_name
-      BCC   :+
-      JMP   @done
-:
+      BCC   shell_cmd_build_named
+      JMP   shell_loop
+shell_cmd_build_named:
       JSR   shell_reset_link_base
       STZ   shell_project_scoped
       STZ   shell_project_out_len
@@ -786,11 +835,9 @@ shell_cmd_build:
       LDA   #NPTOOL_FLAG_VALIDATE
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_linker
-      STA   p_word
-      LDA   #>shell_tool_linker
-      STA   p_word+1
-      LDA   #shell_tool_linker_end-shell_tool_linker
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_linker
+      LDX   #shell_tool_linker_end-shell_tool_linker
+      JSR   shell_launch_tool_ay
       BCC   @compile_project
       JMP   @tool_error
 @compile_project:
@@ -812,11 +859,9 @@ shell_cmd_build:
       LDA   shell_project_unit_index
       STA   NPTOOL_DETAIL
       LDA   #<shell_tool_project
-      STA   p_word
-      LDA   #>shell_tool_project
-      STA   p_word+1
-      LDA   #shell_tool_project_end-shell_tool_project
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_project
+      LDX   #shell_tool_project_end-shell_tool_project
+      JSR   shell_launch_tool_ay
       long_bcs @tool_error
       JSR   shell_copy_arg0_to_name
       JSR   shell_compile_unoptimized
@@ -831,28 +876,22 @@ shell_cmd_build:
       JSR   shell_use_project_output
       JSR   shell_promote_name2
       LDA   #<shell_ext_asm
-      STA   p_word
-      LDA   #>shell_ext_asm
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_asm
+      JSR   shell_derive_name_ay
       JSR   shell_restore_project_file
       BRA   @combine_named
 @combine_default_name:
       LDA   #<shell_ext_asm
-      STA   p_word
-      LDA   #>shell_ext_asm
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_asm
+      JSR   shell_derive_name_ay
 @combine_named:
       JSR   shell_prepare_tool_args
       LDA   #NPP_OP_COMBINE
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_project
-      STA   p_word
-      LDA   #>shell_tool_project
-      STA   p_word+1
-      LDA   #shell_tool_project_end-shell_tool_project
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_project
+      LDX   #shell_tool_project_end-shell_tool_project
+      JSR   shell_launch_tool_ay
       long_bcs @tool_error
       JSR   shell_use_inline_config
       JSR   shell_preprocess
@@ -865,10 +904,8 @@ shell_cmd_build:
 @source_build:
       STZ   shell_local_unit_count
       LDA   #<shell_ext_s
-      STA   p_word
-      LDA   #>shell_ext_s
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_s
+      JSR   shell_derive_name_ay
       JSR   shell_compile_cached
       BCC   :+
       JMP   @tool_error
@@ -884,10 +921,8 @@ shell_cmd_build:
       JSR   shell_promote_name2
 @assemble:
       LDA   #<shell_ext_obj
-      STA   p_word
-      LDA   #>shell_ext_obj
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_obj
+      JSR   shell_derive_name_ay
       JSR   shell_assemble_cached_preprocessed
       BCS   @tool_error
 
@@ -906,10 +941,8 @@ shell_cmd_build:
       BRA   @link
 @default_output:
       LDA   #<shell_ext_bin
-      STA   p_word
-      LDA   #>shell_ext_bin
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_bin
+      JSR   shell_derive_name_ay
 @link:
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_project_object
@@ -923,18 +956,14 @@ shell_cmd_build:
       STA   NPTOOL_FLAGS
 :
       LDA   #<shell_tool_linker
-      STA   p_word
-      LDA   #>shell_tool_linker
-      STA   p_word+1
-      LDA   #shell_tool_linker_end-shell_tool_linker
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_linker
+      LDX   #shell_tool_linker_end-shell_tool_linker
+      JSR   shell_launch_tool_ay
       BCS   @tool_error
 @build_complete:
       LDA   #<shell_build_ok
-      STA   p_word
-      LDA   #>shell_build_ok
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_build_ok
+      JSR   print_ay
       JSR   shell_print_name2
       JSR   shell_newline
       BRA   @done
@@ -950,7 +979,9 @@ shell_cmd_build:
 
 shell_cmd_run:
       JSR   shell_require_name
-      long_bcs @done
+      BCC   shell_cmd_run_named
+      JMP   shell_loop
+shell_cmd_run_named:
       STZ   shell_project_scoped
       JSR   shell_stash_run_cwd
       long_bcs @memory_error
@@ -987,10 +1018,8 @@ shell_cmd_run:
       CMP   #3
       BEQ   @memory_error
       LDA   #<shell_running
-      STA   p_word
-      LDA   #>shell_running
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_running
+      JSR   print_ay
       LDA   shell_program_entry+1
       JSR   shell_print_hex
       LDA   shell_program_entry
@@ -1002,31 +1031,23 @@ shell_cmd_run:
       BRA   @bad_binary
 @bad_binary:
       LDA   #<shell_binary_error
-      STA   p_word
-      LDA   #>shell_binary_error
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_binary_error
+      JSR   print_ay
       BRA   @done
 @file_error:
       JSR   shell_print_file_error
       BRA   @done
 @memory_error:
       JSR   shell_release_program
-      LDA   #<shell_memory_error
-      STA   p_word
-      LDA   #>shell_memory_error
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_memory_error
       BRA   @done
 @tool_error:
       JSR   shell_print_tool_error
       BRA   @done
 @bad_project:
       LDA   #<shell_project_error
-      STA   p_word
-      LDA   #>shell_project_error
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_project_error
+      JSR   print_ay
 @done:
       JSR   shell_leave_project
       JSR   shell_delete_run_cwd
@@ -1037,10 +1058,8 @@ shell_cmd_run:
 ; ---------------------------------------------------------------------
 shell_print_usage:
       LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_usage
+      JMP   print_ay
 
 shell_name_has_dot:
       LDY   #0
@@ -1060,12 +1079,9 @@ shell_name_has_dot:
       RTS
 
 shell_save_cwd:
-      LDA   #MODULE_ID_FILES
-      STA   LIB_MOD_ID
       LDA   #FILE_PWD
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_FILES
+      JSR   shell_lib_call
       BNE   @bad
       LDA   FIO_NAMELEN
       CMP   #SHELL_NAME_CAP
@@ -1106,10 +1122,8 @@ shell_enter_project:
       JSR   shell_restore_project_name
       INC   shell_project_scoped
       LDA   #<shell_ext_npp
-      STA   p_word
-      LDA   #>shell_ext_npp
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_npp
+      JSR   shell_derive_name_ay
       JSR   shell_promote_name2
       CLC
       RTS
@@ -1242,12 +1256,9 @@ shell_stash_run_cwd:
       STA   LIB_ARG1+3
       LDA   #SHELL_RUN_CWD_SIZE
       STA   LIB_ARG2+0
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_NAMED_STASH
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       BNE   @bad
       CLC
       RTS
@@ -1263,12 +1274,9 @@ shell_restore_run_cwd:
       STA   LIB_ARG1+3
       LDA   #SHELL_RUN_CWD_SIZE
       STA   LIB_ARG2+0
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_NAMED_FETCH
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       BNE   @delete
       LDA   shell_saved_cwd_len
       CMP   #SHELL_NAME_CAP
@@ -1294,9 +1302,9 @@ shell_delete_run_cwd:
       STA   LIB_MOD_ID
       LDA   #MEM_NAMED_DELETE
       STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      RTS
+      JMP   LIB_LOADER_BAND
 
+; Stage the block name in RAM: the allocator runs with the shell ROM banked out.
 shell_run_cwd_args:
       JSR   shell_clear_lib_args
       LDX   #SHELL_RUN_CWD_NAME_SIZE-1
@@ -1343,19 +1351,15 @@ shell_copy_arg0_to_name:
 
 shell_compile_unoptimized:
       LDA   #<shell_ext_asm
-      STA   p_word
-      LDA   #>shell_ext_asm
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_asm
+      JSR   shell_derive_name_ay
       JMP   shell_compile_cached
 
 shell_compile_cached:
       LDA   #<shell_identity_compiler
-      STA   p_word
-      LDA   #>shell_identity_compiler
-      STA   p_word+1
-      LDA   #shell_identity_compiler_end-shell_identity_compiler
-      JSR   shell_cache_check
+      LDY   #>shell_identity_compiler
+      LDX   #shell_identity_compiler_end-shell_identity_compiler
+      JSR   shell_cache_check_ay
       BCS   @fail
       CMP   #NBUILD_CLEAN
       BEQ   @ok
@@ -1367,11 +1371,9 @@ shell_compile_cached:
       JSR   npc_compile_file
       BNE   @fail
       LDA   #<shell_identity_compiler
-      STA   p_word
-      LDA   #>shell_identity_compiler
-      STA   p_word+1
-      LDA   #shell_identity_compiler_end-shell_identity_compiler
-      JSR   shell_cache_commit
+      LDY   #>shell_identity_compiler
+      LDX   #shell_identity_compiler_end-shell_identity_compiler
+      JSR   shell_cache_commit_ay
       BCS   @fail
 @ok:
       CLC
@@ -1412,11 +1414,9 @@ shell_assemble_cached_common:
       ORA   #NPTOOL_FLAG_DEPENDENCIES
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_assembler
-      STA   p_word
-      LDA   #>shell_tool_assembler
-      STA   p_word+1
-      LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_assembler
+      LDX   #shell_tool_assembler_end-shell_tool_assembler
+      JSR   shell_launch_tool_ay
       BCS   @fail
       LDA   shell_digit
       BEQ   @raw_commit_identity
@@ -1486,16 +1486,18 @@ shell_launch_project_op_with_user_fallback:
 ; Exact-content cache shared by NPC, NAS, and later language shells. The
 ; output filename is also the stable node key because each stage has its own
 ; extension. A/p_word supplies the stage identity.
+shell_cache_check_ay:
+      STA   p_word
+      STY   p_word+1
+      TXA
 shell_cache_check:
       JSR   shell_prepare_cache_args
       LDA   #NBUILD_OP_CHECK
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_build
-      STA   p_word
-      LDA   #>shell_tool_build
-      STA   p_word+1
-      LDA   #shell_tool_build_end-shell_tool_build
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_build
+      LDX   #shell_tool_build_end-shell_tool_build
+      JSR   shell_launch_tool_ay
       BCS   @fail
       LDA   NPTOOL_DETAIL
       CLC
@@ -1504,6 +1506,10 @@ shell_cache_check:
       SEC
       RTS
 
+shell_cache_commit_ay:
+      STA   p_word
+      STY   p_word+1
+      TXA
 shell_cache_commit:
       JSR   shell_prepare_cache_args
       LDA   #shell_build_dependencies_end-shell_build_dependencies
@@ -1531,11 +1537,9 @@ shell_cache_commit:
       LDA   #NBUILD_OP_COMMIT
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_build
-      STA   p_word
-      LDA   #>shell_tool_build
-      STA   p_word+1
-      LDA   #shell_tool_build_end-shell_tool_build
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_build
+      LDX   #shell_tool_build_end-shell_tool_build
+      JSR   shell_launch_tool_ay
       BCS   @done
       JSR   shell_delete_dependency_manifest
       CLC
@@ -1637,8 +1641,7 @@ shell_delete_dependency_manifest:
       STA   LIB_MOD_ID
       LDA   #FILE_FDELETE
       STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      RTS
+      JMP   LIB_LOADER_BAND
 
 shell_prepare_tool_args:
       STZ   NPTOOL_STATUS
@@ -1652,10 +1655,15 @@ shell_prepare_tool_args:
       STZ   NPTOOL_ARG5
       STZ   NPTOOL_ARG6_LEN
       STZ   NPTOOL_ARG6
+      ; A queued editor reopen carries the failing build's location through to
+      ; the editor, so leave the diagnostic alone in that one case.
+      LDA   shell_pending
+      BNE   :+
       STZ   NPTOOL_DIAG_LINE
       STZ   NPTOOL_DIAG_LINE+1
       STZ   NPTOOL_DIAG_COL
       STZ   NPTOOL_DIAG_COL+1
+:
       LDA   shell_name_len
       STA   NPTOOL_ARG0_LEN
       LDA   shell_name2_len
@@ -1692,6 +1700,10 @@ shell_prepare_tool_args:
       RTS
 
 ; p_word = executable filename, A = filename length.
+shell_launch_tool_ay:
+      STA   p_word
+      STY   p_word+1
+      TXA
 shell_launch_tool:
       STA   shell_io_len
       JSR   shell_copy_fio_name
@@ -1724,16 +1736,12 @@ shell_preprocess:
       STZ   shell_stage_cached
       JSR   shell_promote_name2
       LDA   #<shell_ext_s
-      STA   p_word
-      LDA   #>shell_ext_s
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_s
+      JSR   shell_derive_name_ay
       LDA   #<shell_identity_preprocess
-      STA   p_word
-      LDA   #>shell_identity_preprocess
-      STA   p_word+1
-      LDA   #shell_identity_preprocess_end-shell_identity_preprocess
-      JSR   shell_cache_check
+      LDY   #>shell_identity_preprocess
+      LDX   #shell_identity_preprocess_end-shell_identity_preprocess
+      JSR   shell_cache_check_ay
       BCS   @done
       CMP   #NBUILD_CLEAN
       BNE   @build
@@ -1747,37 +1755,58 @@ shell_preprocess:
       LDA   #NPTOOL_FLAG_PREPROCESS_ONLY | NPTOOL_FLAG_DEPENDENCIES
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_assembler
-      STA   p_word
-      LDA   #>shell_tool_assembler
-      STA   p_word+1
-      LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_assembler
+      LDX   #shell_tool_assembler_end-shell_tool_assembler
+      JSR   shell_launch_tool_ay
 @done:
       RTS
 
 ; Every compile lowers compact typed IR and runs machine peepholes before the
 ; language-neutral assembler sees the resulting 65C02 source.
 shell_optimize:
+      ; One-shot: set by the preprocess stage, consumed here. It used to be
+      ; cleared only because it sat above $1D00 and every tool image overwrote
+      ; it, so a second unit in the same build could inherit a stale verdict.
       LDA   shell_stage_cached
+      STZ   shell_stage_cached
       BNE   @ok
       LDA   #<shell_tool_optimizer
-      STA   p_word
-      LDA   #>shell_tool_optimizer
-      STA   p_word+1
-      LDA   #shell_tool_optimizer_end-shell_tool_optimizer
-      JSR   shell_launch_tool
+      LDY   #>shell_tool_optimizer
+      LDX   #shell_tool_optimizer_end-shell_tool_optimizer
+      JSR   shell_launch_tool_ay
       BCS   @done
       LDA   #<shell_identity_preprocess
-      STA   p_word
-      LDA   #>shell_identity_preprocess
-      STA   p_word+1
-      LDA   #shell_identity_preprocess_end-shell_identity_preprocess
-      JSR   shell_cache_commit
+      LDY   #>shell_identity_preprocess
+      LDX   #shell_identity_preprocess_end-shell_identity_preprocess
+      JSR   shell_cache_commit_ay
 @done:
       RTS
 @ok:
       CLC
       RTS
+
+; A = function id, X = module id. Returns LIB_STATUS in A. Six call sites paid
+; seventeen bytes each for this sequence.
+shell_lib_call:
+      STA   LIB_FN_ID
+      STX   LIB_MOD_ID
+      JSR   LIB_LOADER_BAND
+      LDA   LIB_STATUS
+      RTS
+
+; Fixed messages with more than one caller: seven bytes of setup each, folded.
+shell_print_memory_error:
+      LDA   #<shell_memory_error
+      LDY   #>shell_memory_error
+      JMP   print_ay
+shell_print_not_text:
+      LDA   #<shell_not_text
+      LDY   #>shell_not_text
+      JMP   print_ay
+shell_print_diag_separator:
+      LDA   #<shell_diag_separator
+      LDY   #>shell_diag_separator
+      JMP   print_ay
 
 shell_print_tool_error:
       LDA   NPTOOL_STATUS
@@ -1818,10 +1847,8 @@ shell_print_tool_error:
       JMP   @args
 :
       LDA   #<shell_tool_load_error
-      STA   p_word
-      LDA   #>shell_tool_load_error
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_tool_load_error
+      JSR   print_ay
       LDA   shell_tool_load_error_code
       JSR   shell_print_hex
       JMP   shell_newline
@@ -1841,15 +1868,13 @@ shell_print_tool_error:
       LDA   NPTOOL_ARG6_LEN
       BEQ   @compile_primary
       LDA   #<NPTOOL_ARG6
-      LDX   #>NPTOOL_ARG6
+      LDY   #>NPTOOL_ARG6
       BRA   @compile_name
 @compile_primary:
       LDA   #<NPTOOL_ARG0
-      LDX   #>NPTOOL_ARG0
+      LDY   #>NPTOOL_ARG0
 @compile_name:
-      STA   p_word
-      STX   p_word+1
-      JSR   print_z
+      JSR   print_ay
       LDA   #':'
       STA   VGC_CHAROUT
       LDA   NPTOOL_DIAG_LINE
@@ -1860,29 +1885,21 @@ shell_print_tool_error:
       LDA   NPTOOL_DIAG_COL
       LDX   NPTOOL_DIAG_COL+1
       JSR   shell_print_u16
-      LDA   #<shell_diag_separator
-      STA   p_word
-      LDA   #>shell_diag_separator
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_diag_separator
       LDA   #<shell_compile_error
-      STA   p_word
-      LDA   #>shell_compile_error
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_compile_error
+      JMP   print_ay
 @assemble:
       LDA   NPTOOL_ARG2_LEN
       BEQ   @assemble_primary
       LDA   #<NPTOOL_ARG2
-      LDX   #>NPTOOL_ARG2
+      LDY   #>NPTOOL_ARG2
       BRA   @assemble_name
 @assemble_primary:
       LDA   #<NPTOOL_ARG0
-      LDX   #>NPTOOL_ARG0
+      LDY   #>NPTOOL_ARG0
 @assemble_name:
-      STA   p_word
-      STX   p_word+1
-      JSR   print_z
+      JSR   print_ay
       LDA   #':'
       STA   VGC_CHAROUT
       LDA   NPTOOL_DIAG_LINE
@@ -1893,11 +1910,7 @@ shell_print_tool_error:
       LDA   NPTOOL_DIAG_COL
       LDX   NPTOOL_DIAG_COL+1
       JSR   shell_print_u16
-      LDA   #<shell_diag_separator
-      STA   p_word
-      LDA   #>shell_diag_separator
-      STA   p_word+1
-      JSR   print_z
+      JSR   shell_print_diag_separator
       LDA   NPTOOL_DETAIL
       CMP   #1
       BEQ   @assemble_syntax
@@ -1928,10 +1941,8 @@ shell_print_tool_error:
       LDA   NPTOOL_ARG6_LEN
       BEQ   @assemble_symbol_message
       LDA   #<NPTOOL_ARG6
-      STA   p_word
-      LDA   #>NPTOOL_ARG6
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>NPTOOL_ARG6
+      JSR   print_ay
       LDA   #':'
       STA   VGC_CHAROUT
       LDA   #' '
@@ -1964,34 +1975,20 @@ shell_print_tool_error:
       CMP   #4
       BNE   @link_generic
       LDA   #<shell_link_config_error
-      STA   p_word
-      LDA   #>shell_link_config_error
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_link_config_error
+      JMP   print_ay
 @link_generic:
       LDA   #<shell_link_error
-      STA   p_word
-      LDA   #>shell_link_error
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_link_error
+      JMP   print_ay
 @editor:
       LDA   #<shell_editor_error
-      STA   p_word
-      LDA   #>shell_editor_error
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_editor_error
+      JMP   print_ay
 @not_text:
-      LDA   #<shell_not_text
-      STA   p_word
-      LDA   #>shell_not_text
-      STA   p_word+1
-      JMP   print_z
+      JMP   shell_print_not_text
 @memory:
-      LDA   #<shell_memory_error
-      STA   p_word
-      LDA   #>shell_memory_error
-      STA   p_word+1
-      JMP   print_z
+      JMP   shell_print_memory_error
 @project:
       LDA   NPTOOL_DETAIL
       CMP   #NPP_DETAIL_EXISTS
@@ -2039,11 +2036,7 @@ shell_print_tool_error:
       STX   p_word+1
       JMP   print_z
 @args:
-      LDA   #<shell_usage
-      STA   p_word
-      LDA   #>shell_usage
-      STA   p_word+1
-      JMP   print_z
+      JMP   shell_print_usage
 
 shell_promote_name2:
       LDY   #0
@@ -2112,12 +2105,9 @@ shell_load_program:
       STA   LIB_ARG2+0
       LDA   shell_file_len+1
       STA   LIB_ARG2+1
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_ALLOC
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       BEQ   :+
       JMP   @memory_failed
 :
@@ -2146,12 +2136,9 @@ shell_load_program:
       STA   LIB_ARG3+0
       LDA   shell_file_len+1
       STA   LIB_ARG3+1
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_XLOAD
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       BEQ   :+
       JMP   @memory_failed
 :
@@ -2163,12 +2150,9 @@ shell_load_program:
       STA   LIB_ARG0,X
       DEX
       BPL   @header_addr
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_READ8
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       BNE   @memory_failed
       LDA   LIB_RESULT
       STA   shell_program_entry
@@ -2282,12 +2266,9 @@ shell_exec_program:
       STA   LIB_ARG2+0
       LDA   #>shell_warm_start
       STA   LIB_ARG2+1
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
       LDA   #MEM_EXEC_IMAGE
-      STA   LIB_FN_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+      LDX   #MODULE_ID_MEMORY
+      JSR   shell_lib_call
       RTS
 
 shell_reset_link_base:
@@ -2433,10 +2414,8 @@ shell_assemble_project_source:
 @derive:
       STY   shell_name_len
       LDA   #<shell_ext_obj
-      STA   p_word
-      LDA   #>shell_ext_obj
-      STA   p_word+1
-      JSR   shell_derive_name
+      LDY   #>shell_ext_obj
+      JSR   shell_derive_name_ay
       JSR   shell_assemble_cached
       BCS   @bad
       LDA   shell_name2_len
@@ -2962,6 +2941,11 @@ shell_parse_link_options:
 
 ; Replace shell_name's extension and write the result to shell_name2.
 ; p_word points at the new extension, including its dot.
+; A/Y name the extension string. Twelve call sites, so folding the pointer
+; setup into the routine is a straight win.
+shell_derive_name_ay:
+      STA   p_word
+      STY   p_word+1
 shell_derive_name:
       LDA   shell_name_len
       STA   shell_scan
@@ -3136,10 +3120,8 @@ shell_print_file_error:
       LDA   shell_load_error
       BEQ   @fio
       LDA   #<shell_too_large
-      STA   p_word
-      LDA   #>shell_too_large
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_too_large
+      JMP   print_ay
 @fio:
       LDA   shell_fio_error
       BNE   :+
@@ -3151,34 +3133,24 @@ shell_print_file_error:
       CMP   #FIO_ERR_NOTMOUNTED
       BEQ   @not_mounted
       LDA   #<shell_io_error
-      STA   p_word
-      LDA   #>shell_io_error
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_io_error
+      JMP   print_ay
 @not_found:
       LDA   #<shell_not_found
-      STA   p_word
-      LDA   #>shell_not_found
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_not_found
+      JSR   print_ay
       LDA   #<shell_name
-      STA   p_word
-      LDA   #>shell_name
-      STA   p_word+1
-      JSR   print_z
+      LDY   #>shell_name
+      JSR   print_ay
       JMP   shell_newline
 @disk_full:
       LDA   #<shell_disk_full
-      STA   p_word
-      LDA   #>shell_disk_full
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_disk_full
+      JMP   print_ay
 @not_mounted:
       LDA   #<shell_not_mounted
-      STA   p_word
-      LDA   #>shell_not_mounted
-      STA   p_word+1
-      JMP   print_z
+      LDY   #>shell_not_mounted
+      JMP   print_ay
 
 shell_print_hex:
       PHA

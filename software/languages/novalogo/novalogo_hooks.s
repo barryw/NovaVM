@@ -40,6 +40,7 @@ editor_hooks_command:
       .word 0
 editor_hooks_changed:
       .word 0
+      .byte 0, 0, 0            ; GOTO line/column: Logo always opens at the top
 editor_hooks_end:
 
 .assert editor_hooks_type - editor_hooks = EDITOR_HOOKS_TYPEL, error, "Logo hook type offset drifted"

@@ -196,10 +196,7 @@ proc_parse_header:
       SEC
       RTS
 @have_name:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_WORD
@@ -242,10 +239,7 @@ proc_parse_header:
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BEQ   @params_done
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_VARREF
@@ -264,10 +258,7 @@ proc_parse_header:
       CPY   #0
       BEQ   @param_ch_done
       ; Read source char from token
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       PHY
       LDA   proc_rec_off
       CLC
@@ -560,10 +551,7 @@ proc_buf_put:
 ;   The name+param region is < 256 bytes so 8-bit Y indexing is safe there.
 ; ---------------------------------------------------------------------
 proc_record_to_buffers:
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       ; --- name (record +2 = len, +3.. = chars) ---
       LDY   #2
       LDA   (ptr_lo),Y
@@ -905,10 +893,7 @@ heap_alloc_big:
       RTS
 @big_ok:
       ; Write header at base (proc_entry = base here)
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
 
       LDY   #GC_HDR_TAG
       LDA   #ATYPE_PROC
@@ -995,10 +980,7 @@ proc_build_record:
       ; Fill the record using (ptr_lo),Y indirect addressing
       ; We track Y as the write offset. For records > 256 bytes
       ; we bump ptr_hi when Y wraps.
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
 
       ; +0,+1: next pointer = current proc_head
       LDY   #0
@@ -1150,10 +1132,7 @@ proc_lookup:
 ;   In/out: proc_entry_lo/hi.  Clobbers: A, X, Y, ptr_lo/hi.
 ; ---------------------------------------------------------------------
 proc_next:
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #0
       LDA   (ptr_lo),Y
       TAX
@@ -1170,19 +1149,13 @@ proc_next:
 ; ---------------------------------------------------------------------
 proc_names_equal:
       ; Token name length
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_PAYLOAD
       LDA   (ptr_lo),Y
       STA   proc_name_len         ; token name length
 
       ; Record name length
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #2
       LDA   (ptr_lo),Y
 
@@ -1197,10 +1170,7 @@ proc_names_equal:
       PHX
       PHY
       ; Token char at eval_cur + TOK_PAYLOAD + 1 + charIdx
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       TYA
       CLC
       ADC   #TOK_PAYLOAD+1
@@ -1211,10 +1181,7 @@ proc_names_equal:
       ; Record char at proc_entry + 3 + charIdx
       PLY
       PHY
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       TYA
       CLC
       ADC   #3
@@ -1271,10 +1238,7 @@ proc_invoke:
       ; --- Bind parameters ---
       ; Navigate to param_count in the record:
       ;   offset = 3 + name_len
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #2
       LDA   (ptr_lo),Y           ; name_len
       CLC
@@ -1312,10 +1276,7 @@ proc_invoke:
 
       ; Build the param name as a length-prefixed string in param_name_tmp
       ; Read from record at proc_entry + proc_rec_off
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   proc_rec_off
       LDA   (ptr_lo),Y           ; param name length
       STA   param_name_tmp        ; length byte
@@ -1378,10 +1339,7 @@ proc_invoke:
       ; Navigate to body in the record:
       ;   proc_rec_off now points past all params.
       ;   Next 2 bytes = body_len, then body text.
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   proc_rec_off
       LDA   (ptr_lo),Y           ; body_len_lo
       STA   proc_body_len_lo
@@ -1681,10 +1639,7 @@ proc_find_by_name:
       LDA   (ptr_lo),Y             ; search name length
       STA   proc_name_len
 
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #2
       LDA   (ptr_lo),Y             ; record name length
       CMP   proc_name_len
@@ -1708,10 +1663,7 @@ proc_find_by_name:
 
       ; Record char
       PLY
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       PHY
       TYA
       CLC
@@ -1761,10 +1713,7 @@ do_pots:
       BEQ   @done
 
       ; Print name
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #2
       LDA   (ptr_lo),Y             ; name_len
       TAX
@@ -1799,10 +1748,7 @@ do_po:
       CMP   #VAL_WORD
       BNE   @err
       ; Look up by name -> proc_entry
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       JSR   proc_find_by_name
       BCS   @err_notfound
       ; Reuse the editor's record->text reconstruction, then print the buffer
@@ -1862,17 +1808,11 @@ do_erase:
       BNE   @err
       ; Locate the procedure; proc_find_by_name also records proc_prev = the
       ; predecessor "next" field to patch for the unlink.
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       JSR   proc_find_by_name
       BCS   @not_found
       ; Unlink: *proc_prev = proc_entry->next
-      LDA   proc_entry_lo
-      STA   ptr_lo
-      LDA   proc_entry_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_proc_entry
       LDY   #0
       LDA   (ptr_lo),Y             ; next_lo -> X
       TAX
@@ -1918,10 +1858,7 @@ do_apply:
 @ap_word_ok:
 
       ; Copy proc name to input_buf
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       STZ   z:buf_idx
       LDY   #0
       LDA   (ptr_lo),Y             ; name length
@@ -2117,10 +2054,7 @@ sb_value:
 @word:
       LDA   #'"'
       JSR   sb_put
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y                ; word length
       TAX

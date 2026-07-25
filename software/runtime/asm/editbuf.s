@@ -20,6 +20,10 @@ EDITBUF_IMPLEMENTATION_INCLUDED = 1
 
 EDITBUF_STATUS_TICKS = 600
 EDITBUF_ALT_TIMEOUT_FRAMES = 15
+; Cap on auto-indent so a pathologically indented line cannot fill the buffer.
+EDITBUF_MAX_AUTO_INDENT = 64
+; One indent step, in spaces, for Tab / Shift-Tab.
+EDITBUF_INDENT_WIDTH = 2
 
 ; =====================================================================
 ; ZEROPAGE — editor working pointers
@@ -151,6 +155,12 @@ EB_FINDBUF:         .res 32
 ; --- HILITE hook scratch ---
 EDITBUF_HL_LEN:     .res 1
 EDITBUF_HL_COLORS:  .res 80
+; Block-indent scratch. New editbuf variables belong here, behind the last
+; hook-ABI symbol: EDITOR_HOOK_ABI_* pins fixed addresses through
+; EDITBUF_HL_COLORS, so declaring earlier silently moves the addresses that
+; out-of-module hook code (syntax highlighting) is compiled against.
+EB_INDENT_MODE:     .res 1       ; 0 = indent, 1 = unindent
+EB_INDENT_TMP:      .res 1       ; low byte of the range comparison
 
 ; --- transient status state (private; keep after exported hook ABI storage) ---
 EB_STATUS_TIMERL:   .res 1
@@ -261,6 +271,63 @@ editbuf_dispatch_key:
 :     CMP   #EDITUI_KEY_DOWN
       BNE   :+
       JSR   editbuf_move_down
+      CLC
+      RTS
+      ; Shift + navigation drops an anchor on the first press and then extends
+      ; the selection as the cursor moves.
+:     CMP   #EDITUI_KEY_SHIFT_LEFT
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_left
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_SHIFT_RIGHT
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_right
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_SHIFT_UP
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_up
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_SHIFT_DOWN
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_down
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_SHIFT_HOME
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_home
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_SHIFT_END
+      BNE   :+
+      JSR   editbuf_anchor_selection
+      JSR   editbuf_move_end
+      JMP   editbuf_end_extend
+:     CMP   #EDITUI_KEY_TAB
+      BNE   :+
+      JSR   editbuf_indent_block
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_SHIFT_TAB
+      BNE   :+
+      JSR   editbuf_unindent_block
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_LEFT
+      BNE   :+
+      JSR   editbuf_move_word_left
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_RIGHT
+      BNE   :+
+      JSR   editbuf_move_word_right
+      CLC
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_BACKSPACE
+      BNE   :+
+      JSR   editbuf_delete_word_left
       CLC
       RTS
 :     CMP   #EDITUI_KEY_HOME
@@ -401,6 +468,20 @@ editbuf_dispatch_command:
 :     CMP   #EDITUI_CMD_BUFFER_LIST
       BNE   :+
       JMP   editbuf_do_host_command
+      ; The toolchain commands are entirely the host's business: it owns the
+      ; compiler, the runner, and what to do with a diagnostic.
+:     CMP   #EDITUI_CMD_BUILD
+      BNE   :+
+      JMP   editbuf_do_host_command
+:     CMP   #EDITUI_CMD_RUN
+      BNE   :+
+      JMP   editbuf_do_host_command
+:     CMP   #EDITUI_CMD_STOP
+      BNE   :+
+      JMP   editbuf_do_host_command
+:     CMP   #EDITUI_CMD_ERROR_NEXT
+      BNE   :+
+      JMP   editbuf_do_host_command
 :
       CLC
       RTS
@@ -471,6 +552,22 @@ editbuf_key_to_command:
 :     CMP   #EDITUI_KEY_SHIFT_F6
       BNE   :+
       LDA   #EDITUI_CMD_BUFFER_PREVIOUS
+      RTS
+:     CMP   #EDITUI_KEY_F9
+      BNE   :+
+      LDA   #EDITUI_CMD_BUILD
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_F9
+      BNE   :+
+      LDA   #EDITUI_CMD_RUN
+      RTS
+:     CMP   #EDITUI_KEY_CTRL_BREAK
+      BNE   :+
+      LDA   #EDITUI_CMD_STOP
+      RTS
+:     CMP   #EDITUI_KEY_F8
+      BNE   :+
+      LDA   #EDITUI_CMD_ERROR_NEXT
       RTS
 :     CMP   #EDITUI_KEY_ALT_PREFIX
       BNE   @none
@@ -1449,6 +1546,313 @@ editbuf_move_end:
       JSR   editbuf_update_goalcol
       JMP   editbuf_after_move
 
+; Drop the selection anchor at the cursor unless one is already live, so a run
+; of shifted moves grows a single selection.
+editbuf_anchor_selection:
+      LDA   EDITBUF_SELACT
+      BNE   @done
+      LDA   EDITBUF_CURL
+      STA   EB_SELL
+      LDA   EDITBUF_CURH
+      STA   EB_SELH
+      LDA   #1
+      STA   EDITBUF_SELACT
+@done:
+      RTS
+
+; The plain movement handlers clear the selection; re-assert it and repaint so
+; the highlight follows the cursor.
+editbuf_end_extend:
+      LDA   #1
+      STA   EDITBUF_SELACT
+      JSR   editbuf_mark_dirty
+      CLC
+      RTS
+
+; Tab indents; Shift-Tab unindents. With a selection both act on every line the
+; selection touches, so this is the block operation; without one they act on the
+; current line, which is what a bare Tab should do in source anyway.
+editbuf_indent_block:
+      LDA   #0
+      BRA   editbuf_indent_common
+editbuf_unindent_block:
+      LDA   #1
+editbuf_indent_common:
+      STA   EB_INDENT_MODE
+      JSR   editbuf_capture_undo
+      LDA   EDITBUF_SELACT
+      BNE   @selected
+      ; No selection: the range is the caret plus one byte, which makes exactly
+      ; the line under the cursor qualify below.
+      LDA   EDITBUF_CURL
+      STA   EB_SELSTARTL
+      CLC
+      ADC   #1
+      STA   EB_SELENDL
+      LDA   EDITBUF_CURH
+      STA   EB_SELSTARTH
+      ADC   #0
+      STA   EB_SELENDH
+      BRA   @range
+@selected:
+      JSR   editbuf_normalize_selection
+@range:
+      ; Walk to the first affected line start and remember the last offset.
+      LDA   EB_SELSTARTL
+      STA   EDITBUF_CURL
+      LDA   EB_SELSTARTH
+      STA   EDITBUF_CURH
+      JSR   editbuf_cursor_to_line_start
+      ; Remember where the block begins; the walk below runs the cursor past the
+      ; last line, and leaving it there would silently shift the next operation.
+      LDA   EDITBUF_CURL
+      STA   EB_SELSTARTL
+      LDA   EDITBUF_CURH
+      STA   EB_SELSTARTH
+      ; Decide whether a line is in range *before* indenting it: the indent
+      ; shifts EB_SELEND right, so testing afterwards would spill onto the
+      ; following line whenever the range starts and ends on the same one.
+@line:
+      SEC
+      LDA   EB_SELENDL
+      SBC   EDITBUF_CURL
+      STA   EB_INDENT_TMP
+      LDA   EB_SELENDH
+      SBC   EDITBUF_CURH
+      BCC   @finish                ; range end is behind this line start
+      ORA   EB_INDENT_TMP
+      BEQ   @finish                ; ends exactly here, so this line is outside
+      JSR   editbuf_indent_one_line
+      JSR   editbuf_cursor_to_next_line
+      BCS   @line
+@finish:
+      LDA   EB_SELSTARTL
+      STA   EDITBUF_CURL
+      LDA   EB_SELSTARTH
+      STA   EDITBUF_CURH
+      STZ   EDITBUF_SELACT
+      JMP   editbuf_after_change
+
+; Apply one indent step at the cursor, which is sitting on a line start. The
+; cursor stays on that line start so the caller can step to the next line.
+editbuf_indent_one_line:
+      LDA   EB_INDENT_MODE
+      BNE   @remove
+      LDX   #EDITBUF_INDENT_WIDTH
+@insert:
+      PHX
+      JSR   editbuf_has_room
+      BCC   @insert_done
+      LDA   #1
+      STA   EDITBUF_CNTL
+      STZ   EDITBUF_CNTH
+      JSR   editbuf_make_gap
+      LDX   EDITBUF_CURL
+      LDA   EDITBUF_CURH
+      JSR   editbuf_ptr_from_off
+      LDA   #' '
+      LDY   #0
+      STA   (EB_PL),Y
+      JSR   editbuf_selend_inc
+@insert_done:
+      PLX
+      DEX
+      BNE   @insert
+      RTS
+@remove:
+      LDX   #EDITBUF_INDENT_WIDTH
+@strip:
+      PHX
+      JSR   editbuf_char_at_cursor
+      BCC   @strip_done
+      CMP   #' '
+      BEQ   @strip_take
+      CMP   #$09
+      BNE   @strip_done
+@strip_take:
+      LDA   EDITBUF_CURL
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      STA   EB_SCRATCHH
+      LDA   #1
+      STA   EDITBUF_CNTL
+      STZ   EDITBUF_CNTH
+      JSR   editbuf_close_gap
+      JSR   editbuf_selend_dec
+      PLX
+      DEX
+      BNE   @strip
+      RTS
+@strip_done:
+      PLX
+      RTS
+
+editbuf_selend_inc:
+      INC   EB_SELENDL
+      BNE   :+
+      INC   EB_SELENDH
+:     RTS
+
+editbuf_selend_dec:
+      LDA   EB_SELENDL
+      BNE   :+
+      DEC   EB_SELENDH
+:     DEC   EB_SELENDL
+      RTS
+
+; Move the cursor back to the start of its line.
+editbuf_cursor_to_line_start:
+@back:
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JSR   editbuf_cursor_dec
+      JSR   editbuf_char_at_cursor
+      BCC   @done
+      CMP   #$0A
+      BNE   @back
+      JSR   editbuf_cursor_inc     ; stop just past the break
+@done:
+      RTS
+
+; Advance to the start of the next line. Carry clear at end of buffer.
+editbuf_cursor_to_next_line:
+@scan:
+      JSR   editbuf_char_at_cursor
+      BCC   @none
+      JSR   editbuf_cursor_inc
+      CMP   #$0A
+      BNE   @scan
+      SEC
+      RTS
+@none:
+      CLC
+      RTS
+
+; A word is letters, digits and underscore; everything else separates them.
+editbuf_is_word_char:
+      CMP   #'_'
+      BEQ   @yes
+      CMP   #'0'
+      BCC   @no
+      CMP   #'9'+1
+      BCC   @yes
+      ORA   #$20                 ; fold case; punctuation cannot reach a..z
+      CMP   #'a'
+      BCC   @no
+      CMP   #'z'+1
+      BCC   @yes
+@no:
+      CLC
+      RTS
+@yes:
+      SEC
+      RTS
+
+; Carry set with the character under the cursor, clear at end of buffer.
+editbuf_char_at_cursor:
+      LDA   EDITBUF_CURL
+      CMP   EDITBUF_LENL
+      LDA   EDITBUF_CURH
+      SBC   EDITBUF_LENH
+      BCS   @end
+      LDX   EDITBUF_CURL
+      LDA   EDITBUF_CURH
+      JSR   editbuf_ptr_from_off
+      LDY   #0
+      LDA   (EB_PL),Y
+      SEC
+      RTS
+@end:
+      CLC
+      RTS
+
+; Ctrl-Right: leave the current word, then skip the gap to the next word start.
+; A line break ends the move so word stepping never silently jumps lines.
+editbuf_move_word_right:
+      JSR   editbuf_begin_move
+@word:
+      JSR   editbuf_char_at_cursor
+      BCC   @done
+      JSR   editbuf_is_word_char
+      BCC   @gap
+      JSR   editbuf_cursor_inc
+      BRA   @word
+@gap:
+      JSR   editbuf_char_at_cursor
+      BCC   @done
+      CMP   #$0A
+      BEQ   @done
+      JSR   editbuf_is_word_char
+      BCS   @done
+      JSR   editbuf_cursor_inc
+      BRA   @gap
+@done:
+      JSR   editbuf_update_goalcol
+      JMP   editbuf_after_move
+
+; Ctrl-Left: step back over any gap, then to the start of the word before it.
+editbuf_move_word_left:
+      JSR   editbuf_begin_move
+@gap:
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JSR   editbuf_cursor_dec
+      JSR   editbuf_char_at_cursor
+      BCC   @done
+      JSR   editbuf_is_word_char
+      BCC   @gap
+@word:
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JSR   editbuf_cursor_dec
+      JSR   editbuf_char_at_cursor
+      BCC   @done
+      JSR   editbuf_is_word_char
+      BCS   @word
+      JSR   editbuf_cursor_inc   ; overshot onto the separator; step back on
+@done:
+      JSR   editbuf_update_goalcol
+      JMP   editbuf_after_move
+
+; Ctrl-Backspace: delete the gap to the left, then the word behind it.
+editbuf_delete_word_left:
+@gap:
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JSR   editbuf_char_left_is_word
+      BCS   @word
+      JSR   editbuf_backspace
+      BRA   @gap
+@word:
+      LDA   EDITBUF_CURL
+      ORA   EDITBUF_CURH
+      BEQ   @done
+      JSR   editbuf_char_left_is_word
+      BCC   @done
+      JSR   editbuf_backspace
+      BRA   @word
+@done:
+      RTS
+
+; Carry set when the character before the cursor is part of a word.
+editbuf_char_left_is_word:
+      JSR   editbuf_cursor_dec
+      JSR   editbuf_char_at_cursor
+      BCC   @none
+      JSR   editbuf_is_word_char
+      PHP
+      JSR   editbuf_cursor_inc
+      PLP
+      RTS
+@none:
+      JSR   editbuf_cursor_inc
+      CLC
+      RTS
+
 editbuf_move_file_start:
       JSR   editbuf_begin_move
       LDA   #EDITUI_CMD_WINDOW_FIRST
@@ -1610,6 +2014,28 @@ editbuf_page_down:
 @ok:
       JSR   editbuf_goto_line_col
       JMP   editbuf_after_move
+
+; Consume a host's one-shot goto request now that the buffer holds the document.
+      .export editbuf_seek_line_col
+; Seek to a one-based line and column, as a compiler diagnostic reports them.
+; A/X carry the line, Y the column; a zero line leaves the cursor alone. This is
+; the entry a host uses to reopen the editor on an error.
+editbuf_seek_line_col:
+      STA   EB_SCRATCHL
+      STX   EB_SCRATCHH
+      ORA   EB_SCRATCHH
+      BEQ   @done
+      LDA   EB_SCRATCHL
+      BNE   :+
+      DEC   EB_SCRATCHH
+:     DEC   EB_SCRATCHL
+      TYA
+      BEQ   :+
+      DEC   A
+:     STA   EB_GOALCOL
+      JMP   editbuf_goto_line_col
+@done:
+      RTS
 
 ; editbuf_goto_line_col — set cursor to (line=EB_SCRATCH, col=EB_GOALCOL),
 ; clamped to the line's length.
@@ -3359,8 +3785,74 @@ editbuf_call_changed:
 editbuf_default_save:
       LDA   #EDITBUF_SAVE_OK
       RTS
+; Default auto-indent: repeat the leading whitespace of the line just ended.
+; This runs immediately after the newline is inserted, so the cursor sits at the
+; start of the fresh line and the previous line ends at cursor-2. Keeping it here
+; rather than in a language hook means every editor host gets it; a host that
+; wants language-aware indenting still overrides EDITBUF_INDENT_VEC.
 editbuf_default_indent:
+      LDA   EDITBUF_CURL
+      SEC
+      SBC   #2
+      STA   EB_SCRATCHL
+      LDA   EDITBUF_CURH
+      SBC   #0
+      STA   EB_SCRATCHH
+      BCC   @none                  ; fewer than two bytes behind the cursor
+@back:
+      LDA   EB_SCRATCHL
+      ORA   EB_SCRATCHH
+      BEQ   @count                 ; reached the buffer start; that is the line
+      JSR   editbuf_indent_char
+      CMP   #$0A
+      BEQ   @after_break
+      LDA   EB_SCRATCHL
+      BNE   :+
+      DEC   EB_SCRATCHH
+:     DEC   EB_SCRATCHL
+      BRA   @back
+@after_break:
+      INC   EB_SCRATCHL
+      BNE   @count
+      INC   EB_SCRATCHH
+@count:
+      LDX   #0
+@scan:
+      LDA   EB_SCRATCHL            ; never run past the newline we just inserted
+      CMP   EDITBUF_CURL
+      LDA   EB_SCRATCHH
+      SBC   EDITBUF_CURH
+      BCS   @done
+      PHX
+      JSR   editbuf_indent_char
+      PLX
+      CMP   #' '
+      BEQ   @take
+      CMP   #$09
+      BNE   @done
+@take:
+      CPX   #EDITBUF_MAX_AUTO_INDENT
+      BCS   @done
+      INX
+      INC   EB_SCRATCHL
+      BNE   @scan
+      INC   EB_SCRATCHH
+      BRA   @scan
+@done:
+      TXA
+      RTS
+@none:
       LDA   #0
+      RTS
+
+; Fetch the byte at the EB_SCRATCH offset. Clobbers X, so callers holding a
+; counter there must save it.
+editbuf_indent_char:
+      LDX   EB_SCRATCHL
+      LDA   EB_SCRATCHH
+      JSR   editbuf_ptr_from_off
+      LDY   #0
+      LDA   (EB_PL),Y
       RTS
 editbuf_default_hilite:
       RTS

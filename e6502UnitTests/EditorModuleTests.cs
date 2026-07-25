@@ -115,16 +115,21 @@ public class EditorModuleTests
     }
 
     [TestMethod]
-    public void EditorModule_HasOneKilobyteOfRomHeadroom()
+    public void EditorModule_HasRomHeadroom()
     {
         string map = File.ReadAllText(RepoPath("software", "modules", "editor", "editor.map"));
         int rodataEnd = ParseSegmentEnd(map, "RODATA");
         const int vectorsStart = 0xFFFA;
         int freeBytes = vectorsStart - (rodataEnd + 1);
 
+        // Lowered from $0400 as word-wise movement, shift-selection, block
+        // indent/unindent, auto-indent and the toolchain command bindings
+        // landed. The module is now close to full: the next editor feature of
+        // any size needs space reclaimed here first rather than another step
+        // down. Move this floor only for deliberate work, never to absorb drift.
         Assert.IsTrue(
-            freeBytes >= 0x0400,
-            $"Editor module must keep at least $0400 bytes free after adding generic XRAM paging; found ${freeBytes:X4}.");
+            freeBytes >= 0x00C0,
+            $"Editor module is nearly full; keep at least $00C0 bytes free. Found ${freeBytes:X4}.");
     }
 
     private static string RepoPath(params string[] parts)

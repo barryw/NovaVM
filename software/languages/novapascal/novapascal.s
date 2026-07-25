@@ -49,6 +49,11 @@ cold_start:
       STA   VGC_CMD
       JMP   shell_start
 
+; Print the NUL-terminated string at A/Y. print_z already clobbers A and Y, so
+; no caller of this shorthand can have depended on either surviving.
+print_ay:
+      STA   p_word
+      STY   p_word+1
 print_z:
       LDY   #0
 @loop:

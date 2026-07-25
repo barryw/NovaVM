@@ -107,6 +107,26 @@ tool_main:
 
 @edit:
       STZ   editor_command_action
+      ; A failed build leaves its location in NPTOOL_DIAG_*; carry it into the
+      ; editor so reopening lands on the offending line instead of the top.
+      LDA   NPTOOL_DIAG_LINE+0
+      STA   editor_hooks+EDITOR_HOOKS_GOTO_LINEL
+      LDA   NPTOOL_DIAG_LINE+1
+      STA   editor_hooks+EDITOR_HOOKS_GOTO_LINEH
+      LDA   NPTOOL_DIAG_COL+0
+      STA   editor_hooks+EDITOR_HOOKS_GOTO_COL
+      ; Say why the cursor moved. The status bar already carries line:col, so
+      ; the message only has to name the cause.
+      STZ   editor_hooks+EDITOR_HOOKS_STATUSL
+      STZ   editor_hooks+EDITOR_HOOKS_STATUSH
+      LDA   editor_hooks+EDITOR_HOOKS_GOTO_LINEL
+      ORA   editor_hooks+EDITOR_HOOKS_GOTO_LINEH
+      BEQ   :+
+      LDA   #<editor_build_failed
+      STA   editor_hooks+EDITOR_HOOKS_STATUSL
+      LDA   #>editor_build_failed
+      STA   editor_hooks+EDITOR_HOOKS_STATUSH
+:
       JSR   editor_select_type
       LDA   editor_type_ptr+0
       STA   editor_hooks+EDITOR_HOOKS_TYPEL
@@ -154,7 +174,7 @@ tool_main:
       STA   LIB_FN_ID
       JSR   LIB_LOADER_BAND
       LDA   LIB_STATUS
-      BNE   @editor_error
+      long_bne @editor_error
       LDA   LIB_RESULT+0
       STA   editor_exit
       LDA   LIB_ARG1+0
@@ -182,6 +202,10 @@ tool_main:
       BNE   @ok
       LDA   editor_command_action
       BEQ   @ok
+      CMP   #EDITUI_CMD_BUILD
+      BEQ   @toolchain
+      CMP   #EDITUI_CMD_RUN
+      BEQ   @toolchain
       JSR   tool_pick_file
       CMP   #2
       BEQ   @fail
@@ -192,6 +216,19 @@ tool_main:
       JSR   tool_load_current_document
       BNE   @fail
       JMP   @edit
+      ; F9/Ctrl-F9: the buffer is saved above, so hand the request to the shell.
+      ; It owns the compiler and reopens us once the step finishes.
+@toolchain:
+      CMP   #EDITUI_CMD_BUILD
+      BNE   :+
+      LDA   #NPTOOL_EDIT_BUILD
+      BRA   :++
+:     LDA   #NPTOOL_EDIT_RUN
+:     STA   NPTOOL_DETAIL
+      JSR   tool_release_document
+      BNE   @memory_error
+      LDA   #0
+      RTS
 @ok:
       LDA   editor_saved
       STA   NPTOOL_DETAIL
@@ -502,6 +539,10 @@ tool_use_picker_name:
 
 editor_command_hook:
       CMP   #EDITUI_CMD_OPEN
+      BEQ   @open
+      CMP   #EDITUI_CMD_BUILD
+      BEQ   @open
+      CMP   #EDITUI_CMD_RUN
       BEQ   @open
       CMP   #EDITUI_CMD_BUFFER_LIST
       BNE   @ignored
@@ -855,6 +896,8 @@ EDITOR_PASCAL_COLOR_WORD    = $63
 EDITOR_PASCAL_COLOR_STRING  = $65
 EDITOR_PASCAL_COLOR_NUMBER  = $67
 EDITOR_PASCAL_COLOR_COMMENT = $6C
+editor_build_failed:
+      .byte "Build failed - cursor is on the error", 0
 editor_type_text:     .byte "Text", 0
 editor_type_pascal:   .byte "Pascal Source", 0
 editor_type_project:  .byte "Pascal Project", 0

@@ -486,7 +486,13 @@ public class RuntimeLibraryAbiTests
         AssertConstant("EDITOR_HOOKS_COMMAND_VECH", 13);
         AssertConstant("EDITOR_HOOKS_CHANGED_VECL", 14);
         AssertConstant("EDITOR_HOOKS_CHANGED_VECH", 15);
-        AssertConstant("EDITOR_HOOKS_SIZE", 16);
+        // The module overlays 16 bytes onto its config block; the table itself
+        // carries three more so a host can ask to open on a diagnostic.
+        AssertConstant("EDITOR_HOOKS_COPY_SIZE", 16);
+        AssertConstant("EDITOR_HOOKS_GOTO_LINEL", 16);
+        AssertConstant("EDITOR_HOOKS_GOTO_LINEH", 17);
+        AssertConstant("EDITOR_HOOKS_GOTO_COL", 18);
+        AssertConstant("EDITOR_HOOKS_SIZE", 19);
         AssertConstant("EDITOR_HOOK_ABI_HL_PTRL", 0x00AB);
         AssertConstant("EDITOR_HOOK_ABI_HL_PTRH", 0x00AC);
         AssertConstant("EDITOR_HOOK_ABI_HL_LEN", 0x055C);

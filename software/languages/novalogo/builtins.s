@@ -53,10 +53,7 @@ lookup_builtin:
       STX   ptr2_lo             ; ptr2 now points to table name string
 
       ; Get token payload pointer
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
 
       ; Compare length bytes
       LDY   #0
@@ -152,10 +149,7 @@ pt_list:
 
 pt_word:
       ; Print quoted word — eval_val_lo/hi points at length+chars
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y         ; length
       TAX
@@ -302,10 +296,7 @@ do_repeat:
       BNE   @have_tok
       JMP   @err_bracket_pop
 @have_tok:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_LBRACKET
@@ -330,10 +321,7 @@ do_repeat:
       BNE   @scan_ok
       JMP   @err_bracket_pop
 @scan_ok:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -471,10 +459,7 @@ skip_list_body:
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BEQ   @err
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_LBRACKET
@@ -488,10 +473,7 @@ skip_list_body:
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BEQ   @err                  ; ran out of tokens
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -533,10 +515,7 @@ exec_body_block:
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BEQ   @err
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_LBRACKET
@@ -565,10 +544,7 @@ exec_body_block:
       LDA   eval_cur_lo
       ORA   eval_cur_hi
       BEQ   @err_pop5
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_LBRACKET
@@ -892,10 +868,7 @@ do_throw:
       BEQ   @no_catch
 
       ; Compare tags: eval_val_lo/hi vs catch_tag_lo/hi
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDA   catch_tag_lo
       STA   ptr2_lo
       LDA   catch_tag_hi
@@ -941,10 +914,7 @@ do_throw:
       .byte "CAN'T FIND CATCH TAG ", 0
 @nc_word:
       ; Print the tag word
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y           ; length
       TAX
@@ -1669,10 +1639,7 @@ do_readlist:
       JMP   @rl_build_done
 @rl_have_tok:
 
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -1892,10 +1859,7 @@ do_ascii:
       CMP   #VAL_WORD
       BNE   @err_type
       ; eval_val_lo/hi points at length-prefixed string
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y           ; length
       BEQ   @err_empty            ; empty word
@@ -2253,10 +2217,7 @@ do_clearcharbg:
 ;   have already verified eval_type = VAL_WORD. Clobbers A/Y, ptr_lo/hi.
 ; ---------------------------------------------------------------------
 file_set_name_from_eval:
-      LDA   eval_val_lo
-      STA   ptr_lo
-      LDA   eval_val_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_val
       LDY   #0
       LDA   (ptr_lo),Y              ; length byte
       STA   LIB_ARG1+0

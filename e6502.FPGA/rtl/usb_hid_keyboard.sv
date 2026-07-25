@@ -236,8 +236,8 @@ module usb_hid_keyboard (
                     8'd39: hid_key_to_ascii = shift ? 8'h29 : 8'h30; // 0 )
                     8'd40: hid_key_to_ascii = 8'h0D;                 // Enter
                     8'd41: hid_key_to_ascii = 8'h1B;                 // Escape
-                    8'd42: hid_key_to_ascii = 8'h08;                 // Backspace
-                    8'd43: hid_key_to_ascii = 8'h09;                 // Tab
+                    8'd42: hid_key_to_ascii = ctrl ? 8'h96 : 8'h08;  // Backspace / Ctrl-Backspace
+                    8'd43: hid_key_to_ascii = shift ? 8'h8F : 8'h09; // Tab / Shift-Tab
                     8'd44: hid_key_to_ascii = 8'h20;                 // Space
                     8'd45: hid_key_to_ascii = shift ? 8'h5F : 8'h2D; // - _
                     8'd46: hid_key_to_ascii = shift ? 8'h2B : 8'h3D; // = +
@@ -251,7 +251,31 @@ module usb_hid_keyboard (
                     8'd54: hid_key_to_ascii = shift ? 8'h3C : 8'h2C; // , <
                     8'd55: hid_key_to_ascii = shift ? 8'h3E : 8'h2E; // . >
                     8'd56: hid_key_to_ascii = shift ? 8'h3F : 8'h2F; // / ?
+                    // Function keys. Codes come from software/runtime/asm/editui.inc;
+                    // F3/F6 predate this block and keep their original values.
+                    8'd58: hid_key_to_ascii = 8'h86;                 // F1
+                    8'd59: hid_key_to_ascii = 8'h87;                 // F2
+                    8'd60: hid_key_to_ascii = 8'h82;                 // F3
+                    8'd61: hid_key_to_ascii = 8'h88;                 // F4
+                    8'd62: hid_key_to_ascii = 8'h89;                 // F5
+                    8'd63: hid_key_to_ascii = shift ? 8'h85 : 8'h84; // F6 / Shift-F6
+                    8'd64: hid_key_to_ascii = 8'h8A;                 // F7
+                    8'd65: hid_key_to_ascii = 8'h8B;                 // F8
+                    8'd66: hid_key_to_ascii = ctrl ? 8'h92 : 8'h8C;  // F9 build / Ctrl-F9 run
+                    8'd67: hid_key_to_ascii = 8'h8D;                 // F10
+                    8'd68: hid_key_to_ascii = 8'h90;                 // F11
+                    8'd69: hid_key_to_ascii = 8'h91;                 // F12
+                    // Editing navigation. Without these the full-screen editor
+                    // has no cursor movement at all on hardware.
+                    8'd74: hid_key_to_ascii = shift ? 8'h9B : (ctrl ? 8'h80 : 8'h83); // Home
+                    8'd75: hid_key_to_ascii = 8'h10;                 // Page Up
                     8'd76: hid_key_to_ascii = 8'h7F;                 // Delete
+                    8'd77: hid_key_to_ascii = shift ? 8'h9C : (ctrl ? 8'h81 : 8'h05); // End
+                    8'd78: hid_key_to_ascii = 8'h12;                 // Page Down
+                    8'd79: hid_key_to_ascii = shift ? 8'h98 : (ctrl ? 8'h95 : 8'h1D); // Right
+                    8'd80: hid_key_to_ascii = shift ? 8'h97 : (ctrl ? 8'h94 : 8'h1C); // Left
+                    8'd81: hid_key_to_ascii = shift ? 8'h9A : 8'h1F; // Down / extend down
+                    8'd82: hid_key_to_ascii = shift ? 8'h99 : 8'h1E; // Up / extend up
                     8'd84: hid_key_to_ascii = 8'h2F;                 // Keypad /
                     8'd85: hid_key_to_ascii = 8'h2A;                 // Keypad *
                     8'd86: hid_key_to_ascii = 8'h2D;                 // Keypad -

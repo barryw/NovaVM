@@ -116,6 +116,280 @@ public class NovaPascalTests
     }
 
     [TestMethod]
+    public void EditorSupportsWordMovementAndDeletion()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-word-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal), "shell banner");
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("WORDDOC", Encoding.ASCII.GetBytes("alpha beta gamma\n"), ".TXT");
+
+            QueueLine(editor, "EDIT WORDDOC.TXT");
+            RunUntil(cpu, bus, s => s.Contains("alpha beta gamma", StringComparison.Ordinal), "editor opened");
+            RunSteps(cpu, bus, 200_000);
+
+            // Ctrl-Right twice lands on the start of "gamma"; typing marks it.
+            editor.QueueInput(0x95);
+            editor.QueueInput(0x95);
+            RunSteps(cpu, bus, 400_000);
+            editor.QueueInput((byte)'#');
+            RunSteps(cpu, bus, 300_000);
+            string afterRight = Snapshot(bus).Split('\n')[1].TrimEnd();
+
+            // Ctrl-Backspace eats the gap then the whole word behind it.
+            editor.QueueInput(0x96);
+            RunSteps(cpu, bus, 500_000);
+            string afterDelete = Snapshot(bus).Split('\n')[1].TrimEnd();
+
+            // Ctrl-Left from there returns to the start of the preceding word.
+            editor.QueueInput(0x94);
+            RunSteps(cpu, bus, 400_000);
+            editor.QueueInput((byte)'<');
+            RunSteps(cpu, bus, 300_000);
+            string afterLeft = Snapshot(bus).Split('\n')[1].TrimEnd();
+
+            Assert.AreEqual("alpha beta #gamma", afterRight,
+                "Ctrl-Right must stop at the start of each following word.");
+            Assert.AreEqual("alpha gamma", afterDelete,
+                "Ctrl-Backspace must delete the gap and the word behind it.");
+            Assert.AreEqual("<alpha gamma", afterLeft,
+                "Ctrl-Left must land on the start of the preceding word.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    public void EditorIndentsBlocksAndExtendsSelections()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-indent-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal), "shell banner");
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("INDDOC", Encoding.ASCII.GetBytes("aaa\nbbb\nccc\n"), ".TXT");
+
+            QueueLine(editor, "EDIT INDDOC.TXT");
+            RunUntil(cpu, bus, s => s.Contains("aaa", StringComparison.Ordinal), "editor opened");
+            RunSteps(cpu, bus, 200_000);
+
+            // Tab with no selection indents just the current line.
+            editor.QueueInput(0x09);
+            RunSteps(cpu, bus, 400_000);
+            string[] one = Snapshot(bus).Split('\n');
+            Assert.AreEqual("  aaa", one[1].TrimEnd(), "Tab must indent the current line.");
+
+            // Shift-Down extends a selection over the first two lines; Tab then
+            // indents both. Before shift-navigation existed the editor could not
+            // select a range at all.
+            editor.QueueInput(0x83);   // Home
+            editor.QueueInput(0x9A);   // Shift-Down
+            editor.QueueInput(0x9A);   // Shift-Down
+            RunSteps(cpu, bus, 500_000);
+            editor.QueueInput(0x09);
+            RunSteps(cpu, bus, 600_000);
+            string[] two = Snapshot(bus).Split('\n');
+            Assert.AreEqual("    aaa", two[1].TrimEnd(), "Block indent must cover the first selected line.");
+            Assert.AreEqual("  bbb", two[2].TrimEnd(), "Block indent must cover the second selected line.");
+            Assert.AreEqual("ccc", two[3].TrimEnd(), "Block indent must stop at the selection end.");
+
+            // Shift-Tab removes one step from the current line.
+            editor.QueueInput(0x83);
+            RunSteps(cpu, bus, 300_000);
+            editor.QueueInput(0x8F);
+            RunSteps(cpu, bus, 500_000);
+            string[] three = Snapshot(bus).Split('\n');
+            Assert.AreEqual("  aaa", three[1].TrimEnd(), "Shift-Tab must remove one indent step.");
+
+            // Enter carries the current line's leading whitespace onto the new
+            // line, so nested code does not have to be hand-spaced.
+            editor.QueueInput(0x05);   // End of "  aaa"
+            RunSteps(cpu, bus, 300_000);
+            editor.QueueInput(0x0D);   // Enter
+            RunSteps(cpu, bus, 400_000);
+            editor.QueueInput((byte)'z');
+            RunSteps(cpu, bus, 300_000);
+            string[] four = Snapshot(bus).Split('\n');
+            Assert.AreEqual("  z", four[2].TrimEnd(),
+                "Enter must repeat the previous line's indent.");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    /// <summary>
+    /// The shell prompt is a real line editor, not an append-only echo: Home,
+    /// End, word movement and Ctrl-Backspace all edit in place. Each step here
+    /// builds a command that only runs if the caret went where it was asked.
+    /// </summary>
+    [TestMethod]
+    public void ShellPromptEditsTheLineInPlace()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-repl-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal),
+                "shell banner");
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            string expected = $"{disk.Prefix}:/";
+
+            // Home + insert: "WD" becomes "PWD". Append-only would run "WDP".
+            Type(editor, "WD");
+            editor.QueueInput(0x83);          // Home
+            Type(editor, "P\r");
+            RunUntil(cpu, bus, s => s.Contains(expected, StringComparison.Ordinal), "PWD built with Home");
+            AssertNoUnknownCommand(bus);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            // Ctrl-Backspace drops the word before the caret.
+            Type(editor, "PWD EXTRA");
+            editor.QueueInput(0x96);          // Ctrl-Backspace
+            Type(editor, "\r");
+            RunUntil(cpu, bus, s => s.Contains(expected, StringComparison.Ordinal), "PWD after word delete");
+            AssertNoUnknownCommand(bus);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            // Home, then Ctrl-Right over the junk word, then backspace it away.
+            Type(editor, "ZZ PWD");
+            editor.QueueInput(0x83);          // Home
+            editor.QueueInput(0x95);          // Ctrl-Right -> start of "PWD"
+            editor.QueueInput(0x08);
+            editor.QueueInput(0x08);
+            editor.QueueInput(0x08);          // erase "ZZ "
+            Type(editor, "\r");
+            RunUntil(cpu, bus, s => s.Contains(expected, StringComparison.Ordinal), "PWD after word movement");
+            AssertNoUnknownCommand(bus);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            // End returns the caret to the tail so typing appends again.
+            Type(editor, "PW");
+            editor.QueueInput(0x83);          // Home
+            editor.QueueInput(0x05);          // End
+            Type(editor, "D\r");
+            RunUntil(cpu, bus, s => s.Contains(expected, StringComparison.Ordinal), "PWD after End");
+            AssertNoUnknownCommand(bus);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    private static void Type(ScreenEditor editor, string text)
+    {
+        foreach (char c in text)
+            editor.QueueInput((byte)(c == '\r' ? 0x0D : c));
+    }
+
+    private static void AssertNoUnknownCommand(CompositeBusDevice bus)
+    {
+        string screen = Snapshot(bus);
+        Assert.IsFalse(screen.Contains("Unknown", StringComparison.OrdinalIgnoreCase),
+            $"The edited line did not reach the shell intact.\n{screen}");
+    }
+
+    [TestMethod]
+    public void EditorBuildsAndReopensThroughTheShell()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-f9-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal), "shell banner");
+            var disk = bus.DeviceManager.GetDevice("FD0");
+
+            disk.Save("F9DEMO", Encoding.ASCII.GetBytes(
+                "program F9Demo;\nbegin\n  writeln('F9 RAN')\nend.\n"), ".PAS");
+            disk.Save("F9BAD", Encoding.ASCII.GetBytes(
+                "program F9Bad;\nvar A: Byte;\nbegin\n  A := 1;\n  A := @@@;\n  A := 2\nend.\n"), ".PAS");
+            disk.Save("F9DEMO", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN F9DEMO.PAS\nOUTPUT F9DEMO.BIN\nOPTIMIZE O2\nMAP F9DEMO.MAP\n"), ".NPP");
+
+            QueueLine(editor, "EDIT F9DEMO.PAS");
+            RunUntil(cpu, bus, s => s.Contains("program F9Demo", StringComparison.Ordinal), "editor opened");
+            RunSteps(cpu, bus, 200_000);
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+
+            // F9 hands a build request to the shell, which compiles and then
+            // reopens the editor on the same source with no prompt in between.
+            editor.QueueInput(0x8C);
+            RunUntil(cpu, bus, s => s.Contains("Nova Pascal Compiler", StringComparison.Ordinal),
+                "F9 reaches the compiler");
+            RunUntil(cpu, bus, s => s.Contains("program F9Demo", StringComparison.Ordinal),
+                "editor reopens after the build");
+            Assert.IsTrue(disk.FileExists("F9DEMO", ".S"),
+                "F9 must run the toolchain against the source the editor was on.");
+
+            // A failing build must reopen the editor on the offending line, not
+            // at the top of the file. The bad token sits on line 5.
+            editor.QueueInput(0x11);   // Ctrl-Q leaves the editor we reopened into
+            RunUntil(cpu, bus, s => s.Contains("NP> ", StringComparison.Ordinal), "back at the shell");
+            bus.Write((ushort)VgcConstants.RegCharOut, 0x0C);
+            QueueLine(editor, "EDIT F9BAD.PAS");
+            RunUntil(cpu, bus, s => s.Contains("F9BAD.PAS", StringComparison.Ordinal), "bad source opened");
+            RunSteps(cpu, bus, 200_000);
+            editor.QueueInput(0x8C);
+            RunUntil(cpu, bus, s => s.Contains("error:", StringComparison.Ordinal), "compiler reports the error");
+            RunUntil(cpu, bus, s => s.Contains("F9BAD.PAS", StringComparison.Ordinal), "editor reopens on the error");
+            RunUntil(cpu, bus, s => s.Contains("Build failed", StringComparison.Ordinal),
+                "the editor says why it moved the cursor");
+            // The message is transient; once it expires the metadata bar comes
+            // back and shows the cursor sitting on the reported line.
+            RunUntil(cpu, bus, s => s.Contains("Y:5", StringComparison.Ordinal),
+                "cursor parked on the diagnostic line");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
     public void CompilerSupportsTurboFileAndByteServices()
     {
         string root = Path.Combine(Path.GetTempPath(), $"novapascal-fileio-{Guid.NewGuid():N}");

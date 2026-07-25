@@ -109,28 +109,15 @@ sys_edit:
       STA   z:SE_HOOKH
 
       ; --- snapshot the display registers editui_init will clobber ---
-      LDA   VGC_MODE
-      STA   se_saved_mode
-      LDA   VGC_PALETTE
-      STA   se_saved_palette
-      LDA   VGC_BGCOL
-      STA   se_saved_bgcol
-      LDA   VGC_BORDER
-      STA   se_saved_border
-      LDA   VGC_FGCOL
-      STA   se_saved_fgcol
-      LDA   VGC_CURSX
-      STA   se_saved_cursx
-      LDA   VGC_CURSY
-      STA   se_saved_cursy
-      LDA   VGC_CURSEN
-      STA   se_saved_cursen
-      LDA   VGC_TEXT_TOPROW
-      STA   se_saved_text_toprow
-      LDA   VGC_TEXT_SCROLL_START
-      STA   se_saved_text_scroll_start
-      LDA   VGC_TEXT_SCROLL_ROWS
-      STA   se_saved_text_scroll_rows
+      ; Every register lives in the $A0xx page, so one map of low bytes drives
+      ; the save. The restore stays straight-line: its order is load-bearing.
+      LDY   #se_saved_reg_map_end-se_saved_reg_map-1
+@save_regs:
+      LDX   se_saved_reg_map,Y
+      LDA   $A000,X
+      STA   se_saved_mode,Y
+      DEY
+      BPL   @save_regs
 
       ; --- the editor owns the whole screen: copper off, full text window ---
       JSR   copper_off
@@ -233,7 +220,14 @@ sys_edit:
       LDA   LIB_ARG0+2
       STA   EDITBUF_CURL
       LDA   LIB_ARG0+3
+      ; Byte 3 carries the option bits too, and they must not leak into the
+      ; cursor: a host that sets one would otherwise open at $01xx.
+      AND   #<~EDITOR_XRAM_FLAG_HOOKS
       STA   EDITBUF_CURH
+      ; A hook-table line/column wins over the raw offset above, so a host
+      ; reopening after a failed build lands on the diagnostic. sys_edit_xram
+      ; has already faulted in the first window, so the buffer is real here.
+      JSR   sys_edit_apply_goto
       JSR   editbuf_run                ; A = exit reason
 
       ; --- publish results to the mailbox ---
@@ -312,6 +306,24 @@ sys_edit_hook_save_hook:
 ; sys_edit_apply_hook_table — EDITOR_FN_EDIT overlays EDITBUF_TYPEL through
 ; EDITBUF_CHANGED_VECH from the caller's EDITOR_HOOKS_* table. The source table
 ; and destination config bytes intentionally share the same order.
+; Seed the cursor from the hook table's optional one-based line/column.
+sys_edit_apply_goto:
+      LDA   z:SE_HOOKL
+      ORA   z:SE_HOOKH
+      BEQ   @none
+      LDY   #EDITOR_HOOKS_GOTO_COL
+      LDA   (SE_HOOKL),Y
+      PHA
+      LDY   #EDITOR_HOOKS_GOTO_LINEH
+      LDA   (SE_HOOKL),Y
+      TAX
+      DEY
+      LDA   (SE_HOOKL),Y
+      PLY
+      JMP   editbuf_seek_line_col
+@none:
+      RTS
+
 sys_edit_apply_hook_table:
       LDA   #<EDITBUF_TYPEL
       STA   z:SE_DSTL
@@ -322,7 +334,7 @@ sys_edit_apply_hook_table:
       LDA   (SE_HOOKL),Y
       STA   (SE_DSTL),Y
       INY
-      CPY   #EDITOR_HOOKS_SIZE
+      CPY   #EDITOR_HOOKS_COPY_SIZE
       BNE   @copy
       LDA   EDITBUF_SAVE_VECL
       STA   se_hook_saveL
@@ -379,6 +391,13 @@ se_hook_saveH:     .res 1
       .include "editui.inc"
       .include "editbuf.inc"
       .segment "RODATA"
+; Low bytes of the display registers the editor takes over, in se_saved_* order.
+se_saved_reg_map:
+      .byte <VGC_MODE, <VGC_PALETTE, <VGC_BGCOL, <VGC_BORDER, <VGC_FGCOL
+      .byte <VGC_CURSX, <VGC_CURSY, <VGC_CURSEN, <VGC_TEXT_TOPROW
+      .byte <VGC_TEXT_SCROLL_START, <VGC_TEXT_SCROLL_ROWS
+se_saved_reg_map_end:
+
 sys_edit_type_text:
       .byte "Text", 0
 

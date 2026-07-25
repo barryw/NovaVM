@@ -131,7 +131,10 @@ EDITBUF_COLOR_SEL    = $30      ; selection: black on cyan
 .global EDITBUF_HL_COLORS     ; 80-byte color buffer
 
 ; --- Entry points -------------------------------------------------------
-.global editbuf_run           ; run the modal editor
+.global editbuf_run
+; Seek to a one-based line/column: A/X = line, Y = column. A zero line is a
+; no-op. Hosts use this to open the editor on a compiler diagnostic.
+.global editbuf_seek_line_col
 .global editbuf_reset_state   ; reset cursor/scroll/selection/dirty for a new session
 .global editbuf_dialog3       ; three-choice status-line prompt (A=result 0/1/2)
 

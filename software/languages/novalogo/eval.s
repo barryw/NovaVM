@@ -51,6 +51,45 @@ lat_was_visible: .res 1   ; logo_adapt_turtle: pre-call TURTLE_GFX_VISIBLE snaps
 ; =====================================================================
       .segment "CODE"
 
+; Point ptr at the current token / the last evaluated value. Thirty-five call
+; sites paid twelve bytes each to inline these; A and the flags still come back
+; holding the high byte, exactly as the inline sequence left them.
+logo_ptr_from_eval_cur:
+      LDA   eval_cur_lo
+      STA   ptr_lo
+      LDA   eval_cur_hi
+      STA   ptr_hi
+      RTS
+
+logo_ptr_from_proc_entry:
+      LDA   proc_entry_lo
+      STA   ptr_lo
+      LDA   proc_entry_hi
+      STA   ptr_hi
+      RTS
+
+logo_ptr_from_list_ptr:
+      LDA   list_ptr_lo
+      STA   ptr_lo
+      LDA   list_ptr_hi
+      STA   ptr_hi
+      RTS
+
+logo_ptr_from_gc_ptr:
+      LDA   gc_ptr_lo
+      STA   ptr_lo
+      LDA   gc_ptr_hi
+      STA   ptr_hi
+      RTS
+
+logo_ptr_from_eval_val:
+      LDA   eval_val_lo
+      STA   ptr_lo
+      LDA   eval_val_hi
+      STA   ptr_hi
+      RTS
+
+
 ; ---------------------------------------------------------------------
 ; eval_line — evaluate the token list built by tokenize_line
 ;   Input:  tok_head_lo/hi = first token
@@ -76,10 +115,7 @@ eval_loop:
       BEQ   @bail_out
 
       ; Read tag of current token
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -232,10 +268,7 @@ eval_body:
       BEQ   @done
 
       ; Read tag of current token
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -263,10 +296,7 @@ eval_body:
 ;   Reads next pointer from current token, stores in eval_cur
 ; ---------------------------------------------------------------------
 eval_advance:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_NEXT_LO
       LDA   (ptr_lo),Y
       TAX
@@ -291,10 +321,7 @@ eval_expr:
       RTS
 
 @have_token:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
 
@@ -461,10 +488,7 @@ eval_expr:
 
       ; Not found — print "NAME has no value"
       ; ptr_lo/hi was clobbered by var_get, reload from eval_cur
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_PAYLOAD          ; length byte
       LDA   (ptr_lo),Y
       TAX                         ; X = name length
@@ -652,10 +676,7 @@ err_throw:                        ; <- fall-through from err_idk_word
 ; print_token_word — print the length-prefixed word in the current token
 ;   (eval_cur + TOK_PAYLOAD).  Clobbers A, X, Y, ptr_lo/hi.
 print_token_word:
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_PAYLOAD          ; length byte
       LDA   (ptr_lo),Y
       TAX
@@ -680,10 +701,7 @@ eval_check_infix:
       BEQ   @no_infix
 
       ; Peek at the next token's tag
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
       LDY   #TOK_TAG
       LDA   (ptr_lo),Y
       CMP   #TOK_INFIX
@@ -1131,10 +1149,7 @@ lookup_ext_cmd:
 @have_entry:
       ; Get token payload pointer
       TAX                       ; X = length
-      LDA   eval_cur_lo
-      STA   ptr_lo
-      LDA   eval_cur_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_eval_cur
 
       ; Compare length bytes
       LDY   #0

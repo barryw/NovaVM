@@ -160,27 +160,27 @@ public class EmulatorCanvas : Control
         switch (e.Key)
         {
             case Key.Left:
-                _editor.QueueInput(28);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 28, ctrl: 0x94, shift: 0x97));
                 e.Handled = true;
                 break;
             case Key.Right:
-                _editor.QueueInput(29);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 29, ctrl: 0x95, shift: 0x98));
                 e.Handled = true;
                 break;
             case Key.Up:
-                _editor.QueueInput(30);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 30, ctrl: 30, shift: 0x99));
                 e.Handled = true;
                 break;
             case Key.Down:
-                _editor.QueueInput(31);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 31, ctrl: 31, shift: 0x9A));
                 e.Handled = true;
                 break;
             case Key.Home:
-                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x80 : (byte)0x83);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 0x83, ctrl: 0x80, shift: 0x9B));
                 e.Handled = true;
                 break;
             case Key.End:
-                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x81 : (byte)0x05);
+                _editor.QueueInput(NavKey(e.KeyModifiers, plain: 0x05, ctrl: 0x81, shift: 0x9C));
                 e.Handled = true;
                 break;
             case Key.PageUp:
@@ -191,12 +191,63 @@ public class EmulatorCanvas : Control
                 _editor.QueueInput(0x12);
                 e.Handled = true;
                 break;
+            // Function keys and editing chords. Codes come from
+            // software/runtime/asm/editui.inc; the FPGA keyboard core
+            // (usb_hid_keyboard.sv) translates to the same bytes.
+            case Key.F1:
+                _editor.QueueInput(0x86);
+                e.Handled = true;
+                break;
+            case Key.F2:
+                _editor.QueueInput(0x87);
+                e.Handled = true;
+                break;
             case Key.F3:
                 _editor.QueueInput(0x82);
                 e.Handled = true;
                 break;
+            case Key.F4:
+                _editor.QueueInput(0x88);
+                e.Handled = true;
+                break;
+            case Key.F5:
+                _editor.QueueInput(0x89);
+                e.Handled = true;
+                break;
             case Key.F6:
                 _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? (byte)0x85 : (byte)0x84);
+                e.Handled = true;
+                break;
+            case Key.F7:
+                _editor.QueueInput(0x8A);
+                e.Handled = true;
+                break;
+            case Key.F8:
+                _editor.QueueInput(0x8B);
+                e.Handled = true;
+                break;
+            case Key.F9:
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x92 : (byte)0x8C);
+                e.Handled = true;
+                break;
+            case Key.F10:
+                _editor.QueueInput(0x8D);
+                e.Handled = true;
+                break;
+            case Key.F11:
+                _editor.QueueInput(0x90);
+                e.Handled = true;
+                break;
+            case Key.F12:
+                _editor.QueueInput(0x91);
+                e.Handled = true;
+                break;
+            case Key.Tab:
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? (byte)0x8F : (byte)0x09);
+                e.Handled = true;
+                break;
+            case Key.Cancel:
+                _editor.QueueInput(0x93);
                 e.Handled = true;
                 break;
             case Key.Enter:
@@ -204,7 +255,7 @@ public class EmulatorCanvas : Control
                 e.Handled = true;
                 break;
             case Key.Back:
-                _editor.QueueInput(0x08);
+                _editor.QueueInput(e.KeyModifiers.HasFlag(KeyModifiers.Control) ? (byte)0x96 : (byte)0x08);
                 e.Handled = true;
                 break;
             case Key.Escape:
@@ -665,4 +716,16 @@ public class EmulatorCanvas : Control
         private static int NormalizeScrollY(int value) =>
             value >= VgcConstants.GfxHeight ? value - VgcConstants.GfxHeight : value;
     }
+    /// <summary>
+    /// Pick the navigation byte for a key by modifier. Shift wins over Ctrl so
+    /// Shift+Ctrl still extends a selection rather than silently moving.
+    /// Codes are defined by software/runtime/asm/editui.inc.
+    /// </summary>
+    private static byte NavKey(KeyModifiers modifiers, byte plain, byte ctrl, byte shift)
+    {
+        if (modifiers.HasFlag(KeyModifiers.Shift)) return shift;
+        if (modifiers.HasFlag(KeyModifiers.Control)) return ctrl;
+        return plain;
+    }
+
 }

@@ -71,10 +71,7 @@ gc_collect:
 
 @clear_one:
       ; Clear mark bit on this allocation
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #GC_HDR_TAG
       LDA   (ptr_lo),Y
       AND   #<~ALLOC_MARK_BIT    ; clear bit 7
@@ -152,10 +149,7 @@ gc_collect:
       BCS   @sweep_done
 
 @sweep_one:
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
 
       ; Get size of this allocation
       LDY   #GC_HDR_SIZE
@@ -272,10 +266,7 @@ gc_mark_vars:
       JSR   gc_mark_node
 
       ; Read the variable's value — if it's a list, mark the list
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #VAR_NAME_LEN
       LDA   (ptr_lo),Y           ; name_len
       CLC
@@ -333,10 +324,7 @@ gc_mark_vars:
 
 @var_next:
       ; Follow next pointer
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #VAR_NEXT_LO
       LDA   (ptr_lo),Y
       TAX
@@ -378,10 +366,7 @@ gc_mark_procs:
       STA   (ptr_lo),Y
 
       ; Follow next pointer (at record data offset 0)
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #0                    ; next_lo at offset 0
       LDA   (ptr_lo),Y
       TAX
@@ -417,10 +402,7 @@ gc_mark_token_list:
       JSR   gc_mark_node
 
       ; Follow next pointer (at payload offsets TOK_NEXT_LO/HI)
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #TOK_NEXT_LO
       LDA   (ptr_lo),Y
       TAX
@@ -460,10 +442,7 @@ gc_mark_list:
 
       ; Check car_type: if list, recursively mark sublist
       ; if word, mark the string
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #CONS_CAR_TYPE
       LDA   (ptr_lo),Y
       CMP   #VAL_LIST
@@ -513,10 +492,7 @@ gc_mark_list:
 
 @follow_cdr:
       ; Follow cdr to next cons pair
-      LDA   gc_ptr_lo
-      STA   ptr_lo
-      LDA   gc_ptr_hi
-      STA   ptr_hi
+      JSR   logo_ptr_from_gc_ptr
       LDY   #CONS_CDR_LO
       LDA   (ptr_lo),Y
       TAX

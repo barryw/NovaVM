@@ -105,6 +105,36 @@ EDITUI_KEY_F3        = $82
 EDITUI_KEY_F6        = $84
 EDITUI_KEY_SHIFT_F6  = $85
 
+; Remaining function keys and the editing chords. $8F is NUI_KEY_BACKTAB, which
+; doubles as Shift-Tab here. Keep this block and the host keyboards in step:
+; e6502.Avalonia/Rendering/EmulatorCanvas.cs and
+; e6502.FPGA/rtl/usb_hid_keyboard.sv both translate to these bytes.
+EDITUI_KEY_F1        = $86
+EDITUI_KEY_F2        = $87
+EDITUI_KEY_F4        = $88
+EDITUI_KEY_F5        = $89
+EDITUI_KEY_F7        = $8A
+EDITUI_KEY_F8        = $8B
+EDITUI_KEY_F9        = $8C
+EDITUI_KEY_F10       = $8D
+EDITUI_KEY_SHIFT_TAB = $8F
+EDITUI_KEY_F11       = $90
+EDITUI_KEY_F12       = $91
+EDITUI_KEY_CTRL_F9   = $92
+EDITUI_KEY_CTRL_BREAK = $93
+EDITUI_KEY_CTRL_LEFT = $94
+EDITUI_KEY_CTRL_RIGHT = $95
+EDITUI_KEY_CTRL_BACKSPACE = $96
+; Shift + navigation extends the selection. Until these existed the editor could
+; only ever select the whole document (Ctrl-A), which left cut/copy/paste and
+; block indent with nothing to work on.
+EDITUI_KEY_SHIFT_LEFT  = $97
+EDITUI_KEY_SHIFT_RIGHT = $98
+EDITUI_KEY_SHIFT_UP    = $99
+EDITUI_KEY_SHIFT_DOWN  = $9A
+EDITUI_KEY_SHIFT_HOME  = $9B
+EDITUI_KEY_SHIFT_END   = $9C
+
 EDITUI_CMD_NONE      = $00
 EDITUI_CMD_NEW       = $01
 EDITUI_CMD_OPEN      = $02
@@ -132,6 +162,13 @@ EDITUI_CMD_WINDOW_NEXT = $17
 EDITUI_CMD_WINDOW_PREVIOUS = $18
 EDITUI_CMD_WINDOW_FIRST = $19
 EDITUI_CMD_WINDOW_LAST = $1A
+; Toolchain commands. The editor never runs a build itself; it hands these to
+; the host through EDITOR_HOOKS_COMMAND_VEC, which decides what "build" means
+; for its language and re-enters the editor afterwards.
+EDITUI_CMD_BUILD     = $1B
+EDITUI_CMD_RUN       = $1C
+EDITUI_CMD_STOP      = $1D
+EDITUI_CMD_ERROR_NEXT = $1E
 
 EDITUI_MENU_ENTRY_SIZE = 6
 EDITUI_MENU_ITEM_SIZE  = 4
