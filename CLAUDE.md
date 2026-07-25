@@ -4,137 +4,175 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-MOS 6502 CPU emulator in C#/.NET. Supports both NMOS 6502 and CMOS 65C02 variants with full instruction set coverage including decimal mode and interrupt handling. Includes an Avalonia GUI with a virtual graphics controller, SID sound chip emulation, sprite engine, music sequencer, and EhBASIC interpreter.
+NovaVM is a custom 6502/65C02 computer platform kept aligned across three implementation targets:
 
-## Build & Test Commands
+- **Avalonia** (`e6502.Avalonia`) — reference desktop machine and development UI
+- **Verilator** (`e6502.FPGA/test`) — RTL simulation used to validate hardware before flashing
+- **ULX3S FPGA + ESP32 NovaHost** (`e6502.FPGA`, `e6502.ESP32/novahost`) — the hardware target
+
+The design rule: custom hardware is not an emulator trick. The same register model and memory
+behavior should exist in Avalonia, Verilator, and FPGA. When you change a device, check whether
+the other targets need the matching change.
+
+`AGENTS.md` also applies to this repo and is not repeated here.
+
+## Nova CLI — required reading
+
+Repo operations belong in the `nova` CLI (`e6502.Nova`). Do **not** add `.sh` or `.py` entry
+points; add or reuse a `nova` command. See `docs/script-inventory.md` for the short list of
+allowed exceptions.
+
+Before choosing or inventing a workflow, read `docs/books/nova-cli-guide/chapters/nova-cli.md`.
+It covers NDI disk images, drive slots, remote NovaHost operations, codegen, and CI bootstrap.
+
+Every `nova` command change must update three things together:
+1. the command's `help` output,
+2. `docs/books/nova-cli-guide/chapters/nova-cli.md`,
+3. `e6502UnitTests/NovaCliCoverageTests.cs`.
+
+## Build & Test
 
 ```bash
-dotnet build                                    # Build all projects
-dotnet test                                     # Run all tests
-dotnet test --filter "RunAllSuiteTest"           # Run a single test by name
-dotnet test --filter "FullyQualifiedName~Vgc"    # Run tests matching a pattern
-dotnet test --verbosity normal                  # Verbose test output
-dotnet run --project e6502.Avalonia             # Run Avalonia GUI
-dotnet run --project e6502.CLI                  # Run CLI (console BASIC)
-dotnet run --project e6502.MCP                  # Run MCP server (connects to GUI via TCP)
+make binaries                                    # build+stage ALL ROM/module/app .bin from source
+dotnet restore e6502.sln
+dotnet build e6502.sln -c Release -maxcpucount:1  # serialized: shared ROM/lib artifacts race in parallel
+dotnet test e6502.sln -c Release --no-build
 ```
 
-CI runs on Windows with `dotnet build -c Release` then `dotnet test -c Release`.
+`make binaries` is the canonical resource entrypoint. Several `.csproj` files reference generated
+`.bin` resources (`petscii_*.bin`, `ehbasic.bin`, module/app blobs) as pre-existing files, so a
+clean checkout fails to build without it. It also stages copies into `e6502.CLI/Resources`,
+`e6502.FPGA/rom`, and the web emulator dirs — create those dirs first on a clean tree
+(`mkdir -p e6502.CLI/Resources e6502.FPGA/rom`).
 
-## Solution Structure
+`e6502.Avalonia` runs `make` for the ROM and NDK modules during build, so `ca65`/`ld65` (cc65)
+must be on `PATH`. Pass `-p:SkipRomBuild=true` to build against pre-staged resources instead.
 
-| Project | Target | Purpose |
-|---------|--------|---------|
-| `e6502` | net10.0 | Core emulator library (CPU, bus, opcodes) |
-| `e6502UnitTests` | net10.0 | MSTest tests using real 6502 test ROMs + hardware tests |
-| `e6502.Avalonia` | net10.0 | Avalonia GUI with VGC, SID, sprites, music, TCP server |
-| `e6502.MCP` | net10.0 | MCP server bridging AI clients to the emulator via TCP |
-| `e6502.CLI` | net10.0 | Console-based BASIC interpreter |
-| `e6502.Tools` | net10.0 | CLI tool for SID file relocation |
-| `e6502.NovaHost` | net10.0 | Shared client library for NovaHost TCP protocols (management 6504 CBOR + debug 6503 JSON) |
-| `e6502.NovaPanel` | net10.0 | Avalonia remote-control app for Nova hardware: on-screen keyboard + web-admin parity |
-| `e6502.NovaPanel.Tests` | net10.0 | xUnit + Avalonia.Headless tests for NovaPanel |
-| `e6502Debugger` | net6.0-windows | WinForms debugger (Windows only) |
+Running targets:
 
-## Namespace
+```bash
+dotnet run --project e6502.Avalonia        # desktop reference host
+dotnet run --project e6502.CLI             # headless BASIC host
+dotnet run --project e6502.MCP             # MCP bridge (needs Avalonia host running)
+dotnet run --project e6502.Nova -- --help  # Nova CLI
+```
 
-`KDS.e6502` — all core types use this namespace prefix.
+Tests are MSTest in `e6502UnitTests` (plus xUnit + Avalonia.Headless in `e6502.NovaPanel.Tests`):
+
+```bash
+dotnet test --filter "FullyQualifiedName~Vgc"    # pattern
+dotnet test --filter "RunAllSuiteTest"           # single test
+```
+
+FPGA:
+
+```bash
+make -C e6502.FPGA                           # build Verilator sim
+make -C e6502.FPGA run
+make -C e6502.FPGA/test                      # all Verilator RTL tests
+make -C e6502.FPGA/test test_vgc_sprites     # one RTL test
+make -C e6502.FPGA/boards/ulx3s bitstream    # needs yosys/nextpnr-ecp5/ecppack
+```
+
+CI is Woodpecker on Linux (`.woodpecker/`), not GitHub Actions: it runs
+`nova ci install-linux-deps build`, `make binaries`, then a serialized Release build and test.
+
+## Solution Layout
+
+| Project | Purpose |
+|---|---|
+| `e6502` | Core CPU/opcode library (net10.0) — knows nothing about hardware |
+| `e6502.Avalonia` | Reference machine: VGC, audio, storage, network, editors, TCP bridge |
+| `e6502.CLI` | Terminal NovaBASIC host |
+| `e6502.MCP` | MCP server bridging AI clients to the Avalonia host over TCP |
+| `e6502.Nova` | The `nova` CLI: NDI images, NovaHost assets, codegen, CI, web admin |
+| `e6502.Storage` | NDI and host-directory storage abstractions |
+| `e6502.NovaHost` | Client library for NovaHost management (6504 CBOR) and debug (6503 JSON) |
+| `e6502.NovaPanel` (+ `.Tests`) | Avalonia remote-control app for Nova hardware |
+| `e6502.GameServer` | TCP game server speaking the Nova NIC message framing |
+| `e6502.Browser` / `.RustCore` | WASM host + Rust `no_std` core |
+| `e6502.Tools` | Host-side utilities (SID relocation) |
+| `e6502Debugger` | WinForms debugger, net6.0-windows, Windows only |
+| `e6502UnitTests` | MSTest suite (CPU ROM suites + device/storage/editor/compiler tests) |
+
+Non-.NET trees: `e6502.FPGA/` (SystemVerilog RTL, Verilator tests, board flows),
+`e6502.ESP32/novahost/` (ESP32 firmware), `software/` (65C02 source), `docs/books/` (PDF sources).
+
+Namespace prefix: `KDS.e6502`.
 
 ## Architecture
 
 ### CPU (`e6502/CPU.cs`)
 
-Sealed class implementing the full 6502 instruction set. Key design:
-- Two-phase execution: `ClocksForNext()` (prefetch + cycle count) then `ExecuteNext()` (run instruction). Simple runners can call `ExecuteNext()` alone; cycle-accurate systems use both.
-- Receives an `IBusDevice` via constructor — the CPU knows nothing about ROM, I/O, or hardware.
-- CPU type selected via `E6502Type` enum (NMOS vs CMOS). CMOS adds new instructions, fixes JMP indirect page-wrap bug, clears decimal flag on BRK/IRQ.
-- Interrupts: `IrqWaiting` and `NmiWaiting` bool flags set externally; checked at start of each execute cycle. NMI has priority over IRQ. IRQ is maskable via the I flag.
+Sealed class, full 6502 + 65C02 instruction set. Two-phase execution: `ClocksForNext()`
+(prefetch + cycle count) then `ExecuteNext()`. Simple runners can call `ExecuteNext()` alone.
+The CPU takes an `IBusDevice` (`Read(ushort)` / `Write(ushort, byte)`) and knows nothing about
+ROM or I/O. `E6502Type` selects NMOS vs CMOS (CMOS adds instructions, fixes the JMP-indirect
+page-wrap bug, clears decimal on BRK/IRQ). Interrupts are `IrqWaiting`/`NmiWaiting` flags set
+externally and checked at the start of each execute cycle; NMI wins over IRQ.
 
-### Bus (`IBusDevice` / `BusDevice`)
-
-`IBusDevice` has two methods: `Read(ushort)` and `Write(ushort, byte)`. Every CPU memory access routes through this interface. Implementations:
-- `BusDevice` — flat 64KB RAM, used by tests
-- `BasicBusDevice` (CLI) — 64KB RAM with ROM at $C000+ (writes dropped) and console I/O at $F001/$F004
-- `CompositeBusDevice` (Avalonia) — full memory map with hardware register interception
+Bus implementations: `BusDevice` (flat 64KB, tests), `BasicBusDevice` (CLI),
+`CompositeBusDevice` (Avalonia — full map with register interception over a flat `byte[]`).
 
 ### OpCodes (`e6502/OpCodes/`)
 
-Immutable opcode table parsed at startup from a fixed-width text file embedded as a .resx resource (`OpCodeList.txt`). Not hardcoded in C# — easy to audit and modify without touching execution logic.
-- `OpCodeTable` — 256-entry array indexed by opcode byte
-- `OpCodeRecord` — instruction metadata with `Dasm()` for disassembly
-- `AddressModes` — 15-value enum including 65C02 modes (`ZeroPage0` for `(zp)`, `BranchExt` for BBRx/BBSx)
+The opcode table is parsed at startup from a fixed-width text resource (`OpCodeList.txt`), not
+hardcoded in C#. `OpCodeTable` is a 256-entry array; `OpCodeRecord.Dasm()` disassembles;
+`AddressModes` includes 65C02 modes (`ZeroPage0` for `(zp)`, `BranchExt` for BBRx/BBSx).
+Edit the text file, not the execution logic, to change instruction metadata.
 
-### Avalonia Memory Map (`CompositeBusDevice`)
+### Memory map
 
-Hardware registers are intercepted from a flat 64KB `byte[]` array at Read/Write time:
+`docs/help/guides/memory-map.md` is the authoritative map — read it rather than trusting a
+summary here. Broad shape: zero page/stack, vectors at `$0200`, BASIC RAM to `$9FFF`, VGC and
+sprite/NIC/WTS registers in `$A000-$A1FF`, FIO/XMC/timer/music/DMA/blitter/board-input/math-copro
+registers in `$B9A0-$BBCD`, four 256-byte XRAM windows at `$BC00-$BFFF`, ROM at `$C000-$FFFF`
+with SID registers intercepted at `$D400-$D43F`.
 
-```
-$0000-$01FF  Zero page + stack
-$0200-$027F  Vector table (device base addresses, written at boot)
-$0280-$9FFF  BASIC program space (~40KB)
-$A000-$A01F  VGC registers + command interface
-$AA00-$B1CF  Character RAM (2000 bytes, 80x25)
-$B1D0-$B99F  Color RAM (2000 bytes, 80x25)
-$B9A0-$B9EF  FileIoController registers
-$BA00-$BA3F  Expansion Memory Controller (XMC) registers
-$BA40-$BA4F  Timer Controller registers
-$A100-$A13F  Network Interface Controller (NIC) registers
-$A140-$A1DF  Wavetable Synthesizer (WTS) registers
-$BA50-$BA62  Music status + voice note readback + elapsed/total frames
-$BC00-$BFFF  XMC window (4x256-byte pages into 512KB XRAM)
-$C000-$FFFF  ROM (EhBASIC, write-protected)
-$D400-$D41F  SID 1 registers (inside ROM range, intercepted on Write)
-$D420-$D43F  SID 2 registers (inside ROM range, intercepted on Write)
-```
+### Avalonia devices (`e6502.Avalonia/Hardware/`)
 
-### Virtual Graphics Controller (`VGC`)
+- **VGC** (`VirtualGraphicsController.cs`) — 80x50 text + attributes, 320x200 4-bit graphics,
+  16 16x16 multicolor sprites, tiles, copper lists. Register writes to the command port trigger
+  immediate primitives (plot/line/circle/rect/fill/paint), sprite ops, and bulk memory I/O.
+  Renders at 60Hz: background → priority-0 sprites → text/gfx (order by mode) → priority-1/2
+  sprites → collision detection.
+- **DMA / Blitter** (`VirtualDmaController.cs`, `VirtualBlitterController.cs`) — bulk copy/fill
+  across CPU RAM, VGC memory spaces, sprites, tiles, and XRAM; blitter adds stride and color key.
+- **XMC** (`VirtualExpansionMemoryController.cs`) — 512KB XRAM as a flat 24-bit space, exposed to
+  the CPU through the four mapped windows.
+- **SID** (`SidChip.cs`) — software 6581: 3 voices, ADSR, 4 waveforms, ring mod, sync, filter.
+  Extended with per-voice volume at `$1D-$1F` (not on real hardware). Rendered on a background
+  OpenAL thread at 44100Hz, decoupled from CPU clock.
+- **MusicEngine** (`MusicEngine.cs`) — 14-voice sequencer at 60Hz: voices 0–5 → SID, 6–13 → WTS.
+  MML parsed by `MmlParser`. `I<n>` = SID instrument, `@I<n>` = WTS GM program, `@D<n>` = WTS drum.
+- **WavetableSynth** (`WavetableSynth.cs`) — 8-voice SF2 sample playback (samples stay in host
+  memory), reverb/chorus, stereo PCM16 via OpenAL.
+- **NIC** (`VirtualNetworkController.cs`) — 4 slots, connect or listen/accept, length-prefixed
+  messages, DMA to/from 6502 RAM, optional per-slot IRQ.
+- **FIO** (`FileIoController.cs`) — save/load of CPU RAM and VGC memory spaces, directory
+  enumeration, MIDI playback, music forwarding. User files live on mounted NDI devices.
 
-Manages three layers: 80x50 text, 320x200 block graphics (4-bit color per pixel), and 16 multicolor 16x16 sprites. Register writes to $A010 trigger immediate commands for graphics primitives (plot, line, circle, rect, fill, paint), sprite manipulation (define, position, enable, flip, priority), and memory I/O (bulk read/write of screen/color/gfx/sprite data).
+### TCP / MCP
 
-Rendering at 60Hz: background fill → priority-0 sprites → text/gfx layers (order depends on mode) → priority-1 sprites → priority-2 sprites → collision detection.
+`Ipc/EmulatorTcpServer.cs` listens on port 6502 (`EMULATOR_PORT` overrides) with a
+newline-delimited JSON protocol exposing screen I/O, graphics, sprites, audio, and file
+management. `e6502.MCP` is a separate process mapping `[McpServerTool]` methods onto those
+commands; `EnterBasicLine` uppercases outside quotes, `RunProgram` types RUN and waits for Ready.
 
-### SID Chip & Music Engine
+### Runtimes (`software/languages/`)
 
-**SidChip** (`Hardware/SidChip.cs`): Software MOS 6581 emulation with 3 voices, ADSR envelopes, 4 waveforms, ring modulation, sync, and state-variable filter. Extended with per-voice volume registers at $1D-$1F (0-15, 4-bit, default $0F) — not present on the real SID. Audio rendered in a background thread via OpenAL at 44100Hz, fully decoupled from CPU clock.
+A non-BASIC runtime replaces NovaBASIC in the ROM slot rather than running alongside it.
+NovaBASIC (`ehbasic/`) is the default and the only one verified on FPGA. NovaLogo, NovaForth,
+and NovaPascal build their own 16KB ROM images. Shared 65C02 libraries live in
+`software/runtime/asm/` (XRAM, vtext, NDK primitives); `software/ndk/` packages them for
+out-of-tree development. Generated headers (`novavm.inc`, runtime ABI, NDK reference) come from
+`nova codegen` — regenerate rather than hand-editing.
 
-**MusicEngine** (`Hardware/MusicEngine.cs`): 14-voice sequencer (6 SID + 8 WTS), ticked at 60Hz. Voices 0–5 route to SID chips, voices 6–13 route to WavetableSynth. Supports 16 SID instrument slots, one-shot SFX with voice stealing, and per-frame effects (arpeggio, vibrato, portamento, PWM/filter sweep). MML parsed by `MmlParser` into `MmlEvent` lists. `I<n>` selects SID instrument, `@I<n>` selects WTS instrument by GM program, `@D<n>` selects WTS drum instrument.
+## FPGA / ULX3S gotcha
 
-**WavetableSynth** (`Hardware/WavetableSynth.cs`): 8-voice sample-based synthesizer at $A140–$A1DF. Loads SF2 soundfonts from host filesystem (samples stay in host memory). Per-voice: volume, panning, pitch bend. Global: reverb (Freeverb), chorus (modulated delay), master volume. Stereo PCM16 output via OpenAL at 44100Hz. Register interface supports note-on/off, instrument selection, and instrument enumeration.
+Boards silkscreened **v3.0.8 can actually carry the v3.1.x pinout** (`wifi_en=J5`,
+`wifi_gpio0=F1` instead of `F1`/`L2`). If ESP32 serial flashing fails silently ("No serial data
+received"), check this first — see `e6502.FPGA/boards/ulx3s/BOARD.md`. After the first serial
+flash, NovaHost updates go over OTA (`--port novahost.local`).
 
-**SidPlayer** (`Hardware/SidPlayer.cs`): Plays `.sid` files by injecting an IRQ trampoline into CPU RAM that calls init/play routines at 60Hz.
-
-**MidiPlayback** (`Hardware/MidiPlayback.cs`): Plays standard `.mid` files through the MusicEngine with 14 voices. Three routing modes: Auto (WTS preferred, SID overflow), Manual (per-channel table), SidOnly (legacy 6-voice). Auto-maps GM program numbers to WTS instrument indices or SID instrument buckets.
-
-### Network Interface Controller (`Hardware/VirtualNetworkController.cs`)
-
-Message-oriented TCP networking at $A100-$A13F. 4 connection slots, each supporting connect (client) or listen/accept (server). Messages are length-prefixed (1 byte, 0=256) on the wire. DMA transfers between NIC and 6502 RAM via configurable address/length registers. Optional per-slot IRQ on message arrival. TCP server exposes `SendDirect`/`RecvDirect` methods bypassing DMA for external callers.
-
-### FileIoController (`Hardware/FileIoController.cs`)
-
-6502-accessible file I/O at $B9A0-$B9EF. Commands: Save/Load (CPU RAM ↔ `.bas` files), GSave/GLoad (VGC memory spaces ↔ `.gfx` files), DirOpen/DirRead, Delete, MidPlay/MidStop (MIDI file playback), and music/sound forwarding to MusicEngine. User-visible files live on mounted NDI devices; no mounted disk means file commands return a not-mounted error.
-
-### TCP Server & MCP
-
-**TCP** (`Ipc/EmulatorTcpServer.cs`): Listens on port 6502 (or `EMULATOR_PORT` env var). Newline-delimited JSON request/response protocol. Exposes the full emulator surface: screen I/O, graphics, sprites, SID playback, music engine, MIDI playback (`mid_play`/`mid_stop`), file management.
-
-**MCP** (`e6502.MCP/`): Separate process bridging Model Context Protocol (stdio) to the TCP server. `EmulatorClient` is a singleton TCP client. All `[McpServerTool]` methods in `EmulatorTools` map to TCP commands. Higher-level helpers: `EnterBasicLine` uppercases outside quotes; `RunProgram` types RUN and waits for Ready.
-
-### EhBASIC Integration
-
-ROM (`ehbasic.bin`, 16KB) loaded at $C000. Reset vector at $FFFC points to monitor code at $FF80 which sets up the vector table and jumps to EhBASIC cold start. BASIC I/O wired to VGC: output via `STA $A00E` (RegCharOut), input via `LDA $A00F` (RegCharIn) polling the `ScreenEditor` key queue.
-
-## FPGA / ULX3S hardware notes
-
-The `e6502.FPGA/` directory targets the ULX3S (ECP5) with a matching ESP32
-companion in `e6502.ESP32/novahost/`. See `e6502.FPGA/boards/ulx3s/BOARD.md` for the
-important gotcha: **boards labeled v3.0.8 in silkscreen/FTDI product string
-can actually have the v3.1.x physical pinout** (`wifi_en=J5`, `wifi_gpio0=F1`
-instead of `F1`/`L2`). If ESP32 serial flashing fails silently ("No serial
-data received"), this is the first thing to check. Once NovaHost is flashed
-once over serial, subsequent updates go via OTA (`--port novahost.local`).
-
-## Tests
-
-MSTest framework. CPU correctness validated by running real 6502 test suite binaries (Klaus Dormann's functional/interrupt tests, AllSuiteA, 65C02 extended opcodes) to completion — each loops on itself when done, test asserts final PC value.
-
-Hardware tests cover VGC commands, SID registers, timer interrupts, composite bus routing, sprite rendering/collision, SID file parsing/relocation, MML parsing, music engine sequencing, and NIC controller (connect, send/recv, listen/accept, IRQ, DMA, remote-close).
+Debugging workflow: `docs/fpga-debugging-workflow.md`.
