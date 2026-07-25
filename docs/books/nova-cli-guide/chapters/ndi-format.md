@@ -99,7 +99,9 @@ Each directory entry is 64 bytes. Four entries fit in one 256-byte sector.
 | `$08` | 4 | size in bytes |
 | `$0C` | 32 | filename, null-padded ASCII |
 | `$2C` | 4 | allocated sector count |
-| `$30` | 16 | reserved |
+| `$30` | 1 | metadata marker (`$80`) and DOS attribute bits (`$3F`) |
+| `$31` | 4 | packed DOS date/time, little-endian (`date << 16 | time`) |
+| `$35` | 11 | reserved |
 
 ### Entry Flags
 
@@ -318,7 +320,7 @@ Validation does not currently verify every reserved byte or filename character.
 - Fixed 192-entry directory table.
 - Contiguous allocation only.
 - No journaling.
-- No timestamps.
+- Timestamps have DOS two-second resolution and a 1980--2107 year range.
 - No long filename extension table.
 - No sparse files.
 - No per-file checksum.

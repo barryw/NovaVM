@@ -1,0 +1,21 @@
+; Compiled interface for OVERLAY.PAS.
+.ifndef NPI_OVERLAYFACE
+NPI_OVERLAYFACE = 1
+
+__CC51FD6 = 1 ; OvrOk
+__C6A6106 = 1 ; OvrError
+__C86A4BE = 1 ; OvrIoError
+__C25FF44 = 1 ; OvrBadMagic
+__C9052E9 = 1 ; OvrBadVersion
+__C8BC989 = 1 ; OvrBadLoadAddress
+__C0D1E99 = 1 ; OvrTooLarge
+__C9D7396 = 1 ; OvrNotLoaded
+__C67ABEB = 1 ; OvrNoEntry
+__CF1A658 = 1 ; OvrEntryError
+
+__PBDE645 = $03 ; OvrInitAt
+__S03818C = $00 ; OvrCallInit
+__S6928F1 = $00 ; OvrRun
+__S8F2BA7 = $00 ; OvrTick
+__S868082 = $00 ; OvrDone
+.endif

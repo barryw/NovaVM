@@ -40,6 +40,7 @@ NOVA_LIB_SRCS := \
 	nui_state.s \
 	nui_dialog.s \
 	nui_input.s \
+	nui_drain.s \
 	nui_list.s \
 	nui_file.s \
 	nui_text.s \

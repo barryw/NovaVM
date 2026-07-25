@@ -1,0 +1,23 @@
+File commands:
+  DIR [mask]       List files
+  PWD              Show directory
+  CD dir           Change directory
+  TYPE file        Print ASCII text only
+  NEW name         Create a Pascal project directory
+  NEWUNIT name     Create a reusable unit in /USER
+  ADDUNIT proj unit Add a Pascal unit
+  DELUNIT proj unit Delete a Pascal unit
+  DELPROJECT proj  Delete a Pascal project
+  EDIT file        Edit source/project/config text
+  DEL file         Delete a file
+  REN old new      Rename a file
+  MKDIR dir        Create directory
+  RMDIR dir        Remove directory
+Build commands:
+  COMPILE file.pas Write file.S
+  ASSEMBLE file.s [-Dname=value] [-o file.obj]
+  LINK main.obj [more.obj] [-C cfg] [-M map] [-Ln labels]
+  BUILD project    Build an NPP Pascal project
+  BUILD file.pas   Compile, assemble, link
+  RUN project      Run a Pascal project
+  RUN file.bin     Run a linked program

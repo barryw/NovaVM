@@ -243,14 +243,34 @@ load-address-prefixed binary stay in the project directory. `RUN HELLOWORLD`
 executes that result. Direct `BUILD file.pas`, `BUILD file.npp`, and `RUN
 file.bin` remain available for compatible flat-file workflows.
 
+`BUILD` is content-incremental rather than timestamp-driven. The language-neutral
+`NBUILD.BIN` records exact file hashes in the project's binary `BUILD.NBS` state.
+NPC records the primary Pascal file, project manifest, and every unit or include
+it actually opens, so unchanged main and unit `.ASM` artifacts are reused
+independently. NPPROJ still composes those streams in project order; NAS records
+the combined source, configuration, and resolved includes, allowing the
+NAS-preprocess/NPO2 `.S` stage and the final NAS `.OBJ` stage to be reused when
+their exact inputs and outputs match. Same-size edits invalidate correctly,
+failed stages never replace the last known-good state, and state updates use a
+temporary file plus exact rename.
+
 Project source uses normal Pascal syntax: the program selects project units
 with `uses`, and each unit separates public declarations from matching
-implementations. The current source-unit ABI supports public parameterless
-procedures and parameterless `Byte`/`Boolean` functions. NPP 2 accepts up to 16
-unit files; NPP 1 remains a supported single-main compatibility format. No
-source includes are required, and project units do not create a redundant
-persistent interface artifact—the compiler emits checked signatures into the
-whole-project assembly stream.
+implementations. Interfaces may export constants, named types, globals, typed
+procedures, and typed functions; implementations must match parameter types,
+`var` modes, widths, and return types exactly. Unit initialization runs before
+the program body in dependency order. NPP 2 accepts up to 16 unit files; NPP 1
+remains a supported single-main compatibility format. No source includes are
+required, and project units do not create a redundant persistent interface
+artifact—the compiler emits checked signatures into the whole-project assembly
+stream.
+
+The Turbo-compatible language surface includes typed pointers, `Pointer`,
+`nil`, `@`, `^`, `New`, `Dispose`, `GetMem`, and `FreeMem` over the shared
+low-RAM heap. Procedural/function variables and `const`, `var`, or value open
+arrays use checked signatures; open-array `Low`, `High`, and `SizeOf` observe
+the hidden bound, and value arrays are copied. Finalization and Object Pascal
+remain outside the current contract.
 
 Small 65C02 fragments may be written as a line-oriented Pascal `asm` ... `end`
 statement using ordinary NAS syntax. NPC copies the block into generated
@@ -276,8 +296,10 @@ them through the Files module's `FILE_PAGE` operation. Primary and include files
 therefore use the same 24-bit, offset-based streaming path already used by NAS
 and NPO2. NPC also keeps its 4,864-byte symbol and constant/type-name arena in
 one allocator-owned XRAM block, mapping the requested record through Windows 0
-and 1. This leaves more than 5 KiB of the frontend overlay available for new
-language support without reducing any compiler table limits. Finished
+and 1. Transient identifier, routine, control, and include tables reuse the
+suspended shell's 4 KiB scratch arena. This leaves at least 4 KiB of the
+frontend overlay available for new language support without reducing any
+compiler table limits. Finished
 sequential includes reuse their nesting-depth XRAM slot, so
 only simultaneously nested sources add buffers; no Pascal-specific disk protocol
 or whole-file lower-RAM buffer is required. NAS and NL load and unload
@@ -310,7 +332,25 @@ blocking `ReadKey`, cursor-position functions, blitter-backed `DelLine` and
 coordinates, and 16-bit `Delay`. Turbo-style
 parameterless functions may be called without an empty parentheses pair. The
 unit also publishes Turbo's 16 named colors from `Black` through `White` using
-Nova's default palette indexes.
+Nova's default palette indexes. `Sound` and `NoSound` use the shared SOUND
+module and the NDK's math-coprocessor-backed hertz conversion.
+`uses Strings;` provides the Turbo `PChar` helpers, including heap-backed
+`StrNew`/`StrDispose`; `Printer.Lst` lazily spools through the ordinary Text and
+FILES path to `PRINTER.TXT`. `Dos` maps file, path, disk, and date/time services
+to the Files/System modules. `Graph` maps the familiar BGI-shaped 320-by-200
+surface to VGC. `Overlay` loads and calls generic NL `NOVO` images through the
+NDK overlay lifecycle.
+
+An NPP 2 `TARGET OVERLAY` project compiles and optimizes Pascal normally, then
+asks the language-neutral linker to emit a versioned `NOVO` image at the
+configured load address. Exported `OvrInit`, `OvrRun`, and `OvrTick` routines
+form its optional entry table; the same format is available to assembly
+projects and contains no Pascal-specific linker behavior.
+The smart-linked Pascal runtime uses the shared paged `LANGRT` module for
+Q16.16 `Real` arithmetic and Nova's math coprocessor where its result format
+matches Pascal semantics. `Trunc` and `Round` return signed 16-bit values;
+`Round` rounds exact halves away from zero. `Str` converts ordinal or `Real`
+values and supports Turbo-style width and `Real` precision fields.
 Generated `.NPI` bindings validate byte call signatures and distinguish byte
 constants from storage, so `FIO_CMD_RNG` lowers to an immediate while
 `RNG_VALUE0` remains a memory read; no explicit `Byte(...)` cast is required.

@@ -1,9 +1,9 @@
 ; =====================================================================
 ;  Nova NDK — nui_input.s
 ;
-;  nui keyboard input: blocking key read with ANSI arrow-key decoding,
-;  plus a key-drain helper. Pulled when a caller (dialog wait_key, list
-;  picker) uses nui_read_key; dropped otherwise.
+;  nui keyboard input: blocking key read with ANSI arrow-key decoding.
+;  Pulled when a caller (dialog wait_key, list picker) uses nui_read_key;
+;  dropped otherwise. The independently useful drain lives in nui_drain.s.
 ;
 ;  Copyright (C) 2026 Barry Walker
 ;  SPDX-License-Identifier: MIT
@@ -83,15 +83,4 @@ nui_read_key:
       RTS
 @ansi_backtab:
       LDA   #NUI_KEY_BACKTAB
-      RTS
-
-; @label NUI.DRAIN_KEYS
-; @kind routine
-; @symbol nui_drain_keys
-; @summary Drain pending keyboard bytes before handing focus to a new modal control.
-nui_drain_keys:
-@loop:
-      LDA   VGC_CHARIN
-      BNE   @loop
-      LDA   #NUI_OK
       RTS

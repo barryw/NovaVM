@@ -25,7 +25,7 @@ procedure ClrScr; external;
 procedure ClrEol; external;
 procedure DelLine; external;
 procedure InsLine; external;
-procedure GotoXY(X, Y: Byte); external;
+procedure GotoXY(X, Y: Integer); external;
 procedure Window(X1, Y1, X2, Y2: Byte); external;
 procedure HighVideo; external;
 procedure LowVideo; external;
@@ -37,6 +37,8 @@ function WhereX: Byte; external;
 function WhereY: Byte; external;
 procedure TextColor(Color: Byte); external;
 procedure TextBackground(Color: Byte); external;
+procedure Sound(Frequency: Word); external;
+procedure NoSound; external;
 
 implementation
 

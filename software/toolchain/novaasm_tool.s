@@ -12,6 +12,9 @@
       .include "nas_backend.inc"
       .include "nas_core.inc"
 
+      .define tool_clear_args nptool_clear_args
+      .define tool_files_call nptool_files_call
+
 ASM_CAP      = $8000
 ASM_LOAD_CAP = ASM_CAP
 INCLUDE_CACHE_CAP = NASCORE_INCLUDE_STREAM_CAP
@@ -25,6 +28,8 @@ nas_core_zp:     .res NASCORE_ZP_SIZE
 .assert nas_core_zp = NASCORE_ZP_BASE, error, "NAS core zero-page ABI moved"
 include_path_ptr:.res 2
 stream_word_ptr: .res 2
+memory_ptr = stream_word_ptr
+dependency_ptr:  .res 2
 
       .segment "BSS"
 source_xaddr:    .res 3
@@ -53,6 +58,13 @@ include_size_l:  .res NASM_INCLUDE_DEPTH
 include_size_h:  .res NASM_INCLUDE_DEPTH
 include_allocated:.res NASM_INCLUDE_DEPTH
 include_names:   .res NASM_INCLUDE_DEPTH * NASM_FILENAME_CAP
+dependency_name:.res NPTOOL_ARG_CAP
+dependency_len: .res 1
+dependency_id:  .res 2
+dependency_open:.res 1
+dependency_created:.res 1
+dependency_write_len:.res 1
+dependency_failed:.res 1
 
       .segment "NOINIT"
 workspace_buf:   .res PROJECT_CAP
@@ -79,6 +91,7 @@ include_release_error = workspace_buf+$0127
 project_left     = workspace_buf+$0128
 project_found    = workspace_buf+$012A
 project_expected = workspace_buf+$012B
+error_symbol     = workspace_buf+$0140
 
       .segment "CODE"
       .export tool_main
@@ -93,7 +106,10 @@ tool_main:
       STZ   NPTOOL_DIAG_LINE+1
       STZ   NPTOOL_DIAG_COL
       STZ   NPTOOL_DIAG_COL+1
-      STZ   NPTOOL_ARG2_LEN
+      JSR   tool_capture_dependency_name
+      BEQ   :+
+      JMP   tool_bad_args
+:
       STZ   NASCORE_INCLUDE_MODE
       LDA   #<nas_banner
       LDX   #>nas_banner
@@ -133,6 +149,10 @@ tool_main:
       LDX   #>NPTOOL_ARG0
       JSR   nptool_print_z
       JSR   nptool_newline
+      JSR   tool_open_dependencies
+      BEQ   :+
+      JMP   @fail
+:
       JSR   tool_alloc_source
       BEQ   :+
       JMP   @memory_error
@@ -185,8 +205,7 @@ tool_main:
       LDA   #<nas_preprocess_ok
       LDX   #>nas_preprocess_ok
       JSR   nptool_print_z
-      LDA   #0
-      RTS
+      JMP   tool_finish_success
 @large_assembly:
       LDA   NPTOOL_FLAGS
       AND   #NPTOOL_FLAG_SOURCE_PREPROCESSED
@@ -198,11 +217,13 @@ tool_main:
       JMP   @memory_error
 :
       JSR   tool_preprocess
-      BEQ   :+
+      BEQ   @preprocessed
+      LDA   dependency_failed
+      long_bne @fail_release
       LDA   #NPTOOL_ERR_ASSEMBLE
       STA   NPTOOL_STATUS
       JMP   @fail_release
-:
+@preprocessed:
       ; Preprocessing has produced a self-contained expanded stream. Release
       ; the original immediately so large NDK includes can use those pages
       ; while the backend owns its symbol/object workspaces.
@@ -222,8 +243,7 @@ tool_main:
       LDA   #<nas_preprocess_ok
       LDX   #>nas_preprocess_ok
       JSR   nptool_print_z
-      LDA   #0
-      RTS
+      JMP   tool_finish_success
 @assemble:
       JSR   tool_alloc_constants
       BEQ   :+
@@ -296,6 +316,10 @@ tool_main:
       STA   nasm_reloc_buffer_ptr+1
       LDA   reloc_xaddr+2
       STA   nasm_reloc_buffer_ptr_h
+      LDA   #<error_symbol
+      STA   nasm_error_symbol_ptr
+      LDA   #>error_symbol
+      STA   nasm_error_symbol_ptr+1
       JSR   NASCORE_ENTRY
       BNE   @assemble_error
 
@@ -317,12 +341,24 @@ tool_main:
       LDA   #<nas_ok
       LDX   #>nas_ok
       JSR   nptool_print_z
-      LDA   #0
-      RTS
+      JMP   tool_finish_success
 
 @assemble_error:
       LDA   nasm_error
       STA   NPTOOL_DETAIL
+      STZ   NPTOOL_ARG6_LEN
+      LDY   #0
+@error_symbol:
+      LDA   error_symbol,Y
+      BEQ   @error_symbol_done
+      STA   NPTOOL_ARG6,Y
+      INY
+      CPY   #NPTOOL_ARG_CAP-1
+      BCC   @error_symbol
+@error_symbol_done:
+      LDA   #0
+      STA   NPTOOL_ARG6,Y
+      STY   NPTOOL_ARG6_LEN
       LDA   nasm_error_line
       STA   NPTOOL_DIAG_LINE
       LDA   nasm_error_line+1
@@ -368,6 +404,7 @@ tool_main:
 @fail_release:
       JSR   tool_release_all
 @fail:
+      JSR   tool_discard_dependencies
       LDA   #1
       RTS
 
@@ -384,37 +421,207 @@ tool_bad_args:
       LDA   #1
       RTS
 
-tool_clear_args:
-      LDX   #15
-@loop:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @loop
+; ARG2 is normally scratch/diagnostic space. With dependency capture enabled,
+; preserve its initial filename privately, then release the mailbox for NAS.
+tool_capture_dependency_name:
+      STZ   dependency_len
+      STZ   dependency_open
+      STZ   dependency_created
+      LDA   NPTOOL_FLAGS
+      AND   #NPTOOL_FLAG_DEPENDENCIES
+      BEQ   @clear
+      LDA   NPTOOL_ARG2_LEN
+      BEQ   @bad
+      CMP   #NPTOOL_ARG_CAP
+      BCS   @bad
+      STA   dependency_len
+      TAY
+      LDA   #0
+      STA   dependency_name,Y
+@copy:
+      DEY
+      LDA   NPTOOL_ARG2,Y
+      STA   dependency_name,Y
+      TYA
+      BNE   @copy
+@clear:
+      STZ   NPTOOL_ARG2_LEN
+      STZ   NPTOOL_ARG2
+      LDA   #0
+      RTS
+@bad:
+      LDA   #1
       RTS
 
-tool_mem_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+; Record only files NAS actually consumes. NBUILD owns hashing and persistent
+; cache state; this transient manifest stays deliberately dumb and reusable.
+tool_open_dependencies:
+      LDA   dependency_len
+      BEQ   @ok
+      JSR   tool_clear_args
+      LDA   #<dependency_name
+      STA   LIB_ARG0
+      LDA   #>dependency_name
+      STA   LIB_ARG0+1
+      LDA   dependency_len
+      STA   LIB_ARG1
+      LDA   #FIO_FILE_ACCESS_WRITE
+      STA   LIB_ARG2
+      LDA   #FILE_FCREATE
+      JSR   tool_files_call
+      long_bne tool_dependency_io_fail
+      LDA   LIB_RESULT
+      STA   dependency_id
+      LDA   LIB_RESULT+1
+      STA   dependency_id+1
+      INC   dependency_open
+      INC   dependency_created
+      LDA   #<NPTOOL_ARG0
+      LDX   #>NPTOOL_ARG0
+      LDY   NPTOOL_ARG0_LEN
+      JSR   tool_write_dependency_named
+      BNE   @done
+      LDA   NPTOOL_ARG4_LEN
+      BEQ   @ok
+      LDA   #<NPTOOL_ARG4
+      LDX   #>NPTOOL_ARG4
+      LDY   NPTOOL_ARG4_LEN
+      JSR   tool_write_dependency_named
+@done:
+      RTS
+@ok:
+      LDA   #0
       RTS
 
-tool_sys_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_SYSTEM
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+tool_record_include_dependency:
+      JSR   tool_include_name_pointer
+      LDA   include_name_ptr
+      LDX   include_name_ptr+1
+      LDY   include_load_len
+
+; A/X points to a filename and Y is its length.
+tool_write_dependency_named:
+      STA   dependency_ptr
+      STX   dependency_ptr+1
+      STY   dependency_write_len
+      LDA   dependency_open
+      BEQ   @ok
+      JSR   tool_clear_args
+      LDA   dependency_id
+      STA   LIB_ARG0
+      LDA   dependency_id+1
+      STA   LIB_ARG0+1
+      LDA   dependency_ptr
+      STA   LIB_ARG1
+      LDA   dependency_ptr+1
+      STA   LIB_ARG1+1
+      LDA   dependency_write_len
+      STA   LIB_ARG2
+      LDA   #FILE_FWRITE
+      JSR   tool_files_call
+      long_bne tool_dependency_io_fail
+      LDA   LIB_RESULT
+      CMP   dependency_write_len
+      BNE   @short
+      LDA   LIB_RESULT+1
+      BNE   @short
+      JSR   tool_clear_args
+      LDA   dependency_id
+      STA   LIB_ARG0
+      LDA   dependency_id+1
+      STA   LIB_ARG0+1
+      LDA   #<dependency_lf
+      STA   LIB_ARG1
+      LDA   #>dependency_lf
+      STA   LIB_ARG1+1
+      LDA   #1
+      STA   LIB_ARG2
+      LDA   #FILE_FWRITE
+      JSR   tool_files_call
+      BNE   tool_dependency_io_fail
+      LDA   LIB_RESULT
+      CMP   #1
+      BNE   @short
+      LDA   LIB_RESULT+1
+      BNE   @short
+@ok:
+      LDA   #0
+      RTS
+@short:
+      LDA   #NPTOOL_IO_SHORT
+      BRA   tool_dependency_fail
+
+tool_close_dependencies:
+      LDA   dependency_open
+      BEQ   @ok
+      STZ   dependency_open
+      JSR   tool_clear_args
+      LDA   dependency_id
+      STA   LIB_ARG0
+      LDA   dependency_id+1
+      STA   LIB_ARG0+1
+      LDA   #FILE_FCLOSE
+      JSR   tool_files_call
+      BNE   tool_dependency_io_fail
+@ok:
+      LDA   #0
       RTS
 
-tool_files_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_FILES
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
+tool_delete_dependency:
+      LDA   dependency_created
+      BEQ   @done
+      STZ   dependency_created
+      JSR   tool_clear_args
+      LDA   #<dependency_name
+      STA   LIB_ARG0
+      LDA   #>dependency_name
+      STA   LIB_ARG0+1
+      LDA   dependency_len
+      STA   LIB_ARG1
+      LDA   #FILE_FDELETE
+      JSR   tool_files_call
+@done:
       RTS
+
+tool_finish_success:
+      JSR   tool_close_dependencies
+      BEQ   @ok
+      JSR   tool_delete_dependency
+      LDA   #1
+      RTS
+@ok:
+      LDA   #0
+      RTS
+
+; Cleanup must not replace the real compiler/assembler diagnostic.
+tool_discard_dependencies:
+      LDA   NPTOOL_STATUS
+      PHA
+      LDA   NPTOOL_DETAIL
+      PHA
+      JSR   tool_close_dependencies
+      JSR   tool_delete_dependency
+      PLA
+      STA   NPTOOL_DETAIL
+      PLA
+      STA   NPTOOL_STATUS
+      RTS
+
+tool_dependency_io_fail:
+      LDA   FIO_ERRCODE
+      BNE   tool_dependency_fail
+      LDA   LIB_STATUS
+      BNE   tool_dependency_fail
+      LDA   #NPTOOL_IO_SHORT
+tool_dependency_fail:
+      STA   NPTOOL_DETAIL
+      INC   dependency_failed
+      LDA   #NPTOOL_ERR_IO
+      STA   NPTOOL_STATUS
+      LDA   #1
+      RTS
+
+      .include "nptool_xram.inc"
 
 ; A large source that contains no preprocessor directives is already its own
 ; expanded form. Copy it with bounded RAM pages instead of imposing an XRAM
@@ -803,40 +1010,19 @@ tool_alloc_expanded:
       STA   LIB_ARG2
       LDA   #>EXPANDED_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   expanded_xaddr,X
-      DEX
-      BPL   @copy
-      INC   expanded_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<expanded_xaddr
+      LDX   #>expanded_xaddr
+      JMP   tool_alloc_xram
 
 tool_release_expanded:
-      LDA   expanded_allocated
-      BEQ   @done
-      STZ   expanded_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   expanded_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<EXPANDED_CAP
       STA   LIB_ARG2
       LDA   #>EXPANDED_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<expanded_xaddr
+      LDX   #>expanded_xaddr
+      JMP   tool_release_xram
 
 tool_preprocess:
       STZ   preprocessor_error
@@ -1006,40 +1192,19 @@ tool_alloc_constants:
       STA   LIB_ARG2
       LDA   #>NASCORE_CONSTANT_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   constant_xaddr,X
-      DEX
-      BPL   @copy
-      INC   constant_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<constant_xaddr
+      LDX   #>constant_xaddr
+      JMP   tool_alloc_xram
 
 tool_release_constants:
-      LDA   constant_allocated
-      BEQ   @done
-      STZ   constant_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   constant_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<NASCORE_CONSTANT_CAP
       STA   LIB_ARG2
       LDA   #>NASCORE_CONSTANT_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<constant_xaddr
+      LDX   #>constant_xaddr
+      JMP   tool_release_xram
 
 tool_alloc_symbols:
       JSR   tool_clear_args
@@ -1047,40 +1212,19 @@ tool_alloc_symbols:
       STA   LIB_ARG2
       LDA   #>NASCORE_SYMBOL_WORK_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   symbol_xaddr,X
-      DEX
-      BPL   @copy
-      INC   symbol_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<symbol_xaddr
+      LDX   #>symbol_xaddr
+      JMP   tool_alloc_xram
 
 tool_release_symbols:
-      LDA   symbol_allocated
-      BEQ   @done
-      STZ   symbol_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   symbol_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<NASCORE_SYMBOL_WORK_CAP
       STA   LIB_ARG2
       LDA   #>NASCORE_SYMBOL_WORK_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<symbol_xaddr
+      LDX   #>symbol_xaddr
+      JMP   tool_release_xram
 
 tool_alloc_object:
       JSR   tool_clear_args
@@ -1088,40 +1232,19 @@ tool_alloc_object:
       STA   LIB_ARG2
       LDA   #>NASCORE_OBJECT_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   object_xaddr,X
-      DEX
-      BPL   @copy
-      INC   object_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<object_xaddr
+      LDX   #>object_xaddr
+      JMP   tool_alloc_xram
 
 tool_release_object:
-      LDA   object_allocated
-      BEQ   @done
-      STZ   object_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   object_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<NASCORE_OBJECT_CAP
       STA   LIB_ARG2
       LDA   #>NASCORE_OBJECT_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<object_xaddr
+      LDX   #>object_xaddr
+      JMP   tool_release_xram
 
 tool_alloc_relocations:
       JSR   tool_clear_args
@@ -1129,40 +1252,19 @@ tool_alloc_relocations:
       STA   LIB_ARG2
       LDA   #>NASCORE_RELOC_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   reloc_xaddr,X
-      DEX
-      BPL   @copy
-      INC   reloc_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<reloc_xaddr
+      LDX   #>reloc_xaddr
+      JMP   tool_alloc_xram
 
 tool_release_relocations:
-      LDA   reloc_allocated
-      BEQ   @done
-      STZ   reloc_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   reloc_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<NASCORE_RELOC_CAP
       STA   LIB_ARG2
       LDA   #>NASCORE_RELOC_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<reloc_xaddr
+      LDX   #>reloc_xaddr
+      JMP   tool_release_xram
 
 tool_save_object:
       JSR   tool_clear_args
@@ -1191,17 +1293,16 @@ tool_alloc_source:
       STA   LIB_ARG2+0
       LDA   #>ASM_LOAD_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
+      LDA   #<source_xaddr
+      LDX   #>source_xaddr
+      JSR   tool_alloc_xram
       BNE   @done
       LDX   #2
 @copy:
-      LDA   LIB_RESULT,X
-      STA   source_xaddr,X
+      LDA   source_xaddr,X
       STA   expanded_xaddr,X
       DEX
       BPL   @copy
-      INC   source_allocated
       LDA   #0
 @done:
       RTS
@@ -1228,25 +1329,14 @@ tool_load_source:
       JMP   tool_mem_call
 
 tool_release_source:
-      LDA   source_allocated
-      BEQ   @done
-      STZ   source_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   source_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<ASM_LOAD_CAP
       STA   LIB_ARG2+0
       LDA   #>ASM_LOAD_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<source_xaddr
+      LDX   #>source_xaddr
+      JMP   tool_release_xram
 
 ; NAS include callbacks. Every include is streamed through one bounded cache;
 ; nested readers refill it after returning instead of retaining whole files.
@@ -1306,6 +1396,8 @@ nasm_include_open:
       JSR   tool_probe_include_current
       long_bne @bad
 @found:
+      JSR   tool_record_include_dependency
+      long_bne @bad
       STZ   NPTOOL_STATUS
       STZ   NPTOOL_DETAIL
       LDA   NASCORE_INCLUDE_MODE
@@ -1545,25 +1637,14 @@ tool_release_includes:
       BNE   @fail
       BRA   @close
 @cache:
-      LDA   include_cache_allocated
-      BEQ   @done
-      STZ   include_cache_allocated
       JSR   tool_clear_args
-      LDX   #2
-@address:
-      LDA   include_cache_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<INCLUDE_CACHE_CAP
       STA   LIB_ARG2+0
       LDA   #>INCLUDE_CACHE_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JMP   tool_mem_call
-@done:
-      LDA   #0
-      RTS
+      LDA   #<include_cache_xaddr
+      LDX   #>include_cache_xaddr
+      JMP   tool_release_xram
 @fail:
       LDA   #1
       RTS
@@ -1618,21 +1699,11 @@ tool_alloc_include_cache:
       STA   LIB_ARG2+0
       LDA   #>INCLUDE_CACHE_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   tool_mem_call
-      BNE   @fail
-      LDX   #2
-@address:
-      LDA   LIB_RESULT,X
-      STA   include_cache_xaddr,X
-      DEX
-      BPL   @address
-      INC   include_cache_allocated
+      LDA   #<include_cache_xaddr
+      LDX   #>include_cache_xaddr
+      JMP   tool_alloc_xram
 @done:
       LDA   #0
-      RTS
-@fail:
-      LDA   #1
       RTS
 
 ; include_slot -> include_name_ptr for its fixed 64-byte filename slot.
@@ -1685,6 +1756,7 @@ stream_kw_elseif:     .byte "ELSEIF", 0
 stream_kw_else:       .byte "ELSE", 0
 stream_kw_endif:      .byte "ENDIF", 0
 stream_kw_includetext:.byte "INCLUDETEXT", 0
+dependency_lf:  .byte $0A
 nas_banner:     .byte "Nova Assembler v1.0", $0D, $0A, 0
 nas_assembling: .byte "Assembling ", 0
 nas_preprocessing:.byte "Preprocessing ", 0

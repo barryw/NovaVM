@@ -1048,6 +1048,30 @@ Clear the host-visible FIO status and error latch.
 Outputs:
 - `A`: 0 on success.
 
+## FIO.CLOCK_GET
+
+Read the calendar clock into FIO_CLOCK_* fields.
+
+- Kind: `routine`
+- Symbol: `fio_clock_get`
+
+## FIO.CLOCK_SET
+
+Set the calendar clock from FIO_CLOCK_* fields.
+
+- Kind: `routine`
+- Symbol: `fio_clock_set`
+
+Requires:
+- `FIO_CLOCK_YEARL`
+- `FIO_CLOCK_YEARH`
+- `FIO_CLOCK_MONTH`
+- `FIO_CLOCK_DAY`
+- `FIO_CLOCK_HOUR`
+- `FIO_CLOCK_MIN`
+- `FIO_CLOCK_SEC`
+- `FIO_CLOCK_HSEC`
+
 ## FIO.CMD_LOADRUNTIME
 
 Host command that streams a 16K file into the primary runtime ROM bank. Callers must execute from RAM while issuing it.
@@ -1112,6 +1136,9 @@ Check whether the device named by FIO.NAME/FIO.NAMELEN is mounted.
 
 - Kind: `routine`
 - Symbol: `fio_devstatus`
+
+Outputs:
+- `FIO_FREE0`: FIO_FREE1 FIO_FREE2 FIO_FREE3 FIO_CAPACITY0 FIO_CAPACITY1 FIO_CAPACITY2 FIO_CAPACITY3
 
 Requires:
 - `FIO_NAME`
@@ -1203,6 +1230,36 @@ FOPEN/FCREATE access bit pattern for write-only file handles.
 - Kind: `const`
 - Symbol: `FIO_FILE_ACCESS_WRITE`
 - Address: `$02`
+
+## FIO.FILE_INFO_GET
+
+Read exact-file attributes, packed DOS timestamp, and 32-bit size.
+
+- Kind: `routine`
+- Symbol: `fio_file_info_get`
+
+Outputs:
+- `FIO_FILE_ATTR`: FIO_FILE_TIME0 FIO_FILE_TIME1 FIO_FILE_TIME2 FIO_FILE_TIME3 FIO_FILE_SIZE0 FIO_FILE_SIZE1 FIO_FILE_SIZE2 FIO_FILE_SIZE3
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
+
+## FIO.FILE_INFO_SET
+
+Set exact-file attributes and packed DOS timestamp.
+
+- Kind: `routine`
+- Symbol: `fio_file_info_set`
+
+Requires:
+- `FIO_NAME`
+- `FIO_NAMELEN`
+- `FIO_FILE_ATTR`
+- `FIO_FILE_TIME0`
+- `FIO_FILE_TIME1`
+- `FIO_FILE_TIME2`
+- `FIO_FILE_TIME3`
 
 ## FIO.FILE_TARGET_MASK
 

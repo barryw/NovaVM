@@ -11,10 +11,10 @@ namespace e6502UnitTests;
 ///   $C003  "NL" magic    ($4E $4C)
 ///   $C005  module id     ($02  MODULE_ID_SOUND)
 ///   $C006  ABI version   ($01  LIB_ABI_VERSION)
-///   $C007  fn count      ($1B  the full audio NDK: SID effects + music engine)
+///   $C007  fn count      ($1D  the full audio NDK: SID effects + music engine)
 /// The simple SID commands (TONE/NOISE/VOLUME) moved out of the deleted NovaLogo
 /// extension ROM in Phase B; the module was later expanded to wrap the whole
-/// runtime/asm/audio.s NDK (27 fns). The exact header fn_count vs the dispatch
+/// runtime/asm/audio.s NDK (29 fns). The exact header fn_count vs the dispatch
 /// jtable is cross-checked dynamically in ModuleNdkContractTests.
 /// </summary>
 [TestClass]
@@ -31,7 +31,7 @@ public class SoundModuleTests
         Assert.AreEqual(0x4C, img[4]);   // 'L'
         Assert.AreEqual(0x02, img[5]);   // MODULE_ID_SOUND
         Assert.AreEqual(0x01, img[6]);   // LIB_ABI_VERSION
-        Assert.AreEqual(0x1B, img[7]);   // SND_FN_COUNT (full audio NDK, 27 fns)
+        Assert.AreEqual(0x1D, img[7]);   // SND_FN_COUNT (full audio NDK, 29 fns)
     }
 
     private static string RepoPath(params string[] parts)

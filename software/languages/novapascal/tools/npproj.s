@@ -8,6 +8,9 @@
       .include "longbranch.inc"
       .include "npproj.inc"
 
+      .define project_clear_lib_args nptool_clear_args
+      .define project_call nptool_files_call
+
 PROJECT_BUFFER_CAP = $1000
 
       .segment "ZEROPAGE"
@@ -710,8 +713,16 @@ project_parse:
       LDA   #<word_unit_target
       LDX   #>word_unit_target
       JSR   token_is
-      long_bcc @bad
+      BCC   @target_overlay
       LDA   #NPP_TARGET_UNIT
+      STA   NPP_PLAN_BASE+NPP_PLAN_TARGET
+      BRA   @target_end
+@target_overlay:
+      LDA   #<word_overlay
+      LDX   #>word_overlay
+      JSR   token_is
+      long_bcc @bad
+      LDA   #NPP_TARGET_OVERLAY
       STA   NPP_PLAN_BASE+NPP_PLAN_TARGET
 @target_end:
       JSR   parser_finish_line
@@ -1791,22 +1802,6 @@ project_remove_unit_line:
 ; ---------------------------------------------------------------------
 ; File and directory helpers, exclusively through the FILES NDK module.
 ; ---------------------------------------------------------------------
-project_clear_lib_args:
-      LDX   #15
-@clear:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @clear
-      RTS
-
-project_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_FILES
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
-      RTS
-
 ; A/X name, Y length, project_requested_unit already contains FILE_* fn.
 project_call_named:
       STA   project_ptr

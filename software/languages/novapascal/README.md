@@ -34,6 +34,17 @@ Standalone unit `.ASM` is intentionally published typed IR so another Pascal
 build can retain routine boundaries for whole-program O2.
 Both `COMPILE` and `BUILD` print the optimizer banner and every pass as it runs.
 
+`BUILD` is exact-content incremental. The language-neutral `NBUILD.BIN` keeps
+one atomic `BUILD.NBS` file and hashes inputs through the NDK Files API instead
+of trusting timestamps. NPC records each primary Pascal source, project file,
+and unit or include it actually opens. NAS records its source, project options,
+and resolved includes in the same LF manifest format. Unchanged per-source
+`.ASM`, combined NAS-preprocess/NPO2 `.S`, and final NAS `.OBJ` stages print
+`Up to date` and are skipped; same-size edits invalidate normally. Pascal keeps
+one combined NAS boundary so unit implementations are composed once and O2 can
+still optimize across the whole program. NAS dependency capture and NBUILD have
+no Pascal-specific behavior and are reusable by an assembly project shell.
+
 ## Executable language slice
 
 `FIZZBUZZ/MAIN.PAS` with `FIZZBUZZ/FIZZBUZZ.NPP` and `LIFE/MAIN.PAS` with
@@ -123,13 +134,28 @@ Multiplication, square root, sine, cosine, and arctangent use Nova's math
 coprocessor; the runtime scales its integer and fixed-point results back into
 Pascal `Real` values. General Q16.16 division remains software because the
 hardware divider intentionally returns only a signed 16-bit quotient.
+`Trunc` and `Round` return signed 16-bit values; `Round` follows Turbo
+Pascal's rule of rounding exact halves away from zero. `Str` accepts ordinal
+and `Real` values, an optional field width, and an optional `Real` precision.
+Unary minus promotes byte ordinals to signed 16-bit values so negative
+constants retain their sign through assignment and conversion.
 The MicroCalc compatibility slice exercises enumerations, subranges,
 sets, records, strings, multidimensional arrays, `Real`, nested and recursive
 routines, value and `var` parameters, locals, typed/text files, and formatted
-output. Public project-unit declarations remain intentionally narrower:
-parameterless procedures and parameterless `Byte`/`Boolean` functions. Pointers,
-wider integers, unit initialization/finalization, and Object Pascal are not yet
-language contracts.
+output. Project-unit interfaces may export constants, named types, globals,
+typed value/`var` parameters, and typed function results; implementations must
+match the interface exactly. Unit initialization runs once in dependency order
+before the program body. Finalization and Object Pascal are not yet language
+contracts.
+
+The built-in `System` surface includes Turbo-compatible ordinal/string helpers,
+`Move`, `FillChar`, `Inc`, `Dec`, `Break`, `Continue`, `Exit`, `Halt`, and
+runtime-check switches. Typed pointers and `Pointer` support `nil`, `@`, `^`,
+record-field traversal, comparison, `New`/`Dispose`, and `GetMem`/`FreeMem` over
+the canonical low-RAM heap. Procedural and function types are assignable and
+callable. Fixed arrays and scalars can be passed to `const`, `var`, and value
+open-array parameters; `Low`, `High`, and `SizeOf` use the hidden open-array
+bound while value parameters receive an isolated copy.
 
 ## Pascal standard units
 
@@ -146,7 +172,22 @@ blitter-backed text-region API. Parameterless
 functions accept Turbo syntax without empty parentheses, and `Delay` accepts a
 16-bit millisecond value while delegating frame waits to the System module. The
 unit publishes Turbo's 16 named colors from `Black` through `White` using
-Nova's default palette indexes.
+Nova's default palette indexes. `Sound(Frequency)` and `NoSound` drive a
+continuous SID tone through the shared SOUND module; the NDK converts hertz
+with Nova's math coprocessor.
+
+The remaining Turbo-shaped compatibility units stay thin over Nova services:
+
+- `Dos` provides file search/metadata, paths, disk capacity, and packed
+  date/time operations over the Files and System modules.
+- `Graph` maps the familiar 320-by-200 BGI drawing surface to the canonical VGC
+  NDK, including pixels, lines, rectangles, bars, circles, and flood fill.
+- `Overlay` loads and invokes generic NL-produced `NOVO` overlays through the
+  NDK overlay lifecycle.
+- `Printer` exposes `Lst: Text`; Nova lazily creates `PRINTER.TXT` on the first
+  write and uses the ordinary Pascal Text/FILES pipeline thereafter.
+- `Strings` supplies Turbo `PChar` conversion, copy, concatenate, comparison,
+  case conversion, and heap-backed `StrNew`/`StrDispose` routines.
 
 The first Nova-specific native adapter is `NovaGraphics`:
 
@@ -194,10 +235,10 @@ transfer, and coalesce released blocks without a fixed allocation table.
 `XRamBlock` similarly hides the allocator's 24-bit address while
 `XRamAlloc`, `XRamFree`, `XRamRead`, and `XRamWrite` retain a Pascal-sized
 16-bit allocation/transfer contract and call the canonical NDK Memory module.
-The readable `NOVAMEMORY.PAS` contract declares both descriptor types. Current
-`.NPI` metadata validates routine calls but does not yet import unit type
-declarations, so source clients temporarily repeat those two array aliases;
-compiled-unit type metadata is the clean removal path.
+The readable `NOVAMEMORY.PAS` contract declares both descriptor types. Generated
+platform `.NPI` metadata validates routine calls but does not yet import its
+type declarations; project-owned Pascal interfaces do import their public types
+directly from source.
 
 The development disk keeps those roles physically separate. `/SYSTEM` contains
 generated NDK contracts, declarations, implementations, and `PASCAL.NLIB`;
@@ -284,9 +325,9 @@ its small driver is resident and its frontend is the `NPCFE.OVL` described
 above. The frontend allocates its 4,864-byte symbol and constant/type-name
 arena through the NDK Memory module, maps individual records through XRAM
 Windows 0 and 1, and releases the arena on every exit path. Keeping this
-growth-sensitive state out of overlay BSS leaves more than 5 KiB in NPCFE for
-the Turbo Pascal compatibility work; focused coverage requires at least 4 KiB
-to remain.
+growth-sensitive state out of overlay BSS currently leaves about 3 KiB below
+NPCFE's `$A000` physical ceiling for the remaining Turbo Pascal compatibility
+work.
 
 - `NPEDIT.BIN` — thin file/type adapter for the shared editor (`Alt-X` or
   `Ctrl-Q` returns to the shell). It streams documents into transient XRAM;
@@ -298,6 +339,7 @@ to remain.
   strings, and Pascal comments; other file types remain plain editor clients.
 - `NPO2.BIN` — Pascal-specific typed dataflow, inlining, instruction selection,
   and O2 machine peepholes
+- `NBUILD.BIN` — atomic exact-content build-state checker shared by languages
 - `NAS.BIN` — Nova assembler
 - `NL.BIN` — Nova linker
 
@@ -535,11 +577,11 @@ end;
 end.
 ```
 
-Public declarations and definitions must match in order and signature. The
-current project-unit ABI supports parameterless procedures and parameterless
-`Byte`/`Boolean` functions. Unit parameters, local storage, and
-initialization/finalization blocks are intentionally deferred until NPC can
-implement their Pascal semantics cleanly.
+Public declarations and definitions must match in order and exact signature.
+Interfaces may export constants, named types, globals, typed procedures, and
+typed functions, including `var` and 16-bit parameters/results. Initialization
+blocks run once before the program body in dependency order. Unit finalization
+is not yet supported.
 
 The NPP manifest owns build membership; source files do not include one another.
 `uses` owns Pascal visibility and calls. Every listed unit is compiled, and O2
@@ -598,7 +640,12 @@ preprocessor path as direct `ASSEMBLE file.s -Dname=value`.
 publishes sibling typed `.ASM` and optimized `.S` files from the same stem,
 exports every public interface routine in the standalone object, and ends the
 build after NAS. A program consumes the typed stream so O2 can discard public
-routines it never calls. Repeated `UNITPATH` directives
+routines it never calls. `TARGET OVERLAY` runs the same language-neutral NAS/NL
+pipeline but emits a versioned `NOVO` image instead of an executable; its
+configured `MEMORY` start is the overlay load address and its live exported
+`OvrInit`, `OvrRun`, and `OvrTick` routines populate the entry table. The
+Pascal `Overlay` unit can load and call that artifact without a private loader.
+Repeated `UNITPATH` directives
 (currently up to two) are shared NAS settings; generated projects use `SYSTEM`
 followed by `USER`.
 

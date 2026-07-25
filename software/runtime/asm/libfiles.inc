@@ -56,7 +56,7 @@ FILE_LOAD      = $01   ; (nameptr:ARG0, namelen:ARG1, dest:ARG2 u16)            
 ; Directory listing + delete (fio.s)
 ; =====================================================================
 FILE_DIR_OPEN  = $02   ; (nameptr:ARG0, namelen:ARG1 optional filter)            -> open directory listing
-FILE_DIR_READ  = $03   ; ()                                                      -> read next dir entry into FIO dir regs
+FILE_DIR_READ  = $03   ; ()                                                      -> name/type/size + attr/time in FIO regs
 FILE_DELETE    = $04   ; (nameptr:ARG0, namelen:ARG1)                            -> delete file/program
 
 ; =====================================================================
@@ -109,8 +109,15 @@ FILE_FSTATUS   = $19   ; (nameptr:ARG0, namelen:ARG1)                           
 FILE_FDELETE   = $1A   ; (nameptr:ARG0, namelen:ARG1)                           -> exact delete
 FILE_FRENAME   = $1B   ; (oldptr:ARG0, oldlen:ARG1, newptr:ARG2, newlen:ARG3)   -> exact rename
 FILE_DIR_LIST  = $1C   ; (nameptr:ARG0, namelen:ARG1 optional filter)            -> open+iterate+print whole listing (bank-0 handler stays thin)
+FILE_DISK_FREE = $1D   ; (nameptr:ARG0, namelen:ARG1 device prefix)              -> RESULT=free bytes u32
+FILE_DISK_SIZE = $1E   ; (nameptr:ARG0, namelen:ARG1 device prefix)              -> RESULT=capacity bytes u32
+FILE_INFO_GET  = $1F   ; (nameptr:ARG0, namelen:ARG1)                            -> RESULT=attributes; FIO_FILE_* outputs
+FILE_INFO_SET  = $20   ; (nameptr:ARG0, namelen:ARG1, attr:ARG2 b0, time:ARG3)   -> set attributes/timestamp
+FILE_CLOCK_GET = $21   ; ()                                                       -> FIO_CLOCK_* outputs including DOW
+FILE_CLOCK_SET = $22   ; (year/month/day:ARG0, hour/min/sec/hsec:ARG1)            -> set clock
+FILE_HASH      = $23   ; (nameptr:ARG0, namelen:ARG1)                             -> RESULT=CRC-32 of exact file bytes
 
 ; Highest implemented fn-id + 1. Gaps / ids >= FILE_FN_COUNT -> LERR_NO_FN.
-FILE_FN_COUNT  = $1D
+FILE_FN_COUNT  = $24
 
 .endif

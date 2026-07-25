@@ -67,20 +67,30 @@ public class RuntimeLibraryAbiTests
                 int codeOffset = 20 + 8 + objectFile[22];
                 int relocationCount = objectFile[14] | objectFile[15] << 8;
                 int relocationOffset = objectFile[16] | objectFile[17] << 8;
-                Assert.AreEqual(5, relocationCount,
-                    "Each absolute jump within the relocatable READ/READLN member needs an NOBJ relocation.");
+                Assert.AreEqual(6, relocationCount,
+                    "Each absolute control transfer within the relocatable file-runtime member needs an NOBJ relocation.");
                 for (int relocation = 0; relocation < relocationCount; relocation++)
                 {
                     int record = relocationOffset + relocation * 8;
                     int patch = objectFile[record + 2] | objectFile[record + 3] << 8;
                     int target = objectFile[record + 4] | objectFile[record + 5] << 8;
                     Assert.AreEqual(1, objectFile[record + 1], "Internal control transfers use ABS16 relocations.");
-                    Assert.AreEqual(0x4C, objectFile[codeOffset + patch - 1],
-                        "The relocation must patch the operand of a JMP opcode.");
+                    Assert.AreEqual(relocation < 5 ? 0x4C : 0x20, objectFile[codeOffset + patch - 1],
+                        "The relocation must patch the expected JMP or lazy-Printer JSR operand.");
                     Assert.AreEqual(0, objectFile[symbolOffsets[target] + 2],
                         "Internal jump targets must remain in the member's CODE section.");
-                    Assert.AreEqual(0, objectFile[symbolOffsets[target] + 3],
-                        "Internal jump targets must not leak into the archive's global export index.");
+                    if (relocation < 5)
+                    {
+                        Assert.AreEqual(0, objectFile[symbolOffsets[target] + 3],
+                            "Internal jump targets must not leak into the archive's global export index.");
+                    }
+                    else
+                    {
+                        int targetNameLength = objectFile[symbolOffsets[target] + 4];
+                        Assert.AreEqual("REWRITE",
+                            Encoding.ASCII.GetString(objectFile.Slice(symbolOffsets[target] + 5, targetNameLength)),
+                            "Printer's lazy open must relocate its call to the existing REWRITE entry.");
+                    }
                 }
                 return;
             }

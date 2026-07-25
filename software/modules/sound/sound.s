@@ -202,6 +202,17 @@
 ;@arg voice u8 voice number 1..14 -> X (ARG0)
 ;@ret u8 current MIDI note, 0 if out of range or silent (RESULT byte0)
 ;@status LERR_OK
+;
+;@fn SND_TONE_HZ
+;@ndk audio_tone_hz
+;@arg frequency u16 frequency in hertz (ARG0)
+;@ret void
+;@status LERR_OK
+;
+;@fn SND_TONE_STOP
+;@ndk audio_tone_stop
+;@ret void
+;@status LERR_OK
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router (RTS-trick). SND_FN_COUNT is small so fn*2 < 256.
@@ -250,6 +261,8 @@ snd_jtable:
       .word   snd_sfx_playing-1        ; $18 SND_SFX_PLAYING
       .word   snd_music_playing-1      ; $19 SND_MUSIC_PLAYING
       .word   snd_music_note-1         ; $1A SND_MUSIC_NOTE
+      .word   snd_tone_hz-1            ; $1B SND_TONE_HZ
+      .word   snd_tone_stop-1          ; $1C SND_TONE_STOP
 
 ; ===========================================================================
 ; Shared epilogues. snd_finish_status maps the NDK A result (0=OK / nonzero=err)
@@ -518,6 +531,20 @@ snd_music_note:
       LDX   LIB_ARG0+0                 ; voice number 1..14
       JSR   audio_music_note
       JMP   snd_finish_result
+
+; --- $1B SND_TONE_HZ: ARG0 = frequency in hertz -> continuous SID tone ---
+snd_tone_hz:
+      LDA   LIB_ARG0+0
+      STA   NVR0L
+      LDA   LIB_ARG0+1
+      STA   NVR0H
+      JSR   audio_tone_hz
+      JMP   snd_ok
+
+; --- $1C SND_TONE_STOP: stop continuous SID tone ---
+snd_tone_stop:
+      JSR   audio_tone_stop
+      JMP   snd_ok
 
 ; ===========================================================================
 ; NDK driver bodies, included AFTER the wrappers so .referenced(audio_*) is true

@@ -679,11 +679,24 @@ w_extract_archive_definition:
       LDA   NLW_OBJECT_COUNT
       CMP   #NLINK_OBJECT_CAP
       long_bcs @bad
-      STZ   w_obj_xram
+      LDA   NLW_LIBRARY_XRAM
+      STA   w_obj_xram
+      BEQ   @ram
+      STZ   w_obj
+      STZ   w_obj+1
+      LDA   NLW_LIBRARY_XADDR_L
+      STA   w_obj_xaddr_l
+      LDA   NLW_LIBRARY_XADDR_M
+      STA   w_obj_xaddr_m
+      LDA   NLW_LIBRARY_XADDR_H
+      STA   w_obj_xaddr_h
+      BRA   @header
+@ram:
       LDA   NLW_LIBRARY_PTR
       STA   w_obj
       LDA   NLW_LIBRARY_PTR+1
       STA   w_obj+1
+@header:
       LDY   #NLIB_MEMBER_COUNT
       w_object_lda w_obj
       STA   w_archive_members
@@ -698,10 +711,10 @@ w_extract_archive_definition:
       LDA   w_archive_members
       long_beq @bad
       LDY   #0
-      LDA   (w_dst),Y
+      w_object_lda w_dst
       STA   w_address
       INY
-      LDA   (w_dst),Y
+      w_object_lda w_dst
       STA   w_address+1
       CLC
       LDA   w_dst
@@ -752,25 +765,42 @@ w_extract_archive_definition:
 @name:
       CPY   w_name_len
       long_bcs @select
-      LDA   (w_tmp),Y
+      w_object_lda w_tmp
       CMP   (w_name),Y
       long_bne @next_symbol
       INY
       BRA   @name
 @select:
       LDX   NLW_OBJECT_COUNT
-      LDA   w_obj
-      STA   NLW_OBJECT_PTR_L,X
-      LDA   w_obj+1
-      STA   NLW_OBJECT_PTR_H,X
       LDA   w_address
       STA   NLW_OBJECT_LEN_L,X
       LDA   w_address+1
       STA   NLW_OBJECT_LEN_H,X
-      STZ   NLW_OBJECT_XRAM,X
+      LDA   w_obj_xram
+      STA   NLW_OBJECT_XRAM,X
+      BNE   @select_xram
+      LDA   w_obj
+      STA   NLW_OBJECT_PTR_L,X
+      LDA   w_obj+1
+      STA   NLW_OBJECT_PTR_H,X
       STZ   NLW_OBJECT_XADDR_L,X
       STZ   NLW_OBJECT_XADDR_M,X
       STZ   NLW_OBJECT_XADDR_H,X
+      BRA   @selected
+@select_xram:
+      STZ   NLW_OBJECT_PTR_L,X
+      STZ   NLW_OBJECT_PTR_H,X
+      CLC
+      LDA   w_obj_xaddr_l
+      ADC   w_obj
+      STA   NLW_OBJECT_XADDR_L,X
+      LDA   w_obj_xaddr_m
+      ADC   w_obj+1
+      STA   NLW_OBJECT_XADDR_M,X
+      LDA   w_obj_xaddr_h
+      ADC   #0
+      STA   NLW_OBJECT_XADDR_H,X
+@selected:
       INC   NLW_OBJECT_COUNT
       CLC
       RTS
@@ -1183,12 +1213,18 @@ w_read_object_y:
       STX   w_read_x
       STY   w_read_y
       CLC
-      LDA   w_obj_xaddr_l
+      TYA
       ADC   w_read_offset
-      ADC   w_read_y
+      STA   w_read_index
+      LDA   w_read_offset+1
+      ADC   #0
+      STA   w_read_m
+      CLC
+      LDA   w_obj_xaddr_l
+      ADC   w_read_index
       STA   w_read_index
       LDA   w_obj_xaddr_m
-      ADC   w_read_offset+1
+      ADC   w_read_m
       STA   w_read_m
       LDA   w_obj_xaddr_h
       ADC   #0

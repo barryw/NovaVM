@@ -40,7 +40,15 @@ LANGRT_REAL_LN              = $19
 LANGRT_REAL_EXP             = $1A
 LANGRT_REAL_TRUNC           = $1B
 LANGRT_REAL_VAL             = $1C
-LANGRT_FN_COUNT             = $1D
+LANGRT_REAL_ROUND           = $1D
+LANGRT_LONG_FROM_BYTE       = $1E
+LANGRT_LONG_FROM_UWORD      = $1F
+LANGRT_LONG_FROM_INTEGER    = $20
+LANGRT_LONG_NEGATE          = $21
+LANGRT_LONG_ADD             = $22
+LANGRT_LONG_SUB             = $23
+LANGRT_LONG_CMP             = $24
+LANGRT_FN_COUNT             = $25
 
 ; LIB_SCRATCH byte zero belongs to the resident loader. The Pascal adapter uses
 ; two otherwise-free bytes while translating its native ABI; LANGRT itself

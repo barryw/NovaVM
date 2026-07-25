@@ -214,6 +214,57 @@
 ;@arg width u8 ARG3 byte0 is 2 for Integer or 4 for Real
 ;@ret void
 ;@status LERR_OK
+;
+;@fn LANGRT_REAL_ROUND
+;@brief Round signed Q16.16 to the nearest integer, with halves away from zero.
+;@arg value ptr16 ARG0 byte0..1 points to Q16.16
+;@ret i16 LIB_RESULT byte0..1
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_FROM_BYTE
+;@brief Zero-extend an unsigned byte to signed 32-bit storage.
+;@arg value u8 ARG0 byte0
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_FROM_UWORD
+;@brief Zero-extend an unsigned word to signed 32-bit storage.
+;@arg value u16 ARG0 byte0..1
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_FROM_INTEGER
+;@brief Sign-extend a signed word to signed 32-bit storage.
+;@arg value i16 ARG0 byte0..1
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_NEGATE
+;@brief Negate a signed 32-bit integer.
+;@arg value ptr16 ARG0 byte0..1 points to i32
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_ADD
+;@brief Add two signed 32-bit integers.
+;@arg left i32 ARG1 byte0..3
+;@arg right ptr16 ARG0 byte0..1 points to i32
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_SUB
+;@brief Subtract the right signed 32-bit integer from the left.
+;@arg left i32 ARG1 byte0..3
+;@arg right ptr16 ARG0 byte0..1 points to i32
+;@ret i32 LIB_RESULT byte0..3
+;@status LERR_OK
+;
+;@fn LANGRT_LONG_CMP
+;@brief Compare two signed 32-bit integers.
+;@arg left i32 ARG1 byte0..3
+;@arg right ptr16 ARG0 byte0..1 points to i32
+;@ret flags N/V/Z/C comparison flags in LIB_RESULT byte2
+;@status LERR_OK
 
 dispatch:
       LDA   LIB_FN_ID
@@ -274,9 +325,49 @@ langrt_jtable:
       .word real_exp-1
       .word real_trunc-1
       .word real_val-1
+      .word real_round-1
+      .word long_from_byte-1
+      .word long_from_uword-1
+      .word long_from_integer-1
+      .word real_negate-1
+      .word real_add-1
+      .word real_subtract-1
+      .word real_compare-1
 
 PASCAL_REAL_MODULE = 1
       .include "pascal_real_runtime.inc"
+
+long_from_byte:
+      STA   LIB_RESULT
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #<LIB_RESULT
+      LDX   #>LIB_RESULT
+      RTS
+
+long_from_uword:
+      STA   LIB_RESULT
+      STX   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      LDA   #<LIB_RESULT
+      LDX   #>LIB_RESULT
+      RTS
+
+long_from_integer:
+      STA   LIB_RESULT
+      STX   LIB_RESULT+1
+      TXA
+      ASL
+      LDA   #0
+      SBC   #0
+      EOR   #$FF
+      STA   LIB_RESULT+2
+      STA   LIB_RESULT+3
+      LDA   #<LIB_RESULT
+      LDX   #>LIB_RESULT
+      RTS
 
       .segment "VECTORS"
       .word   $C000, $C000, $C000

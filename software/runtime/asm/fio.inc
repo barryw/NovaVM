@@ -98,6 +98,11 @@ FIO_ARG_NAMEPTR_H = NVR5L
 .global fio_rmdir
 .global fio_pwd
 .global fio_devstatus
+.global fio_file_info_get
+.global fio_file_info_set
+.global fio_clock_get
+.global fio_clock_set
+.global fio_file_hash
 .global fio_load_runtime
 .global fio_rng
 .global fio_fopen

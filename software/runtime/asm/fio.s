@@ -37,7 +37,7 @@ FIO_EMIT_ALL = 0
 .endif
 
 .if FIO_EMIT_ALL = 0
-.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_devstatus) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_fopen) .OR .referenced(fio_fcreate) .OR .referenced(fio_fclose) .OR .referenced(fio_fread) .OR .referenced(fio_fwrite) .OR .referenced(fio_fseek) .OR .referenced(fio_ftell) .OR .referenced(fio_fsize) .OR .referenced(fio_fresize) .OR .referenced(fio_fflush) .OR .referenced(fio_fstatus) .OR .referenced(fio_fdelete_exact) .OR .referenced(fio_frename) .OR .referenced(fio_run)
+.if .referenced(fio_save) .OR .referenced(fio_load) .OR .referenced(fio_dir_open) .OR .referenced(fio_dir_read) .OR .referenced(fio_delete) .OR .referenced(fio_gsave) .OR .referenced(fio_gload) .OR .referenced(fio_cd) .OR .referenced(fio_mkdir) .OR .referenced(fio_rmdir) .OR .referenced(fio_pwd) .OR .referenced(fio_devstatus) .OR .referenced(fio_file_info_get) .OR .referenced(fio_file_info_set) .OR .referenced(fio_clock_get) .OR .referenced(fio_clock_set) .OR .referenced(fio_load_runtime) .OR .referenced(fio_rng) .OR .referenced(fio_fopen) .OR .referenced(fio_fcreate) .OR .referenced(fio_fclose) .OR .referenced(fio_fread) .OR .referenced(fio_fwrite) .OR .referenced(fio_fseek) .OR .referenced(fio_ftell) .OR .referenced(fio_fsize) .OR .referenced(fio_fresize) .OR .referenced(fio_fflush) .OR .referenced(fio_fstatus) .OR .referenced(fio_fdelete_exact) .OR .referenced(fio_frename) .OR .referenced(fio_run)
       .refto fio_exec
 .endif
 .if .referenced(fio_exec)
@@ -103,6 +103,18 @@ FIO_EMIT_ALL = 0
 .endif
 .if FIO_EMIT_ALL .OR .referenced(fio_devstatus)
       .export fio_devstatus
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_file_info_get)
+      .export fio_file_info_get
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_file_info_set)
+      .export fio_file_info_set
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_clock_get)
+      .export fio_clock_get
+.endif
+.if FIO_EMIT_ALL .OR .referenced(fio_clock_set)
+      .export fio_clock_set
 .endif
 .if FIO_EMIT_ALL .OR .referenced(fio_load_runtime)
       .export fio_load_runtime
@@ -375,9 +387,67 @@ fio_pwd:
 ; @symbol fio_devstatus
 ; @summary Check whether the device named by FIO.NAME/FIO.NAMELEN is mounted.
 ; @requires FIO_NAME FIO_NAMELEN
+; @out FIO_FREE0 FIO_FREE1 FIO_FREE2 FIO_FREE3 FIO_CAPACITY0 FIO_CAPACITY1 FIO_CAPACITY2 FIO_CAPACITY3
 .if FIO_EMIT_ALL .OR .referenced(fio_devstatus)
 fio_devstatus:
       LDA   #FIO_CMD_DEVSTATUS
+      JMP   fio_exec
+.endif
+
+; @label FIO.FILE_INFO_GET
+; @kind routine
+; @symbol fio_file_info_get
+; @summary Read exact-file attributes, packed DOS timestamp, and 32-bit size.
+; @requires FIO_NAME FIO_NAMELEN
+; @out FIO_FILE_ATTR FIO_FILE_TIME0 FIO_FILE_TIME1 FIO_FILE_TIME2 FIO_FILE_TIME3 FIO_FILE_SIZE0 FIO_FILE_SIZE1 FIO_FILE_SIZE2 FIO_FILE_SIZE3
+.if FIO_EMIT_ALL .OR .referenced(fio_file_info_get)
+fio_file_info_get:
+      LDA   #FIO_CMD_FILEINFO_GET
+      JMP   fio_exec
+.endif
+
+; @label FIO.FILE_INFO_SET
+; @kind routine
+; @symbol fio_file_info_set
+; @summary Set exact-file attributes and packed DOS timestamp.
+; @requires FIO_NAME FIO_NAMELEN FIO_FILE_ATTR FIO_FILE_TIME0 FIO_FILE_TIME1 FIO_FILE_TIME2 FIO_FILE_TIME3
+.if FIO_EMIT_ALL .OR .referenced(fio_file_info_set)
+fio_file_info_set:
+      LDA   #FIO_CMD_FILEINFO_SET
+      JMP   fio_exec
+.endif
+
+; @label FIO.CLOCK_GET
+; @kind routine
+; @symbol fio_clock_get
+; @summary Read the calendar clock into FIO_CLOCK_* fields.
+.if FIO_EMIT_ALL .OR .referenced(fio_clock_get)
+fio_clock_get:
+      LDA   #FIO_CMD_CLOCK_GET
+      JMP   fio_exec
+.endif
+
+; @label FIO.CLOCK_SET
+; @kind routine
+; @symbol fio_clock_set
+; @summary Set the calendar clock from FIO_CLOCK_* fields.
+; @requires FIO_CLOCK_YEARL FIO_CLOCK_YEARH FIO_CLOCK_MONTH FIO_CLOCK_DAY FIO_CLOCK_HOUR FIO_CLOCK_MIN FIO_CLOCK_SEC FIO_CLOCK_HSEC
+.if FIO_EMIT_ALL .OR .referenced(fio_clock_set)
+fio_clock_set:
+      LDA   #FIO_CMD_CLOCK_SET
+      JMP   fio_exec
+.endif
+
+; @label FIO.FILE_HASH
+; @kind routine
+; @symbol fio_file_hash
+; @summary Compute the standard CRC-32 of FIO.NAME and return it in FIO.HASH0..3.
+; @requires FIO_NAME FIO_NAMELEN
+; @out A: 0 on success, 1 on error.
+; @out FIO_HASH0 FIO_HASH1 FIO_HASH2 FIO_HASH3
+.if FIO_EMIT_ALL .OR .referenced(fio_file_hash)
+fio_file_hash:
+      LDA   #FIO_CMD_FILEHASH
       JMP   fio_exec
 .endif
 

@@ -1474,7 +1474,7 @@
     {
       "label": "FIO.CD",
       "source": "../../runtime/asm/fio.s",
-      "line": 330,
+      "line": 342,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1488,7 +1488,7 @@
     {
       "label": "FIO.CHECK",
       "source": "../../runtime/asm/fio.s",
-      "line": 174,
+      "line": 186,
       "inputs": [],
       "outputs": [
         {
@@ -1517,6 +1517,37 @@
       "symbol": "fio_clear_error",
       "summary": "Clear the host-visible FIO status and error latch.",
       "address": "$FFC5"
+    },
+    {
+      "label": "FIO.CLOCK_GET",
+      "source": "../../runtime/asm/fio.s",
+      "line": 420,
+      "inputs": [],
+      "outputs": [],
+      "requires": [],
+      "kind": "routine",
+      "symbol": "fio_clock_get",
+      "summary": "Read the calendar clock into FIO_CLOCK_* fields."
+    },
+    {
+      "label": "FIO.CLOCK_SET",
+      "source": "../../runtime/asm/fio.s",
+      "line": 430,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_CLOCK_YEARL",
+        "FIO_CLOCK_YEARH",
+        "FIO_CLOCK_MONTH",
+        "FIO_CLOCK_DAY",
+        "FIO_CLOCK_HOUR",
+        "FIO_CLOCK_MIN",
+        "FIO_CLOCK_SEC",
+        "FIO_CLOCK_HSEC"
+      ],
+      "kind": "routine",
+      "symbol": "fio_clock_set",
+      "summary": "Set the calendar clock from FIO_CLOCK_* fields."
     },
     {
       "label": "FIO.CMD_LOADRUNTIME",
@@ -1569,7 +1600,7 @@
     {
       "label": "FIO.COPY_NAME",
       "source": "../../runtime/asm/fio.s",
-      "line": 228,
+      "line": 240,
       "inputs": [],
       "outputs": [
         {
@@ -1589,7 +1620,7 @@
     {
       "label": "FIO.DELETE",
       "source": "../../runtime/asm/fio.s",
-      "line": 297,
+      "line": 309,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1603,9 +1634,14 @@
     {
       "label": "FIO.DEVSTATUS",
       "source": "../../runtime/asm/fio.s",
-      "line": 373,
+      "line": 385,
       "inputs": [],
-      "outputs": [],
+      "outputs": [
+        {
+          "name": "FIO_FREE0",
+          "description": "FIO_FREE1 FIO_FREE2 FIO_FREE3 FIO_CAPACITY0 FIO_CAPACITY1 FIO_CAPACITY2 FIO_CAPACITY3"
+        }
+      ],
       "requires": [
         "FIO_NAME",
         "FIO_NAMELEN"
@@ -1629,7 +1665,7 @@
     {
       "label": "FIO.DIR_OPEN",
       "source": "../../runtime/asm/fio.s",
-      "line": 277,
+      "line": 289,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1640,7 +1676,7 @@
     {
       "label": "FIO.DIR_READ",
       "source": "../../runtime/asm/fio.s",
-      "line": 287,
+      "line": 299,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1651,7 +1687,7 @@
     {
       "label": "FIO.EXEC",
       "source": "../../runtime/asm/fio.s",
-      "line": 192,
+      "line": 204,
       "inputs": [
         {
           "name": "A",
@@ -1672,7 +1708,7 @@
     {
       "label": "FIO.FCLOSE",
       "source": "../../runtime/asm/fio.s",
-      "line": 431,
+      "line": 488,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1683,7 +1719,7 @@
     {
       "label": "FIO.FCREATE",
       "source": "../../runtime/asm/fio.s",
-      "line": 421,
+      "line": 478,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1694,7 +1730,7 @@
     {
       "label": "FIO.FDELETE_EXACT",
       "source": "../../runtime/asm/fio.s",
-      "line": 521,
+      "line": 578,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1705,7 +1741,7 @@
     {
       "label": "FIO.FFLUSH",
       "source": "../../runtime/asm/fio.s",
-      "line": 501,
+      "line": 558,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1750,6 +1786,44 @@
       "address": "$02"
     },
     {
+      "label": "FIO.FILE_INFO_GET",
+      "source": "../../runtime/asm/fio.s",
+      "line": 397,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FIO_FILE_ATTR",
+          "description": "FIO_FILE_TIME0 FIO_FILE_TIME1 FIO_FILE_TIME2 FIO_FILE_TIME3 FIO_FILE_SIZE0 FIO_FILE_SIZE1 FIO_FILE_SIZE2 FIO_FILE_SIZE3"
+        }
+      ],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN"
+      ],
+      "kind": "routine",
+      "symbol": "fio_file_info_get",
+      "summary": "Read exact-file attributes, packed DOS timestamp, and 32-bit size."
+    },
+    {
+      "label": "FIO.FILE_INFO_SET",
+      "source": "../../runtime/asm/fio.s",
+      "line": 409,
+      "inputs": [],
+      "outputs": [],
+      "requires": [
+        "FIO_NAME",
+        "FIO_NAMELEN",
+        "FIO_FILE_ATTR",
+        "FIO_FILE_TIME0",
+        "FIO_FILE_TIME1",
+        "FIO_FILE_TIME2",
+        "FIO_FILE_TIME3"
+      ],
+      "kind": "routine",
+      "symbol": "fio_file_info_set",
+      "summary": "Set exact-file attributes and packed DOS timestamp."
+    },
+    {
       "label": "FIO.FILE_TARGET_MASK",
       "source": "../../runtime/asm/nova.inc",
       "line": 966,
@@ -1788,7 +1862,7 @@
     {
       "label": "FIO.FOPEN",
       "source": "../../runtime/asm/fio.s",
-      "line": 411,
+      "line": 468,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1799,7 +1873,7 @@
     {
       "label": "FIO.FREAD",
       "source": "../../runtime/asm/fio.s",
-      "line": 441,
+      "line": 498,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1810,7 +1884,7 @@
     {
       "label": "FIO.FRENAME",
       "source": "../../runtime/asm/fio.s",
-      "line": 531,
+      "line": 588,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1821,7 +1895,7 @@
     {
       "label": "FIO.FRESIZE",
       "source": "../../runtime/asm/fio.s",
-      "line": 491,
+      "line": 548,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1832,7 +1906,7 @@
     {
       "label": "FIO.FSEEK",
       "source": "../../runtime/asm/fio.s",
-      "line": 461,
+      "line": 518,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1843,7 +1917,7 @@
     {
       "label": "FIO.FSIZE",
       "source": "../../runtime/asm/fio.s",
-      "line": 481,
+      "line": 538,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1854,7 +1928,7 @@
     {
       "label": "FIO.FSTATUS",
       "source": "../../runtime/asm/fio.s",
-      "line": 511,
+      "line": 568,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1865,7 +1939,7 @@
     {
       "label": "FIO.FTELL",
       "source": "../../runtime/asm/fio.s",
-      "line": 471,
+      "line": 528,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1876,7 +1950,7 @@
     {
       "label": "FIO.FWRITE",
       "source": "../../runtime/asm/fio.s",
-      "line": 451,
+      "line": 508,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -1887,7 +1961,7 @@
     {
       "label": "FIO.GLOAD",
       "source": "../../runtime/asm/fio.s",
-      "line": 319,
+      "line": 331,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1906,7 +1980,7 @@
     {
       "label": "FIO.GSAVE",
       "source": "../../runtime/asm/fio.s",
-      "line": 308,
+      "line": 320,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1925,7 +1999,7 @@
     {
       "label": "FIO.ISSUE",
       "source": "../../runtime/asm/fio.s",
-      "line": 162,
+      "line": 174,
       "inputs": [
         {
           "name": "A",
@@ -1941,7 +2015,7 @@
     {
       "label": "FIO.LOAD",
       "source": "../../runtime/asm/fio.s",
-      "line": 266,
+      "line": 278,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1957,7 +2031,7 @@
     {
       "label": "FIO.LOAD_RUNTIME",
       "source": "../../runtime/asm/fio.s",
-      "line": 387,
+      "line": 444,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -1971,7 +2045,7 @@
     {
       "label": "FIO.MKDIR",
       "source": "../../runtime/asm/fio.s",
-      "line": 341,
+      "line": 353,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2009,7 +2083,7 @@
     {
       "label": "FIO.PREPARE_XRAM_TRANSFER",
       "source": "../../runtime/asm/fio.s",
-      "line": 553,
+      "line": 610,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2029,7 +2103,7 @@
     {
       "label": "FIO.PWD",
       "source": "../../runtime/asm/fio.s",
-      "line": 363,
+      "line": 375,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2040,7 +2114,7 @@
     {
       "label": "FIO.RMDIR",
       "source": "../../runtime/asm/fio.s",
-      "line": 352,
+      "line": 364,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2054,7 +2128,7 @@
     {
       "label": "FIO.RNG",
       "source": "../../runtime/asm/fio.s",
-      "line": 399,
+      "line": 456,
       "inputs": [],
       "outputs": [
         {
@@ -2074,7 +2148,7 @@
     {
       "label": "FIO.RNG0",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1400,
+      "line": 1442,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2086,7 +2160,7 @@
     {
       "label": "FIO.RNG1",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1407,
+      "line": 1449,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2098,7 +2172,7 @@
     {
       "label": "FIO.RNG2",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1414,
+      "line": 1456,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2110,7 +2184,7 @@
     {
       "label": "FIO.RNG3",
       "source": "../../runtime/asm/nova.inc",
-      "line": 1421,
+      "line": 1463,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2122,7 +2196,7 @@
     {
       "label": "FIO.RUN",
       "source": "../../runtime/asm/fio.s",
-      "line": 543,
+      "line": 600,
       "inputs": [],
       "outputs": [],
       "requires": [],
@@ -2133,7 +2207,7 @@
     {
       "label": "FIO.SAVE",
       "source": "../../runtime/asm/fio.s",
-      "line": 255,
+      "line": 267,
       "inputs": [],
       "outputs": [],
       "requires": [
@@ -2151,7 +2225,7 @@
     {
       "label": "FIO.SET_IO_ERROR",
       "source": "../../runtime/asm/fio.s",
-      "line": 212,
+      "line": 224,
       "inputs": [],
       "outputs": [
         {

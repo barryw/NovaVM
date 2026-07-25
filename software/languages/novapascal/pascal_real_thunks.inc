@@ -10,7 +10,7 @@ call_site: .word 0                       ; JMP P_RTCALL
 
 .macro REAL_THUNK_RELOC call_site
       .byte 0, NOBJ_RELOC_ABS16
-      .word call_site-real_thunk_code, 29, 0
+      .word call_site-real_thunk_code, 30, 0
 .endmacro
 
       .word real_thunk_object_end-real_thunk_object
@@ -18,9 +18,9 @@ real_thunk_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 30
+      .word 31
       .word real_thunk_symbols-real_thunk_object
-      .word 29
+      .word 30
       .word real_thunk_relocations-real_thunk_object
       .word 0
 
@@ -58,6 +58,7 @@ real_thunk_code:
       REAL_THUNK real_exp_thunk, real_exp_call, LANGRT_REAL_EXP
       REAL_THUNK real_trunc_thunk, real_trunc_call, LANGRT_REAL_TRUNC
       REAL_THUNK real_val_thunk, real_val_call, LANGRT_REAL_VAL
+      REAL_THUNK real_round_thunk, real_round_call, LANGRT_REAL_ROUND
 real_thunk_code_end:
 
 real_thunk_symbols:
@@ -119,6 +120,8 @@ real_thunk_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 5, "TRUNC"
       .word real_val_thunk-real_thunk_code
       .byte 0, NOBJ_SYM_GLOBAL, 3, "VAL"
+      .word real_round_thunk-real_thunk_code
+      .byte 0, NOBJ_SYM_GLOBAL, 5, "ROUND"
       .word 0
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 8, "P_RTCALL"
 
@@ -152,4 +155,5 @@ real_thunk_relocations:
       REAL_THUNK_RELOC real_exp_call
       REAL_THUNK_RELOC real_trunc_call
       REAL_THUNK_RELOC real_val_call
+      REAL_THUNK_RELOC real_round_call
 real_thunk_object_end:

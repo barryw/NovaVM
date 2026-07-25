@@ -81,7 +81,13 @@ SND_SFX_PLAYING   = $18  ; ()              -> RESULT = nonzero if a sound effect
 SND_MUSIC_PLAYING = $19  ; ()              -> RESULT = 1 if music is playing, else 0
 SND_MUSIC_NOTE    = $1A  ; (voice:ARG0 1..14) -> RESULT = current MIDI note, 0 if silent/range
 
+; =====================================================================
+; Continuous Turbo-style tone
+; =====================================================================
+SND_TONE_HZ       = $1B  ; (frequency:ARG0 u16 hertz) -> start continuous SID voice-0 tone
+SND_TONE_STOP     = $1C  ; ()                         -> stop continuous SID voice-0 tone
+
 ; Highest implemented fn-id + 1. Gaps / ids >= SND_FN_COUNT -> LERR_NO_FN.
-SND_FN_COUNT = $1B
+SND_FN_COUNT = $1D
 
 .endif

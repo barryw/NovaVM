@@ -10,8 +10,12 @@
       .include "xram.inc"
       .include "xramstream.inc"
       .include "npproj.inc"
+      .include "npc_lowering.inc"
 
-ASM_CAP = $4000
+      .define clear_lib_args nptool_clear_args
+      .define files_call nptool_files_call
+
+ASM_CAP = $8000
 ASM_LOAD_CAP = ASM_CAP + 1
 LARGE_CHUNK_TARGET = $1000
 LARGE_XRAM_PAGE_SIZE = $4000
@@ -42,6 +46,7 @@ line_has_lf:     .res 1
 line_buf:        .res 256
 large_page_buf:  .res 256
 pass_id:         .res 1
+lowering_base:   .res 1
 pending_compare: .res 1
 operand_pos:     .res 1
 immediate_hi:    .res 1
@@ -67,18 +72,18 @@ routine_body:    .res 3
 routine_type:    .res 1
 call_count:      .res 1
 candidate_index_len: .res 1
-candidate_index_buf: .res 64
+candidate_index_buf: .res NP_TYPED_SYMBOL_CAP
 candidate_array_len: .res 1
-candidate_array_buf: .res 64
+candidate_array_buf: .res NP_TYPED_SYMBOL_CAP
 cache_index_len: .res 1
-cache_index_buf: .res 64
+cache_index_buf: .res NP_TYPED_SYMBOL_CAP
 cache_array_len: .res 1
-cache_array_buf: .res 64
+cache_array_buf: .res NP_TYPED_SYMBOL_CAP
 cache_valid:     .res 1
 window_index_len: .res 1
-window_index_buf: .res 64
+window_index_buf: .res NP_TYPED_SYMBOL_CAP
 window_array_len: .res 1
-window_array_buf: .res 64
+window_array_buf: .res NP_TYPED_SYMBOL_CAP
 window_active:   .res 1
 window_count:    .res 1
 window_min:      .res 2
@@ -166,6 +171,7 @@ tool_main:
       LDA   XRAM_LENL
       CMP   #<ASM_LOAD_CAP
       BNE   @small_source
+@large_source:
       JSR   optimize_large_file
       BEQ   @large_done
       CMP   #2
@@ -224,6 +230,9 @@ tool_main:
 @run:
       JSR   run_pass
       BEQ   :+
+      LDA   opt_error
+      CMP   #3
+      BEQ   @large_source
       JMP   output_error
 :
       LDA   output_len
@@ -283,25 +292,9 @@ fail:
 ; XRAM ownership and file streaming.
 ; ---------------------------------------------------------------------
 
-clear_lib_args:
-      LDX   #15
-@clear:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @clear
-      RTS
-
 memory_call:
       STA   LIB_FN_ID
       LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
-      RTS
-
-files_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_FILES
       STA   LIB_MOD_ID
       JSR   LIB_LOADER_BAND
       LDA   LIB_STATUS
@@ -405,10 +398,6 @@ load_source:
       JMP   memory_call
 
 save_result:
-      LDA   output_len
-      STA   $0D0D
-      LDA   output_len+1
-      STA   $0D0E
       JSR   clear_lib_args
       LDA   #<NPTOOL_ARG1
       STA   LIB_ARG0
@@ -1259,12 +1248,6 @@ run_pass:
       STA   XMC_WINCTL
       JSR   map_output
 @next:
-      LDA   pass_id
-      STA   $0D0A
-      LDA   input_pos
-      STA   $0D0B
-      LDA   input_pos+1
-      STA   $0D0C
       JSR   read_line
       BEQ   @line
       LDA   opt_error
@@ -1457,6 +1440,58 @@ process_typed:
       LDA   #0
       RTS
 @unit_export_done:
+      STZ   lowering_base
+      LDA   #<ir_lowering
+      LDX   #>ir_lowering
+      JSR   line_starts
+      BEQ   @lowering
+      LDA   #<ir_lowering2
+      LDX   #>ir_lowering2
+      JSR   line_starts
+      BEQ   @lowering2
+      LDA   #<ir_lowering3
+      LDX   #>ir_lowering3
+      JSR   line_starts
+      BNE   @not_lowering
+      LDA   #104
+      STA   lowering_base
+      BRA   @lowering
+@lowering2:
+      LDA   #52
+      STA   lowering_base
+@lowering:
+      LDA   line_len
+      CMP   #5
+      BNE   @bad_lowering
+      LDA   line_buf+4
+      CMP   #'A'
+      BCC   @lowering_lowercase
+      CMP   #('Z' + 1)
+      BCS   @lowering_lowercase
+      SEC
+      SBC   #'A'
+      BRA   @lowering_index
+@lowering_lowercase:
+      CMP   #'a'
+      BCC   @bad_lowering
+      CMP   #('z' + 1)
+      BCS   @bad_lowering
+      SEC
+      SBC   #'a'
+      CLC
+      ADC   #26
+@lowering_index:
+      CLC
+      ADC   lowering_base
+      CMP   #NP_LOWER_COUNT
+      BCS   @bad_lowering
+      TAY
+      LDA   np_lowering_lo,Y
+      LDX   np_lowering_hi,Y
+      JMP   emit_text
+@bad_lowering:
+      JMP   @raw
+@not_lowering:
       LDA   #<ir_routine
       LDX   #>ir_routine
       JSR   line_starts
@@ -1575,6 +1610,7 @@ process_typed:
       JSR   capture_symbol
       BNE   @raw
       JSR   copy_symbol_to_candidate_index
+      BNE   @word_raw
       JSR   save_input_position
       JSR   try_window_access
       BEQ   @done
@@ -1586,6 +1622,7 @@ process_typed:
       BEQ   @done
       JSR   restore_input_position
       JSR   copy_candidate_index_to_symbol
+@word_raw:
       LDA   #<ir_load_word
       LDX   #>ir_load_word
       JMP   emit_typed_symbol
@@ -1641,6 +1678,8 @@ emit_routine_target:
 
 copy_symbol_to_candidate_index:
       LDA   symbol_len
+      CMP   #NP_TYPED_SYMBOL_CAP+1
+      BCS   @too_long
       STA   candidate_index_len
       LDY   #0
 @byte:
@@ -1651,6 +1690,10 @@ copy_symbol_to_candidate_index:
       INY
       BRA   @byte
 @done:
+      LDA   #0
+      RTS
+@too_long:
+      LDA   #1
       RTS
 
 copy_candidate_index_to_symbol:
@@ -1669,6 +1712,8 @@ copy_candidate_index_to_symbol:
 
 copy_symbol_to_candidate_array:
       LDA   symbol_len
+      CMP   #NP_TYPED_SYMBOL_CAP+1
+      BCS   @too_long
       STA   candidate_array_len
       LDY   #0
 @byte:
@@ -1679,6 +1724,10 @@ copy_symbol_to_candidate_array:
       INY
       BRA   @byte
 @done:
+      LDA   #0
+      RTS
+@too_long:
+      LDA   #1
       RTS
 
 candidate_matches_cache:
@@ -1823,6 +1872,7 @@ try_array_cache:
       JSR   capture_symbol
       long_bne @no
       JSR   copy_symbol_to_candidate_array
+      long_bne @no
       LDA   cache_valid
       BEQ   @search
       JSR   candidate_matches_cache
@@ -1900,6 +1950,18 @@ try_array_cache:
 
 line_is_cache_barrier:
       JSR   line_is_inline_asm
+      long_beq @yes
+      LDA   #<ir_lowering
+      LDX   #>ir_lowering
+      JSR   line_starts
+      BEQ   @yes
+      LDA   #<ir_lowering2
+      LDX   #>ir_lowering2
+      JSR   line_starts
+      BEQ   @yes
+      LDA   #<ir_lowering3
+      LDX   #>ir_lowering3
+      JSR   line_starts
       BEQ   @yes
       LDA   line_len
       BEQ   @structured
@@ -2029,20 +2091,12 @@ parse_offset_array:
       JMP   @no
 :
       STA   offset_value
-      LDA   #<line_sta_nvr0l
-      LDX   #>line_sta_nvr0l
+      LDA   #<ir_rhs_byte
+      LDX   #>ir_rhs_byte
       JSR   expect_line
       long_bne @no
-      LDA   #<line_stz_nvr0h
-      LDX   #>line_stz_nvr0h
-      JSR   expect_line
-      long_bne @no
-      LDA   #<line_pla
-      LDX   #>line_pla
-      JSR   expect_line
-      long_bne @no
-      LDA   #<line_plx
-      LDX   #>line_plx
+      LDA   #<ir_lhs_word
+      LDX   #>ir_lhs_word
       JSR   expect_line
       long_bne @no
       JSR   read_line
@@ -2079,6 +2133,7 @@ parse_offset_array:
       JSR   capture_symbol
       BNE   @no
       JSR   copy_symbol_to_candidate_array
+      BNE   @no
       LDA   #0
       RTS
 @no:
@@ -2217,6 +2272,7 @@ analyze_array_window:
       JSR   capture_symbol
       BNE   @scan
       JSR   copy_symbol_to_candidate_index
+      BNE   @scan
       JSR   parse_offset_array
       BNE   @scan
       LDA   window_count
@@ -2244,11 +2300,11 @@ analyze_array_window:
 @max:
       LDA   candidate_offset+1
       CMP   window_max+1
-      BCC   @scan
+      long_bcc @scan
       BNE   @new_max
       LDA   candidate_offset
       CMP   window_max
-      BCC   @scan
+      long_bcc @scan
 @new_max:
       LDA   candidate_offset
       STA   window_max
@@ -2681,20 +2737,12 @@ try_word_self_update:
       LDX   #>line_literal_one
       JSR   expect_line
       long_bne @no
-      LDA   #<line_sta_nvr0l
-      LDX   #>line_sta_nvr0l
+      LDA   #<ir_rhs_byte
+      LDX   #>ir_rhs_byte
       JSR   expect_line
       long_bne @no
-      LDA   #<line_stz_nvr0h
-      LDX   #>line_stz_nvr0h
-      JSR   expect_line
-      long_bne @no
-      LDA   #<line_pla
-      LDX   #>line_pla
-      JSR   expect_line
-      long_bne @no
-      LDA   #<line_plx
-      LDX   #>line_plx
+      LDA   #<ir_lhs_word
+      LDX   #>ir_lhs_word
       JSR   expect_line
       long_bne @no
       JSR   read_line
@@ -3685,9 +3733,17 @@ process_lowering:
       LDA   #<ir_compare_word
       LDX   #>ir_compare_word
       JSR   line_equals
-      BNE   @array_get
+      BNE   @compare_signed_word
       LDA   #<lower_compare_word
       LDX   #>lower_compare_word
+      JMP   emit_text
+@compare_signed_word:
+      LDA   #<ir_compare_signed_word
+      LDX   #>ir_compare_signed_word
+      JSR   line_equals
+      BNE   @array_get
+      LDA   #<lower_compare_signed_word
+      LDX   #>lower_compare_signed_word
       JMP   emit_text
 @array_get:
       LDA   #<ir_array_get
@@ -4198,11 +4254,13 @@ lower_window_pointer:
       JSR   capture_token
       BNE   @bad
       JSR   copy_symbol_to_candidate_index
+      BNE   @bad
       INC   operand_pos
       LDA   operand_pos
       JSR   capture_symbol
       BNE   @bad
       JSR   copy_symbol_to_candidate_array
+      BNE   @bad
       LDA   #<load_byte_prefix
       LDX   #>load_byte_prefix
       JSR   emit_text
@@ -4878,6 +4936,7 @@ ir_branch:       .byte ".O2F ", 0
 ir_add_word:     .byte ".O2A", 0
 ir_sub_word:     .byte ".O2S", 0
 ir_compare_word: .byte ".O2X", 0
+ir_compare_signed_word: .byte ".O2Y", 0
 ir_array_get:    .byte ".O2G ", 0
 ir_array_byte:   .byte ".O2B ", 0
 ir_array_word:   .byte ".O2W ", 0
@@ -4890,6 +4949,13 @@ ir_add_byte:     .byte ".O2+", 0
 ir_sub_byte:     .byte ".O2-", 0
 ir_compare_byte: .byte ".O2Q", 0
 ir_call:         .byte ".O2J ", 0
+ir_lowering:     .byte ".O2T", 0
+ir_lowering2:    .byte ".O2U", 0
+ir_lowering3:    .byte ".O2H", 0
+ir_rhs_word:     .byte ".O2U", 'a' + NP_LOWER_RHS_WORD - 78, 0
+ir_rhs_byte:     .byte ".O2U", 'a' + NP_LOWER_RHS_BYTE - 78, 0
+ir_lhs_word:     .byte ".O2U", 'a' + NP_LOWER_LHS_WORD - 78, 0
+ir_lhs_byte:     .byte ".O2U", 'a' + NP_LOWER_LHS_BYTE - 78, 0
 ir_routine:      .byte ".O2R ", 0
 frame_enter_line:.byte "JSR P_FENTER", 0
 unit_export_marker: .byte " ;@NPUNIT"
@@ -4909,9 +4975,13 @@ ir_fast_function_end_wide: .byte ".O2E w", $0A, 0
 ir_window_pointer: .byte ".O2P ", 0
 ir_window_load: .byte ".O2Y ", 0
 
+NPO2_LOWERING_IMPL = 1
+      .include "npc_lowering.inc"
+
 lower_add_word: .byte "CLC", $0A, "ADC NVR0L", $0A, "STA NVR0L", $0A, "TXA", $0A, "ADC NVR0H", $0A, "TAX", $0A, "LDA NVR0L", $0A, 0
 lower_sub_word: .byte "SEC", $0A, "SBC NVR0L", $0A, "STA NVR0L", $0A, "TXA", $0A, "SBC NVR0H", $0A, "TAX", $0A, "LDA NVR0L", $0A, 0
 lower_compare_word: .byte "CPX NVR0H", $0A, "BNE :+", $0A, "CMP NVR0L", $0A, ":", $0A, 0
+lower_compare_signed_word: .byte "JSR P_CMPSW", $0A, 0
 lower_add_byte: .byte "STA NVR0L", $0A, "PLA", $0A, "CLC", $0A, "ADC NVR0L", $0A, 0
 lower_sub_byte: .byte "STA NVR0L", $0A, "PLA", $0A, "SEC", $0A, "SBC NVR0L", $0A, 0
 lower_compare_byte: .byte "STA NVR0L", $0A, "PLA", $0A, "CMP NVR0L", $0A, 0
@@ -4980,12 +5050,12 @@ branch_le:      .byte "BCC :+", $0A, "BEQ :+", $0A, 0
 branch_gt:      .byte "BCC :+", $0A, "BEQ :+", $0A, "BRA :++", $0A, ":", $0A, 0
 compound_end:   .byte ":", $0A, 0
 
-materialize_eq: .byte "BNE :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-materialize_ne: .byte "BEQ :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-materialize_lt: .byte "BCS :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-materialize_le: .byte "BCC :+", $0A, "BEQ :+", $0A, "LDA #$00", $0A, "BRA :++", $0A, ":", $0A, "LDA #$01", $0A, ":", $0A, 0
-materialize_gt: .byte "BCC :+", $0A, "BEQ :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
-materialize_ge: .byte "BCC :+", $0A, "LDA #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
+materialize_eq: .byte "PHP", $0A, "PLA", $0A, "AND #$02", $0A, "LSR A", $0A, 0
+materialize_ne: .byte "PHP", $0A, "PLA", $0A, "AND #$02", $0A, "LSR A", $0A, "EOR #$01", $0A, 0
+materialize_lt: .byte "LDA #$00", $0A, "ROL A", $0A, "EOR #$01", $0A, 0
+materialize_le: .byte "BEQ :+", $0A, "LDA #$00", $0A, "ROL A", $0A, "EOR #$01", $0A, "BRA :++", $0A, ":", $0A, "LDA #$01", $0A, ":", $0A, 0
+materialize_gt: .byte "BEQ :+", $0A, "LDA #$00", $0A, "ROL A", $0A, "BRA :++", $0A, ":", $0A, "LDA #$00", $0A, ":", $0A, 0
+materialize_ge: .byte "LDA #$00", $0A, "ROL A", $0A, 0
 
 line_pha:       .byte "PHA", 0
 line_pha_lf:    .byte "PHA", $0A, 0
@@ -5016,8 +5086,10 @@ line_lda_indirect: .byte "LDA (NVR1L)", 0
 line_adc_low:   .byte "ADC #<", 0
 line_adc_high:  .byte "ADC #>", 0
 
-pure_line_lo: .byte <line_pha, <line_phx, <line_pla, <line_plx, <line_sta_nvr0l, <line_stz_nvr0h, 0
-pure_line_hi: .byte >line_pha, >line_phx, >line_pla, >line_plx, >line_sta_nvr0l, >line_stz_nvr0h, 0
+pure_line_lo: .byte <line_pha, <line_phx, <line_pla, <line_plx, <line_sta_nvr0l, <line_stz_nvr0h
+              .byte <ir_rhs_word, <ir_rhs_byte, <ir_lhs_word, <ir_lhs_byte, 0
+pure_line_hi: .byte >line_pha, >line_phx, >line_pla, >line_plx, >line_sta_nvr0l, >line_stz_nvr0h
+              .byte >ir_rhs_word, >ir_rhs_byte, >ir_lhs_word, >ir_lhs_byte, 0
 
 fold_compare: .byte "CMP #$", 0
 fold_add:     .byte "CLC", $0A, "ADC #$", 0

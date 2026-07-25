@@ -66,6 +66,20 @@ public class FileIoControllerTests
         fio.Write((ushort)VgcConstants.FioSize2, (byte)((value >> 16) & 0xFF));
     }
 
+    private static uint ReadUInt32(FileIoController fio, int address) =>
+        (uint)(fio.Read((ushort)address)
+        | (fio.Read((ushort)(address + 1)) << 8)
+        | (fio.Read((ushort)(address + 2)) << 16)
+        | (fio.Read((ushort)(address + 3)) << 24));
+
+    private static void WriteUInt32(FileIoController fio, int address, uint value)
+    {
+        fio.Write((ushort)address, (byte)value);
+        fio.Write((ushort)(address + 1), (byte)(value >> 8));
+        fio.Write((ushort)(address + 2), (byte)(value >> 16));
+        fio.Write((ushort)(address + 3), (byte)(value >> 24));
+    }
+
     private static byte[] MakeNvg(int width, int height, params (ushort Address, byte[] Pixels)[] spans)
     {
         var pixels = new byte[width * height];
@@ -649,6 +663,24 @@ public class FileIoControllerTests
 
             Assert.AreEqual("module.asm", ReadFilename(fio),
                 "Printable DIR needs the exact stored extension so EDIT can reuse the displayed name.");
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirRead_UnknownTextExtensionReportsPhysicalSize()
+    {
+        var (fio, _, tempDir, dm) = MakeControllerWithDevice();
+        try
+        {
+            byte[] text = Encoding.ASCII.GetBytes("DOS");
+            WriteMountedFile(dm, "notes.txt", text);
+            SetFilename(fio, "*.txt");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+
+            Assert.AreEqual(text.Length, ReadSize(fio),
+                "A fallback storage type must not invent a BASIC load-address prefix for ordinary text.");
         }
         finally { Directory.Delete(tempDir, true); }
     }
@@ -1862,6 +1894,130 @@ public class FileIoControllerTests
     }
 
     [TestMethod]
+    public void DevStatus_ReturnsUsableFreeAndCapacityBytes()
+    {
+        var (fio, _, rootDir, dm, _) = MakeControllerWithMountedFd0();
+        try
+        {
+            IStorageDevice device = dm.GetDevice("FD0");
+            SetFilename(fio, "FD0");
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDevStatus);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(device.FreeBytes, ReadUInt32(fio, VgcConstants.FioSrcL));
+            Assert.AreEqual(device.CapacityBytes, ReadUInt32(fio, VgcConstants.FioSizeL),
+                "DiskSize must describe allocatable bytes rather than the NDI container size.");
+        }
+        finally
+        {
+            try { dm.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(rootDir, true);
+        }
+    }
+
+    [TestMethod]
+    public void FileInfo_CommandsRoundTripExactFileMetadata()
+    {
+        var (fio, _, rootDir, dm, _) = MakeControllerWithMountedFd0();
+        uint timestamp = StorageTimestamp.Pack(new DateTime(1992, 10, 27, 12, 34, 56));
+        try
+        {
+            dm.GetDevice("FD0").Save("TEST", [1, 2, 3], ".PAS");
+            SetFilename(fio, "FD0:TEST.PAS");
+            WriteUInt32(fio, VgcConstants.FioSrcL, timestamp);
+            fio.Write((ushort)VgcConstants.FioGAddrH,
+                StorageAttributes.ReadOnly | StorageAttributes.Archive);
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFileInfoSet);
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+
+            WriteUInt32(fio, VgcConstants.FioSrcL, 0);
+            WriteUInt32(fio, VgcConstants.FioSizeL, 0);
+            fio.Write((ushort)VgcConstants.FioGAddrH, 0);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFileInfoGet);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(timestamp, ReadUInt32(fio, VgcConstants.FioSrcL));
+            Assert.AreEqual(3u, ReadUInt32(fio, VgcConstants.FioSizeL));
+            Assert.AreEqual(StorageAttributes.ReadOnly | StorageAttributes.Archive,
+                fio.Read((ushort)VgcConstants.FioGAddrH));
+        }
+        finally
+        {
+            try { dm.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(rootDir, true);
+        }
+    }
+
+    [TestMethod]
+    public void FileHash_UsesExactContentsInsteadOfTimestampOrSize()
+    {
+        var (fio, _, rootDir, dm, _) = MakeControllerWithMountedFd0();
+        try
+        {
+            IStorageDevice device = dm.GetDevice("FD0");
+            device.Save("HASH", Encoding.ASCII.GetBytes("123456789"), ".TXT");
+            SetFilename(fio, "FD0:HASH.TXT");
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFileHash);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual(0xCBF43926u, ReadUInt32(fio, VgcConstants.FioSizeL),
+                "Build invalidation needs the standard CRC-32 of exact bytes, not metadata.");
+
+            device.Save("HASH", Encoding.ASCII.GetBytes("123456788"), ".TXT");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdFileHash);
+            Assert.AreNotEqual(0xCBF43926u, ReadUInt32(fio, VgcConstants.FioSizeL),
+                "Same-size edits must invalidate NPC and NAS caches.");
+        }
+        finally
+        {
+            try { dm.GetDevice("FD0").Unmount(); } catch { }
+            Directory.Delete(rootDir, true);
+        }
+    }
+
+    [TestMethod]
+    public void Clock_CommandsRoundTripCalendarFieldsAndRejectInvalidDates()
+    {
+        string saveDir = Path.Combine(Path.GetTempPath(), "fio_clock_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(saveDir);
+        try
+        {
+            FileIoController fio = MakeController(saveDir);
+            WriteWord(fio, VgcConstants.FioSrcL, 2001);
+            fio.Write((ushort)VgcConstants.FioEndL, 2);
+            fio.Write((ushort)VgcConstants.FioEndH, 3);
+            fio.Write((ushort)VgcConstants.FioSizeL, 4);
+            fio.Write((ushort)VgcConstants.FioSizeH, 5);
+            fio.Write((ushort)VgcConstants.FioSize2, 6);
+            fio.Write((ushort)VgcConstants.FioGAddrL, 25);
+
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdClockSet);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdClockGet);
+
+            Assert.AreEqual(2001, fio.Read((ushort)VgcConstants.FioSrcL)
+                | (fio.Read((ushort)VgcConstants.FioSrcH) << 8));
+            Assert.AreEqual(2, fio.Read((ushort)VgcConstants.FioEndL));
+            Assert.AreEqual(3, fio.Read((ushort)VgcConstants.FioEndH));
+            Assert.AreEqual(4, fio.Read((ushort)VgcConstants.FioSizeL));
+            Assert.AreEqual(5, fio.Read((ushort)VgcConstants.FioSizeH));
+            Assert.AreEqual(6, fio.Read((ushort)VgcConstants.FioSize2));
+            Assert.IsTrue(fio.Read((ushort)VgcConstants.FioGAddrL) is >= 25 and <= 26);
+
+            fio.Write((ushort)VgcConstants.FioEndL, 13);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdClockSet);
+            Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus),
+                "Invalid calendar input must fail instead of silently normalizing a date.");
+        }
+        finally
+        {
+            Directory.Delete(saveDir, true);
+        }
+    }
+
+    [TestMethod]
     public void Save_WithoutMountedDisk_ReturnsNotMounted()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "fio_test_" + Guid.NewGuid().ToString("N")[..8]);
@@ -1986,6 +2142,32 @@ public class FileIoControllerTests
             fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
             Assert.AreEqual(VgcConstants.FioStatusError, fio.Read((ushort)VgcConstants.FioStatus));
             Assert.AreEqual(VgcConstants.FioErrEndOfDir, fio.Read((ushort)VgcConstants.FioErrCode));
+        }
+        finally { Directory.Delete(tempDir, true); }
+    }
+
+    [TestMethod]
+    public void DirRead_ReturnsDosMetadataAndStarDotStarMatchesFiles()
+    {
+        var (fio, memory, tempDir, dm) = MakeControllerWithDevice();
+        try
+        {
+            const uint timestamp = 0x58A46C2Au;
+            const byte attributes = StorageAttributes.Hidden | StorageAttributes.Archive;
+            WriteMountedFile(dm, "stamp.pas", Encoding.ASCII.GetBytes("program Stamp;\n"));
+            dm.GetDevice("FD0").SetFileInfo("stamp", ".pas", attributes, timestamp);
+
+            fio.Write((ushort)VgcConstants.FioDirType, VgcConstants.FioDirFlagFullName);
+            SetFilename(fio, "*.*");
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirOpen);
+            fio.Write((ushort)VgcConstants.FioCmd, VgcConstants.FioCmdDirRead);
+
+            Assert.AreEqual(VgcConstants.FioStatusOk, fio.Read((ushort)VgcConstants.FioStatus));
+            Assert.AreEqual("stamp.pas", ReadFilename(fio));
+            Assert.AreEqual(attributes, fio.Read((ushort)VgcConstants.FioGAddrH),
+                "FindFirst-compatible iteration must return the stored DOS attribute byte.");
+            Assert.AreEqual(timestamp, ReadUInt32(fio, VgcConstants.FioSrcL),
+                "FindFirst-compatible iteration must return the packed modification time.");
         }
         finally { Directory.Delete(tempDir, true); }
     }

@@ -7,7 +7,10 @@
       .include "xram.inc"
       .include "npc_frontend.inc"
 
+      .define npc_clear_lib_args nptool_clear_args
+
 SOURCE_CAP = NPC_SOURCE_CAP
+memory_ptr = nptool_io_aux
 
       .segment "BSS"
 source_len:          .res 2
@@ -156,29 +159,7 @@ tool_bad_args:
       LDA   #1
       RTS
 
-npc_clear_lib_args:
-      LDX   #15
-@clear:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @clear
-      RTS
-
-npc_memory_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_MEMORY
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
-      RTS
-
-npc_system_call:
-      STA   LIB_FN_ID
-      LDA   #MODULE_ID_SYSTEM
-      STA   LIB_MOD_ID
-      JSR   LIB_LOADER_BAND
-      LDA   LIB_STATUS
-      RTS
+      .include "nptool_xram.inc"
 
 npc_allocate_source:
       JSR   npc_clear_lib_args
@@ -186,19 +167,9 @@ npc_allocate_source:
       STA   LIB_ARG2
       LDA   #>SOURCE_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_ALLOC
-      JSR   npc_memory_call
-      BNE   @done
-      LDX   #2
-@copy:
-      LDA   LIB_RESULT,X
-      STA   source_xaddr,X
-      DEX
-      BPL   @copy
-      INC   source_allocated
-      LDA   #0
-@done:
-      RTS
+      LDA   #<source_xaddr
+      LDX   #>source_xaddr
+      JMP   tool_alloc_xram
 
 npc_load_source:
       JSR   npc_clear_lib_args
@@ -219,27 +190,17 @@ npc_load_source:
       LDA   #>NPC_SOURCE_PAGE_SIZE
       STA   LIB_ARG3+1
       LDA   #MEM_XLOAD
-      JMP   npc_memory_call
+      JMP   tool_mem_call
 
 npc_release_source:
-      LDA   source_allocated
-      BEQ   @done
-      STZ   source_allocated
       JSR   npc_clear_lib_args
-      LDX   #2
-@address:
-      LDA   source_xaddr,X
-      STA   LIB_ARG0,X
-      DEX
-      BPL   @address
       LDA   #<SOURCE_CAP
       STA   LIB_ARG2
       LDA   #>SOURCE_CAP
       STA   LIB_ARG2+1
-      LDA   #MEM_RELEASE
-      JSR   npc_memory_call
-@done:
-      RTS
+      LDA   #<source_xaddr
+      LDX   #>source_xaddr
+      JMP   tool_release_xram
 
 npc_load_frontend:
       ; System replaces the switchable $C000 bank while servicing this call,
@@ -266,7 +227,7 @@ npc_load_frontend:
       LDA   #>NPCFE_MAX
       STA   LIB_ARG3+1
       LDA   #SYS_OVL_LOAD
-      JSR   npc_system_call
+      JSR   tool_sys_call
       BEQ   @loaded
       LDA   LIB_RESULT+1
       STA   frontend_detail
@@ -283,7 +244,7 @@ npc_release_frontend:
       STZ   frontend_loaded
       JSR   npc_clear_lib_args
       LDA   #SYS_OVL_UNLOAD
-      JSR   npc_system_call
+      JSR   tool_sys_call
       BEQ   @done
       LDA   LIB_RESULT+1
       STA   frontend_detail

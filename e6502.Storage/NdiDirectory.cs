@@ -10,7 +10,7 @@ public enum NdiEntryFlags : byte { Active = 0x01, Directory = 0x02, Locked = 0x8
 public sealed record NdiDirEntry(
     int Index, NdiEntryFlags Flags, NdiFileType FileType,
     ushort ParentIndex, uint StartSector, int SizeBytes,
-    string Filename, uint SectorCount)
+    string Filename, uint SectorCount, byte Attributes, uint PackedTimestamp)
 {
     public bool IsActive => (Flags & NdiEntryFlags.Active) != 0;
     public bool IsDirectory => (Flags & NdiEntryFlags.Directory) != 0;
@@ -29,7 +29,9 @@ public sealed record NdiDirEntry(
 ///   $08-$0B  Size in bytes, little-endian
 ///   $0C-$2B  Filename (null-padded ASCII, max 32 chars)
 ///   $2C-$2F  Sector count (allocated), little-endian
-///   $30-$3F  Reserved
+///   $30      Attributes: bit 7=valid, bits 0..5=ReadOnly/Hidden/System/Volume/Directory/Archive
+///   $31-$34  Packed DOS date/time, little-endian (zero means unknown)
+///   $35-$3F  Reserved
 /// </summary>
 public sealed class NdiDirectory
 {
@@ -56,14 +58,15 @@ public sealed class NdiDirectory
     /// Adds a file entry. Returns the entry index, or throws if the directory is full.
     /// </summary>
     public int AddEntry(string name, NdiFileType type, ushort parentIndex,
-                        uint startSector, int sizeBytes, uint sectorCount = 0)
+                        uint startSector, int sizeBytes, uint sectorCount = 0,
+                        byte attributes = StorageAttributes.Archive, uint packedTimestamp = 0)
     {
         int slot = FindFreeSlot();
         if (slot < 0)
             throw new InvalidOperationException("Directory is full.");
 
         WriteEntry(slot, NdiEntryFlags.Active, type, parentIndex, startSector, sizeBytes,
-                   TruncateName(name), sectorCount);
+                   TruncateName(name), sectorCount, attributes, packedTimestamp);
         return slot;
     }
 
@@ -77,8 +80,22 @@ public sealed class NdiDirectory
             throw new InvalidOperationException("Directory is full.");
 
         WriteEntry(slot, NdiEntryFlags.Active | NdiEntryFlags.Directory, NdiFileType.Dir,
-                   parentIndex, 0, 0, TruncateName(name), 0);
+                   parentIndex, 0, 0, TruncateName(name), 0,
+                   StorageAttributes.Directory, StorageTimestamp.Pack(DateTime.Now));
         return slot;
+    }
+
+    public void SetMetadata(int index, byte attributes, uint packedTimestamp)
+    {
+        ValidateIndex(index);
+        int offset = index * EntrySize;
+        if ((_data[offset] & (byte)NdiEntryFlags.Active) == 0)
+            throw new FileNotFoundException("Directory entry is not active.");
+
+        _data[offset] = (byte)((_data[offset] & ~(byte)NdiEntryFlags.Locked)
+            | ((attributes & StorageAttributes.ReadOnly) != 0 ? (byte)NdiEntryFlags.Locked : 0));
+        _data[offset + 0x30] = (byte)(0x80 | (attributes & StorageAttributes.AnyFile));
+        WriteU32(offset + 0x31, packedTimestamp);
     }
 
     /// <summary>
@@ -161,12 +178,15 @@ public sealed class NdiDirectory
 
     private void WriteEntry(int index, NdiEntryFlags flags, NdiFileType type,
                             ushort parentIndex, uint startSector, int sizeBytes,
-                            string name, uint sectorCount)
+                            string name, uint sectorCount, byte attributes, uint packedTimestamp)
     {
         if (sizeBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(sizeBytes));
 
         int o = index * EntrySize;
+        Array.Clear(_data, o, EntrySize);
+        if ((attributes & StorageAttributes.ReadOnly) != 0)
+            flags |= NdiEntryFlags.Locked;
         _data[o + 0x00] = (byte)flags;
         _data[o + 0x01] = (byte)type;
         WriteU16(o + 0x02, parentIndex);
@@ -179,6 +199,8 @@ public sealed class NdiDirectory
         Array.Copy(nameBytes, 0, _data, o + 0x0C, nameBytes.Length);
 
         WriteU32(o + 0x2C, sectorCount);
+        _data[o + 0x30] = (byte)(0x80 | (attributes & StorageAttributes.AnyFile));
+        WriteU32(o + 0x31, packedTimestamp);
     }
 
     private NdiDirEntry ReadEntry(int index)
@@ -198,8 +220,18 @@ public sealed class NdiDirectory
         string name = Encoding.ASCII.GetString(nameBytes, 0, nullPos < 0 ? MaxFilenameLength : nullPos);
 
         uint sectorCount = ReadU32(o + 0x2C);
+        byte storedAttributes = _data[o + 0x30];
+        byte attributes = (storedAttributes & 0x80) != 0
+            ? (byte)(storedAttributes & StorageAttributes.AnyFile)
+            : (flags & NdiEntryFlags.Directory) != 0
+                ? StorageAttributes.Directory
+                : StorageAttributes.Archive;
+        if ((flags & NdiEntryFlags.Locked) != 0)
+            attributes |= StorageAttributes.ReadOnly;
+        uint packedTimestamp = ReadU32(o + 0x31);
 
-        return new NdiDirEntry(index, flags, type, parentIndex, startSector, (int)sizeBytesRaw, name, sectorCount);
+        return new NdiDirEntry(index, flags, type, parentIndex, startSector, (int)sizeBytesRaw,
+            name, sectorCount, attributes, packedTimestamp);
     }
 
     private void WriteU16(int offset, ushort value)

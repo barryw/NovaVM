@@ -1,0 +1,4 @@
+; Compiled interface for PRINTER.PAS.
+.ifndef NPI_PRINTER
+NPI_PRINTER = 1
+.endif

@@ -1,0 +1,74 @@
+; Compiled interface for GRAPH.PAS.
+.ifndef NPI_GRAPH
+NPI_GRAPH = 1
+
+DETECT = 0
+VGA = 9
+NOVAGRAPH = 9
+NOVA320X200 = 0
+GROK = 0
+BLACK = 0
+BLUE = 1
+GREEN = 2
+CYAN = 3
+RED = 4
+MAGENTA = 5
+BROWN = 6
+LIGHTGRAY = 7
+DARKGRAY = 8
+LIGHTBLUE = 9
+LIGHTGREEN = 10
+LIGHTCYAN = 11
+LIGHTRED = 12
+LIGHTMAGENTA = 13
+YELLOW = 14
+WHITE = 15
+
+__C8DA89E = 1 ; Detect
+__C882A23 = 1 ; VGA
+__C3A460B = 1 ; NovaGraph
+__C828CD8 = 1 ; Nova320x200
+__C8565B8 = 1 ; grOk
+__CD41BA2 = 1 ; Black
+__C828F0D = 1 ; Blue
+__C31F1B6 = 1 ; Green
+__C835030 = 1 ; Cyan
+__C8818E0 = 1 ; Red
+__CCF2D22 = 1 ; Magenta
+__CD7A40D = 1 ; Brown
+__C4670B0 = 1 ; LightGray
+__C75C89A = 1 ; DarkGray
+__C439BC5 = 1 ; LightBlue
+__C14956E = 1 ; LightGreen
+__C445CE8 = 1 ; LightCyan
+__C7E6E98 = 1 ; LightRed
+__CE99EDA = 1 ; LightMagenta
+__C85BA21 = 1 ; Yellow
+__C4E10E6 = 1 ; White
+
+__P189D50 = $02 ; DetectGraph
+__P272A4B = $03 ; InitGraph
+__SFCA08D = $00 ; CloseGraph
+__S656CD6 = $02 ; GraphResult
+__S35CE03 = $02 ; GetMaxX
+__S35CE04 = $02 ; GetMaxY
+__S53B4AA = $02 ; GetMaxColor
+__SE9137C = $00 ; ClearDevice
+__S580D50 = $01 ; SetColor
+__S4212C4 = $02 ; GetColor
+__S9ED67D = $01 ; SetBkColor
+__S2008F1 = $02 ; GetBkColor
+__P1E80C0 = $03 ; PutPixel
+__P2A38C7 = $02 ; GetPixel
+__P42263F = $02 ; MoveTo
+__P86E49F = $02 ; MoveRel
+__S852F1D = $02 ; GetX
+__S852F1E = $02 ; GetY
+__P7C0790 = $02 ; LineTo
+__PFCF010 = $02 ; LineRel
+__P87FD2D = $04 ; Line
+__PEA8F5A = $04 ; Rectangle
+__P87D45A = $04 ; Bar
+__P7FC1D7 = $03 ; Circle
+__P251260 = $03 ; FloodFill
+.endif

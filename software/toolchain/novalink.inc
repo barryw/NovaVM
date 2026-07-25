@@ -16,8 +16,10 @@ NLINK_REGION_CAP     = 4
 NLINK_RULE_CAP       = 8
 NLINK_SYMBOL_CAP     = 4
 NLINK_NAME_CAP       = 16
+NLINK_OVERLAY_HEADER_SIZE = $20
 
 .global nlink_link
+.global nlink_package_overlay
 .global nlink_prepare
 .global nlink_export_worker_state
 .global nlink_import_worker_objects
@@ -32,6 +34,8 @@ NLINK_NAME_CAP       = 16
 .global nlink_object_xaddr_h
 .global nlink_library_ptr
 .global nlink_library_len
+.global nlink_library_xram
+.global nlink_library_xaddr
 .global nlink_output_ptr
 .global nlink_output_xram
 .global nlink_output_xaddr

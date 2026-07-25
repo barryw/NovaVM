@@ -9,6 +9,8 @@ SHELL_NAME_CAP = 64
 SHELL_RUN_CWD_SIZE = SHELL_NAME_CAP + 1
 SHELL_RUN_CWD_NAME_SIZE = 10
 
+      .define shell_clear_lib_args nptool_clear_args
+
       .segment "ZEROPAGE"
 shell_scan:       .res 1
 shell_name_len:   .res 1
@@ -69,6 +71,7 @@ shell_program_allocated:.res 1
 shell_number:          .res 2
 shell_digit:           .res 1
 shell_number_printed:  .res 1
+shell_stage_cached:    .res 1
 
       .segment "CODE"
       .export repl_line_complete
@@ -319,12 +322,19 @@ shell_require_name:
       RTS
 
 shell_cmd_help:
-      LDA   #<shell_help
-      STA   p_word
-      LDA   #>shell_help
-      STA   p_word+1
-      JSR   print_z
-      JMP   shell_loop
+      LDA   #shell_help_file_end-shell_help_file
+      STA   shell_name_len
+      LDX   #shell_help_file_end-shell_help_file
+      LDA   #0
+      STA   shell_name,X
+@copy:
+      DEX
+      BPL   @copy_byte
+      JMP   shell_type_name
+@copy_byte:
+      LDA   shell_help_file,X
+      STA   shell_name,X
+      BRA   @copy
 
 shell_cmd_dir:
       JSR   shell_read_args
@@ -436,7 +446,9 @@ shell_cmd_ren:
 
 shell_cmd_type:
       JSR   shell_require_name
-      BCS   @done
+      BCC   shell_type_name
+      JMP   shell_loop
+shell_type_name:
       LDA   #<source_buf
       STA   p_copy_dst
       LDA   #>source_buf
@@ -627,9 +639,8 @@ shell_cmd_compile:
       LDA   #>shell_ext_s
       STA   p_word+1
       JSR   shell_derive_name
-      JSR   shell_prepare_tool_args
-      JSR   npc_compile_file
-      BEQ   :+
+      JSR   shell_compile_cached
+      BCC   :+
       JMP   @tool_error
 :
       JSR   shell_preprocess
@@ -827,9 +838,9 @@ shell_cmd_build:
       JSR   shell_restore_project_file
       BRA   @combine_named
 @combine_default_name:
-      LDA   #<shell_ext_s
+      LDA   #<shell_ext_asm
       STA   p_word
-      LDA   #>shell_ext_s
+      LDA   #>shell_ext_asm
       STA   p_word+1
       JSR   shell_derive_name
 @combine_named:
@@ -858,9 +869,8 @@ shell_cmd_build:
       LDA   #>shell_ext_s
       STA   p_word+1
       JSR   shell_derive_name
-      JSR   shell_prepare_tool_args
-      JSR   npc_compile_file
-      BEQ   :+
+      JSR   shell_compile_cached
+      BCC   :+
       JMP   @tool_error
 :
       JSR   shell_preprocess
@@ -878,16 +888,7 @@ shell_cmd_build:
       LDA   #>shell_ext_obj
       STA   p_word+1
       JSR   shell_derive_name
-      JSR   shell_prepare_tool_args
-      JSR   shell_prepare_nas_project
-      LDA   #NPTOOL_FLAG_SOURCE_PREPROCESSED
-      STA   NPTOOL_FLAGS
-      LDA   #<shell_tool_assembler
-      STA   p_word
-      LDA   #>shell_tool_assembler
-      STA   p_word+1
-      LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JSR   shell_launch_tool
+      JSR   shell_assemble_cached_preprocessed
       BCS   @tool_error
 
       JSR   shell_promote_name2
@@ -915,6 +916,12 @@ shell_cmd_build:
       JSR   shell_prepare_link_config
       JSR   shell_prepare_link_map
       JSR   shell_prepare_link_label
+      LDA   shell_project_target
+      CMP   #NPP_TARGET_OVERLAY
+      BNE   :+
+      LDA   #NPTOOL_FLAG_OVERLAY_OUTPUT
+      STA   NPTOOL_FLAGS
+:
       LDA   #<shell_tool_linker
       STA   p_word
       LDA   #>shell_tool_linker
@@ -946,7 +953,7 @@ shell_cmd_run:
       long_bcs @done
       STZ   shell_project_scoped
       JSR   shell_stash_run_cwd
-      BCS   @memory_error
+      long_bcs @memory_error
       JSR   shell_name_has_dot
       BCS   @check_manifest
       JSR   shell_enter_project
@@ -963,13 +970,15 @@ shell_cmd_run:
       JSR   shell_launch_project_op
       BCS   @tool_error
       LDA   shell_project_target
-      CMP   #NPP_TARGET_UNIT
-      BEQ   @bad_project
+      BNE   @bad_project
       LDA   shell_project_out_len
       BEQ   @bad_project
       JSR   shell_use_project_output
       JSR   shell_promote_name2
 @load:
+      ; The application owns keyboard focus after RUN. Do not leak the command
+      ; line's Enter byte into its first ReadKey call.
+      JSR   nui_drain_keys
       JSR   shell_load_program
       CMP   #1
       BEQ   @file_error
@@ -1338,13 +1347,98 @@ shell_compile_unoptimized:
       LDA   #>shell_ext_asm
       STA   p_word+1
       JSR   shell_derive_name
-      JSR   shell_prepare_tool_args
-      JSR   npc_compile_file
+      JMP   shell_compile_cached
+
+shell_compile_cached:
+      LDA   #<shell_identity_compiler
+      STA   p_word
+      LDA   #>shell_identity_compiler
+      STA   p_word+1
+      LDA   #shell_identity_compiler_end-shell_identity_compiler
+      JSR   shell_cache_check
+      BCS   @fail
+      CMP   #NBUILD_CLEAN
       BEQ   @ok
-      SEC
-      RTS
+      JSR   shell_prepare_tool_args
+      JSR   shell_prepare_project_arg4
+      JSR   shell_prepare_dependency_arg5
+      LDA   #NPTOOL_FLAG_DEPENDENCIES
+      STA   NPTOOL_FLAGS
+      JSR   npc_compile_file
+      BNE   @fail
+      LDA   #<shell_identity_compiler
+      STA   p_word
+      LDA   #>shell_identity_compiler
+      STA   p_word+1
+      LDA   #shell_identity_compiler_end-shell_identity_compiler
+      JSR   shell_cache_commit
+      BCS   @fail
 @ok:
       CLC
+      RTS
+@fail:
+      SEC
+      RTS
+
+shell_assemble_cached_preprocessed:
+      LDA   #NPTOOL_FLAG_SOURCE_PREPROCESSED
+      BRA   shell_assemble_cached_common
+
+shell_assemble_cached:
+      LDA   #0
+shell_assemble_cached_common:
+      STA   shell_digit
+      BEQ   @raw_identity
+      LDA   #<shell_identity_assembler_preprocessed
+      LDX   #>shell_identity_assembler_preprocessed
+      LDY   #shell_identity_assembler_preprocessed_end-shell_identity_assembler_preprocessed
+      BRA   @identity_ready
+@raw_identity:
+      LDA   #<shell_identity_assembler
+      LDX   #>shell_identity_assembler
+      LDY   #shell_identity_assembler_end-shell_identity_assembler
+@identity_ready:
+      STA   p_word
+      STX   p_word+1
+      TYA
+      JSR   shell_cache_check
+      BCS   @fail
+      CMP   #NBUILD_CLEAN
+      BEQ   @ok
+      JSR   shell_prepare_tool_args
+      JSR   shell_prepare_nas_project
+      JSR   shell_prepare_dependency_arg2
+      LDA   shell_digit
+      ORA   #NPTOOL_FLAG_DEPENDENCIES
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_assembler
+      STA   p_word
+      LDA   #>shell_tool_assembler
+      STA   p_word+1
+      LDA   #shell_tool_assembler_end-shell_tool_assembler
+      JSR   shell_launch_tool
+      BCS   @fail
+      LDA   shell_digit
+      BEQ   @raw_commit_identity
+      LDA   #<shell_identity_assembler_preprocessed
+      LDX   #>shell_identity_assembler_preprocessed
+      LDY   #shell_identity_assembler_preprocessed_end-shell_identity_assembler_preprocessed
+      BRA   @commit_identity
+@raw_commit_identity:
+      LDA   #<shell_identity_assembler
+      LDX   #>shell_identity_assembler
+      LDY   #shell_identity_assembler_end-shell_identity_assembler
+@commit_identity:
+      STA   p_word
+      STX   p_word+1
+      TYA
+      JSR   shell_cache_commit
+      BCS   @fail
+@ok:
+      CLC
+      RTS
+@fail:
+      SEC
       RTS
 
 ; A selects an NPP_OP_* operation. The two parsed shell arguments are passed
@@ -1387,6 +1481,163 @@ shell_launch_project_op_with_user_fallback:
       JSR   shell_leave_project
 @fail:
       SEC
+      RTS
+
+; Exact-content cache shared by NPC, NAS, and later language shells. The
+; output filename is also the stable node key because each stage has its own
+; extension. A/p_word supplies the stage identity.
+shell_cache_check:
+      JSR   shell_prepare_cache_args
+      LDA   #NBUILD_OP_CHECK
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_build
+      STA   p_word
+      LDA   #>shell_tool_build
+      STA   p_word+1
+      LDA   #shell_tool_build_end-shell_tool_build
+      JSR   shell_launch_tool
+      BCS   @fail
+      LDA   NPTOOL_DETAIL
+      CLC
+      RTS
+@fail:
+      SEC
+      RTS
+
+shell_cache_commit:
+      JSR   shell_prepare_cache_args
+      LDA   #shell_build_dependencies_end-shell_build_dependencies
+      STA   NPTOOL_ARG4_LEN
+      LDY   #0
+@manifest:
+      LDA   shell_build_dependencies,Y
+      STA   NPTOOL_ARG4,Y
+      INY
+      CPY   #shell_build_dependencies_end-shell_build_dependencies
+      BCC   @manifest
+      LDA   #0
+      STA   NPTOOL_ARG4,Y
+      LDA   #shell_build_temp_end-shell_build_temp
+      STA   NPTOOL_ARG5_LEN
+      LDY   #0
+@temp:
+      LDA   shell_build_temp,Y
+      STA   NPTOOL_ARG5,Y
+      INY
+      CPY   #shell_build_temp_end-shell_build_temp
+      BCC   @temp
+      LDA   #0
+      STA   NPTOOL_ARG5,Y
+      LDA   #NBUILD_OP_COMMIT
+      STA   NPTOOL_FLAGS
+      LDA   #<shell_tool_build
+      STA   p_word
+      LDA   #>shell_tool_build
+      STA   p_word+1
+      LDA   #shell_tool_build_end-shell_tool_build
+      JSR   shell_launch_tool
+      BCS   @done
+      JSR   shell_delete_dependency_manifest
+      CLC
+@done:
+      RTS
+
+; Preserve the identity pointer before filling the fixed NBUILD mailbox.
+shell_prepare_cache_args:
+      STA   shell_io_len
+      LDA   p_word
+      STA   p_copy_dst
+      LDA   p_word+1
+      STA   p_copy_dst+1
+      STZ   NPTOOL_STATUS
+      STZ   NPTOOL_DETAIL
+      LDA   #shell_build_state_end-shell_build_state
+      STA   NPTOOL_ARG0_LEN
+      LDY   #0
+@state:
+      LDA   shell_build_state,Y
+      STA   NPTOOL_ARG0,Y
+      INY
+      CPY   #shell_build_state_end-shell_build_state
+      BCC   @state
+      LDA   #0
+      STA   NPTOOL_ARG0,Y
+      LDA   shell_name2_len
+      STA   NPTOOL_ARG1_LEN
+      STA   NPTOOL_ARG2_LEN
+      LDY   #0
+@output:
+      LDA   shell_name2,Y
+      STA   NPTOOL_ARG1,Y
+      STA   NPTOOL_ARG2,Y
+      INY
+      CPY   shell_name2_len
+      BCC   @output
+      LDA   #0
+      STA   NPTOOL_ARG1,Y
+      STA   NPTOOL_ARG2,Y
+      LDA   shell_io_len
+      STA   NPTOOL_ARG3_LEN
+      LDY   #0
+@identity:
+      CPY   shell_io_len
+      BCS   @identity_done
+      LDA   (p_copy_dst),Y
+      STA   NPTOOL_ARG3,Y
+      INY
+      BRA   @identity
+@identity_done:
+      LDA   #0
+      STA   NPTOOL_ARG3,Y
+      STZ   NPTOOL_ARG4_LEN
+      STZ   NPTOOL_ARG4
+      STZ   NPTOOL_ARG5_LEN
+      STZ   NPTOOL_ARG5
+      STZ   NPTOOL_ARG6_LEN
+      STZ   NPTOOL_ARG6
+      RTS
+
+shell_prepare_dependency_arg2:
+      LDA   #shell_build_dependencies_end-shell_build_dependencies
+      STA   NPTOOL_ARG2_LEN
+      LDY   #0
+@copy:
+      LDA   shell_build_dependencies,Y
+      STA   NPTOOL_ARG2,Y
+      INY
+      CPY   #shell_build_dependencies_end-shell_build_dependencies
+      BCC   @copy
+      LDA   #0
+      STA   NPTOOL_ARG2,Y
+      RTS
+
+shell_prepare_dependency_arg5:
+      LDA   #shell_build_dependencies_end-shell_build_dependencies
+      STA   NPTOOL_ARG5_LEN
+      LDY   #0
+@copy:
+      LDA   shell_build_dependencies,Y
+      STA   NPTOOL_ARG5,Y
+      INY
+      CPY   #shell_build_dependencies_end-shell_build_dependencies
+      BCC   @copy
+      LDA   #0
+      STA   NPTOOL_ARG5,Y
+      RTS
+
+shell_delete_dependency_manifest:
+      JSR   shell_clear_lib_args
+      LDA   #<shell_build_dependencies
+      STA   LIB_ARG0
+      LDA   #>shell_build_dependencies
+      STA   LIB_ARG0+1
+      LDA   #shell_build_dependencies_end-shell_build_dependencies
+      STA   LIB_ARG1
+      LDA   #MODULE_ID_FILES
+      STA   LIB_MOD_ID
+      LDA   #FILE_FDELETE
+      STA   LIB_FN_ID
+      JSR   LIB_LOADER_BAND
       RTS
 
 shell_prepare_tool_args:
@@ -1470,32 +1721,63 @@ shell_launch_tool:
 ; A standalone unit keeps that expanded stream in its .S artifact; ordinary
 ; programs preprocess in place. This lets O2 optimize across unit boundaries.
 shell_preprocess:
+      STZ   shell_stage_cached
       JSR   shell_promote_name2
       LDA   #<shell_ext_s
       STA   p_word
       LDA   #>shell_ext_s
       STA   p_word+1
       JSR   shell_derive_name
+      LDA   #<shell_identity_preprocess
+      STA   p_word
+      LDA   #>shell_identity_preprocess
+      STA   p_word+1
+      LDA   #shell_identity_preprocess_end-shell_identity_preprocess
+      JSR   shell_cache_check
+      BCS   @done
+      CMP   #NBUILD_CLEAN
+      BNE   @build
+      INC   shell_stage_cached
+      CLC
+      RTS
+@build:
       JSR   shell_prepare_tool_args
       JSR   shell_prepare_nas_project
-      LDA   #NPTOOL_FLAG_PREPROCESS_ONLY
+      JSR   shell_prepare_dependency_arg2
+      LDA   #NPTOOL_FLAG_PREPROCESS_ONLY | NPTOOL_FLAG_DEPENDENCIES
       STA   NPTOOL_FLAGS
       LDA   #<shell_tool_assembler
       STA   p_word
       LDA   #>shell_tool_assembler
       STA   p_word+1
       LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JMP   shell_launch_tool
+      JSR   shell_launch_tool
+@done:
+      RTS
 
 ; Every compile lowers compact typed IR and runs machine peepholes before the
 ; language-neutral assembler sees the resulting 65C02 source.
 shell_optimize:
+      LDA   shell_stage_cached
+      BNE   @ok
       LDA   #<shell_tool_optimizer
       STA   p_word
       LDA   #>shell_tool_optimizer
       STA   p_word+1
       LDA   #shell_tool_optimizer_end-shell_tool_optimizer
-      JMP   shell_launch_tool
+      JSR   shell_launch_tool
+      BCS   @done
+      LDA   #<shell_identity_preprocess
+      STA   p_word
+      LDA   #>shell_identity_preprocess
+      STA   p_word+1
+      LDA   #shell_identity_preprocess_end-shell_identity_preprocess
+      JSR   shell_cache_commit
+@done:
+      RTS
+@ok:
+      CLC
+      RTS
 
 shell_print_tool_error:
       LDA   NPTOOL_STATUS
@@ -1526,6 +1808,10 @@ shell_print_tool_error:
       CMP   #NPTOOL_ERR_PROJECT
       BNE   :+
       JMP   @project
+:
+      CMP   #NPTOOL_ERR_BUILD
+      BNE   :+
+      JMP   @build
 :
       CMP   #NPTOOL_ERR_ARGS
       BNE   :+
@@ -1639,6 +1925,18 @@ shell_print_tool_error:
       LDX   #>shell_assemble_output
       BRA   @assemble_message
 @assemble_symbol:
+      LDA   NPTOOL_ARG6_LEN
+      BEQ   @assemble_symbol_message
+      LDA   #<NPTOOL_ARG6
+      STA   p_word
+      LDA   #>NPTOOL_ARG6
+      STA   p_word+1
+      JSR   print_z
+      LDA   #':'
+      STA   VGC_CHAROUT
+      LDA   #' '
+      STA   VGC_CHAROUT
+@assemble_symbol_message:
       LDA   #<shell_assemble_symbol
       LDX   #>shell_assemble_symbol
       BRA   @assemble_message
@@ -1723,6 +2021,20 @@ shell_print_tool_error:
       LDA   #<shell_project_error
       LDX   #>shell_project_error
 @project_message:
+      STA   p_word
+      STX   p_word+1
+      JMP   print_z
+@build:
+      LDA   NPTOOL_DETAIL
+      CMP   #NBUILD_DETAIL_CAPACITY
+      BNE   @build_generic
+      LDA   #<shell_build_capacity
+      LDX   #>shell_build_capacity
+      BRA   @build_message
+@build_generic:
+      LDA   #<shell_build_error
+      LDX   #>shell_build_error
+@build_message:
       STA   p_word
       STX   p_word+1
       JMP   print_z
@@ -2125,14 +2437,7 @@ shell_assemble_project_source:
       LDA   #>shell_ext_obj
       STA   p_word+1
       JSR   shell_derive_name
-      JSR   shell_prepare_tool_args
-      JSR   shell_prepare_nas_project
-      LDA   #<shell_tool_assembler
-      STA   p_word
-      LDA   #>shell_tool_assembler
-      STA   p_word+1
-      LDA   #shell_tool_assembler_end-shell_tool_assembler
-      JSR   shell_launch_tool
+      JSR   shell_assemble_cached
       BCS   @bad
       LDA   shell_name2_len
       STA   shell_project_obj_len
@@ -2370,19 +2675,7 @@ shell_prepare_nas_define:
       RTS
 
 shell_prepare_nas_project:
-      LDA   shell_project_file_len
-      STA   NPTOOL_ARG4_LEN
-      BEQ   @empty
-      LDY   #0
-@copy:
-      LDA   shell_project_file,Y
-      STA   NPTOOL_ARG4,Y
-      BEQ   @done
-      INY
-      BRA   @copy
-@empty:
-      STZ   NPTOOL_ARG4
-@done:
+      JSR   shell_prepare_project_arg4
       LDA   shell_unit_path_count
       BNE   @configured_paths
       LDA   #shell_default_system_end-shell_default_system-1
@@ -2425,6 +2718,22 @@ shell_prepare_nas_project:
       INX
       BRA   @path2
 @paths_done:
+      RTS
+
+shell_prepare_project_arg4:
+      LDA   shell_project_file_len
+      STA   NPTOOL_ARG4_LEN
+      BEQ   @empty
+      LDY   #0
+@copy:
+      LDA   shell_project_file,Y
+      STA   NPTOOL_ARG4,Y
+      BEQ   @done
+      INY
+      BRA   @copy
+@empty:
+      STZ   NPTOOL_ARG4
+@done:
       RTS
 
 shell_prepare_link_config:
@@ -2797,14 +3106,6 @@ shell_close_file:
 ; ---------------------------------------------------------------------
 ; FILES-module and output helpers.
 ; ---------------------------------------------------------------------
-shell_clear_lib_args:
-      LDX   #15
-@clear:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @clear
-      RTS
-
 shell_call_file_name:
       STA   LIB_FN_ID
       STZ   shell_load_error
@@ -3012,35 +3313,12 @@ shell_project_exists: .byte "Project or unit already exists.", $0D, $0A, 0
 shell_unit_not_member: .byte "Unit is not in the project.", $0D, $0A, 0
 shell_project_nested: .byte "Project contains a nested directory.", $0D, $0A, 0
 shell_too_many_units: .byte "Project has too many units.", $0D, $0A, 0
+shell_build_error: .byte "Build state error.", $0D, $0A, 0
+shell_build_capacity: .byte "Build state capacity exceeded.", $0D, $0A, 0
 shell_binary_error: .byte "Not a runnable Nova binary.", $0D, $0A, 0
 shell_tool_load_error: .byte "Tool load error $", 0
 shell_decimal_divisors:
       .word 10000, 1000, 100, 10, 1
-
-shell_help:
-      .byte "File commands:", $0D, $0A
-      .byte "  DIR [mask]       List files", $0D, $0A
-      .byte "  PWD              Show directory", $0D, $0A
-      .byte "  CD dir           Change directory", $0D, $0A
-      .byte "  TYPE file        Print ASCII text only", $0D, $0A
-      .byte "  NEW name         Create a Pascal project directory", $0D, $0A
-      .byte "  NEWUNIT name     Create a reusable unit in /USER", $0D, $0A
-      .byte "  ADDUNIT proj unit Add a Pascal unit", $0D, $0A
-      .byte "  DELUNIT proj unit Delete a Pascal unit", $0D, $0A
-      .byte "  DELPROJECT proj  Delete a Pascal project", $0D, $0A
-      .byte "  EDIT file        Edit source/project/config text", $0D, $0A
-      .byte "  DEL file         Delete a file", $0D, $0A
-      .byte "  REN old new      Rename a file", $0D, $0A
-      .byte "  MKDIR dir        Create directory", $0D, $0A
-      .byte "  RMDIR dir        Remove directory", $0D, $0A
-      .byte "Build commands:", $0D, $0A
-      .byte "  COMPILE file.pas Write file.S", $0D, $0A
-      .byte "  ASSEMBLE file.s [-Dname=value] [-o file.obj]", $0D, $0A
-      .byte "  LINK main.obj [more.obj] [-C cfg] [-M map] [-Ln labels]", $0D, $0A
-      .byte "  BUILD project    Build an NPP Pascal project", $0D, $0A
-      .byte "  BUILD file.pas   Compile, assemble, link", $0D, $0A
-      .byte "  RUN project      Run a Pascal project", $0D, $0A
-      .byte "  RUN file.bin     Run a linked program", $0D, $0A, 0
 
 shell_kw_help:     .byte "HELP", 0
 shell_kw_dir:      .byte "DIR", 0
@@ -3079,11 +3357,29 @@ shell_user_prefix: .byte "/USER/"
 shell_user_prefix_end:
 shell_run_cwd_name: .byte "__NPSH.CWD"
 shell_run_cwd_name_end:
+shell_help_file: .byte "/NPHELP.TXT"
+shell_help_file_end:
 
 shell_pascal_library: .byte "/SYSTEM/PASCAL.NLIB"
 shell_pascal_library_end:
+shell_build_state: .byte "BUILD.NBS"
+shell_build_state_end:
+shell_build_temp: .byte "BUILD.TMP"
+shell_build_temp_end:
+shell_build_dependencies: .byte "BUILD.DEP"
+shell_build_dependencies_end:
+shell_identity_compiler: .byte "NPC/1"
+shell_identity_compiler_end:
+shell_identity_preprocess: .byte "NASPP+NPO2/1"
+shell_identity_preprocess_end:
+shell_identity_assembler: .byte "NAS/1"
+shell_identity_assembler_end:
+shell_identity_assembler_preprocessed: .byte "NAS/1/PRE"
+shell_identity_assembler_preprocessed_end:
 shell_tool_editor: .byte "/NPEDIT.BIN"
 shell_tool_editor_end:
+shell_tool_build: .byte "/NBUILD.BIN"
+shell_tool_build_end:
 shell_tool_optimizer: .byte "/NPO2.BIN"
 shell_tool_optimizer_end:
 shell_tool_project: .byte "/NPPROJ.BIN"

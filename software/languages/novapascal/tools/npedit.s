@@ -12,6 +12,8 @@
       .include "nptool.inc"
       .include "longbranch.inc"
 
+      .define tool_clear_lib_args nptool_clear_args
+
 SOURCE_CAP = $1000
 DOCUMENT_CAP = $FFFF
 PICKER_NAME_CAP = 64
@@ -223,14 +225,6 @@ tool_bad_args:
       LDA   #NPTOOL_ERR_ARGS
       STA   NPTOOL_STATUS
       LDA   #1
-      RTS
-
-tool_clear_lib_args:
-      LDX   #15
-@loop:
-      STZ   LIB_ARG0,X
-      DEX
-      BPL   @loop
       RTS
 
 tool_mem_call:

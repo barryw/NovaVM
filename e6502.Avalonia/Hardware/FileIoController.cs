@@ -41,6 +41,7 @@ public sealed partial class FileIoController
     private int _dirIndex;
     private bool _dirFiltered;
     private string _wtsBankName = string.Empty;
+    private TimeSpan _clockOffset;
     private const int MaxOpenFiles = 8;
     private readonly OpenFileHandle?[] _openFiles = new OpenFileHandle?[MaxOpenFiles];
 
@@ -301,6 +302,21 @@ public sealed partial class FileIoController
                 break;
             case VgcConstants.FioCmdDevStatus:
                 DoDevStatus();
+                break;
+            case VgcConstants.FioCmdFileInfoGet:
+                DoFileInfoGet();
+                break;
+            case VgcConstants.FioCmdFileInfoSet:
+                DoFileInfoSet();
+                break;
+            case VgcConstants.FioCmdClockGet:
+                DoClockGet();
+                break;
+            case VgcConstants.FioCmdClockSet:
+                DoClockSet();
+                break;
+            case VgcConstants.FioCmdFileHash:
+                DoFileHash();
                 break;
             case VgcConstants.FioCmdPwd:
                 DoPwd();
@@ -2650,9 +2666,140 @@ public sealed partial class FileIoController
 
             var device = _deviceManager.GetDevice(prefix.TrimEnd(':'));
             if (!device.IsMounted) { SetError(VgcConstants.FioErrNotMounted); return; }
+            WriteRegisterUInt32(VgcConstants.FioSrcL, device.FreeBytes);
+            WriteRegisterUInt32(VgcConstants.FioSizeL, device.CapacityBytes);
             SetOk();
         }
         catch { SetError(VgcConstants.FioErrIo); }
+    }
+
+    private void DoFileInfoGet()
+    {
+        try
+        {
+            StorageFileInfo info = WithFileInfo(ReadFilename(), (device, name, extension) =>
+                device.GetFileInfo(name, extension));
+            WriteRegisterUInt32(VgcConstants.FioSrcL, info.PackedTimestamp);
+            WriteRegisterUInt32(VgcConstants.FioSizeL, checked((uint)info.SizeBytes));
+            _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] = info.Attributes;
+            SetOk();
+        }
+        catch (Exception ex)
+        {
+            SetFileIoError(ex);
+        }
+    }
+
+    private void DoFileInfoSet()
+    {
+        try
+        {
+            byte attributes = _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase];
+            uint timestamp = ReadRegisterUInt32(VgcConstants.FioSrcL);
+            WithFileInfo(ReadFilename(), (device, name, extension) =>
+            {
+                device.SetFileInfo(name, extension, attributes, timestamp);
+                return 0;
+            });
+            SetOk();
+        }
+        catch (Exception ex)
+        {
+            SetFileIoError(ex);
+        }
+    }
+
+    private void DoFileHash()
+    {
+        try
+        {
+            byte[] data = WithFileInfo(ReadFilename(), (device, name, extension) =>
+                device.Load(name, extension));
+            uint crc = uint.MaxValue;
+            foreach (byte value in data)
+            {
+                crc ^= value;
+                for (int bit = 0; bit < 8; bit++)
+                    crc = (crc >> 1) ^ ((crc & 1) != 0 ? 0xEDB88320u : 0u);
+            }
+            WriteRegisterUInt32(VgcConstants.FioSizeL, ~crc);
+            SetOk();
+        }
+        catch (Exception ex)
+        {
+            SetFileIoError(ex);
+        }
+    }
+
+    private T WithFileInfo<T>(string? filename, Func<IStorageDevice, string, string, T> action)
+    {
+        if (filename is null)
+            throw new IOException("Invalid filename.");
+
+        var resolved = ResolveDevice(filename);
+        IStorageDevice device;
+        string name;
+        string? savedDir;
+        if (resolved is null)
+        {
+            device = new HostDirectoryDevice(_saveDir, "");
+            name = filename;
+            savedDir = null;
+        }
+        else
+        {
+            (device, name, savedDir) = resolved.Value;
+        }
+
+        try
+        {
+            var (baseName, extension) = SplitDataFilename(name, "");
+            return action(device, baseName, extension);
+        }
+        finally
+        {
+            RestoreDir(device, savedDir);
+        }
+    }
+
+    private void DoClockGet()
+    {
+        DateTime now = DateTime.Now + _clockOffset;
+        WriteWordRegister(VgcConstants.FioSrcL, now.Year);
+        _regs[VgcConstants.FioEndL - VgcConstants.FioBase] = (byte)now.Month;
+        _regs[VgcConstants.FioEndH - VgcConstants.FioBase] = (byte)now.Day;
+        _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)now.Hour;
+        _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)now.Minute;
+        _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)now.Second;
+        _regs[VgcConstants.FioGAddrL - VgcConstants.FioBase] = (byte)(now.Millisecond / 10);
+        _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] = (byte)now.DayOfWeek;
+        SetOk();
+    }
+
+    private void DoClockSet()
+    {
+        try
+        {
+            int year = ReadWordRegister(VgcConstants.FioSrcL);
+            int hundredth = _regs[VgcConstants.FioGAddrL - VgcConstants.FioBase];
+            if (year is < 1980 or > 2107 || hundredth > 99)
+                throw new ArgumentOutOfRangeException(nameof(hundredth));
+            var requested = new DateTime(
+                year,
+                _regs[VgcConstants.FioEndL - VgcConstants.FioBase],
+                _regs[VgcConstants.FioEndH - VgcConstants.FioBase],
+                _regs[VgcConstants.FioSizeL - VgcConstants.FioBase],
+                _regs[VgcConstants.FioSizeH - VgcConstants.FioBase],
+                _regs[VgcConstants.FioSize2 - VgcConstants.FioBase],
+                hundredth * 10,
+                DateTimeKind.Local);
+            _clockOffset = requested - DateTime.Now;
+            SetOk();
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            SetError(VgcConstants.FioErrIo);
+        }
     }
 
     private void DoPwd()
@@ -2806,8 +2953,9 @@ public sealed partial class FileIoController
         };
     }
 
-    private static bool HasTwoByteLoadPrefix(int fioDirType) =>
-        fioDirType is VgcConstants.FioDirTypeBas or VgcConstants.FioDirTypeBin;
+    private static bool HasTwoByteLoadPrefix(int fioDirType, string extension) =>
+        (fioDirType == VgcConstants.FioDirTypeBas && extension.Equals(".bas", StringComparison.OrdinalIgnoreCase)) ||
+        (fioDirType == VgcConstants.FioDirTypeBin && extension.Equals(".bin", StringComparison.OrdinalIgnoreCase));
 
     private void PopulateMetadata(StorageDirEntry entry)
     {
@@ -2976,10 +3124,14 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)displayName[i];
 
-        long dataSize = HasTwoByteLoadPrefix(type) ? Math.Max(0, entry.SizeBytes - 2) : entry.SizeBytes;
+        long dataSize = HasTwoByteLoadPrefix(type, entry.Extension) ? Math.Max(0, entry.SizeBytes - 2) : entry.SizeBytes;
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
         _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
+        WriteRegisterUInt32(VgcConstants.FioSrcL, entry.PackedTimestamp);
+        _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] = entry.IsDirectory
+            ? (byte)(entry.Attributes | StorageAttributes.Directory)
+            : entry.Attributes;
     }
 
     private void PopulateDirEntry(FileInfo fi)
@@ -3022,10 +3174,13 @@ public sealed partial class FileIoController
         for (int i = 0; i < nameLen; i++)
             _regs[nameOffset + i] = (byte)displayName[i];
 
-        long dataSize = HasTwoByteLoadPrefix(type) ? Math.Max(0, fi.Length - 2) : fi.Length;
+        long dataSize = HasTwoByteLoadPrefix(type, ext) ? Math.Max(0, fi.Length - 2) : fi.Length;
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(dataSize & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((dataSize >> 8) & 0xFF);
         _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((dataSize >> 16) & 0xFF);
+        WriteRegisterUInt32(VgcConstants.FioSrcL, StorageTimestamp.Pack(fi.LastWriteTime));
+        _regs[VgcConstants.FioGAddrH - VgcConstants.FioBase] =
+            StorageAttributes.FromFileAttributes(fi.Attributes);
     }
 
     // -------------------------------------------------------------------------
@@ -3145,6 +3300,30 @@ public sealed partial class FileIoController
         _regs[VgcConstants.FioSizeL - VgcConstants.FioBase] = (byte)(length & 0xFF);
         _regs[VgcConstants.FioSizeH - VgcConstants.FioBase] = (byte)((length >> 8) & 0xFF);
         _regs[VgcConstants.FioSize2 - VgcConstants.FioBase] = (byte)((length >> 16) & 0xFF);
+    }
+
+    private int ReadWordRegister(int address) =>
+        _regs[address - VgcConstants.FioBase]
+        | (_regs[address + 1 - VgcConstants.FioBase] << 8);
+
+    private void WriteWordRegister(int address, int value)
+    {
+        _regs[address - VgcConstants.FioBase] = (byte)value;
+        _regs[address + 1 - VgcConstants.FioBase] = (byte)(value >> 8);
+    }
+
+    private uint ReadRegisterUInt32(int address) =>
+        (uint)(_regs[address - VgcConstants.FioBase]
+        | (_regs[address + 1 - VgcConstants.FioBase] << 8)
+        | (_regs[address + 2 - VgcConstants.FioBase] << 16)
+        | (_regs[address + 3 - VgcConstants.FioBase] << 24));
+
+    private void WriteRegisterUInt32(int address, uint value)
+    {
+        _regs[address - VgcConstants.FioBase] = (byte)value;
+        _regs[address + 1 - VgcConstants.FioBase] = (byte)(value >> 8);
+        _regs[address + 2 - VgcConstants.FioBase] = (byte)(value >> 16);
+        _regs[address + 3 - VgcConstants.FioBase] = (byte)(value >> 24);
     }
 
     private static bool DecodeForthFileAccess(byte fam, out bool canRead, out bool canWrite)
@@ -3483,7 +3662,7 @@ public sealed partial class FileIoController
         if (dot >= 0)
         {
             string ext = remainder[dot..];
-            extFilter = ext.ToLowerInvariant();
+            extFilter = ext == ".*" ? null : ext.ToLowerInvariant();
             namePattern = remainder[..dot];
         }
 

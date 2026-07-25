@@ -146,6 +146,28 @@ public class NdiDirectoryTests
     }
 
     [TestMethod]
+    public void Metadata_RoundTripsWithoutBreakingLegacyEntries()
+    {
+        var dir = new NdiDirectory(DirSectorCount);
+        uint timestamp = StorageTimestamp.Pack(new DateTime(2026, 7, 24, 13, 42, 18));
+        int current = dir.AddEntry("current.pas", NdiFileType.Pascal, 0xFFFF, 51, 100, 1,
+            StorageAttributes.ReadOnly | StorageAttributes.Archive, timestamp);
+        int legacy = dir.AddEntry("legacy.pas", NdiFileType.Pascal, 0xFFFF, 52, 100, 1);
+
+        byte[] bytes = dir.ToBytes();
+        Array.Clear(bytes, legacy * NdiDirectory.EntrySize + 0x30, 5);
+        var restored = NdiDirectory.FromBytes(bytes, DirSectorCount);
+
+        Assert.AreEqual(StorageAttributes.ReadOnly | StorageAttributes.Archive,
+            restored.GetEntry(current).Attributes,
+            "New images must preserve DOS-compatible attributes used by Pascal's Dos unit.");
+        Assert.AreEqual(timestamp, restored.GetEntry(current).PackedTimestamp);
+        Assert.AreEqual(StorageAttributes.Archive, restored.GetEntry(legacy).Attributes,
+            "Images written before metadata support must remain readable as ordinary files.");
+        Assert.AreEqual(0u, restored.GetEntry(legacy).PackedTimestamp);
+    }
+
+    [TestMethod]
     public void Filename_TruncatedTo32Chars()
     {
         var dir = new NdiDirectory(DirSectorCount);

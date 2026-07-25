@@ -37,6 +37,8 @@ public sealed class HostDirectoryDevice : IStorageDevice
 
     public string Prefix { get; }
     public bool IsMounted => true;
+    public uint FreeBytes => ClampToUInt32(new DriveInfo(Path.GetPathRoot(_rootDir)!).AvailableFreeSpace);
+    public uint CapacityBytes => ClampToUInt32(new DriveInfo(Path.GetPathRoot(_rootDir)!).TotalSize);
 
     public string CurrentDirectory
     {
@@ -116,7 +118,8 @@ public sealed class HostDirectoryDevice : IStorageDevice
             return [];
 
         var dirs = Directory.GetDirectories(targetDir)
-            .Select(d => new StorageDirEntry(Path.GetFileName(d), true, NdiFileType.Dir, 0))
+            .Select(d => new StorageDirEntry(Path.GetFileName(d), true, NdiFileType.Dir, 0, "",
+                StorageAttributes.Directory, StorageTimestamp.Pack(Directory.GetLastWriteTime(d))))
             .OrderBy(e => e.Filename);
 
         var files = SupportedExtensions
@@ -127,7 +130,8 @@ public sealed class HostDirectoryDevice : IStorageDevice
                 string nameNoExt = Path.GetFileNameWithoutExtension(f);
                 var type = ExtToType.TryGetValue(ext, out var t) ? t : NdiFileType.Bin;
                 int size = (int)new FileInfo(f).Length;
-                return new StorageDirEntry(nameNoExt, false, type, size, ext);
+                return new StorageDirEntry(nameNoExt, false, type, size, ext,
+                    GetAttributes(f), StorageTimestamp.Pack(File.GetLastWriteTime(f)));
             })
             .OrderBy(e => e.Filename);
 
@@ -155,6 +159,27 @@ public sealed class HostDirectoryDevice : IStorageDevice
     public bool FileExists(string name, string ext)
         => File.Exists(ResolvePath(name, ext));
 
+    public StorageFileInfo GetFileInfo(string name, string ext)
+    {
+        string path = ResolvePath(name, ext);
+        var file = new FileInfo(path);
+        if (!file.Exists)
+            throw new FileNotFoundException($"File not found: {name}{ext}", path);
+        return new StorageFileInfo(GetAttributes(path), StorageTimestamp.Pack(file.LastWriteTime),
+            checked((int)file.Length));
+    }
+
+    public void SetFileInfo(string name, string ext, byte attributes, uint packedTimestamp)
+    {
+        string path = ResolvePath(name, ext);
+        if (!File.Exists(path))
+            throw new FileNotFoundException($"File not found: {name}{ext}", path);
+
+        File.SetAttributes(path, StorageAttributes.ToFileAttributes(attributes));
+        if (packedTimestamp != 0)
+            File.SetLastWriteTime(path, StorageTimestamp.Unpack(packedTimestamp));
+    }
+
     public void Format(string label, int sizeKB)
         => throw new NotSupportedException("HostDirectoryDevice does not support Format.");
 
@@ -163,4 +188,12 @@ public sealed class HostDirectoryDevice : IStorageDevice
 
     public void Unmount()
         => throw new NotSupportedException("HostDirectoryDevice does not support Unmount.");
+
+    private static byte GetAttributes(string path)
+    {
+        return StorageAttributes.FromFileAttributes(File.GetAttributes(path));
+    }
+
+    private static uint ClampToUInt32(long value) =>
+        value <= 0 ? 0 : value >= uint.MaxValue ? uint.MaxValue : (uint)value;
 }

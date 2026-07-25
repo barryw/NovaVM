@@ -18,6 +18,8 @@ public sealed class NdiImage : IDisposable
 
     public NdiHeader Header => _header;
     public int FreeSectors => _bam.FreeCount;
+    public uint FreeBytes => checked((uint)((long)_bam.FreeCount * _header.SectorSize));
+    public uint CapacityBytes => checked((uint)((_header.TotalSectors - _header.DataStartSector) * (long)_header.SectorSize));
 
     private NdiImage(NdiHeader header, NdiBam bam, NdiDirectory directory, Stream stream)
     {
@@ -129,12 +131,16 @@ public sealed class NdiImage : IDisposable
     {
         ThrowIfDisposed();
         int existing = _directory.FindEntry(name, parentIndex);
+        byte attributes = StorageAttributes.Archive;
         if (existing >= 0)
         {
             var existingEntry = _directory.GetEntry(existing);
             if (existingEntry.IsDirectory)
                 throw new InvalidOperationException($"'{name}' is a directory. Use RemoveDirectory.");
+            if ((existingEntry.Attributes & StorageAttributes.ReadOnly) != 0)
+                throw new UnauthorizedAccessException($"'{name}' is read-only.");
 
+            attributes = existingEntry.Attributes;
             _bam.Free(checked((int)existingEntry.StartSector), checked((int)existingEntry.SectorCount));
             _directory.RemoveEntry(existing);
         }
@@ -156,7 +162,8 @@ public sealed class NdiImage : IDisposable
         _stream.Write(padded);
 
         _directory.AddEntry(name, type, parentIndex,
-            (uint)startSector, data.Length, (uint)sectorCount);
+            (uint)startSector, data.Length, (uint)sectorCount, attributes,
+            StorageTimestamp.Pack(DateTime.Now));
 
         Flush();
     }
@@ -197,6 +204,8 @@ public sealed class NdiImage : IDisposable
         var entry = _directory.GetEntry(idx);
         if (entry.IsDirectory)
             throw new InvalidOperationException($"'{name}' is a directory. Use RemoveDirectory.");
+        if ((entry.Attributes & StorageAttributes.ReadOnly) != 0)
+            throw new UnauthorizedAccessException($"'{name}' is read-only.");
 
         _bam.Free(checked((int)entry.StartSector), checked((int)entry.SectorCount));
         _directory.RemoveEntry(idx);
@@ -245,6 +254,26 @@ public sealed class NdiImage : IDisposable
     {
         ThrowIfDisposed();
         return _directory.ListEntries(parentIndex);
+    }
+
+    public StorageFileInfo GetFileInfo(string name, ushort parentIndex)
+    {
+        ThrowIfDisposed();
+        int index = _directory.FindEntry(name, parentIndex);
+        if (index < 0)
+            throw new FileNotFoundException($"File '{name}' not found.");
+        NdiDirEntry entry = _directory.GetEntry(index);
+        return new StorageFileInfo(entry.Attributes, entry.PackedTimestamp, entry.SizeBytes);
+    }
+
+    public void SetFileInfo(string name, ushort parentIndex, byte attributes, uint packedTimestamp)
+    {
+        ThrowIfDisposed();
+        int index = _directory.FindEntry(name, parentIndex);
+        if (index < 0)
+            throw new FileNotFoundException($"File '{name}' not found.");
+        _directory.SetMetadata(index, attributes, packedTimestamp);
+        Flush();
     }
 
     // -------------------------------------------------------------------------

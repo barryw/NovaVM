@@ -272,6 +272,8 @@ AUDIO_STRLEN     = FIO_NAMELEN
 .global audio_sound_async
 .global audio_volume
 .global audio_tone
+.global audio_tone_hz
+.global audio_tone_stop
 .global audio_noise
 .global audio_instrument
 .global audio_init

@@ -671,6 +671,10 @@ The caller polls $B9A1 (`FioStatus`) for completion.
 | $18 | FioCmdXLoad | Load a file directly into XRAM. FioGSpace/GAddrL/GAddrH=24-bit destination, FioGLenL/H=max length or 0 for full file. |
 | $19 | FioCmdXSave | Save XRAM directly to a file. FioGSpace/GAddrL/GAddrH=24-bit source, FioGLenL/H=length. |
 | $2B | FioCmdNvgLoad | Clear graphics bitmap memory and decode a native packed `.nvg`/NVG2 file into graphics memory. `FioGSpace` must be 3; `FioGAddrL/H` is the bitmap destination offset. `FioSizeL/H` returns pixels written. |
+| $3B | FioCmdFileInfoGet | Read exact-file metadata. Returns packed DOS time in `FioSrcL/H` and `FioEndL/H`, 32-bit size in `FioSizeL/H`, `FioGSpace`, and `FioGAddrL`, and attributes in `FioGAddrH`. |
+| $3C | FioCmdFileInfoSet | Set exact-file packed DOS time from `FioSrcL/H` and `FioEndL/H`, and attributes from `FioGAddrH`. |
+| $3D | FioCmdClockGet | Read the platform clock: year in `FioSrcL/H`, month/day in `FioEndL/H`, hour/minute in `FioSizeL/H`, second in `FioGSpace`, and hundredths in `FioGAddrL`. |
+| $3E | FioCmdClockSet | Set the platform clock from the same register layout as `FioCmdClockGet`; this adjusts Nova's process-local clock and never changes the host clock. |
 
 ### FIO Status Codes
 

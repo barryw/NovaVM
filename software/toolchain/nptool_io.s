@@ -5,8 +5,6 @@
       .include "libfiles.inc"
       .include "nptool.inc"
 
-NPTOOL_IO_SHORT      = $FD
-
 .ifdef NPTOOL_BIN
       .segment "HEADER"
       .word NPTOOL_LOAD
@@ -30,8 +28,11 @@ io_left:        .res 2
       .export nptool_save_arg0
       .export nptool_save_arg1
       .export nptool_save_named
+      .export nptool_clear_args
+      .export nptool_files_call
       .export nptool_size_named
       .export nptool_probe_named
+      .export nptool_hash_named
       .export nptool_validate_text
       .export nptool_print_z
       .export nptool_newline
@@ -203,7 +204,7 @@ nptool_load:
       LDA   NPTOOL_IO_LEN+1
       ORA   NPTOOL_IO_LEN+0
       BEQ   @close
-      JSR   io_clear_args
+      JSR   nptool_clear_args
       LDA   io_file_id+0
       STA   LIB_ARG0+0
       LDA   io_file_id+1
@@ -217,7 +218,7 @@ nptool_load:
       LDA   NPTOOL_IO_LEN+1
       STA   LIB_ARG2+1
       LDA   #FILE_FREAD
-      JSR   io_call
+      JSR   nptool_files_call
       BEQ   :+
       JMP   io_fail_close
 :
@@ -320,6 +321,22 @@ nptool_probe_named:
 :     LDA   #0
       RTS
 
+; A/X points at a filename and Y is its length. Publish the exact CRC-32 in
+; LIB_RESULT. Unlike the buffered helpers, this works for files of any size.
+nptool_hash_named:
+      STA   io_name_ptr
+      STX   io_name_ptr+1
+      STY   io_name_len
+      JSR   nptool_clear_args
+      LDA   io_name_ptr+0
+      STA   LIB_ARG0+0
+      LDA   io_name_ptr+1
+      STA   LIB_ARG0+1
+      LDA   io_name_len
+      STA   LIB_ARG1+0
+      LDA   #FILE_HASH
+      JMP   nptool_files_call
+
 nptool_save_arg0:
       LDA   #<NPTOOL_ARG0
       LDX   #>NPTOOL_ARG0
@@ -344,7 +361,7 @@ io_save:
       LDA   NPTOOL_IO_LEN+0
       ORA   NPTOOL_IO_LEN+1
       BEQ   @close
-      JSR   io_clear_args
+      JSR   nptool_clear_args
       LDA   io_file_id+0
       STA   LIB_ARG0+0
       LDA   io_file_id+1
@@ -358,7 +375,7 @@ io_save:
       LDA   NPTOOL_IO_LEN+1
       STA   LIB_ARG2+1
       LDA   #FILE_FWRITE
-      JSR   io_call
+      JSR   nptool_files_call
       BEQ   :+
       JMP   io_fail_close
 :
@@ -389,7 +406,7 @@ io_open_write:
 
 io_open:
       PHA
-      JSR   io_clear_args
+      JSR   nptool_clear_args
       LDA   io_name_ptr+0
       STA   LIB_ARG0+0
       LDA   io_name_ptr+1
@@ -405,7 +422,7 @@ io_open:
       BRA   @call
 :     LDA   #FILE_FCREATE
 @call:
-      JSR   io_call
+      JSR   nptool_files_call
       BNE   @done
       LDA   LIB_RESULT+0
       STA   io_file_id+0
@@ -416,24 +433,24 @@ io_open:
       RTS
 
 io_file_size:
-      JSR   io_clear_args
+      JSR   nptool_clear_args
       LDA   io_file_id+0
       STA   LIB_ARG0+0
       LDA   io_file_id+1
       STA   LIB_ARG0+1
       LDA   #FILE_FSIZE
-      JMP   io_call
+      JMP   nptool_files_call
 
 io_close:
-      JSR   io_clear_args
+      JSR   nptool_clear_args
       LDA   io_file_id+0
       STA   LIB_ARG0+0
       LDA   io_file_id+1
       STA   LIB_ARG0+1
       LDA   #FILE_FCLOSE
-      JMP   io_call
+      JMP   nptool_files_call
 
-io_clear_args:
+nptool_clear_args:
       LDX   #15
 @loop:
       STZ   LIB_ARG0,X
@@ -441,7 +458,7 @@ io_clear_args:
       BPL   @loop
       RTS
 
-io_call:
+nptool_files_call:
       STA   LIB_FN_ID
       LDA   #MODULE_ID_FILES
       STA   LIB_MOD_ID

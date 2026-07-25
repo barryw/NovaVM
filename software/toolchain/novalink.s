@@ -104,6 +104,8 @@ l_tmp:          .res 2
       .export nlink_object_xaddr_h
       .export nlink_library_ptr
       .export nlink_library_len
+      .export nlink_library_xram
+      .export nlink_library_xaddr
       .export nlink_output_ptr
       .export nlink_output_xram
       .export nlink_output_xaddr
@@ -141,6 +143,8 @@ nlink_object_xaddr_m = NLW_OBJECT_XADDR_M
 nlink_object_xaddr_h = NLW_OBJECT_XADDR_H
 nlink_library_ptr: .res 2
 nlink_library_len: .res 2
+nlink_library_xram:.res 1
+nlink_library_xaddr:.res 3
 nlink_output_ptr:  .res 2
 nlink_output_xram: .res 1
 nlink_output_xaddr:.res 3
@@ -213,6 +217,7 @@ l_place_zerofill:  .res 1
 
       .segment "CODE"
       .export nlink_link
+      .export nlink_package_overlay
       .export nlink_prepare
       .export nlink_export_worker_state
       .export nlink_import_worker_objects
@@ -245,6 +250,177 @@ nlink_prepare:
       INC   l_prepared
       LDA   #NLINK_OK
       RTS
+
+; Replace the finished executable envelope with the canonical NOVO header.
+; Relocations remain untouched: the initialized payload is moved from file
+; offset 2 to offset 32 after linking. The caller must reserve 30 extra bytes
+; beyond nlink_output_cap in the backing output buffer.
+nlink_package_overlay:
+      LDA   l_file_payload_len
+      ORA   l_file_payload_len+1
+      long_beq l_bad_output
+
+      ; A NOVO main entry must point into the serialized payload.
+      SEC
+      LDA   nlink_entry
+      SBC   nlink_load_base
+      STA   l_address
+      LDA   nlink_entry+1
+      SBC   nlink_load_base+1
+      STA   l_address+1
+      long_bcc l_bad_output
+      CMP   l_file_payload_len+1
+      long_bcc @entry_ok
+      long_bne l_bad_output
+      LDA   l_address
+      CMP   l_file_payload_len
+      long_bcs l_bad_output
+@entry_ok:
+      ; Preserve only the zero-fill tail; interior configured gaps already
+      ; live in the serialized payload.
+      SEC
+      LDA   l_payload_len
+      SBC   l_file_payload_len
+      STA   l_reloc_bytes
+      LDA   l_payload_len+1
+      SBC   l_file_payload_len+1
+      STA   l_reloc_bytes+1
+      long_bcc l_bad_output
+
+      ; Move backwards because source and destination overlap by 30 bytes.
+      STZ   l_reloc
+      STZ   l_reloc+1
+      LDA   l_file_payload_len
+      STA   l_left
+      LDA   l_file_payload_len+1
+      STA   l_left+1
+@move:
+      LDA   l_left
+      BNE   :+
+      DEC   l_left+1
+:     DEC   l_left
+      CLC
+      LDA   l_left
+      ADC   #2
+      STA   l_offset
+      LDA   l_left+1
+      ADC   #0
+      STA   l_offset+1
+      JSR   l_set_patch_offset
+      JSR   l_read_patch
+      STA   l_read_value
+      CLC
+      ADC   l_reloc
+      STA   l_reloc
+      LDA   l_reloc+1
+      ADC   #0
+      STA   l_reloc+1
+      CLC
+      LDA   l_left
+      ADC   #NLINK_OVERLAY_HEADER_SIZE
+      STA   l_offset
+      LDA   l_left+1
+      ADC   #0
+      STA   l_offset+1
+      JSR   l_set_patch_offset
+      LDA   l_read_value
+      JSR   l_write_patch
+      LDA   l_left
+      ORA   l_left+1
+      BNE   @move
+
+      ; Write the fixed bytes and zero all optional entry/module fields.
+      STZ   l_output_window_valid
+      LDA   nlink_output_xram
+      BEQ   @header_ram
+      STZ   l_dst
+      STZ   l_dst+1
+      BRA   @header_ready
+@header_ram:
+      LDA   nlink_output_ptr
+      STA   l_dst
+      LDA   nlink_output_ptr+1
+      STA   l_dst+1
+@header_ready:
+      STZ   l_left
+@header:
+      LDX   l_left
+      LDA   l_overlay_header,X
+      JSR   l_write_output
+      INC   l_dst
+      BNE   :+
+      INC   l_dst+1
+:     INC   l_left
+      LDA   l_left
+      CMP   #NLINK_OVERLAY_HEADER_SIZE
+      BCC   @header
+
+      LDA   nlink_load_base
+      LDX   nlink_load_base+1
+      LDY   #$08
+      JSR   l_patch_overlay_word
+      LDA   l_file_payload_len
+      LDX   l_file_payload_len+1
+      LDY   #$0A
+      JSR   l_patch_overlay_word
+      LDA   l_reloc_bytes
+      LDX   l_reloc_bytes+1
+      LDY   #$0C
+      JSR   l_patch_overlay_word
+      LDA   nlink_entry
+      LDX   nlink_entry+1
+      LDY   #$10
+      JSR   l_patch_overlay_word
+      LDA   l_reloc
+      LDX   l_reloc+1
+      LDY   #$1E
+      JSR   l_patch_overlay_word
+
+      CLC
+      LDA   l_file_payload_len
+      ADC   #NLINK_OVERLAY_HEADER_SIZE
+      STA   nlink_output_len
+      LDA   l_file_payload_len+1
+      ADC   #0
+      STA   nlink_output_len+1
+      long_bcs l_bad_output
+      LDA   #NLINK_OK
+      RTS
+
+; Convert an output-relative offset in l_offset to l_write_patch/l_read_patch's
+; pointer representation.
+l_set_patch_offset:
+      LDA   nlink_output_xram
+      BEQ   @ram
+      LDA   l_offset
+      STA   l_tmp
+      LDA   l_offset+1
+      STA   l_tmp+1
+      RTS
+@ram:
+      CLC
+      LDA   nlink_output_ptr
+      ADC   l_offset
+      STA   l_tmp
+      LDA   nlink_output_ptr+1
+      ADC   l_offset+1
+      STA   l_tmp+1
+      RTS
+
+; A/X is the little-endian word and Y is its NOVO header offset.
+l_patch_overlay_word:
+      STA   l_read_acc
+      STX   l_read_value
+      STY   l_offset
+      STZ   l_offset+1
+      JSR   l_set_patch_offset
+      LDA   l_read_acc
+      JSR   l_write_patch
+      INC   l_tmp
+      BNE   :+
+      INC   l_tmp+1
+:     LDA   l_read_value
+      JMP   l_write_patch
 
 ; Return A=0 on success, A=1 on error.
 nlink_link:
@@ -564,12 +740,18 @@ l_read_object_y:
       STX   l_read_x
       STY   l_read_y
       CLC
-      LDA   l_obj_xaddr_l
+      TYA
       ADC   l_read_offset
-      ADC   l_read_y
+      STA   l_read_index
+      LDA   l_read_offset+1
+      ADC   #0
+      STA   l_read_m
+      CLC
+      LDA   l_obj_xaddr_l
+      ADC   l_read_index
       STA   l_read_index
       LDA   l_obj_xaddr_m
-      ADC   l_read_offset+1
+      ADC   l_read_m
       STA   l_read_m
       LDA   l_obj_xaddr_h
       ADC   #0
@@ -686,6 +868,14 @@ nlink_export_worker_state:
       STA   NLW_LIBRARY_LEN
       LDA   nlink_library_len+1
       STA   NLW_LIBRARY_LEN+1
+      LDA   nlink_library_xram
+      STA   NLW_LIBRARY_XRAM
+      LDA   nlink_library_xaddr
+      STA   NLW_LIBRARY_XADDR_L
+      LDA   nlink_library_xaddr+1
+      STA   NLW_LIBRARY_XADDR_M
+      LDA   nlink_library_xaddr+2
+      STA   NLW_LIBRARY_XADDR_H
       LDA   nlink_config_symbol_count
       STA   NLW_CONFIG_SYMBOL_COUNT
       LDX   #NLINK_SYMBOL_CAP-1
@@ -1446,10 +1636,24 @@ l_validate_object:
       RTS
 
 l_validate_library:
+      LDA   nlink_library_xram
+      STA   l_obj_xram
+      BEQ   @ram
+      STZ   l_library
+      STZ   l_library+1
+      LDA   nlink_library_xaddr
+      STA   l_obj_xaddr_l
+      LDA   nlink_library_xaddr+1
+      STA   l_obj_xaddr_m
+      LDA   nlink_library_xaddr+2
+      STA   l_obj_xaddr_h
+      BRA   @length
+@ram:
       LDA   nlink_library_ptr
       STA   l_library
       LDA   nlink_library_ptr+1
       STA   l_library+1
+@length:
       LDA   nlink_library_len+1
       BNE   @magic
       LDA   nlink_library_len
@@ -1457,27 +1661,27 @@ l_validate_library:
       long_bcc @bad
 @magic:
       LDY   #0
-      LDA   (l_library),Y
+      l_object_lda l_library
       CMP   #NLIB_MAGIC0
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_library),Y
+      l_object_lda l_library
       CMP   #NLIB_MAGIC1
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_library),Y
+      l_object_lda l_library
       CMP   #NLIB_MAGIC2
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_library),Y
+      l_object_lda l_library
       CMP   #NLIB_MAGIC3
-      BNE   @bad
+      long_bne @bad
       LDY   #NLIB_VERSION_OFF
-      LDA   (l_library),Y
+      l_object_lda l_library
       CMP   #NLIB_VERSION
-      BNE   @bad
+      long_bne @bad
       INY
-      LDA   (l_library),Y
+      l_object_lda l_library
       STA   l_member_count
       JSR   l_begin_archive
       BCS   @bad
@@ -1490,7 +1694,6 @@ l_validate_library:
       STA   l_obj
       LDA   l_member_code+1
       STA   l_obj+1
-      STZ   l_obj_xram
       LDA   l_archive_len
       STA   l_obj_len
       LDA   l_archive_len+1
@@ -1542,13 +1745,13 @@ l_take_archive_member:
       BNE   @length
       LDA   l_archive_left
       CMP   #2
-      BCC   @bad
+      long_bcc @bad
 @length:
       LDY   #0
-      LDA   (l_archive_ptr),Y
+      l_object_lda l_archive_ptr
       STA   l_archive_len
       INY
-      LDA   (l_archive_ptr),Y
+      l_object_lda l_archive_ptr
       STA   l_archive_len+1
       CLC
       LDA   l_archive_ptr
@@ -2232,6 +2435,21 @@ l_write_patch:
       STA   XRAM_WIN2_BASE,X
       RTS
 
+l_read_patch:
+      LDA   nlink_output_xram
+      BNE   @xram
+      LDY   #0
+      LDA   (l_tmp),Y
+      RTS
+@xram:
+      LDA   l_tmp
+      STA   l_output_offset
+      LDA   l_tmp+1
+      STA   l_output_offset+1
+      JSR   l_map_output_offset
+      LDA   XRAM_WIN2_BASE,X
+      RTS
+
 l_map_output_offset:
       CLC
       LDA   nlink_output_xaddr
@@ -2439,6 +2657,11 @@ l_section_bits:
 l_bss_magic:
       .byte NOVA_EXEC_BSS_MAGIC0, NOVA_EXEC_BSS_MAGIC1
       .byte NOVA_EXEC_BSS_MAGIC2, NOVA_EXEC_BSS_MAGIC3
+l_overlay_header:
+      .byte 'N', 'O', 'V', 'O', $01, $01, $00, $00
+      .byte $00, $00, $00, $00, $00, $00, $00, $00
+      .byte $00, $00, $00, $00, $00, $00, $00, $00
+      .byte $00, $00, $00, $00, $00, $00, $00, $00
 l_builtin_image_end:.byte "__NOVA_IMAGE_END"
 l_builtin_ram_end:  .byte "__NOVA_RAM_END"
 

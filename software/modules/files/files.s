@@ -60,7 +60,7 @@
 ;
 ;@fn FILE_DIR_READ
 ;@ndk fio_dir_read
-;@ret void (entry data lands in the FIO directory result registers)
+;@ret void (name/type/size plus attributes/timestamp land in FIO result registers)
 ;@status LERR_OK, LERR_FIO_FAIL
 ;
 ;@fn FILE_DELETE
@@ -144,6 +144,55 @@
 ;@arg len u16 byte count -> PAGER_LENL/H (ARG3)
 ;@ret void
 ;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_DISK_FREE
+;@ndk fio_devstatus
+;@arg nameptr u16 pointer to device prefix (ARG0)
+;@arg namelen u8 prefix length 1..63 (ARG1 byte0)
+;@ret u32 free bytes (RESULT)
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_DISK_SIZE
+;@ndk fio_devstatus
+;@arg nameptr u16 pointer to device prefix (ARG0)
+;@arg namelen u8 prefix length 1..63 (ARG1 byte0)
+;@ret u32 usable capacity bytes (RESULT)
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_INFO_GET
+;@ndk fio_file_info_get
+;@arg nameptr u16 pointer to exact filename (ARG0)
+;@arg namelen u8 filename length 1..63 (ARG1 byte0)
+;@ret u8 attributes (RESULT byte0); timestamp and size remain in FIO_FILE_* registers
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_INFO_SET
+;@ndk fio_file_info_set
+;@arg nameptr u16 pointer to exact filename (ARG0)
+;@arg namelen u8 filename length 1..63 (ARG1 byte0)
+;@arg attributes u8 DOS-compatible attributes (ARG2 byte0)
+;@arg timestamp u32 packed DOS date/time (ARG3)
+;@ret void
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_CLOCK_GET
+;@ndk fio_clock_get
+;@ret void (calendar fields including FIO_CLOCK_DOW remain in FIO_CLOCK_* registers)
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_CLOCK_SET
+;@ndk fio_clock_set
+;@arg date u32 year word, month byte2, day byte3 (ARG0)
+;@arg time u32 hour, minute, second, hundredth (ARG1)
+;@ret void
+;@status LERR_OK, LERR_FIO_FAIL
+;
+;@fn FILE_HASH
+;@ndk fio_file_hash
+;@arg nameptr u16 pointer to exact filename (ARG0)
+;@arg namelen u8 filename length 1..63 (ARG1 byte0)
+;@ret u32 standard CRC-32 of the exact file bytes (RESULT)
+;@status LERR_OK, LERR_FIO_FAIL
 
 ; ---------------------------------------------------------------------------
 ; dispatch — fn-id router (RTS-trick). FILE_FN_COUNT is small so fn*2 < 256.
@@ -194,6 +243,13 @@ file_jtable:
       .word   file_fdelete-1           ; $1A FILE_FDELETE
       .word   file_frename-1           ; $1B FILE_FRENAME
       .word   file_dir_list-1          ; $1C FILE_DIR_LIST
+      .word   file_disk_free-1         ; $1D FILE_DISK_FREE
+      .word   file_disk_size-1         ; $1E FILE_DISK_SIZE
+      .word   file_info_get-1          ; $1F FILE_INFO_GET
+      .word   file_info_set-1          ; $20 FILE_INFO_SET
+      .word   file_clock_get-1         ; $21 FILE_CLOCK_GET
+      .word   file_clock_set-1         ; $22 FILE_CLOCK_SET
+      .word   file_hash-1              ; $23 FILE_HASH
 
 ; ===========================================================================
 ; Shared epilogues. file_finish_status maps the NDK A result (0=OK / 1=err) to
@@ -249,6 +305,27 @@ file_finish_result_fio_size:
       lda     #LERR_FIO_FAIL
       sta     LIB_STATUS
       rts
+
+; X selects one of the two contiguous four-byte result groups: 0=FIO_SRCL,
+; 4=FIO_SIZEL. A is the fio_* status.
+file_finish_result_fio_u32:
+      cmp     #$00
+      bne     @fail
+      LDA     FIO_SRCL,X
+      STA     LIB_RESULT
+      LDA     FIO_SRCL+1,X
+      STA     LIB_RESULT+1
+      LDA     FIO_SRCL+2,X
+      STA     LIB_RESULT+2
+      LDA     FIO_SRCL+3,X
+      STA     LIB_RESULT+3
+      LDA     #LERR_OK
+      STA     LIB_STATUS
+      RTS
+@fail:
+      LDA     #LERR_FIO_FAIL
+      STA     LIB_STATUS
+      RTS
 
 ; file_marshal_name — marshal the pointer-filename ABI shared by the name-taking
 ; fns: ARG0 word -> FIO_ARG_NAMEPTR_L/H, ARG1 byte0 -> FIO_ARG_NAMELEN, then copy
@@ -782,6 +859,113 @@ file_marshal_size_arg1:
       STA   FIO_SIZEH
       LDA   LIB_ARG1+2
       STA   FIO_SIZE2
+      RTS
+
+; ===========================================================================
+; Device space, exact-file metadata, and calendar clock.
+; ===========================================================================
+
+file_disk_free:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_devstatus
+      LDX   #$00
+      JMP   file_finish_result_fio_u32
+
+file_disk_size:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_devstatus
+      LDX   #$04
+      JMP   file_finish_result_fio_u32
+
+file_info_get:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_file_info_get
+      CMP   #$00
+      BNE   @fail
+      LDA   FIO_FILE_ATTR
+      STA   LIB_RESULT
+      STZ   LIB_RESULT+1
+      STZ   LIB_RESULT+2
+      STZ   LIB_RESULT+3
+      STZ   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_FIO_FAIL
+      STA   LIB_STATUS
+      RTS
+
+file_info_set:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      LDA   LIB_ARG2
+      STA   FIO_FILE_ATTR
+      LDA   LIB_ARG3
+      STA   FIO_FILE_TIME0
+      LDA   LIB_ARG3+1
+      STA   FIO_FILE_TIME1
+      LDA   LIB_ARG3+2
+      STA   FIO_FILE_TIME2
+      LDA   LIB_ARG3+3
+      STA   FIO_FILE_TIME3
+      JSR   fio_file_info_set
+      JMP   file_finish_status
+
+file_clock_get:
+      JSR   fio_clock_get
+      JMP   file_finish_status
+
+file_clock_set:
+      LDA   LIB_ARG0
+      STA   FIO_CLOCK_YEARL
+      LDA   LIB_ARG0+1
+      STA   FIO_CLOCK_YEARH
+      LDA   LIB_ARG0+2
+      STA   FIO_CLOCK_MONTH
+      LDA   LIB_ARG0+3
+      STA   FIO_CLOCK_DAY
+      LDA   LIB_ARG1
+      STA   FIO_CLOCK_HOUR
+      LDA   LIB_ARG1+1
+      STA   FIO_CLOCK_MIN
+      LDA   LIB_ARG1+2
+      STA   FIO_CLOCK_SEC
+      LDA   LIB_ARG1+3
+      STA   FIO_CLOCK_HSEC
+      JSR   fio_clock_set
+      JMP   file_finish_status
+
+file_hash:
+      JSR   file_marshal_name
+      BEQ   :+
+      JMP   file_name_fail
+:
+      JSR   fio_file_hash
+      CMP   #$00
+      BNE   @fail
+      LDA   FIO_HASH0
+      STA   LIB_RESULT
+      LDA   FIO_HASH1
+      STA   LIB_RESULT+1
+      LDA   FIO_HASH2
+      STA   LIB_RESULT+2
+      LDA   FIO_HASH3
+      STA   LIB_RESULT+3
+      STZ   LIB_STATUS
+      RTS
+@fail:
+      LDA   #LERR_FIO_FAIL
+      STA   LIB_STATUS
       RTS
 
 ; ===========================================================================

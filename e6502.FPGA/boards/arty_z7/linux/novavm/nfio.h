@@ -85,7 +85,12 @@ void nfio_disk_dirread(void);   /* FIO_CMD_DIRREAD: name + FIO_DIRTYPE + FIO_SIZ
 void nfio_disk_delete(void);    /* FIO_CMD_DELETE  when a disk is mounted        */
 void nfio_cd(void);             /* FIO_CMD_CD: set the current drive/subdir      */
 void nfio_pwd(void);            /* FIO_CMD_PWD: "drive:dir" -> FIO_NAME/NAMELEN   */
-void nfio_devstatus(void);      /* FIO_CMD_DEVSTATUS: mounted slot probe         */
+void nfio_devstatus(void);      /* FIO_CMD_DEVSTATUS: probe + free/capacity bytes */
+void nfio_file_info_get(void);  /* FIO_CMD_FILEINFO_GET: attributes/time/size     */
+void nfio_file_info_set(void);  /* FIO_CMD_FILEINFO_SET: attributes/time          */
+void nfio_clock_get(void);      /* FIO_CMD_CLOCK_GET: calendar fields             */
+void nfio_clock_set(void);      /* FIO_CMD_CLOCK_SET: calendar fields             */
+void nfio_file_hash(void);      /* FIO_CMD_FILEHASH: exact-file CRC-32             */
 
 /* ---- directory create/remove + VGC graphics-memory save/load --------------
  * Ports of the desktop FileIoController DoMkdir/DoRmdir/DoGSave/DoGLoad. Each

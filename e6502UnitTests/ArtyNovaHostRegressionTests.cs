@@ -413,6 +413,54 @@ public class ArtyNovaHostRegressionTests
     }
 
     [TestMethod]
+    public void LinuxNfio_ImplementsDosMetadataSpaceAndClockContract()
+    {
+        string src = File.ReadAllText(LinuxNovaVmSrc("nfio.c"));
+        string header = File.ReadAllText(LinuxNovaVmSrc("nfio.h"));
+        string host = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));
+
+        foreach (var command in new[]
+        {
+            (Name: "FILEINFO_GET", Handler: "nfio_file_info_get"),
+            (Name: "FILEINFO_SET", Handler: "nfio_file_info_set"),
+            (Name: "CLOCK_GET", Handler: "nfio_clock_get"),
+            (Name: "CLOCK_SET", Handler: "nfio_clock_set"),
+            (Name: "FILEHASH", Handler: "nfio_file_hash")
+        })
+        {
+            StringAssert.Contains(host, $"case FIO_CMD_{command.Name}:",
+                $"Hardware must dispatch the shared {command.Name} command.");
+            StringAssert.Contains(header, $"void {command.Handler}(void);",
+                $"The Linux host interface must expose {command.Handler}.");
+            StringAssert.Contains(src, $"void {command.Handler}(void)",
+                $"The hardware host must implement {command.Handler}, not only Avalonia.");
+        }
+
+        StringAssert.Contains(src, "#define OFF_ATTRIBUTES 0x30",
+            "NDI metadata must use the same reserved directory-entry byte as the desktop host.");
+        StringAssert.Contains(src, "#define OFF_TIMESTAMP  0x31",
+            "Packed DOS timestamps must persist in the shared NDI layout.");
+        StringAssert.Contains(src, "(stored & ATTR_VALID)",
+            "Pre-metadata disk images must remain distinguishable from explicit zero attributes.");
+        StringAssert.Contains(src, "img->free_count * NDI_SECTOR_SIZE",
+            "DiskFree must report allocatable NDI data bytes.");
+        StringAssert.Contains(src, "img->data_sector_count * NDI_SECTOR_SIZE",
+            "DiskSize must exclude image metadata sectors.");
+        StringAssert.Contains(src, "if (e.attributes & ATTR_READONLY) return -1;",
+            "Read-only metadata must protect file deletion on hardware.");
+        StringAssert.Contains(src, "nfio_glob_match(g_ddir_name_pattern, base)",
+            "Arty directory iteration must honor the same FindFirst-style filter as Avalonia.");
+        StringAssert.Contains(src, "e.packed_timestamp >> (8 * k)",
+            "Arty DIRREAD must publish packed timestamps for the Pascal Dos unit.");
+        StringAssert.Contains(src, "poke(FIO_GADDR_HI, e.attributes",
+            "Arty DIRREAD must publish DOS attributes for the Pascal Dos unit.");
+        StringAssert.Contains(src, "poke(FIO_GADDR_HI, local.tm_wday)",
+            "Arty CLOCK_GET must publish Turbo-compatible Sunday-zero day of week.");
+        StringAssert.Contains(src, "UINT32_C(0xEDB88320)",
+            "Arty FILEHASH must use the same standard CRC-32 polynomial as Avalonia.");
+    }
+
+    [TestMethod]
     public void LinuxHost_RngCommandUsesKernelEntropy()
     {
         string src = File.ReadAllText(LinuxNovaVmSrc("novavm.c"));

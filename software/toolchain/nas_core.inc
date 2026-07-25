@@ -41,6 +41,7 @@ nasm_symbol_names_ptr_h = $096A       ; u8
 nasm_reloc_buffer_ptr_h = $096B       ; u8
 nasm_object_ptr_h = $096C             ; u8
 NASCORE_INCLUDE_MODE = $096D           ; u8 callback mode
+nasm_error_symbol_ptr = $096E          ; u16 optional caller buffer
 NASCORE_INCLUDE_STREAM = 0
 NASCORE_INCLUDE_BUFFERED = 1
 NASCORE_CONSTANT_CAP = $8000

@@ -1,0 +1,18 @@
+; Compiled interface for STRINGS.PAS.
+.ifndef NPI_STRINGS
+NPI_STRINGS = 1
+
+__S997EDD = $03 ; StrLen
+__S996235 = $03 ; StrEnd
+__PC49639 = $02 ; StrCopy
+__P74F4BE = $02 ; StrECopy
+__P3C0249 = $02 ; StrPCopy
+__S998F62 = $03 ; StrPas
+__P995816 = $02 ; StrCat
+__PC495CD = $02 ; StrComp
+__PBD5656 = $02 ; StrIComp
+__SFA5567 = $03 ; StrLower
+__S9DA08A = $03 ; StrUpper
+__S998768 = $03 ; StrNew
+__SD215B5 = $01 ; StrDispose
+.endif

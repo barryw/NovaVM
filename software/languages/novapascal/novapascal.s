@@ -12,9 +12,13 @@
       .include "replline.inc"
       .include "nptool.inc"
       .include "longbranch.inc"
+      .include "nbuild.inc"
       .include "tools/npproj.inc"
+      .include "tools/npc_frontend.inc"
 
       .import npc_compile_file
+      .import nui_drain_keys
+      .export source_buf
 
 SHELL_BUFFER_CAP = $1000
 OUTPUT_BASE      = $7000
@@ -27,8 +31,10 @@ p_out_left:  .res 2
 p_copy_dst:  .res 2
 p_expected:  .res 1
 
-      .segment "BSS"
-source_buf: .res SHELL_BUFFER_CAP
+      .segment "SOURCEBUF"
+; NPC owns the final 512 bytes while its frontend is active. Shell file
+; commands still see one contiguous 4 KiB buffer when the compiler is idle.
+source_buf: .res NPCFE_WORK_OFFSET
 
       .segment "CODE"
 

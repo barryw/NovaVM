@@ -243,7 +243,6 @@ a_const_used_l:  .res 1
 a_const_used_h:  .res 1
 a_const_scan:    .res 3
 a_const_limit_l: .res 1
-a_const_limit_m: .res 1
 a_const_limit_h: .res 1
 a_const_value_l: .res 1
 a_const_value_h: .res 1
@@ -278,6 +277,7 @@ a_skip_depth:    .res 1
       .export nasm_include_display_len
       .export nasm_error_name_ptr
       .export nasm_error_name_len
+      .export nasm_error_symbol_ptr
 nasm_source_ptr: .res 3
 nasm_source_len: .res 2
 nasm_source_name_ptr:.res 2
@@ -296,6 +296,7 @@ nasm_include_display_ptr:.res 2
 nasm_include_display_len:.res 1
 nasm_error_name_ptr:.res 2
 nasm_error_name_len:.res 1
+nasm_error_symbol_ptr:.res 2
 .endif
 
       .segment "CODE"
@@ -455,9 +456,6 @@ nasm_assemble:
       LDA   a_anon_count+1
       STA   a_anon_target+1
       JSR   a_make_anon_symbol
-      LDA   a_pass
-      CMP   #NASM_PASS_DEFINE
-      BNE   @statement
       JSR   a_define_symbol
       long_bcs a_fail_symbol
       JMP   @statement
@@ -466,11 +464,6 @@ nasm_assemble:
       LDA   a_symbol_local
       BNE   :+
       JSR   a_set_scope
-:
-      LDA   a_pass
-      CMP   #NASM_PASS_DEFINE
-      BEQ   :+
-      JMP   @statement
 :
       JSR   a_define_symbol
       long_bcs a_fail_symbol
@@ -780,6 +773,18 @@ nasm_assemble:
       long_bcs @bit
       JSR   a_implied_opcode
       long_bcs @implied
+      JSR   a_peek
+      BCC   @accumulator_short
+      CMP   #$0A
+      BEQ   @accumulator_short
+      CMP   #$0D
+      BEQ   @accumulator_short
+      CMP   #';'
+      BNE   @not_accumulator_short
+@accumulator_short:
+      JSR   a_accumulator_opcode
+      long_bcs @implied
+@not_accumulator_short:
       JSR   a_branch_opcode
       long_bcs @branch
       JMP   @direct
@@ -1190,6 +1195,7 @@ nasm_assemble:
       long_bne @begin_pass
       LDA   a_resolve_pending
       long_bne a_fail_symbol
+      JSR   a_save_section_sizes
       LDA   #NASM_PASS_EMIT
       STA   a_pass
       JMP   @begin_pass
@@ -1200,29 +1206,7 @@ nasm_assemble:
       JSR   a_validate_symbols
       long_bcs a_fail_symbol
       JSR   a_finish_object
-      BCC   :+
-      LDA   a_dst
-      STA   $0970
-      LDA   a_dst+1
-      STA   $0971
-      LDA   a_cap
-      STA   $0972
-      LDA   a_cap+1
-      STA   $0973
-      LDA   a_output_symbol_count
-      STA   $0974
-      LDA   a_output_symbol_count+1
-      STA   $0975
-      LDA   a_reloc_len
-      STA   $0976
-      LDA   a_reloc_len+1
-      STA   $0977
-      LDA   a_symbol_index
-      STA   $0978
-      LDA   a_symbol_index_h
-      STA   $0979
-      JMP   a_fail_output
-:
+      BCS   a_fail_output
       LDA   #NASM_OK
       RTS
 
@@ -3328,17 +3312,50 @@ a_link_symbol:
 a_define_symbol:
       JSR   a_find_symbol
       BCC   @create
-      sym_load a_sym_section
-      CMP   #NOBJ_SYM_UNDEFINED
-      BNE   @bad
       BRA   @check_decl
 @create:
       JSR   a_get_symbol
-      BCS   @bad
+      long_bcs @bad
 @check_decl:
       sym_load a_sym_decl
       AND   #NASM_DECL_IMPORT
+      long_bne @bad
+      LDA   a_pass
+      CMP   #NASM_PASS_DEFINE
+      BEQ   @define
+      CMP   #NASM_PASS_RESOLVE
+      BEQ   @resolve
+@verify:
+      sym_load a_sym_section
+      CMP   a_section
       BNE   @bad
+      sym_load a_sym_value_l
+      CMP   a_code_len
+      BNE   @bad
+      sym_load a_sym_value_h
+      CMP   a_code_len+1
+      BEQ   @ok
+      BRA   @bad
+@define:
+      sym_load a_sym_section
+      CMP   #NOBJ_SYM_UNDEFINED
+      BNE   @bad
+      BRA   @set
+@resolve:
+      sym_load a_sym_section
+      CMP   #NOBJ_SYM_UNDEFINED
+      BEQ   @changed
+      CMP   a_section
+      BNE   @changed
+      sym_load a_sym_value_l
+      CMP   a_code_len
+      BNE   @changed
+      sym_load a_sym_value_h
+      CMP   a_code_len+1
+      BEQ   @ok
+@changed:
+      LDA   #1
+      STA   a_resolve_changed
 @set:
       LDA   a_code_len
       sym_store a_sym_value_l
@@ -3346,6 +3363,7 @@ a_define_symbol:
       sym_store a_sym_value_h
       LDA   a_section
       sym_store a_sym_section
+@ok:
       CLC
       RTS
 @bad:
@@ -3866,7 +3884,33 @@ a_validate_symbols:
       CLC
       RTS
 @bad:
+      JSR   a_capture_error_symbol
       SEC
+      RTS
+
+a_capture_error_symbol:
+      LDA   nasm_error_symbol_ptr
+      ORA   nasm_error_symbol_ptr+1
+      BEQ   @done
+      sym_load a_sym_name_len
+      STA   a_symbol_len
+      JSR   a_symbol_name_ptr
+      LDA   nasm_error_symbol_ptr
+      STA   a_word
+      LDA   nasm_error_symbol_ptr+1
+      STA   a_word+1
+      LDY   #0
+@copy:
+      CPY   a_symbol_len
+      BEQ   @terminate
+      LDA   (a_symbol_ptr),Y
+      STA   (a_word),Y
+      INY
+      BRA   @copy
+@terminate:
+      LDA   #0
+      STA   (a_word),Y
+@done:
       RTS
 
 ; Map the current 16-bit symbol index's fixed-size XRAM name slot.

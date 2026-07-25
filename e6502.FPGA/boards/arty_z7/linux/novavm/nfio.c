@@ -35,11 +35,13 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include <stdint.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "novavm.h"
@@ -76,6 +78,7 @@
 #define FIO_CMD_FSTATUS     0x37
 #define FIO_CMD_FDELETE     0x38
 #define FIO_CMD_FRENAME     0x39
+#define FIO_CMD_FILEHASH    0x3F
 
 #define FIO_PAGE_XRAM   0x00   /* XPAGE target: flat XRAM       */
 #define FIO_PAGE_RAM    0x01   /* XPAGE target: CPU RAM         */
@@ -143,9 +146,19 @@ static void xram_read(unsigned off, void *dst, unsigned n) {
 #define OFF_SIZE       0x08   /* u32 LE */
 #define OFF_FILENAME   0x0C   /* 32 bytes */
 #define OFF_SECCOUNT   0x2C   /* u32 LE */
+#define OFF_ATTRIBUTES 0x30   /* bit 7 valid; DOS-compatible bits 0..5 */
+#define OFF_TIMESTAMP  0x31   /* packed DOS date/time u32 LE */
 
 #define FL_ACTIVE    0x01
 #define FL_DIRECTORY 0x02
+#define FL_LOCKED    0x80
+#define ATTR_READONLY 0x01
+#define ATTR_DIRECTORY 0x10
+#define ATTR_ARCHIVE 0x20
+#define ATTR_ANY 0x3F
+#define ATTR_VALID 0x80
+
+static int64_t g_clock_offset_ms;
 
 typedef struct {
     int      open;
@@ -176,6 +189,8 @@ typedef struct {
     uint32_t start_sector;
     uint32_t size_bytes;
     uint32_t sector_count;
+    uint8_t  attributes;
+    uint32_t packed_timestamp;
     char     filename[NDI_MAX_NAME + 1];
 } ndi_entry_t;
 
@@ -187,6 +202,26 @@ static uint32_t rd_u32(const uint8_t *p) {
 static void wr_u16(uint8_t *p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); }
 static void wr_u32(uint8_t *p, uint32_t v) {
     p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24);
+}
+
+static int64_t host_now_ms(void) {
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+    return (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+}
+
+static int64_t clock_now_ms(void) { return host_now_ms() + g_clock_offset_ms; }
+
+static uint32_t ndi_now_packed(void) {
+    time_t seconds = (time_t)(clock_now_ms() / 1000);
+    struct tm local;
+    localtime_r(&seconds, &local);
+    int year = local.tm_year + 1900;
+    if (year < 1980) year = 1980;
+    if (year > 2107) year = 2107;
+    uint16_t date = (uint16_t)(((year - 1980) << 9) | ((local.tm_mon + 1) << 5) | local.tm_mday);
+    uint16_t time = (uint16_t)((local.tm_hour << 11) | (local.tm_min << 5) | (local.tm_sec / 2));
+    return ((uint32_t)date << 16) | time;
 }
 
 static int ndi_lower(int c) { return (c >= 'A' && c <= 'Z') ? c + 32 : c; }
@@ -279,21 +314,43 @@ static void ndi_dir_read_entry(ndi_t *m, int slot, ndi_entry_t *out) {
     for (; n < NDI_MAX_NAME; n++) { char c = (char)p[OFF_FILENAME + n]; if (!c) break; out->filename[n] = c; }
     out->filename[n]  = 0;
     out->sector_count = rd_u32(&p[OFF_SECCOUNT]);
+    uint8_t stored = p[OFF_ATTRIBUTES];
+    out->attributes = (stored & ATTR_VALID)
+        ? (stored & ATTR_ANY)
+        : ((out->flags & FL_DIRECTORY) ? ATTR_DIRECTORY : ATTR_ARCHIVE);
+    if (out->flags & FL_LOCKED) out->attributes |= ATTR_READONLY;
+    out->packed_timestamp = rd_u32(&p[OFF_TIMESTAMP]);
 }
 static void ndi_dir_write_entry(ndi_t *m, int slot, uint8_t flags, uint8_t type,
                                 uint16_t parent, uint32_t start_sector, uint32_t size,
-                                const char *name, uint32_t sector_count) {
+                                const char *name, uint32_t sector_count,
+                                uint8_t attributes, uint32_t packed_timestamp) {
     uint8_t *p = ndi_dir_entry_ptr(m, slot);
     if (!p) return;
+    memset(p, 0, NDI_ENTRY_SIZE);
+    flags &= (uint8_t)~FL_LOCKED;
+    if (attributes & ATTR_READONLY) flags |= FL_LOCKED;
     p[OFF_FLAGS] = flags;
     p[OFF_TYPE]  = type;
     wr_u16(&p[OFF_PARENT], parent);
     wr_u32(&p[OFF_START_SEC], start_sector);
     wr_u32(&p[OFF_SIZE], size);
-    memset(&p[OFF_FILENAME], 0, NDI_MAX_NAME);
     for (int n = 0; name[n] && n < NDI_MAX_NAME; n++) p[OFF_FILENAME + n] = (uint8_t)name[n];
     wr_u32(&p[OFF_SECCOUNT], sector_count);
+    p[OFF_ATTRIBUTES] = ATTR_VALID | (attributes & ATTR_ANY);
+    wr_u32(&p[OFF_TIMESTAMP], packed_timestamp);
     m->dir_cache_dirty = 1;
+}
+
+static int ndi_set_metadata(ndi_t *m, int slot, uint8_t attributes, uint32_t packed_timestamp) {
+    uint8_t *p = ndi_dir_entry_ptr(m, slot);
+    if (!p || !(p[OFF_FLAGS] & FL_ACTIVE)) return -1;
+    p[OFF_FLAGS] &= (uint8_t)~FL_LOCKED;
+    if (attributes & ATTR_READONLY) p[OFF_FLAGS] |= FL_LOCKED;
+    p[OFF_ATTRIBUTES] = ATTR_VALID | (attributes & ATTR_ANY);
+    wr_u32(&p[OFF_TIMESTAMP], packed_timestamp);
+    m->dir_cache_dirty = 1;
+    return 0;
 }
 static void ndi_dir_clear_slot(ndi_t *m, int slot) {
     uint8_t *p = ndi_dir_entry_ptr(m, slot);
@@ -426,7 +483,8 @@ static int ndi_create(ndi_t *m, const char *name, uint8_t type, uint16_t parent,
     if (start < 0) return -1;
     int slot = ndi_dir_find_free_slot(m);
     if (slot < 0) { ndi_bam_free(m, start, sector_count); return -1; }
-    ndi_dir_write_entry(m, slot, FL_ACTIVE, type, parent, (uint32_t)start, size, name, (uint32_t)sector_count);
+    ndi_dir_write_entry(m, slot, FL_ACTIVE, type, parent, (uint32_t)start, size,
+                        name, (uint32_t)sector_count, ATTR_ARCHIVE, ndi_now_packed());
     if (ndi_flush_metadata(m) != 0) {
         ndi_bam_free(m, start, sector_count);
         ndi_dir_clear_slot(m, slot);
@@ -469,6 +527,7 @@ static int ndi_delete(ndi_t *m, const char *name, uint16_t parent) {
     ndi_entry_t e;
     ndi_dir_read_entry(m, idx, &e);
     if (e.flags & FL_DIRECTORY) return -1;
+    if (e.attributes & ATTR_READONLY) return -1;
     ndi_bam_free(m, (int)e.start_sector, (int)e.sector_count);
     ndi_dir_clear_slot(m, idx);
     return ndi_flush_metadata(m);
@@ -793,7 +852,8 @@ int nfio_image_load(const char *name) {
 static int ndi_mkdir(ndi_t *m, const char *name, uint16_t parent) {
     int slot = ndi_dir_find_free_slot(m);
     if (slot < 0) return -1;
-    ndi_dir_write_entry(m, slot, FL_ACTIVE | FL_DIRECTORY, NDI_DT_DIR, parent, 0, 0, name, 0);
+    ndi_dir_write_entry(m, slot, FL_ACTIVE | FL_DIRECTORY, NDI_DT_DIR, parent,
+                        0, 0, name, 0, ATTR_DIRECTORY, ndi_now_packed());
     if (ndi_flush_metadata(m) != 0) return -1;
     return slot;
 }
@@ -939,7 +999,9 @@ void nfio_disk_save(void) {
     int len = nfio_stage_save(g_wbuf, WBUF_BYTES);
     if (len < 0) { fio_fail(FIO_ERR_IO); return; }
     uint8_t type = peek(FIO_DIRTYPE);
-    if (ndi_find(img, fname, parent) >= 0) ndi_delete(img, fname, parent);  /* overwrite */
+    if (ndi_find(img, fname, parent) >= 0 && ndi_delete(img, fname, parent) != 0) {
+        fio_fail(FIO_ERR_IO); return;
+    }
     int idx = ndi_create(img, fname, type, parent, (uint32_t)(len + 2));
     if (idx < 0) { fio_fail(FIO_ERR_DISKFULL); return; }
     if (ndi_write(img, idx, 0, g_wbuf, (uint32_t)(len + 2)) != 0) {
@@ -975,14 +1037,59 @@ int nfio_disk_load(const char *name) {
 static ndi_t  *g_ddir_img    = NULL;
 static uint16_t g_ddir_parent = NDI_ROOT;
 static int      g_ddir_idx    = 0;
+static int      g_ddir_full_names = 0;
+static char     g_ddir_name_pattern[NDI_MAX_NAME + 1] = "*";
+static char     g_ddir_ext_filter[NDI_MAX_NAME + 1] = "";
+
+static int nfio_glob_match(const char *pattern, const char *text) {
+    int p = 0, t = 0, star_p = -1, star_t = -1;
+    while (text[t]) {
+        if (pattern[p] &&
+            (pattern[p] == '?' || toupper((unsigned char)pattern[p]) == toupper((unsigned char)text[t]))) {
+            p++; t++;
+        } else if (pattern[p] == '*') {
+            star_p = p++; star_t = t;
+        } else if (star_p >= 0) {
+            p = star_p + 1; t = ++star_t;
+        } else {
+            return 0;
+        }
+    }
+    while (pattern[p] == '*') p++;
+    return pattern[p] == 0;
+}
 
 /* DIROPEN: bare -> the CWD dir; else the named drive:dir. */
 void nfio_disk_diropen(void) {
     char name[80];
     int nl = fio_read_name(name, sizeof name);
     char path[200]; int slot;
-    if (nl <= 0) { slot = nfio_cwd_slot(); snprintf(path, sizeof path, "%s", g_cwd_dir); }
-    else         { slot = nfio_resolve(name, path, sizeof path); }
+    g_ddir_full_names = (peek(FIO_DIRTYPE) & 0x80) != 0;
+    snprintf(g_ddir_name_pattern, sizeof g_ddir_name_pattern, "*");
+    g_ddir_ext_filter[0] = 0;
+    if (nl <= 0) {
+        slot = nfio_cwd_slot();
+        snprintf(path, sizeof path, "%s", g_cwd_dir);
+    } else {
+        slot = nfio_resolve(name, path, sizeof path);
+        char *slash = strrchr(path, '/');
+        char *leaf = slash ? slash + 1 : path;
+        char leaf_pattern[NDI_MAX_NAME + 1];
+        snprintf(leaf_pattern, sizeof leaf_pattern, "%s", leaf);
+        if (slash) *slash = 0;
+        else path[0] = 0;
+        if (leaf_pattern[0]) {
+            char pattern[NDI_MAX_NAME + 1];
+            snprintf(pattern, sizeof pattern, "%s", leaf_pattern);
+            char *dot = strrchr(pattern, '.');
+            if (dot) {
+                if (strcmp(dot, ".*") != 0)
+                    snprintf(g_ddir_ext_filter, sizeof g_ddir_ext_filter, "%s", dot);
+                *dot = 0;
+            }
+            snprintf(g_ddir_name_pattern, sizeof g_ddir_name_pattern, "%s", pattern[0] ? pattern : "*");
+        }
+    }
     ndi_t *img = (slot >= 0) ? slot_image(slot) : NULL;
     if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
     uint16_t parent;
@@ -1000,10 +1107,21 @@ void nfio_disk_dirread(void) {
         ndi_dir_read_entry(g_ddir_img, i, &e);
         if (!(e.flags & FL_ACTIVE)) continue;
         if (e.parent_index != g_ddir_parent) continue;
-        int nl = 0; while (e.filename[nl] && nl < 63) nl++;
+        char base[NDI_MAX_NAME + 1], ext[NDI_MAX_NAME + 1];
+        snprintf(base, sizeof base, "%s", e.filename);
+        ext[0] = 0;
+        if (!(e.flags & FL_DIRECTORY)) {
+            char *dot = strrchr(base, '.');
+            if (dot) { snprintf(ext, sizeof ext, "%s", dot); *dot = 0; }
+        }
+        if (!nfio_glob_match(g_ddir_name_pattern, base)) continue;
+        if (!(e.flags & FL_DIRECTORY) && g_ddir_ext_filter[0] &&
+            strcasecmp(g_ddir_ext_filter, ext) != 0) continue;
+        const char *display_name = g_ddir_full_names ? e.filename : base;
+        int nl = 0; while (display_name[nl] && nl < 63) nl++;
         poke(FIO_DIRTYPE, (e.flags & FL_DIRECTORY) ? NDI_DT_DIR : e.file_type);
         poke(FIO_NAMELEN, nl);
-        for (int k = 0; k < nl; k++) poke(FIO_NAME + k, e.filename[k]);
+        for (int k = 0; k < nl; k++) poke(FIO_NAME + k, display_name[k]);
         uint32_t display_size = e.size_bytes;
         if (!(e.flags & FL_DIRECTORY) &&
             (e.file_type == DT_BAS || e.file_type == DT_BIN) &&
@@ -1013,6 +1131,9 @@ void nfio_disk_dirread(void) {
         poke(FIO_SIZE_LO, display_size & 0xFF);
         poke(FIO_SIZE_HI, (display_size >> 8) & 0xFF);
         poke(FIO_SIZE2, (display_size >> 16) & 0xFF);
+        for (int k = 0; k < 4; k++)
+            poke(FIO_SRC_LO + k, (e.packed_timestamp >> (8 * k)) & 0xFF);
+        poke(FIO_GADDR_HI, e.attributes | ((e.flags & FL_DIRECTORY) ? ATTR_DIRECTORY : 0));
         fio_ok();
         return;
     }
@@ -1094,10 +1215,113 @@ void nfio_devstatus(void) {
     int slot = drive_slot_index(name);
     if (slot < 0) { fio_fail(FIO_ERR_IO); return; }
     drives_refresh();
-    if (!drive_path(slot)[0] || !slot_image(slot)) {
+    ndi_t *img = slot_image(slot);
+    if (!drive_path(slot)[0] || !img) {
         fio_fail(FIO_ERR_NOTMOUNTED);
         return;
     }
+    uint32_t free_bytes = (uint32_t)img->free_count * NDI_SECTOR_SIZE;
+    uint32_t capacity_bytes = (uint32_t)img->data_sector_count * NDI_SECTOR_SIZE;
+    for (int i = 0; i < 4; i++) {
+        poke(FIO_SRC_LO + i, (free_bytes >> (8 * i)) & 0xFF);
+        poke(FIO_SIZE_LO + i, (capacity_bytes >> (8 * i)) & 0xFF);
+    }
+    fio_ok();
+}
+
+void nfio_file_info_get(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t entry; ndi_dir_read_entry(img, idx, &entry);
+    if (entry.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_IO); return; }
+    for (int i = 0; i < 4; i++) {
+        poke(FIO_SRC_LO + i, (entry.packed_timestamp >> (8 * i)) & 0xFF);
+        poke(FIO_SIZE_LO + i, (entry.size_bytes >> (8 * i)) & 0xFF);
+    }
+    poke(FIO_GADDR_HI, entry.attributes);
+    fio_ok();
+}
+
+void nfio_file_info_set(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t entry; ndi_dir_read_entry(img, idx, &entry);
+    if (entry.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_IO); return; }
+    uint32_t timestamp = 0;
+    for (int i = 0; i < 4; i++) timestamp |= (uint32_t)peek(FIO_SRC_LO + i) << (8 * i);
+    if (ndi_set_metadata(img, idx, peek(FIO_GADDR_HI) & ATTR_ANY, timestamp) != 0 ||
+        ndi_flush_metadata(img) != 0) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+    fio_ok();
+}
+
+void nfio_file_hash(void) {
+    char name[80];
+    if (fio_read_name(name, sizeof name) < 0) { fio_fail(FIO_ERR_IO); return; }
+    int slot; ndi_t *img;
+    int idx = nfio_resolve_file(name, &slot, &img);
+    if (idx < 0) { fio_fail(idx == -2 ? FIO_ERR_NOTMOUNTED : FIO_ERR_NOTFOUND); return; }
+    ndi_entry_t entry; ndi_dir_read_entry(img, idx, &entry);
+    if (entry.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_IO); return; }
+
+    uint32_t crc = UINT32_MAX;
+    uint32_t offset = 0;
+    while (offset < entry.size_bytes) {
+        unsigned want = entry.size_bytes - offset;
+        if (want > 4096) want = 4096;
+        int n = ndi_read(img, idx, offset, g_fbuf, want);
+        if (n <= 0) { fio_fail(FIO_ERR_IO); return; }
+        for (int i = 0; i < n; i++) {
+            crc ^= g_fbuf[i];
+            for (int bit = 0; bit < 8; bit++)
+                crc = (crc >> 1) ^ ((crc & 1) ? UINT32_C(0xEDB88320) : 0);
+        }
+        offset += (unsigned)n;
+    }
+    crc = ~crc;
+    for (int i = 0; i < 4; i++) poke(FIO_SIZE_LO + i, (crc >> (8 * i)) & 0xFF);
+    fio_ok();
+}
+
+void nfio_clock_get(void) {
+    int64_t now_ms = clock_now_ms();
+    time_t seconds = (time_t)(now_ms / 1000);
+    struct tm local;
+    if (!localtime_r(&seconds, &local)) { fio_fail(FIO_ERR_IO); return; }
+    int year = local.tm_year + 1900;
+    poke(FIO_SRC_LO, year & 0xFF); poke(FIO_SRC_HI, (year >> 8) & 0xFF);
+    poke(FIO_END_LO, local.tm_mon + 1); poke(FIO_END_HI, local.tm_mday);
+    poke(FIO_SIZE_LO, local.tm_hour); poke(FIO_SIZE_HI, local.tm_min);
+    poke(FIO_SIZE2, local.tm_sec); poke(FIO_GADDR_LO, (now_ms % 1000) / 10);
+    poke(FIO_GADDR_HI, local.tm_wday);
+    fio_ok();
+}
+
+void nfio_clock_set(void) {
+    int year = peek(FIO_SRC_LO) | (peek(FIO_SRC_HI) << 8);
+    int month = peek(FIO_END_LO), day = peek(FIO_END_HI);
+    int hour = peek(FIO_SIZE_LO), minute = peek(FIO_SIZE_HI);
+    int second = peek(FIO_SIZE2), hundredth = peek(FIO_GADDR_LO);
+    if (year < 1980 || year > 2107 || hundredth > 99) { fio_fail(FIO_ERR_IO); return; }
+    struct tm requested = {0};
+    requested.tm_year = year - 1900; requested.tm_mon = month - 1; requested.tm_mday = day;
+    requested.tm_hour = hour; requested.tm_min = minute; requested.tm_sec = second;
+    requested.tm_isdst = -1;
+    time_t seconds = mktime(&requested);
+    struct tm checked;
+    if (seconds == (time_t)-1 || !localtime_r(&seconds, &checked) ||
+        checked.tm_year != year - 1900 || checked.tm_mon != month - 1 || checked.tm_mday != day ||
+        checked.tm_hour != hour || checked.tm_min != minute || checked.tm_sec != second) {
+        fio_fail(FIO_ERR_IO); return;
+    }
+    g_clock_offset_ms = (int64_t)seconds * 1000 + hundredth * 10 - host_now_ms();
     fio_ok();
 }
 
@@ -1151,7 +1375,8 @@ static int ndi_gfx_store(const char *name, const unsigned char *data, unsigned l
     if (!img) return FIO_ERR_NOTMOUNTED;
     uint16_t parent; char fname[NDI_MAX_NAME + 1];
     if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) return FIO_ERR_NOTFOUND;
-    if (ndi_find(img, fname, parent) >= 0) ndi_delete(img, fname, parent);  /* overwrite */
+    if (ndi_find(img, fname, parent) >= 0 && ndi_delete(img, fname, parent) != 0)
+        return FIO_ERR_IO;
     int idx = ndi_create(img, fname, DT_GFX, parent, len);
     if (idx < 0) return FIO_ERR_DISKFULL;
     if (ndi_write(img, idx, 0, data, len) != 0) return FIO_ERR_IO;
@@ -1527,7 +1752,8 @@ static int fio_commit_write(int h) {
     ndi_t *img = slot_image(g_fh[h].slot);
     if (!img) return -1;
     uint32_t total = g_fh[h].size;
-    ndi_delete(img, g_fh[h].wname, g_fh[h].wparent);           /* overwrite existing slot */
+    if (ndi_find(img, g_fh[h].wname, g_fh[h].wparent) >= 0 &&
+        ndi_delete(img, g_fh[h].wname, g_fh[h].wparent) != 0) return -1;
     int idx = ndi_create(img, g_fh[h].wname, g_fh[h].wtype, g_fh[h].wparent, total);
     if (idx < 0) return -1;
     uint32_t off = 0;
@@ -1693,6 +1919,7 @@ void fio_frename(void) {
     if (old_idx < 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
     ndi_entry_t old_entry; ndi_dir_read_entry(img, old_idx, &old_entry);
     if (old_entry.flags & FL_DIRECTORY) { fio_fail(FIO_ERR_IO); return; }
+    if (old_entry.attributes & ATTR_READONLY) { fio_fail(FIO_ERR_IO); return; }
 
     int existing = ndi_find(img, new_leaf, new_parent);
     if (existing >= 0 && existing != old_idx && ndi_delete(img, new_leaf, new_parent) != 0) {
@@ -1700,7 +1927,8 @@ void fio_frename(void) {
     }
     ndi_dir_write_entry(img, old_idx, old_entry.flags, fio_name_type(new_leaf),
                         new_parent, old_entry.start_sector, old_entry.size_bytes,
-                        new_leaf, old_entry.sector_count);
+                        new_leaf, old_entry.sector_count, old_entry.attributes,
+                        old_entry.packed_timestamp);
     if (ndi_flush_metadata(img) != 0) { fio_fail(FIO_ERR_IO); return; }
     printf("[fio] FRENAME %s:%s -> %s\n", drive_slot_name(old_slot), old_path, new_path);
     fio_ok();

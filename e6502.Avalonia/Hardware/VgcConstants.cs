@@ -125,6 +125,11 @@ public static class VgcConstants
     public const byte FioCmdFDelete    = 0x38;     // low-level exact delete
     public const byte FioCmdFRename    = 0x39;     // low-level exact rename
     public const byte FioCmdDevStatus  = 0x3A;     // device prefix mounted/status probe
+    public const byte FioCmdFileInfoGet = 0x3B;    // exact file attributes, timestamp, and size
+    public const byte FioCmdFileInfoSet = 0x3C;    // set exact file attributes and timestamp
+    public const byte FioCmdClockGet    = 0x3D;    // read host-backed calendar clock
+    public const byte FioCmdClockSet    = 0x3E;    // set emulated calendar clock offset
+    public const byte FioCmdFileHash    = 0x3F;    // CRC-32 of exact file contents
 
     // Dynamic module shelf geometry (libabi.inc): SHELF_N cache slots at
     // ShelfBaseAddr + i*ShelfSlotBytes in linear XRAM.

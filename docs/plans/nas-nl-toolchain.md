@@ -91,7 +91,9 @@ imports against object exports, and adds demanded NLIB v2 NOBJ members to that
 same table. The growing table is scanned along live relocation edges to a fixed
 point before placement, so transitive imports inside selected archive members
 work normally while dead imports and unused members remain absent. The native
-shell currently exposes two explicit inputs as `LINK MAIN.OBJ UTIL.OBJ`. Once
+shell currently exposes two explicit inputs as `LINK MAIN.OBJ UTIL.OBJ`; NL's
+mailbox can also name an LF-delimited object-list file, which it streams in
+order without loading the list into one lower-RAM buffer. Once
 selection stabilizes, NL rejects duplicate case-insensitive globals across the
 selected object set even when no relocation references them. NPP object lists
 are started with one optional ordinary `OBJECT file.obj` or `ASM file.s`; BUILD
@@ -115,7 +117,8 @@ Case-insensitive `.ASSERT expression` now checks absolute assembly-time
 invariants during the final pass, emits no bytes, and has a distinct
 source-located failure diagnostic.
 
-NAS and NL are currently 4,442 and 10,909 bytes on disk. NAS allocates source
+NAS, NL, and the shared NBUILD cache engine are currently 4,736, 11,754, and
+2,588 bytes on disk. NAS allocates source
 input through `MEM_ALLOC`, streams it with `MEM_XLOAD`, parses it
 through an XRAM window, and releases it on every exit path. Nested `.INCLUDE`
 sources use independent XRAM allocations and retain their filenames for

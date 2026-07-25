@@ -47,6 +47,13 @@ AUDIO_EMIT_ALL = 0
 .if .referenced(audio_set_volume)
       .refto audio_volume
 .endif
+.if .referenced(audio_tone)
+      .refto audio_tone_start_raw
+      .refto audio_tone_stop
+.endif
+.if .referenced(audio_tone_hz)
+      .refto audio_tone_start_raw
+.endif
 .if .referenced(audio_sound_async)
       .refto audio_init
       .refto audio_load_instrument
@@ -95,6 +102,12 @@ AUDIO_EMIT_ALL = 0
 ; builds must export them when emitting the complete runtime object.
 .if AUDIO_EMIT_ALL .OR .referenced(audio_tone)
       .export audio_tone
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_hz)
+      .export audio_tone_hz
+.endif
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_stop)
+      .export audio_tone_stop
 .endif
 .if AUDIO_EMIT_ALL .OR .referenced(audio_noise)
       .export audio_noise
@@ -343,6 +356,55 @@ audio_volume:
 .if AUDIO_EMIT_ALL .OR .referenced(audio_tone)
 audio_tone:
       PHA                                ; save duration
+      JSR   audio_tone_start_raw
+      PLA                                ; duration (frames)
+      JSR   vgc_wait_frames
+      JMP   audio_tone_stop
+.endif
+
+; @label AUDIO.TONE_HZ
+; @kind routine
+; @symbol audio_tone_hz
+; @abi pseudo-register
+; @summary Start a continuous sawtooth tone on SID voice 0 from a frequency in hertz.
+; @requires NVR0L NVR0H
+; @in NVR0L/NVR0H: Frequency in hertz, 0..32767; values beyond the SID range saturate.
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_hz)
+audio_tone_hz:
+      LDA   NVR0H
+      BMI   @clamp
+      LDA   NVR0L
+      STA   MATH_MUL16_A_LO
+      LDA   NVR0H
+      STA   MATH_MUL16_A_HI
+      LDA   audio_hz_factor
+      STA   MATH_MUL16_B_LO
+      LDA   audio_hz_factor+1
+      STA   MATH_MUL16_B_HI
+      LDA   MATH_RES0
+      STA   NVR1L
+      LDA   MATH_RES1
+      STA   NVR1H
+      LDA   MATH_RES2
+      STA   NVR2L
+      LDA   MATH_RES3
+      STA   NVR2H
+      LDA   NVR2H
+      BNE   @clamp
+      LDA   NVR1H
+      STA   NVR0L
+      LDA   NVR2L
+      STA   NVR0H
+      JMP   audio_tone_start_raw
+@clamp:
+      LDA   #$FF
+      STA   NVR0L
+      STA   NVR0H
+      JMP   audio_tone_start_raw
+.endif
+
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_start_raw)
+audio_tone_start_raw:
       LDA   #$0F
       STA   SID_BASE + SID_REG_VOLUME    ; master volume max
       LDA   NVR0L
@@ -355,11 +417,25 @@ audio_tone:
       STA   SID_BASE + SID_REG_SR        ; sustain=A, release=0
       LDA   #$21                         ; sawtooth + gate
       STA   SID_BASE + SID_REG_CTRL
-      PLA                                ; duration (frames)
-      JSR   vgc_wait_frames
+      RTS
+.endif
+
+; @label AUDIO.TONE_STOP
+; @kind routine
+; @symbol audio_tone_stop
+; @abi register
+; @summary Stop the continuous tone on SID voice 0.
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_stop)
+audio_tone_stop:
       LDA   #$20                         ; sawtooth, gate off
       STA   SID_BASE + SID_REG_CTRL
       RTS
+.endif
+
+.if AUDIO_EMIT_ALL .OR .referenced(audio_tone_hz)
+; 16777216 / 985248 ~= 4359 / 256. The math coprocessor gives a compact,
+; sub-0.01% conversion from hertz to the SID's 16-bit tuning word.
+audio_hz_factor: .word 4359
 .endif
 
 ; @label AUDIO.NOISE

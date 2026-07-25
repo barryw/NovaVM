@@ -255,6 +255,50 @@ public class NdiImageTests
     }
 
     [TestMethod]
+    public void FileMetadata_PersistsAndReadOnlyProtectsContents()
+    {
+        string path = TempPath();
+        uint timestamp = StorageTimestamp.Pack(new DateTime(1992, 10, 27, 12, 34, 56));
+        try
+        {
+            NdiImage.CreateFormatted(path, "META", 800);
+            using (var img = NdiImage.Open(path))
+            {
+                img.WriteFile("LOCKED.PAS", NdiFileType.Pascal, 0xFFFF, [1, 2, 3]);
+                img.SetFileInfo("LOCKED.PAS", 0xFFFF,
+                    StorageAttributes.ReadOnly | StorageAttributes.Archive, timestamp);
+            }
+
+            using var reopened = NdiImage.Open(path);
+            StorageFileInfo info = reopened.GetFileInfo("LOCKED.PAS", 0xFFFF);
+            Assert.AreEqual(StorageAttributes.ReadOnly | StorageAttributes.Archive, info.Attributes);
+            Assert.AreEqual(timestamp, info.PackedTimestamp);
+            Assert.AreEqual(3, info.SizeBytes);
+            Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                reopened.WriteFile("LOCKED.PAS", NdiFileType.Pascal, 0xFFFF, [4]));
+            Assert.ThrowsException<UnauthorizedAccessException>(() =>
+                reopened.DeleteFile("LOCKED.PAS", 0xFFFF));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void CapacityAndFreeBytes_ReportDataAreaOnly()
+    {
+        string path = TempPath();
+        try
+        {
+            NdiImage.CreateFormatted(path, "SPACE", 800);
+            using var img = NdiImage.Open(path);
+
+            Assert.AreEqual((img.Header.TotalSectors - img.Header.DataStartSector) * img.Header.SectorSize,
+                img.CapacityBytes, "Pascal DiskSize must report usable data space, not image overhead.");
+            Assert.AreEqual((uint)(img.FreeSectors * img.Header.SectorSize), img.FreeBytes);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [TestMethod]
     public void WriteFile_Over64KB_RoundTrips()
     {
         string path = TempPath();

@@ -106,6 +106,11 @@
 #define FIO_CMD_FDELETE     0x38
 #define FIO_CMD_FRENAME     0x39
 #define FIO_CMD_DEVSTATUS   0x3A
+#define FIO_CMD_FILEINFO_GET 0x3B
+#define FIO_CMD_FILEINFO_SET 0x3C
+#define FIO_CMD_CLOCK_GET    0x3D
+#define FIO_CMD_CLOCK_SET    0x3E
+#define FIO_CMD_FILEHASH     0x3F
 #define FIO_ERR_NOTFOUND 1
 #define FIO_ERR_IO 2
 
@@ -473,6 +478,11 @@ int main(int argc, char **argv) {
             case FIO_CMD_FDELETE:     fio_fdelete();      break;
             case FIO_CMD_FRENAME:     fio_frename();      break;
             case FIO_CMD_DEVSTATUS:   nfio_devstatus();   break;
+            case FIO_CMD_FILEINFO_GET: nfio_file_info_get(); break;
+            case FIO_CMD_FILEINFO_SET: nfio_file_info_set(); break;
+            case FIO_CMD_CLOCK_GET:    nfio_clock_get();   break;
+            case FIO_CMD_CLOCK_SET:    nfio_clock_set();   break;
+            case FIO_CMD_FILEHASH:     nfio_file_hash();   break;
             case 0: break;
             default: fio_fail(FIO_ERR_NOTFOUND); break;
         }

@@ -35,6 +35,7 @@ NASM_FILENAME_CAP  = 64
 .global nasm_include_display_len
 .global nasm_error_name_ptr
 .global nasm_error_name_len
+.global nasm_error_symbol_ptr
 .global nasm_include_open
 .global nasm_include_close
 

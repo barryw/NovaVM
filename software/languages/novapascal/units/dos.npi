@@ -1,0 +1,37 @@
+; Compiled interface for DOS.PAS.
+.ifndef NPI_DOS
+NPI_DOS = 1
+
+READONLY = $01
+HIDDEN = $02
+SYSFILE = $04
+VOLUMEID = $08
+DIRECTORY = $10
+ARCHIVE = $20
+ANYFILE = $3F
+
+__CD65523 = 1 ; ReadOnly
+__C21E311 = 1 ; Hidden
+__C8204E4 = 1 ; SysFile
+__C7F282A = 1 ; VolumeID
+__CF780DA = 1 ; Directory
+__C7534E7 = 1 ; Archive
+__CAD936D = 1 ; AnyFile
+
+__S9C4B52 = $03 ; DiskFree
+__SA348AB = $03 ; DiskSize
+__PE2956E = $03 ; FindFirst
+__SFBACA5 = $01 ; FindNext
+__P70D1A6 = $02 ; GetFAttr
+__P86CC32 = $02 ; SetFAttr
+__P7B0D1A = $02 ; GetFTime
+__P9107A6 = $02 ; SetFTime
+__P30DE03 = $04 ; GetDate
+__PEBB70F = $03 ; SetDate
+__P39C534 = $04 ; GetTime
+__PF49E40 = $04 ; SetTime
+__P955DD3 = $02 ; PackTime
+__PFC9156 = $02 ; UnpackTime
+__S85970B = $03 ; FExpand
+__P333DF7 = $04 ; FSplit
+.endif

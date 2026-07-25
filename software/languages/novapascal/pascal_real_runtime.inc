@@ -1069,6 +1069,40 @@ real_trunc:
 .endif
       RTS
 
+; Turbo Pascal rounds halves away from zero. For a positive Q16.16 value,
+; increment the integer half at $8000 or above. A negative value already
+; contains its floor in the high word, so increment only above $8000.
+real_round:
+      STA   NVR4L
+      STX   NVR4H
+      LDY   #2
+      LDA   (NVR4L),Y
+      STA   NVR0L
+      INY
+      LDA   (NVR4L),Y
+      TAX
+      LDY   #1
+      LDA   (NVR4L),Y
+      CMP   #$80
+      BCC   @round_done
+      BNE   @round_increment
+      DEY
+      LDA   (NVR4L),Y
+      BNE   @round_increment
+      TXA
+      BMI   @round_done
+@round_increment:
+      INC   NVR0L
+      BNE   @round_done
+      INX
+@round_done:
+      LDA   NVR0L
+.ifdef PASCAL_REAL_MODULE
+      STA   LIB_RESULT
+      STX   LIB_RESULT+1
+.endif
+      RTS
+
 ; STR value:width[:precision], destination. The value is signed 16.16 and the
 ; destination is a Turbo short string.
 real_str:

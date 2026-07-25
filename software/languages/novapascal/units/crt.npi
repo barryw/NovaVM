@@ -93,4 +93,10 @@ __S1630F7 = $00 ; InsLine
 .ifndef __P24C19D
 __P24C19D = $04 ; Window
 .endif
+.ifndef __S09B7CE
+__S09B7CE = $01 ; Sound
+.endif
+.ifndef __S50618B
+__S50618B = $00 ; NoSound
+.endif
 .endif

@@ -34,6 +34,11 @@ public class LangrtModuleTests
     private const byte StrRealPrecision = 0x12;
     private const byte RealTrunc = 0x1B;
     private const byte RealVal = 0x1C;
+    private const byte RealRound = 0x1D;
+    private const byte LongFromUWord = 0x1F;
+    private const byte LongFromInteger = 0x20;
+    private const byte LongAdd = 0x22;
+    private const byte LongCompare = 0x24;
 
     [TestMethod]
     public void LangrtModule_Header_IsWellFormed()
@@ -46,7 +51,7 @@ public class LangrtModuleTests
         Assert.AreEqual((byte)'L', image[4]);
         Assert.AreEqual(0x09, image[5], "MODULE_ID_LANGRT");
         Assert.AreEqual(0x01, image[6], "LIB_ABI_VERSION");
-        Assert.AreEqual(0x1D, image[7], "LANGRT_FN_COUNT");
+        Assert.AreEqual(0x25, image[7], "LANGRT_FN_COUNT");
     }
 
     [TestMethod]
@@ -77,6 +82,32 @@ public class LangrtModuleTests
             new byte[] { 0x00, 0xC0, 0x03, 0x00 },
             ReadBytes(bus, Result, 4),
             "the shared runtime must add Q16.16 values without Pascal-owned storage");
+    }
+
+    [TestMethod]
+    public void LongIntServices_ShareTheFourByteScalarAbi()
+    {
+        using var bus = MakeBus();
+
+        SetCell(bus, Arg0, 0xFFFF);
+        RunFn(bus, LongFromUWord);
+        CollectionAssert.AreEqual(new byte[] { 0xFF, 0xFF, 0x00, 0x00 }, ReadBytes(bus, Result, 4));
+
+        RunFn(bus, LongFromInteger);
+        CollectionAssert.AreEqual(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0x70, 0x11, 0x01, 0x00); // 70000
+        WriteBytes(bus, Right, 0x05, 0x00, 0x00, 0x00);
+        SetCell(bus, Arg0, Right);
+        RunFn(bus, LongAdd);
+        CollectionAssert.AreEqual(new byte[] { 0x75, 0x11, 0x01, 0x00 }, ReadBytes(bus, Result, 4));
+
+        WriteBytes(bus, Arg1, 0xFF, 0xFF, 0xFF, 0xFF);
+        WriteBytes(bus, Right, 0x01, 0x00, 0x00, 0x00);
+        RunFn(bus, LongCompare);
+        byte flags = bus.ReadRam((ushort)(Result + 2));
+        Assert.AreEqual(0, flags & 0x01, "signed -1 must compare below +1");
+        Assert.AreEqual(0, flags & 0x02, "different LongInt values must clear zero");
     }
 
     [TestMethod]
@@ -161,6 +192,21 @@ public class LangrtModuleTests
         RunFn(bus, RealTrunc);
 
         CollectionAssert.AreEqual(new byte[] { 0x03, 0x00 }, ReadBytes(bus, Result, 2));
+    }
+
+    [TestMethod]
+    public void RealRound_RoundsHalvesAwayFromZero()
+    {
+        using var bus = MakeBus();
+        SetCell(bus, Arg0, Right);
+
+        WriteBytes(bus, Right, 0x00, 0x80, 0x01, 0x00); // 1.5
+        RunFn(bus, RealRound);
+        CollectionAssert.AreEqual(new byte[] { 0x02, 0x00 }, ReadBytes(bus, Result, 2));
+
+        WriteBytes(bus, Right, 0x00, 0x80, 0xFE, 0xFF); // -1.5
+        RunFn(bus, RealRound);
+        CollectionAssert.AreEqual(new byte[] { 0xFE, 0xFF }, ReadBytes(bus, Result, 2));
     }
 
     [TestMethod]

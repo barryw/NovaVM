@@ -40,6 +40,8 @@ public sealed class NdiFloppyDevice : IStorageDevice
 
     public string Prefix { get; }
     public bool IsMounted => _image is not null;
+    public uint FreeBytes { get { ThrowIfNotMounted(); return _image!.FreeBytes; } }
+    public uint CapacityBytes { get { ThrowIfNotMounted(); return _image!.CapacityBytes; } }
 
     public string CurrentDirectory
     {
@@ -181,8 +183,21 @@ public sealed class NdiFloppyDevice : IStorageDevice
                 ? e.Filename
                 : Path.GetFileNameWithoutExtension(e.Filename);
             string extension = e.IsDirectory ? "" : Path.GetExtension(e.Filename);
-            return new StorageDirEntry(displayName, e.IsDirectory, e.FileType, e.IsDirectory ? 0 : e.SizeBytes, extension);
+            return new StorageDirEntry(displayName, e.IsDirectory, e.FileType,
+                e.IsDirectory ? 0 : e.SizeBytes, extension, e.Attributes, e.PackedTimestamp);
         }).ToArray();
+    }
+
+    public StorageFileInfo GetFileInfo(string name, string ext)
+    {
+        ThrowIfNotMounted();
+        return _image!.GetFileInfo(name + ext, _parentIndex);
+    }
+
+    public void SetFileInfo(string name, string ext, byte attributes, uint packedTimestamp)
+    {
+        ThrowIfNotMounted();
+        _image!.SetFileInfo(name + ext, _parentIndex, attributes, packedTimestamp);
     }
 
     public void MakeDirectory(string name)

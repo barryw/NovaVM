@@ -48,7 +48,7 @@ NP_WINDOW_ACTIVE = $A5
 
       .segment "LIBRARY"
       .byte NLIB_MAGIC0, NLIB_MAGIC1, NLIB_MAGIC2, NLIB_MAGIC3
-      .byte NLIB_VERSION, 21
+        .byte NLIB_VERSION, 43
 
       ; P_WRITE_CHAR deliberately imports P_CHAR_DEVICE from the next member.
       ; This keeps the Pascal-facing routine independent of the hardware shim
@@ -147,7 +147,7 @@ byte_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 6
+      .word 8
       .word byte_symbols-byte_object
       .word 9
       .word byte_relocations-byte_object
@@ -259,6 +259,24 @@ write_word_digit_call = *
       BNE   write_word_digits
       RTS
 
+write_uword:
+      STZ   NVR2L                         ; no minimum field width
+      STA   NVR0L
+      STX   NVR0H
+      STZ   NVR2H
+      BRA   write_word_magnitude
+
+write_uword_field:
+      TSX
+      LDA   $0103,X
+      STA   NVR2L
+      LDA   $0104,X
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      STZ   NVR2H
+      BRA   write_word_magnitude
+
 write_string:
       STA   NVR0L
       STX   NVR0H
@@ -289,6 +307,10 @@ byte_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 14, "P_WRITE_STRING"
       .word write_word_field-byte_code
       .byte 0, NOBJ_SYM_GLOBAL, 18, "P_WRITE_WORD_FIELD"
+      .word write_uword-byte_code
+      .byte 0, NOBJ_SYM_GLOBAL, 13, "P_WRITE_UWORD"
+      .word write_uword_field-byte_code
+      .byte 0, NOBJ_SYM_GLOBAL, 19, "P_WRITE_UWORD_FIELD"
       .word 0
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 13, "P_CHAR_DEVICE"
 
@@ -296,22 +318,146 @@ byte_relocations:
       .byte 0, NOBJ_RELOC_ABS16
       .word 1, 1, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_byte_newline_call-byte_code, 5, 0
+      .word write_byte_newline_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_byte_hundreds_call-byte_code, 5, 0
+      .word write_byte_hundreds_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_byte_tens_call-byte_code, 5, 0
+      .word write_byte_tens_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_byte_ones_call-byte_code, 5, 0
+      .word write_byte_ones_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_word_padding_call-byte_code, 5, 0
+      .word write_word_padding_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_word_sign_call-byte_code, 5, 0
+      .word write_word_sign_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_word_digit_call-byte_code, 5, 0
+      .word write_word_digit_call-byte_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word write_string_char_call-byte_code, 5, 0
+      .word write_string_char_call-byte_code, 7, 0
 byte_object_end:
+
+      ; STR(Integer) shares the native signed-word representation but writes
+      ; into a Turbo short string instead of a device.
+      .word str_integer_object_end-str_integer_object
+str_integer_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word str_integer_symbols-str_integer_object
+      .word 0
+      .word str_integer_relocations-str_integer_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word str_integer_code_end-str_integer_code
+      .word str_integer_code_end-str_integer_code
+      .byte "CODE"
+str_integer_code:
+str_integer:
+      STA   NVR4L
+      STX   NVR4H
+      TSX
+      LDA   $0103,X
+      STA   NVR2L                         ; minimum field width
+      LDA   $0105,X                       ; signed value low byte
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      STZ   NVR2H                         ; sign character count
+      LDA   NVR0H
+      BPL   str_integer_magnitude
+      INC   NVR2H
+      SEC
+      LDA   #0
+      SBC   NVR0L
+      STA   NVR0L
+      LDA   #0
+      SBC   NVR0H
+      STA   NVR0H
+str_integer_magnitude:
+      STZ   NVR1L
+@divide:
+      LDA   #0
+      LDX   #16
+@bit:
+      ASL   NVR0L
+      ROL   NVR0H
+      ROL
+      CMP   #10
+      BCC   :+
+      SBC   #10
+      INC   NVR0L
+:     DEX
+      BNE   @bit
+      CLC
+      ADC   #'0'
+      PHA
+      INC   NVR1L
+      LDA   NVR0L
+      ORA   NVR0H
+      BNE   @divide
+      CLC
+      LDA   NVR1L
+      ADC   NVR2H
+      STA   NVR3L
+      LDA   NVR2L
+      CMP   NVR3L
+      BCC   @no_padding
+      BEQ   @no_padding
+      SEC
+      SBC   NVR3L
+      STA   NVR3H
+      LDA   NVR2L
+      BRA   @length
+@no_padding:
+      STZ   NVR3H
+      LDA   NVR3L
+@length:
+      LDY   #0
+      STA   (NVR4L),Y
+@padding:
+      LDA   NVR3H
+      BEQ   @sign
+      INY
+      LDA   #' '
+      STA   (NVR4L),Y
+      DEC   NVR3H
+      BRA   @padding
+@sign:
+      LDA   NVR2H
+      BEQ   @digits
+      INY
+      LDA   #'-'
+      STA   (NVR4L),Y
+@digits:
+      PLA
+      INY
+      STA   (NVR4L),Y
+      DEC   NVR1L
+      BNE   @digits
+      RTS
+
+str_uword:
+      STA   NVR4L
+      STX   NVR4H
+      TSX
+      LDA   $0103,X
+      STA   NVR2L
+      LDA   $0105,X
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      STZ   NVR2H
+      BRA   str_integer_magnitude
+str_integer_code_end:
+
+str_integer_symbols:
+      .word str_integer-str_integer_code
+      .byte 0, NOBJ_SYM_GLOBAL, 13, "P_STR_INTEGER"
+      .word str_uword-str_integer_code
+      .byte 0, NOBJ_SYM_GLOBAL, 11, "P_STR_UWORD"
+str_integer_relocations:
+str_integer_object_end:
 
       ; Formatted Real output depends on the paged numeric runtime. Keeping it
       ; separate prevents byte-only programs from inheriting those objects.
@@ -320,9 +466,9 @@ format_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 7
+      .word 8
       .word format_symbols-format_object
-      .word 13
+      .word 14
       .word format_relocations-format_object
       .word 0
 
@@ -331,13 +477,18 @@ format_object:
       .word format_code_end-format_code
       .byte "CODE"
 format_code:
-; A selects word field (0), Real field (1), or Real field+precision (2).
+; A selects signed word (0), Real (1/2), or unsigned word (3).
 write_format:
+      CMP   #3
+      BEQ   write_format_uword
       CMP   #1
-      BCC   @word
+      BCC   write_format_word
       BEQ   write_real_field
       BRA   write_real_field_precision
-@word:
+write_format_uword:
+      .byte $4C
+write_format_uword_jump: .word 0
+write_format_word:
       .byte $4C
 write_format_word_jump: .word 0
 
@@ -432,10 +583,14 @@ format_symbols:
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 20, "P_STR_REAL_PRECISION"
       .word 0
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 12, "__NP_STRBUF0"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 19, "P_WRITE_UWORD_FIELD"
 
 format_relocations:
       .byte 0, NOBJ_RELOC_ABS16
       .word write_format_word_jump-format_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word write_format_uword_jump-format_code, 7, 0
       .byte 0, NOBJ_RELOC_LO8
       .word write_real_field_buffer_lo-format_code, 6, 0
       .byte 0, NOBJ_RELOC_HI8
@@ -1115,7 +1270,7 @@ block_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 1
+      .word 3
       .word block_symbols-block_object
       .word 0
       .word block_object_end-block_object
@@ -1150,38 +1305,217 @@ block_copy:
       LDA   $0102,X
       ADC   #0
       STA   $0102,X
-@copy:
       LDA   NVR5L
       ORA   NVR5H
-      BEQ   @copied
-      LDY   #0
+      BEQ   @done
       LDA   NVR2L
-      BNE   :+
-      LDA   #0
-      BRA   :++
-:     LDA   (NVR2L),Y
-:     STA   (NVR0L),Y
-      INC   NVR0L
-      BNE   :+
-      INC   NVR0H
-:     LDA   NVR2L
-      BEQ   :+
+      ORA   NVR2H
+      BEQ   @fill
+      LDY   #0
+@copy:
+      LDA   (NVR2L),Y
+      STA   (NVR0L),Y
       INC   NVR2L
       BNE   :+
       INC   NVR2H
+:     INC   NVR0L
+      BNE   :+
+      INC   NVR0H
 :     LDA   NVR5L
       BNE   :+
       DEC   NVR5H
 :     DEC   NVR5L
-      BRA   @copy
-@copied:
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   @copy
+@done:
+      RTS
+@fill:
+      LDY   #0
+@fill_zero:
+      LDA   #0
+      STA   (NVR0L),Y
+      INC   NVR0L
+      BNE   :+
+      INC   NVR0H
+:     LDA   NVR5L
+      BNE   :+
+      DEC   NVR5H
+:     DEC   NVR5L
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   @fill_zero
+      RTS
+
+move:
+      TSX
+      LDA   $0107,X
+      STA   NVR2L
+      LDA   $0108,X
+      STA   NVR2H
+      LDA   $0105,X
+      STA   NVR0L
+      LDA   $0106,X
+      STA   NVR0H
+      LDA   $0103,X
+      STA   NVR5L
+      LDA   $0104,X
+      STA   NVR5H
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   :+
+      RTS
+:
+      LDA   NVR0H
+      CMP   NVR2H
+      BCC   @forward
+      BNE   @backward
+      LDA   NVR0L
+      CMP   NVR2L
+      BCC   @forward
+      BNE   @backward
+      RTS
+@forward:
+      LDY   #0
+@forward_copy:
+      LDA   (NVR2L),Y
+      STA   (NVR0L),Y
+      INC   NVR2L
+      BNE   :+
+      INC   NVR2H
+:     INC   NVR0L
+      BNE   :+
+      INC   NVR0H
+:     LDA   NVR5L
+      BNE   :+
+      DEC   NVR5H
+:     DEC   NVR5L
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   @forward_copy
+      RTS
+@backward:
+      SEC
+      LDA   NVR5L
+      SBC   #1
+      STA   NVR3L
+      LDA   NVR5H
+      SBC   #0
+      STA   NVR3H
+      CLC
+      LDA   NVR2L
+      ADC   NVR3L
+      STA   NVR2L
+      LDA   NVR2H
+      ADC   NVR3H
+      STA   NVR2H
+      CLC
+      LDA   NVR0L
+      ADC   NVR3L
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   NVR3H
+      STA   NVR0H
+      LDY   #0
+@backward_copy:
+      LDA   (NVR2L),Y
+      STA   (NVR0L),Y
+      LDA   NVR2L
+      BNE   :+
+      DEC   NVR2H
+:     DEC   NVR2L
+      LDA   NVR0L
+      BNE   :+
+      DEC   NVR0H
+:     DEC   NVR0L
+      LDA   NVR5L
+      BNE   :+
+      DEC   NVR5H
+:     DEC   NVR5L
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   @backward_copy
+      RTS
+
+fill_char:
+      TSX
+      LDA   $0107,X
+      STA   NVR0L
+      LDA   $0108,X
+      STA   NVR0H
+      LDA   $0105,X
+      STA   NVR5L
+      LDA   $0106,X
+      STA   NVR5H
+      LDA   $0103,X
+      STA   NVR3L
+      LDA   NVR5L
+      ORA   NVR5H
+      BEQ   @done
+      LDY   #0
+@fill:
+      LDA   NVR3L
+      STA   (NVR0L),Y
+      INC   NVR0L
+      BNE   :+
+      INC   NVR0H
+:     LDA   NVR5L
+      BNE   :+
+      DEC   NVR5H
+:     DEC   NVR5L
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   @fill
+@done:
       RTS
 block_code_end:
 
 block_symbols:
       .word block_copy-block_code
       .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_BLOCK_COPY"
+      .word move-block_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "MOVE"
+      .word fill_char-block_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "FILLCHAR"
 block_object_end:
+
+      ; Signed word comparison is isolated so NL retains its 18 bytes only
+      ; when O2 selects it. A/X is the left operand, NVR0 is the right; the
+      ; returned flags describe the signed left-minus-right relation.
+      .word signed_compare_object_end-signed_compare_object
+signed_compare_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 1
+      .word signed_compare_symbols-signed_compare_object
+      .word 0
+      .word signed_compare_object_end-signed_compare_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word signed_compare_code_end-signed_compare_code
+      .word signed_compare_code_end-signed_compare_code
+      .byte "CODE"
+signed_compare_code:
+      TAY
+      LDA   NVR0H
+      EOR   #$80
+      STA   NVR1H
+      TXA
+      EOR   #$80
+      CMP   NVR1H
+      BNE   signed_compare_done
+      TYA
+      CMP   NVR0L
+signed_compare_done:
+      RTS
+signed_compare_code_end:
+
+signed_compare_symbols:
+      .word signed_compare_code-signed_compare_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "P_CMPSW"
+signed_compare_object_end:
 
       ; Word arithmetic and comparison materialization share one compact
       ; member. JSR and RTS preserve the incoming comparison flags.
@@ -1190,7 +1524,7 @@ ordinal_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 12
+      .word 14
       .word ordinal_symbols-ordinal_object
       .word 0
       .word ordinal_object_end-ordinal_object
@@ -1230,15 +1564,10 @@ ordinal_multiply:
       LDX   MATH_RES1
       RTS
 ordinal_divide:
-      JSR   ordinal_divide_common
-      LDA   MATH_RES0
-      LDX   MATH_RES1
-      RTS
+      LDY   #0
+      BRA   ordinal_divide_common
 ordinal_modulo:
-      JSR   ordinal_divide_common
-      LDA   MATH_RES2
-      LDX   MATH_RES3
-      RTS
+      LDY   #1
 ordinal_divide_common:
       STA   MATH_DIV_N_LO
       STX   MATH_DIV_N_1
@@ -1257,6 +1586,82 @@ ordinal_divide_common:
       STA   MATH_DIV_D_LO
       LDA   NVR0H
       STA   MATH_DIV_D_HI
+      TYA
+      BNE   @modulo
+      LDA   MATH_RES0
+      LDX   MATH_RES1
+      RTS
+@modulo:
+      LDA   MATH_RES2
+      LDX   MATH_RES3
+      RTS
+ordinal_divide_unsigned:
+      LDY   #0
+      BRA   ordinal_divide_unsigned_common
+ordinal_modulo_unsigned:
+      LDY   #1
+ordinal_divide_unsigned_common:
+      STA   NVR1L
+      STX   NVR1H
+      LDA   NVR0L
+      ORA   NVR0H
+      BNE   :+
+      STP
+:     LDA   NVR0H
+      BMI   @large_divisor
+      LDA   NVR1L
+      STA   MATH_DIV_N_LO
+      LDA   NVR1H
+      STA   MATH_DIV_N_1
+      STZ   MATH_DIV_N_2
+      STZ   MATH_DIV_N_HI
+      LDA   NVR0L
+      STA   MATH_DIV_D_LO
+      LDA   NVR0H
+      STA   MATH_DIV_D_HI
+      LDA   MATH_RES0
+      STA   NVR2L
+      LDA   MATH_RES1
+      STA   NVR2H
+      LDA   MATH_RES2
+      STA   NVR3L
+      LDA   MATH_RES3
+      STA   NVR3H
+      BRA   @result
+@large_divisor:
+      STZ   NVR2L
+      STZ   NVR2H
+      LDA   NVR1H
+      CMP   NVR0H
+      BCC   @unchanged_remainder
+      BNE   @subtract
+      LDA   NVR1L
+      CMP   NVR0L
+      BCC   @unchanged_remainder
+@subtract:
+      INC   NVR2L
+      SEC
+      LDA   NVR1L
+      SBC   NVR0L
+      STA   NVR3L
+      LDA   NVR1H
+      SBC   NVR0H
+      STA   NVR3H
+      BRA   @result
+@unchanged_remainder:
+      LDA   NVR1L
+      STA   NVR3L
+      LDA   NVR1H
+      STA   NVR3H
+@result:
+      TYA
+      BNE   @modulo
+      LDA   NVR2L
+      LDX   NVR2H
+      RTS
+@modulo:
+      LDA   NVR3L
+      LDX   NVR3H
       RTS
 ordinal_compare:
       CPX   NVR0H
@@ -1303,6 +1708,10 @@ ordinal_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 6, "P_DIVW"
       .word ordinal_modulo-ordinal_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "P_MODW"
+      .word ordinal_divide_unsigned-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "P_DIVUW"
+      .word ordinal_modulo_unsigned-ordinal_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "P_MODUW"
       .word ordinal_compare-ordinal_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "P_CMPW"
       .word ordinal_eq-ordinal_code
@@ -1319,6 +1728,1174 @@ ordinal_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 4, "P_GE"
 ordinal_object_end:
 
+      ; Runtime checks are separate archive members. NL therefore retains
+      ; only the enabled checks plus this shared error formatter.
+      .word runtime_error_object_end-runtime_error_object
+runtime_error_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 7
+      .word runtime_error_symbols-runtime_error_object
+      .word 10
+      .word runtime_error_relocations-runtime_error_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word runtime_error_code_end-runtime_error_code
+      .word runtime_error_code_end-runtime_error_code
+      .byte "CODE"
+
+runtime_error_code:
+; A is the Turbo runtime error number; X/Y is the source line.
+runtime_error:
+      PHY
+      PHX
+      PHA
+      .byte $A9
+runtime_prefix_low: .byte 0
+      .byte $A2
+runtime_prefix_high: .byte 0
+      .byte $20
+runtime_prefix_call: .word 0
+      PLA
+      .byte $20
+runtime_byte_call: .word 0
+      .byte $A9
+runtime_middle_low: .byte 0
+      .byte $A2
+runtime_middle_high: .byte 0
+      .byte $20
+runtime_middle_call: .word 0
+      PLA
+      PLX
+      .byte $20
+runtime_word_call: .word 0
+      LDA   #$0A
+      .byte $20
+runtime_char_call: .word 0
+      PASCAL_MEMORY_CALL MEM_EXIT_IMAGE
+      RTS
+
+; A/X points at a zero-terminated string. Preserve the cursor and pointer
+; across P_WRITE_CHAR because Pascal runtime calls are caller-clobbered.
+runtime_puts:
+      STA   NVR0L
+      STX   NVR0H
+      LDY   #0
+runtime_puts_character:
+      LDA   (NVR0L),Y
+      BEQ   runtime_puts_done
+      LDA   NVR0H
+      PHA
+      LDA   NVR0L
+      PHA
+      PHY
+      LDA   (NVR0L),Y
+      .byte $20
+runtime_puts_char_call: .word 0
+      PLY
+      PLA
+      STA   NVR0L
+      PLA
+      STA   NVR0H
+      INY
+      BRA   runtime_puts_character
+runtime_puts_done:
+      RTS
+runtime_prefix: .byte "Runtime error ", 0
+runtime_middle: .byte " at line ", 0
+runtime_error_code_end:
+
+runtime_error_symbols:
+      .word runtime_error-runtime_error_code
+      .byte 0, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+      .word runtime_puts-runtime_error_code
+      .byte 0, 0, 5, "RPuts"
+      .word runtime_prefix-runtime_error_code
+      .byte 0, 0, 7, "RPrefix"
+      .word runtime_middle-runtime_error_code
+      .byte 0, 0, 7, "RMiddle"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 12, "P_WRITE_CHAR"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 12, "P_WRITE_BYTE"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 12, "P_WRITE_WORD"
+
+runtime_error_relocations:
+      .byte 0, NOBJ_RELOC_LO8
+      .word runtime_prefix_low-runtime_error_code, 2, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word runtime_prefix_high-runtime_error_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_prefix_call-runtime_error_code, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_byte_call-runtime_error_code, 5, 0
+      .byte 0, NOBJ_RELOC_LO8
+      .word runtime_middle_low-runtime_error_code, 3, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word runtime_middle_high-runtime_error_code, 3, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_middle_call-runtime_error_code, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_word_call-runtime_error_code, 6, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_char_call-runtime_error_code, 4, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word runtime_puts_char_call-runtime_error_code, 4, 0
+runtime_error_object_end:
+
+      ; Basic checks preserve A/X and share the inline-line decoder.
+      .word check_line_object_end-check_line_object
+check_line_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_line_symbols-check_line_object
+      .word 1
+      .word check_line_relocations-check_line_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_line_code_end-check_line_code
+      .word check_line_code_end-check_line_code
+      .byte "CODE"
+
+check_line_code:
+check_line:
+      PLA
+      STA   NVR0L
+      PLA
+      STA   NVR0H
+      CLC
+      LDA   NVR0L
+      ADC   #1
+      STA   NVR1L
+      LDA   NVR0H
+      ADC   #0
+      STA   NVR1H
+      LDY   #0
+      LDA   (NVR1L),Y
+      STA   NVR7L
+      INY
+      LDA   (NVR1L),Y
+      STA   NVR7H
+      CLC
+      LDA   NVR0L
+      ADC   #2
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   #0
+      PHA
+      LDA   NVR0L
+      PHA
+      LDA   NVR5L
+      BNE   @line_fail
+      LDA   NVR6L
+      LDX   NVR6H
+      ORA   #0                            ; return Z/N for the value in A
+      RTS
+@line_fail:
+      LDX   NVR7L
+      LDY   NVR7H
+      .byte $4C
+check_line_error_jump: .word 0
+check_line_code_end:
+
+check_line_symbols:
+      .word check_line-check_line_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+
+check_line_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_line_error_jump-check_line_code, 1, 0
+check_line_object_end:
+
+      .word check_overflow_object_end-check_overflow_object
+check_overflow_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_overflow_symbols-check_overflow_object
+      .word 1
+      .word check_overflow_relocations-check_overflow_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_overflow_code_end-check_overflow_code
+      .word check_overflow_code_end-check_overflow_code
+      .byte "CODE"
+check_overflow_code:
+check_overflow:
+      STA   NVR6L
+      STX   NVR6H
+      BVS   @failed
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #215
+      STA   NVR5L
+@check:
+      .byte $4C
+check_overflow_jump: .word 0
+check_overflow_code_end:
+check_overflow_symbols:
+      .word check_overflow-check_overflow_code
+      .byte 0, NOBJ_SYM_GLOBAL, 18, "I_P_CHECK_OVERFLOW"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_overflow_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_overflow_jump-check_overflow_code, 1, 0
+check_overflow_object_end:
+
+      .word check_uadd_object_end-check_uadd_object
+check_uadd_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_uadd_symbols-check_uadd_object
+      .word 1
+      .word check_uadd_relocations-check_uadd_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_uadd_code_end-check_uadd_code
+      .word check_uadd_code_end-check_uadd_code
+      .byte "CODE"
+check_uadd_code:
+check_unsigned_add:
+      STA   NVR6L
+      STX   NVR6H
+      BCS   @failed
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #215
+      STA   NVR5L
+@check:
+      .byte $4C
+check_uadd_jump: .word 0
+check_uadd_code_end:
+check_uadd_symbols:
+      .word check_unsigned_add-check_uadd_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_UADD"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_uadd_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_uadd_jump-check_uadd_code, 1, 0
+check_uadd_object_end:
+
+      .word check_usub_object_end-check_usub_object
+check_usub_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_usub_symbols-check_usub_object
+      .word 1
+      .word check_usub_relocations-check_usub_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_usub_code_end-check_usub_code
+      .word check_usub_code_end-check_usub_code
+      .byte "CODE"
+check_usub_code:
+check_unsigned_subtract:
+      STA   NVR6L
+      STX   NVR6H
+      BCC   @failed
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #215
+      STA   NVR5L
+@check:
+      .byte $4C
+check_usub_jump: .word 0
+check_usub_code_end:
+check_usub_symbols:
+      .word check_unsigned_subtract-check_usub_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_USUB"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_usub_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_usub_jump-check_usub_code, 1, 0
+check_usub_object_end:
+
+      .word check_muls_object_end-check_muls_object
+check_muls_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_muls_symbols-check_muls_object
+      .word 1
+      .word check_muls_relocations-check_muls_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_muls_code_end-check_muls_code
+      .word check_muls_code_end-check_muls_code
+      .byte "CODE"
+check_muls_code:
+check_multiply_signed:
+      STA   NVR6L
+      STX   NVR6H
+      TXA
+      BMI   @negative
+      LDA   MATH_RES2
+      ORA   MATH_RES3
+      BEQ   @ok
+      BRA   @failed
+@negative:
+      LDA   MATH_RES2
+      CMP   #$FF
+      BNE   @failed
+      LDA   MATH_RES3
+      CMP   #$FF
+      BEQ   @ok
+@failed:
+      LDA   #215
+      STA   NVR5L
+      BRA   @check
+@ok:
+      STZ   NVR5L
+@check:
+      .byte $4C
+check_muls_jump: .word 0
+check_muls_code_end:
+check_muls_symbols:
+      .word check_multiply_signed-check_muls_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_MULS"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_muls_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_muls_jump-check_muls_code, 1, 0
+check_muls_object_end:
+
+      .word check_mulu_object_end-check_mulu_object
+check_mulu_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_mulu_symbols-check_mulu_object
+      .word 1
+      .word check_mulu_relocations-check_mulu_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_mulu_code_end-check_mulu_code
+      .word check_mulu_code_end-check_mulu_code
+      .byte "CODE"
+check_mulu_code:
+check_multiply_unsigned:
+      STA   NVR6L
+      STX   NVR6H
+      LDA   MATH_RES2
+      ORA   MATH_RES3
+      BEQ   @ok
+      LDA   #215
+      STA   NVR5L
+      BRA   @check
+@ok:
+      STZ   NVR5L
+@check:
+      .byte $4C
+check_mulu_jump: .word 0
+check_mulu_code_end:
+check_mulu_symbols:
+      .word check_multiply_unsigned-check_mulu_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_MULU"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_mulu_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_mulu_jump-check_mulu_code, 1, 0
+check_mulu_object_end:
+
+      .word check_negs_object_end-check_negs_object
+check_negs_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_negs_symbols-check_negs_object
+      .word 1
+      .word check_negs_relocations-check_negs_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_negs_code_end-check_negs_code
+      .word check_negs_code_end-check_negs_code
+      .byte "CODE"
+check_negs_code:
+check_negate_signed:
+      STA   NVR6L
+      STX   NVR6H
+      CPX   #$80
+      BNE   @ok
+      CMP   #$00
+      BEQ   @failed
+@ok:
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #215
+      STA   NVR5L
+@check:
+      .byte $4C
+check_negs_jump: .word 0
+check_negs_code_end:
+check_negs_symbols:
+      .word check_negate_signed-check_negs_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_NEGS"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_negs_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_negs_jump-check_negs_code, 1, 0
+check_negs_object_end:
+
+      .word check_negu_object_end-check_negu_object
+check_negu_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_negu_symbols-check_negu_object
+      .word 1
+      .word check_negu_relocations-check_negu_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_negu_code_end-check_negu_code
+      .word check_negu_code_end-check_negu_code
+      .byte "CODE"
+check_negu_code:
+check_negate_unsigned:
+      STA   NVR6L
+      STX   NVR6H
+      CPX   #$80
+      BCC   @ok
+      BNE   @failed
+      CMP   #$00
+      BEQ   @ok
+@failed:
+      LDA   #215
+      STA   NVR5L
+      BRA   @check
+@ok:
+      STZ   NVR5L
+@check:
+      .byte $4C
+check_negu_jump: .word 0
+check_negu_code_end:
+check_negu_symbols:
+      .word check_negate_unsigned-check_negu_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_NEGU"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_negu_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_negu_jump-check_negu_code, 1, 0
+check_negu_object_end:
+
+      .word check_divs_object_end-check_divs_object
+check_divs_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_divs_symbols-check_divs_object
+      .word 1
+      .word check_divs_relocations-check_divs_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_divs_code_end-check_divs_code
+      .word check_divs_code_end-check_divs_code
+      .byte "CODE"
+check_divs_code:
+check_divide_signed:
+      STA   NVR6L
+      STX   NVR6H
+      CPX   #$FF
+      BNE   @ok
+      CMP   #$FF
+      BNE   @ok
+      TSX
+      LDA   $0104,X
+      CMP   #$80
+      BNE   @ok
+      LDA   $0103,X
+      BEQ   @failed
+@ok:
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #215
+      STA   NVR5L
+@check:
+      .byte $4C
+check_divs_jump: .word 0
+check_divs_code_end:
+check_divs_symbols:
+      .word check_divide_signed-check_divs_code
+      .byte 0, NOBJ_SYM_GLOBAL, 14, "I_P_CHECK_DIVS"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_divs_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_divs_jump-check_divs_code, 1, 0
+check_divs_object_end:
+
+      .word check_zero8_object_end-check_zero8_object
+check_zero8_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_zero8_symbols-check_zero8_object
+      .word 1
+      .word check_zero8_relocations-check_zero8_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_zero8_code_end-check_zero8_code
+      .word check_zero8_code_end-check_zero8_code
+      .byte "CODE"
+check_zero8_code:
+check_zero8:
+      STA   NVR6L
+      STX   NVR6H
+      ORA   #0
+      BEQ   @failed
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #200
+      STA   NVR5L
+@check:
+      .byte $4C
+check_zero8_jump: .word 0
+check_zero8_code_end:
+check_zero8_symbols:
+      .word check_zero8-check_zero8_code
+      .byte 0, NOBJ_SYM_GLOBAL, 15, "I_P_CHECK_ZERO8"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_zero8_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_zero8_jump-check_zero8_code, 1, 0
+check_zero8_object_end:
+
+      .word check_zero16_object_end-check_zero16_object
+check_zero16_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_zero16_symbols-check_zero16_object
+      .word 1
+      .word check_zero16_relocations-check_zero16_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_zero16_code_end-check_zero16_code
+      .word check_zero16_code_end-check_zero16_code
+      .byte "CODE"
+check_zero16_code:
+check_zero16:
+      STA   NVR6L
+      STX   NVR6H
+      ORA   NVR6H
+      BEQ   @failed
+      STZ   NVR5L
+      BRA   @check
+@failed:
+      LDA   #200
+      STA   NVR5L
+@check:
+      .byte $4C
+check_zero16_jump: .word 0
+check_zero16_code_end:
+check_zero16_symbols:
+      .word check_zero16-check_zero16_code
+      .byte 0, NOBJ_SYM_GLOBAL, 16, "I_P_CHECK_ZERO16"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_zero16_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_zero16_jump-check_zero16_code, 1, 0
+check_zero16_object_end:
+
+      .word check_io_read_object_end-check_io_read_object
+check_io_read_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_io_read_symbols-check_io_read_object
+      .word 1
+      .word check_io_read_relocations-check_io_read_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_io_read_code_end-check_io_read_code
+      .word check_io_read_code_end-check_io_read_code
+      .byte "CODE"
+check_io_read_code:
+check_io_read:
+      STA   NVR6L
+      STX   NVR6H
+      LDA   FIO_ERRCODE
+      BEQ   @ok
+      LDA   #100
+      BRA   @check
+@ok:
+      LDA   #0
+@check:
+      STA   NVR5L
+      .byte $4C
+check_io_read_jump: .word 0
+check_io_read_code_end:
+check_io_read_symbols:
+      .word check_io_read-check_io_read_code
+      .byte 0, NOBJ_SYM_GLOBAL, 16, "I_P_IOCHECK_READ"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_io_read_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_io_read_jump-check_io_read_code, 1, 0
+check_io_read_object_end:
+
+      .word check_io_write_object_end-check_io_write_object
+check_io_write_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word check_io_write_symbols-check_io_write_object
+      .word 1
+      .word check_io_write_relocations-check_io_write_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_io_write_code_end-check_io_write_code
+      .word check_io_write_code_end-check_io_write_code
+      .byte "CODE"
+check_io_write_code:
+check_io_write:
+      STA   NVR6L
+      STX   NVR6H
+      LDA   FIO_ERRCODE
+      BEQ   @ok
+      LDA   #101
+      BRA   @check
+@ok:
+      LDA   #0
+@check:
+      STA   NVR5L
+      .byte $4C
+check_io_write_jump: .word 0
+check_io_write_code_end:
+check_io_write_symbols:
+      .word check_io_write-check_io_write_code
+      .byte 0, NOBJ_SYM_GLOBAL, 17, "I_P_IOCHECK_WRITE"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 14, "__P_CHECK_LINE"
+check_io_write_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_io_write_jump-check_io_write_code, 1, 0
+check_io_write_object_end:
+
+      .word check_range_object_end-check_range_object
+check_range_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 4
+      .word check_range_symbols-check_range_object
+      .word 1
+      .word check_range_relocations-check_range_object
+      .word 0
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word check_range_code_end-check_range_code
+      .word check_range_code_end-check_range_code
+      .byte "CODE"
+check_range_code:
+
+; A/X is checked against two inclusive inline bounds followed by a source
+; line: .WORD low, high, line. The signed entry biases all high bytes by $80.
+check_range_unsigned:
+      STA   NVR6L
+      STX   NVR6H
+      STZ   NVR5H
+      BRA   check_range
+check_range_signed:
+      STA   NVR6L
+      STX   NVR6H
+      LDA   #1
+      STA   NVR5H
+check_range:
+      PLA
+      STA   NVR0L
+      PLA
+      STA   NVR0H
+      CLC
+      LDA   NVR0L
+      ADC   #1
+      STA   NVR3L
+      LDA   NVR0H
+      ADC   #0
+      STA   NVR3H
+      LDY   #0
+      LDA   (NVR3L),Y
+      STA   NVR1L
+      INY
+      LDA   (NVR3L),Y
+      STA   NVR1H
+      INY
+      LDA   (NVR3L),Y
+      STA   NVR2L
+      INY
+      LDA   (NVR3L),Y
+      STA   NVR2H
+      INY
+      LDA   (NVR3L),Y
+      STA   NVR7L
+      INY
+      LDA   (NVR3L),Y
+      STA   NVR7H
+      CLC
+      LDA   NVR0L
+      ADC   #6
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   #0
+      PHA
+      LDA   NVR0L
+      PHA
+      LDA   NVR5H
+      BEQ   @range_compare
+      LDA   NVR6H
+      EOR   #$80
+      STA   NVR6H
+      LDA   NVR1H
+      EOR   #$80
+      STA   NVR1H
+      LDA   NVR2H
+      EOR   #$80
+      STA   NVR2H
+@range_compare:
+      LDA   NVR6H
+      CMP   NVR1H
+      BCC   check_range_fail
+      BNE   @range_lower_ok
+      LDA   NVR6L
+      CMP   NVR1L
+      BCC   check_range_fail
+@range_lower_ok:
+      LDA   NVR6H
+      CMP   NVR2H
+      BCC   @range_ok
+      BNE   check_range_fail
+      LDA   NVR6L
+      CMP   NVR2L
+      BCC   @range_ok
+      BNE   check_range_fail
+@range_ok:
+      LDA   NVR5H
+      BEQ   :+
+      LDA   NVR6H
+      EOR   #$80
+      STA   NVR6H
+:     LDA   NVR6L
+      LDX   NVR6H
+      RTS
+
+check_range_fail:
+      LDA   #201
+      LDX   NVR7L
+      LDY   NVR7H
+      .byte $4C
+check_range_error_jump: .word 0
+
+; A/X is checked against the inclusive dynamic high bound in NVR0. The only
+; inline word is the source line, matching the other removable range checks.
+check_range_open:
+      STA   NVR6L
+      STX   NVR6H
+      PLA
+      STA   NVR3L
+      PLA
+      STA   NVR3H
+      CLC
+      LDA   NVR3L
+      ADC   #1
+      STA   NVR1L
+      LDA   NVR3H
+      ADC   #0
+      STA   NVR1H
+      LDY   #0
+      LDA   (NVR1L),Y
+      STA   NVR7L
+      INY
+      LDA   (NVR1L),Y
+      STA   NVR7H
+      CLC
+      LDA   NVR3L
+      ADC   #2
+      STA   NVR3L
+      LDA   NVR3H
+      ADC   #0
+      PHA
+      LDA   NVR3L
+      PHA
+      LDA   NVR6H
+      CMP   NVR0H
+      BCC   @open_ok
+      BNE   check_range_fail
+      LDA   NVR6L
+      CMP   NVR0L
+      BCC   @open_ok
+      BNE   check_range_fail
+@open_ok:
+      LDA   NVR6L
+      LDX   NVR6H
+      RTS
+check_range_code_end:
+
+check_range_symbols:
+      .word check_range_unsigned-check_range_code
+      .byte 0, NOBJ_SYM_GLOBAL, 17, "I_P_CHECK_RANGE_U"
+      .word check_range_signed-check_range_code
+      .byte 0, NOBJ_SYM_GLOBAL, 17, "I_P_CHECK_RANGE_S"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+      .word check_range_open-check_range_code
+      .byte 0, NOBJ_SYM_GLOBAL, 20, "I_P_CHECK_RANGE_OPEN"
+
+check_range_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word check_range_error_jump-check_range_code, 2, 0
+check_range_object_end:
+
+      ; Stack checking is separate so range/I/O checks do not pull the 1 KiB
+      ; lexical-frame arena into otherwise frameless programs.
+      .word stack_check_object_end-stack_check_object
+stack_check_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 4
+      .word stack_check_symbols-stack_check_object
+      .word 7
+      .word stack_check_relocations-stack_check_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word stack_check_code_end-stack_check_code
+      .word stack_check_code_end-stack_check_code
+      .byte "CODE"
+
+stack_check_code:
+stack_check:
+      PLA
+      STA   NVR0L
+      PLA
+      STA   NVR0H
+      CLC
+      LDA   NVR0L
+      ADC   #1
+      STA   NVR5L
+      LDA   NVR0H
+      ADC   #0
+      STA   NVR5H
+      LDY   #0
+      LDA   (NVR5L),Y
+      STA   NVR2L
+      INY
+      LDA   (NVR5L),Y
+      STA   NVR2H
+      INY
+      LDA   (NVR5L),Y
+      STA   NVR7L
+      INY
+      LDA   (NVR5L),Y
+      STA   NVR7H
+      CLC
+      LDA   NVR0L
+      ADC   #4
+      STA   NVR0L
+      LDA   NVR0H
+      ADC   #0
+      PHA
+      LDA   NVR0L
+      PHA
+      .byte $AD
+stack_check_sp_low: .word 0
+      STA   NVR3L
+      .byte $AD
+stack_check_sp_high: .word 0
+      STA   NVR3H
+      ORA   NVR3L
+      BNE   stack_check_have_sp
+      .byte $A9
+stack_check_base_low: .byte 0
+      STA   NVR3L
+      .byte $A9
+stack_check_base_high: .byte 0
+      STA   NVR3H
+stack_check_have_sp:
+      CLC
+      LDA   NVR3L
+      ADC   NVR2L
+      STA   NVR4L
+      LDA   NVR3H
+      ADC   NVR2H
+      BCS   stack_check_fail
+      STA   NVR4H
+      .byte $C9
+stack_check_end_high: .byte 0
+      BCC   stack_check_ok
+      BNE   stack_check_fail
+      LDA   NVR4L
+      .byte $C9
+stack_check_end_low: .byte 0
+      BCC   stack_check_ok
+      BEQ   stack_check_ok
+stack_check_fail:
+      LDA   #202
+      LDX   NVR7L
+      LDY   NVR7H
+      .byte $4C
+stack_check_error_jump: .word 0
+stack_check_ok:
+      RTS
+stack_check_code_end:
+
+stack_check_symbols:
+      .word stack_check-stack_check_code
+      .byte 0, NOBJ_SYM_GLOBAL, 15, "I_P_STACK_CHECK"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 7, "__NP_SP"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 10, "__NP_STACK"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+
+stack_check_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word stack_check_sp_low-stack_check_code, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word stack_check_sp_high-stack_check_code, 1, 1
+      .byte 0, NOBJ_RELOC_LO8
+      .word stack_check_base_low-stack_check_code, 2, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word stack_check_base_high-stack_check_code, 2, 0
+      .byte 0, NOBJ_RELOC_HI8
+      .word stack_check_end_high-stack_check_code, 2, $0400
+      .byte 0, NOBJ_RELOC_LO8
+      .word stack_check_end_low-stack_check_code, 2, $0400
+      .byte 0, NOBJ_RELOC_ABS16
+      .word stack_check_error_jump-stack_check_code, 3, 0
+stack_check_object_end:
+
+      ; Value open arrays are copied into the current lexical-frame arena.
+      ; Keeping this in its own member makes CONST/VAR open arrays free.
+      .word open_copy_object_end-open_copy_object
+open_copy_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 5
+      .word open_copy_symbols-open_copy_object
+      .word 9
+      .word open_copy_relocations-open_copy_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word open_copy_code_end-open_copy_code
+      .word open_copy_code_end-open_copy_code
+      .byte "CODE"
+
+open_copy_code:
+open_copy:
+      PLA
+      STA   NVR6L
+      PLA
+      STA   NVR6H
+      CLC
+      LDA   NVR6L
+      ADC   #1
+      STA   NVR7L
+      LDA   NVR6H
+      ADC   #0
+      STA   NVR7H
+      LDY   #0
+      LDA   (NVR7L),Y
+      STA   NVR4L                         ; descriptor offset
+      INY
+      LDA   (NVR7L),Y
+      STA   NVR4H
+      INY
+      LDA   (NVR7L),Y
+      STA   MATH_MUL16_B_LO               ; element size
+      INY
+      LDA   (NVR7L),Y
+      STA   MATH_MUL16_B_HI
+      INY
+      LDA   (NVR7L),Y
+      STA   NVR3L                         ; source line
+      INY
+      LDA   (NVR7L),Y
+      STA   NVR3H
+      CLC
+      LDA   NVR6L
+      ADC   #6
+      STA   NVR6L
+      LDA   NVR6H
+      ADC   #0
+      PHA
+      LDA   NVR6L
+      PHA
+
+      .byte $AD
+open_copy_load_fp: .word 0                ; LDA __NP_FP
+      STA   NVR1L
+      .byte $AD
+open_copy_load_fp_hi: .word 0             ; LDA __NP_FP+1
+      STA   NVR1H
+      CLC
+      LDA   NVR1L
+      ADC   NVR4L
+      STA   NVR1L
+      LDA   NVR1H
+      ADC   NVR4H
+      STA   NVR1H
+      LDY   #0
+      LDA   (NVR1L),Y
+      STA   NVR2L                         ; source pointer
+      INY
+      LDA   (NVR1L),Y
+      STA   NVR2H
+      INY
+      LDA   (NVR1L),Y
+      CLC
+      ADC   #1
+      STA   MATH_MUL16_A_LO               ; High + 1
+      INY
+      LDA   (NVR1L),Y
+      ADC   #0
+      STA   MATH_MUL16_A_HI
+      LDA   MATH_RES2
+      ORA   MATH_RES3
+      BNE   open_copy_fail
+      LDA   MATH_RES0
+      STA   NVR5L                         ; byte count
+      LDA   MATH_RES1
+      STA   NVR5H
+
+      .byte $AD
+open_copy_load_sp: .word 0                ; LDA __NP_SP
+      STA   NVR0L
+      .byte $AD
+open_copy_load_sp_hi: .word 0             ; LDA __NP_SP+1
+      STA   NVR0H
+      CLC
+      LDA   NVR0L
+      ADC   NVR5L
+      STA   NVR4L
+      LDA   NVR0H
+      ADC   NVR5H
+      BCS   open_copy_fail
+      STA   NVR4H
+      .byte $C9
+open_copy_end_high: .byte 0               ; CMP #>(__NP_STACK+$0400)
+      BCC   open_copy_space
+      BNE   open_copy_fail
+      LDA   NVR4L
+      .byte $C9
+open_copy_end_low: .byte 0                ; CMP #<(__NP_STACK+$0400)
+      BCC   open_copy_space
+      BNE   open_copy_fail
+open_copy_space:
+      LDY   #0
+      LDA   NVR0L
+      STA   (NVR1L),Y
+      INY
+      LDA   NVR0H
+      STA   (NVR1L),Y
+      LDA   NVR5L
+      ORA   NVR5H
+      BEQ   open_copy_store_sp
+      LDY   #0
+open_copy_byte:
+      LDA   (NVR2L),Y
+      STA   (NVR0L),Y
+      INC   NVR2L
+      BNE   :+
+      INC   NVR2H
+:     INC   NVR0L
+      BNE   :+
+      INC   NVR0H
+:     LDA   NVR5L
+      BNE   :+
+      DEC   NVR5H
+:     DEC   NVR5L
+      LDA   NVR5L
+      ORA   NVR5H
+      BNE   open_copy_byte
+open_copy_store_sp:
+      LDA   NVR0L
+      .byte $8D
+open_copy_store_sp_low: .word 0            ; STA __NP_SP
+      LDA   NVR0H
+      .byte $8D
+open_copy_store_sp_high: .word 0           ; STA __NP_SP+1
+      RTS
+open_copy_fail:
+      LDA   #202
+      LDX   NVR3L
+      LDY   NVR3H
+      .byte $4C
+open_copy_error_jump: .word 0
+open_copy_code_end:
+
+open_copy_symbols:
+      .word open_copy-open_copy_code
+      .byte 0, NOBJ_SYM_GLOBAL, 11, "P_OPEN_COPY"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 7, "__NP_FP"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 7, "__NP_SP"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 10, "__NP_STACK"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+
+open_copy_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_load_fp-open_copy_code, 1, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_load_fp_hi-open_copy_code, 1, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_load_sp-open_copy_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_load_sp_hi-open_copy_code, 2, 1
+      .byte 0, NOBJ_RELOC_HI8
+      .word open_copy_end_high-open_copy_code, 3, $0400
+      .byte 0, NOBJ_RELOC_LO8
+      .word open_copy_end_low-open_copy_code, 3, $0400
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_store_sp_low-open_copy_code, 2, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_store_sp_high-open_copy_code, 2, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word open_copy_error_jump-open_copy_code, 4, 0
+open_copy_object_end:
+
       ; One shared lexical-frame arena is extracted only when compiled code
       ; references a routine frame. Programs without routines pay nothing.
       .word frame_object_end-frame_object
@@ -1328,7 +2905,7 @@ frame_object:
       .word 0
       .word 8
       .word frame_symbols-frame_object
-      .word 20
+      .word 21
       .word frame_relocations-frame_object
       .word 0
 
@@ -1344,10 +2921,10 @@ frame_object:
 
 frame_code:
 ; Enter a lexical frame. Inline metadata is display offset ($FF for none),
-; little-endian frame size, parameter count, and a width mask whose low bit
-; describes the last parameter. Bit 7 of the count reserves frame bytes two
-; and three for a wide function result. One parameter arrives in NVR1; two or
-; more arrive on the hardware stack.
+; little-endian frame size, parameter count, width mask, and open-array mask;
+; each mask's low bit describes the last parameter. Bit 7 of the count
+; reserves frame bytes two and three for a wide function result. One ordinary
+; parameter arrives in NVR1; multiple or descriptor parameters use the stack.
 frame_enter:
       .byte $AD
 frame_enter_load_sp: .word 0               ; LDA __NP_SP
@@ -1401,17 +2978,22 @@ frame_enter_load_sp_hi_again: .word 0       ; LDA __NP_SP+1
       INY
       LDA   (NVR7L),Y
       STA   NVR2H                         ; 1 = two-byte parameter
+      INY
+      LDA   (NVR7L),Y
+      STA   NVR5H                         ; 1 = four-byte open-array descriptor
       CLC
       LDA   NVR6L
-      ADC   #5
+      ADC   #6
       STA   NVR6L
       LDA   NVR6H
       ADC   #0
       STA   NVR6H
 
       LDA   NVR2L
-      BEQ   frame_enter_parameters_done
+      BEQ   frame_enter_unstacked_done
       CMP   #1
+      BNE   frame_enter_stacked_parameters
+      LDA   NVR5H
       BNE   frame_enter_stacked_parameters
       LDY   #2
       LDA   NVR3H
@@ -1422,16 +3004,21 @@ frame_enter_load_sp_hi_again: .word 0       ; LDA __NP_SP+1
       LDA   NVR1L
       STA   (NVR0L),Y
       LSR   NVR2H
-      BCC   frame_enter_parameters_done
+      BCC   frame_enter_unstacked_done
       INY
       LDA   NVR1H
       STA   (NVR0L),Y
-      BRA   frame_enter_parameters_done
+      BRA   frame_enter_unstacked_done
+
+frame_enter_unstacked_done:
+      .byte $4C
+frame_enter_parameters_jump: .word 0
 
 frame_enter_stacked_parameters:
       ; Find the byte immediately beyond the packed frame parameters.
       LDA   NVR2L
       STA   NVR3L
+      STA   NVR1L                         ; caller stack bytes to consume
       STA   NVR7L
       LDA   NVR3H
       BPL   :+
@@ -1440,13 +3027,32 @@ frame_enter_stacked_parameters:
 :
       LDA   NVR2H
       STA   NVR3H
+      LDA   NVR5H
+      PHA
 frame_enter_count_parameter_bytes:
+      LSR   NVR5H
+      BCC   frame_enter_count_width
+      LSR   NVR3H
+      CLC
+      LDA   NVR7L
+      ADC   #3
+      STA   NVR7L
+      CLC
+      LDA   NVR1L
+      ADC   #3
+      STA   NVR1L
+      BRA   frame_enter_count_next
+frame_enter_count_width:
       LSR   NVR3H
       BCC   :+
       INC   NVR7L
+      INC   NVR1L
 :
+frame_enter_count_next:
       DEC   NVR3L
       BNE   frame_enter_count_parameter_bytes
+      PLA
+      STA   NVR5H
       INC   NVR7L
       INC   NVR7L
       TSX
@@ -1459,6 +3065,8 @@ frame_enter_count_parameter_bytes:
       LDA   NVR2L
       STA   NVR3L
 frame_enter_copy_parameter:
+      LSR   NVR5H
+      BCS   frame_enter_copy_open
       LSR   NVR2H
       BCS   frame_enter_copy_word
       DEC   NVR7L
@@ -1482,10 +3090,51 @@ frame_enter_copy_word:
       LDY   NVR7L
       INY
       STA   (NVR0L),Y
+      BRA   frame_enter_next_parameter
+frame_enter_copy_open:
+      LSR   NVR2H
+      SEC
+      LDA   NVR7L
+      SBC   #4
+      STA   NVR7L
+      LDX   #0
+@copy:
+      LDY   NVR7H
+      LDA   $0100,Y
+      INC   NVR7H
+      PHA
+      TXA
+      CLC
+      ADC   NVR7L
+      TAY
+      PLA
+      STA   (NVR0L),Y
+      INX
+      CPX   #4
+      BNE   @copy
 frame_enter_next_parameter:
       DEC   NVR3L
       BNE   frame_enter_copy_parameter
+      BRA   frame_enter_drop_parameters
 frame_enter_parameters_done:
+      BRA   frame_enter_save_context
+frame_enter_drop_parameters:
+      ; Stacked parameters now live in the software frame. Release their
+      ; packed bytes before the routine body runs.
+      PLA
+      STA   NVR7L                         ; original routine return low
+      PLA
+      STA   NVR7H                         ; original routine return high
+      LDX   NVR1L
+frame_enter_drop_argument:
+      PLA
+      DEX
+      BNE   frame_enter_drop_argument
+      LDA   NVR7H
+      PHA
+      LDA   NVR7L
+      PHA
+frame_enter_save_context:
       LDA   __NP_FP
       PHA
       LDA   __NP_FP+1
@@ -1534,9 +3183,9 @@ frame_enter_store_new_sp_hi: .word 0        ; STA __NP_SP+1
       RTS
 
 ; Leave a lexical frame while preserving the routine's original return frame.
-; Inline metadata is the display offset followed by the number of caller stack
-; bytes to discard. Bit 7 marks a function result above the saved frame and
-; bit 6 marks a two-byte A/X result.
+; P_FENTER has already consumed caller arguments after copying them. Inline
+; metadata retains their byte count for compatibility; only bits 7 and 6 are
+; needed here to mark byte and two-byte function results.
 frame_leave:
       PLA
       STA   NVR5L
@@ -1606,14 +3255,6 @@ frame_leave_store_sp_hi: .word 0            ; STA __NP_SP+1
       STA   NVR7L                         ; original routine return low
       PLA
       STA   NVR7H                         ; original routine return high
-      LDA   NVR4H
-      AND   #$3F
-      TAX
-      BEQ   frame_leave_arguments_done
-frame_leave_drop_argument:
-      PLA
-      DEX
-      BNE   frame_leave_drop_argument
 frame_leave_arguments_done:
       LDA   NVR7H
       PHA
@@ -1720,6 +3361,8 @@ frame_symbols:
       .byte 1, NOBJ_SYM_GLOBAL, 7, "P_FADDR"
 
 frame_relocations:
+      .byte 1, NOBJ_RELOC_ABS16
+      .word frame_enter_parameters_jump-frame_code, 5, frame_enter_parameters_done-frame_enter
       .byte 1, NOBJ_RELOC_ABS16
       .word frame_enter_load_sp-frame_code, 0, 0
       .byte 1, NOBJ_RELOC_ABS16
@@ -1937,9 +3580,9 @@ string_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 12
+      .word 13
       .word string_symbols-string_object
-      .word 11
+      .word 12
       .word string_relocations-string_object
       .word 0
 
@@ -2321,49 +3964,160 @@ string_delete:
 @delete_done:
       RTS
 
-string_insert_char:
+string_insert:
       TSX
-      LDA   $0105,X
-      STA   NVR0L
-      LDA   $0106,X
-      STA   NVR0H
       LDA   $0107,X
+      STA   NVR0L
+      LDA   $0108,X
+      STA   NVR0H
+      LDA   $0105,X
       STA   NVR1L
-      LDA   $0104,X
-      BNE   @insert_done
-      LDA   $0103,X
-      BNE   :+
-      INC
-:     STA   NVR1H
-      LDY   #0
-      LDA   (NVR0L),Y
-      CMP   #$FF
-      BEQ   @insert_done
-      TAX
-      INC
-      CMP   NVR1H
-      BCS   :+
+      LDA   $0106,X
       STA   NVR1H
-:     TXA
-      TAY
-@insert_shift:
-      CPY   NVR1H
-      BCC   @insert_store
-      LDA   (NVR0L),Y
-      INY
-      STA   (NVR0L),Y
-      DEY
-      DEY
-      BRA   @insert_shift
-@insert_store:
-      LDY   NVR1H
-      LDA   NVR1L
-      STA   (NVR0L),Y
+      LDA   $0103,X
+      STA   NVR2L
+      LDA   $0104,X
+      STA   NVR2H
       LDY   #0
       LDA   (NVR0L),Y
+      STA   NVR3L
+      BNE   :+
+      RTS
+:
+      .byte $20
+string_insert_select: .word 0
+      STA   NVR5L
+      STX   NVR5H
+      LDY   #0
+      LDA   NVR3L
+      STA   (NVR5L),Y
+      TAX
+      BEQ   @source_staged
+      LDY   #1
+@stage_source:
+      LDA   (NVR0L),Y
+      STA   (NVR5L),Y
+      INY
+      DEX
+      BNE   @stage_source
+@source_staged:
+      LDY   #0
+      LDA   (NVR1L),Y
+      STA   NVR3H
+      CMP   NVR7L
+      BCC   :+
+      RTS
+:
+      LDA   NVR7L
+      SEC
+      SBC   NVR3H
+      CMP   NVR3L
+      BCC   :+
+      LDA   NVR3L
+:     STA   NVR4L
+      BNE   :+
+      RTS
+:
+      LDA   NVR2H
+      BNE   @append
+      LDA   NVR2L
+      BNE   @position_nonzero
       INC
-      STA   (NVR0L),Y
-@insert_done:
+@position_nonzero:
+      STA   NVR2L
+      LDA   NVR3H
+      INC
+      CMP   NVR2L
+      BCS   @position_ready
+@append:
+      LDA   NVR3H
+      INC
+      STA   NVR2L
+@position_ready:
+      CLC
+      LDA   NVR3H
+      ADC   NVR4L
+      STA   NVR7H
+      LDY   #0
+      STA   (NVR1L),Y
+      LDA   NVR3H
+      STA   NVR2H
+      LDA   NVR7H
+      STA   NVR4H
+@insert_shift:
+      LDA   NVR2H
+      CMP   NVR2L
+      BCC   @insert_copy
+      TAY
+      LDA   (NVR1L),Y
+      LDY   NVR4H
+      STA   (NVR1L),Y
+      DEC   NVR2H
+      DEC   NVR4H
+      BRA   @insert_shift
+@insert_copy:
+      LDA   NVR2L
+      STA   NVR3H
+      LDA   #1
+      STA   NVR4H
+      LDX   NVR4L
+@insert_store:
+      LDY   NVR4H
+      LDA   (NVR5L),Y
+      STA   NVR7H
+      LDY   NVR3H
+      LDA   NVR7H
+      STA   (NVR1L),Y
+      INC   NVR4H
+      INC   NVR3H
+      DEX
+      BNE   @insert_store
+string_insert_done:
+      RTS
+
+; Return the one-based location of NVR0's short string in A/X's short string,
+; or zero when it is absent. Empty needles match nowhere, as in Turbo Pascal.
+string_pos:
+      STA   NVR1L
+      STX   NVR1H
+      LDY   #0
+      LDA   (NVR0L),Y
+      STA   NVR2L
+      BEQ   @missing
+      LDA   (NVR1L),Y
+      CMP   NVR2L
+      BCC   @missing
+      SEC
+      SBC   NVR2L
+      INC
+      STA   NVR2H
+      LDA   #1
+      STA   NVR3L
+@candidate:
+      LDX   NVR2L
+      LDY   #1
+@character:
+      LDA   (NVR0L),Y
+      CMP   (NVR1L),Y
+      BNE   @next
+      INY
+      DEX
+      BNE   @character
+      LDA   NVR3L
+      LDX   #0
+      RTS
+@next:
+      INC   NVR1L
+      BNE   :+
+      INC   NVR1H
+:     INC   NVR3L
+      LDA   NVR3L
+      CMP   NVR2H
+      BCC   @candidate
+      BEQ   @candidate
+@missing:
+      LDA   #0
+      TAX
       RTS
 string_code_end:
 
@@ -2384,8 +4138,10 @@ string_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 18, "P_STRING_COPY_PART"
       .word string_delete-string_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "DELETE"
-      .word string_insert_char-string_code
+      .word string_insert-string_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "INSERT"
+      .word string_pos-string_code
+      .byte 0, NOBJ_SYM_GLOBAL, 12, "P_STRING_POS"
       .word string_select_temp-string_code
       .byte 0, 0, 10, "STR_SELECT"
       .word 0
@@ -2395,27 +4151,29 @@ string_symbols:
 
 string_relocations:
       .byte 0, NOBJ_RELOC_LO8
-      .word string_cmp_buf0_lo-string_code, 10, 0
+      .word string_cmp_buf0_lo-string_code, 11, 0
       .byte 0, NOBJ_RELOC_HI8
-      .word string_cmp_buf0_hi-string_code, 10, 0
+      .word string_cmp_buf0_hi-string_code, 11, 0
       .byte 0, NOBJ_RELOC_LO8
-      .word string_load_buf1_lo-string_code, 11, 0
+      .word string_load_buf1_lo-string_code, 12, 0
       .byte 0, NOBJ_RELOC_HI8
-      .word string_load_buf1_hi-string_code, 11, 0
+      .word string_load_buf1_hi-string_code, 12, 0
       .byte 0, NOBJ_RELOC_LO8
-      .word string_load_buf0_lo-string_code, 10, 0
+      .word string_load_buf0_lo-string_code, 11, 0
       .byte 0, NOBJ_RELOC_HI8
-      .word string_load_buf0_hi-string_code, 10, 0
+      .word string_load_buf0_hi-string_code, 11, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word string_concat_select-string_code, 9, 0
+      .word string_concat_select-string_code, 10, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word string_concat_char_select-string_code, 9, 0
+      .word string_concat_char_select-string_code, 10, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word char_concat_select-string_code, 9, 0
+      .word char_concat_select-string_code, 10, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word char_to_string_select-string_code, 9, 0
+      .word char_to_string_select-string_code, 10, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word string_copy_part_select-string_code, 9, 0
+      .word string_insert_select-string_code, 10, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word string_copy_part_select-string_code, 10, 0
 string_object_end:
 
       ; Resident adapter between Pascal's compact register/stack ABI and the
@@ -2546,7 +4304,11 @@ rtcall_load_return_low: .word 0            ; LDA rtcall_return
       LDA   LANGRT_FN_SAVED
       CMP   #LANGRT_REAL_CMP
       BEQ   rtcall_restore_compare
+      CMP   #LANGRT_LONG_CMP
+      BEQ   rtcall_restore_compare
       CMP   #LANGRT_REAL_TRUNC
+      BEQ   rtcall_return_word
+      CMP   #LANGRT_REAL_ROUND
       BEQ   rtcall_return_word
       CMP   #LANGRT_STR_REAL
       BEQ   rtcall_return_void
@@ -2625,6 +4387,7 @@ rtcall_relocations:
 rtcall_object_end:
 
       .include "pascal_real_thunks.inc"
+      .include "pascal_longint_thunks.inc"
 
       ; Turbo-compatible console services. The implementation uses Nova's
       ; canonical VGC registers and SYSTEM module mailbox; no private device
@@ -2634,9 +4397,9 @@ system_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 23
+      .word 18
       .word system_symbols-system_object
-      .word 17
+      .word 16
       .word system_relocations-system_object
       .word 0
 
@@ -2726,7 +4489,8 @@ system_gotoxy_done:
       RTS
 
 system_clreol:
-      JSR   system_window_args
+      .byte $20
+system_clreol_args_call: .word 0
       PASCAL_SYSTEM_CALL SYS_CONSOLE_CLEAR_EOL
       RTS
 
@@ -2814,10 +4578,130 @@ system_clrscr_active: .word 0
       STA   VGC_CHAROUT
       RTS
 @window:
-      JSR   system_window_args
+      .byte $20
+system_clrscr_args_call: .word 0
       PASCAL_SYSTEM_CALL SYS_CONSOLE_CLEAR_REGION
-      JMP   system_window_home
+      .byte $4C
+system_clrscr_home_jump: .word 0
 
+system_succ:
+      INC
+      RTS
+system_pred:
+      DEC
+      RTS
+system_length:
+      STA   NVR0L
+      STX   NVR0H
+      LDA   (NVR0L)
+      LDX   #0
+      RTS
+
+system_ioresult:
+      LDA   FIO_ERRCODE
+      PHA
+      STZ   FIO_ERRCODE
+      LDX   #0
+      PLA
+      RTS
+
+system_halt:
+      PASCAL_MEMORY_CALL MEM_EXIT_IMAGE
+      RTS
+system_code_end:
+
+system_symbols:
+      .word system_gotoxy-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "GOTOXY"
+      .word system_clreol-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "CLREOL"
+      .word system_highvideo-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "HIGHVIDEO"
+      .word system_lowvideo-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "LOWVIDEO"
+      .word system_lowvideo-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 9, "NORMVIDEO"
+      .word system_delay-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 5, "DELAY"
+      .word system_upcase-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "UPCASE"
+      .word system_clrscr-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "CLRSCR"
+      .word system_succ-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "SUCC"
+      .word system_pred-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "PRED"
+      .word system_length-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 6, "LENGTH"
+      .word system_halt-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 4, "HALT"
+      .word VGC_CHARIN
+      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 3, "KBD"
+      .word VGC_CHARIN
+      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 10, "KEYPRESSED"
+      .word system_ioresult-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 8, "IORESULT"
+
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+      .word system_window_args-system_code
+      .byte 0, NOBJ_SYM_GLOBAL, 7, "SYSARGS"
+      .word system_window_home-system_code
+      .byte 0, 0, 7, "SYSHOME"
+
+system_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_active-system_code, 15, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_left-system_code, 15, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_top-system_code, 15, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_width-system_code, 15, 2
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_args_height-system_code, 15, 3
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_home_left-system_code, 15, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_home_top-system_code, 15, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_active-system_code, 15, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_height-system_code, 15, 3
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_width-system_code, 15, 2
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_left-system_code, 15, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_gotoxy_top-system_code, 15, 1
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_clrscr_active-system_code, 15, 4
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_clreol_args_call-system_code, 16, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_clrscr_args_call-system_code, 16, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_clrscr_home_jump-system_code, 17, 0
+system_object_end:
+
+      ; Less common CRT queries and line-editing operations live in their own
+      ; member so ordinary console programs do not pay for them.
+      .word system_extra_object_end-system_extra_object
+system_extra_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 9
+      .word system_extra_symbols-system_extra_object
+      .word 6
+      .word system_extra_relocations-system_extra_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word system_extra_code_end-system_extra_code
+      .word system_extra_code_end-system_extra_code
+      .byte "CODE"
+system_extra_code:
 system_readkey:
       PASCAL_SYSTEM_CALL SYS_WAIT_KEY
       LDA   LIB_RESULT
@@ -2864,125 +4748,57 @@ system_textcolor:
       AND   #$0F
       STA   VGC_FGCOL
       RTS
-
 system_textbackground:
       AND   #$0F
       STA   VGC_TEXT_BG
       RTS
 
 system_delline:
-      JSR   system_window_args
+      .byte $20
+system_delline_args_call: .word 0
       PASCAL_SYSTEM_CALL SYS_CONSOLE_DELETE_LINE
       RTS
-
 system_insline:
-      JSR   system_window_args
+      .byte $20
+system_insline_args_call: .word 0
       PASCAL_SYSTEM_CALL SYS_CONSOLE_INSERT_LINE
       RTS
+system_extra_code_end:
 
-system_succ:
-      INC
-      RTS
-system_pred:
-      DEC
-      RTS
-system_length:
-      STA   NVR0L
-      STX   NVR0H
-      LDA   (NVR0L)
-      LDX   #0
-      RTS
-
-system_halt:
-      PASCAL_MEMORY_CALL MEM_EXIT_IMAGE
-      RTS
-system_code_end:
-
-system_symbols:
-      .word system_gotoxy-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 6, "GOTOXY"
-      .word system_clreol-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 6, "CLREOL"
-      .word system_highvideo-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 9, "HIGHVIDEO"
-      .word system_lowvideo-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 8, "LOWVIDEO"
-      .word system_lowvideo-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 9, "NORMVIDEO"
-      .word system_delay-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 5, "DELAY"
-      .word system_upcase-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 6, "UPCASE"
-      .word system_clrscr-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 6, "CLRSCR"
-      .word system_succ-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 4, "SUCC"
-      .word system_pred-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 4, "PRED"
-      .word system_length-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 6, "LENGTH"
-      .word system_halt-system_code
-      .byte 0, NOBJ_SYM_GLOBAL, 4, "HALT"
-      .word system_readkey-system_code
+system_extra_symbols:
+      .word system_readkey-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 7, "READKEY"
-      .word system_wherex-system_code
+      .word system_wherex-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "WHEREX"
-      .word system_wherey-system_code
+      .word system_wherey-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 6, "WHEREY"
-      .word system_textcolor-system_code
+      .word system_textcolor-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 9, "TEXTCOLOR"
-      .word system_textbackground-system_code
+      .word system_textbackground-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 14, "TEXTBACKGROUND"
-      .word system_delline-system_code
+      .word system_delline-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 7, "DELLINE"
-      .word system_insline-system_code
+      .word system_insline-system_extra_code
       .byte 0, NOBJ_SYM_GLOBAL, 7, "INSLINE"
-      .word VGC_CHARIN
-      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 3, "KBD"
-      .word VGC_CHARIN
-      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 10, "KEYPRESSED"
-      .word FIO_ERRCODE
-      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 8, "IORESULT"
-
       .word 0
       .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 7, "SYSARGS"
 
-system_relocations:
+system_extra_relocations:
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_active-system_code, 22, 4
+      .word system_wherex_active-system_extra_code, 7, 4
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_left-system_code, 22, 0
+      .word system_wherex_left-system_extra_code, 7, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_top-system_code, 22, 1
+      .word system_wherey_active-system_extra_code, 7, 4
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_width-system_code, 22, 2
+      .word system_wherey_top-system_extra_code, 7, 1
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_height-system_code, 22, 3
+      .word system_delline_args_call-system_extra_code, 8, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_home_left-system_code, 22, 0
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_home_top-system_code, 22, 1
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_active-system_code, 22, 4
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_height-system_code, 22, 3
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_width-system_code, 22, 2
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_left-system_code, 22, 0
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_top-system_code, 22, 1
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_clrscr_active-system_code, 22, 4
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_wherex_active-system_code, 22, 4
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_wherex_left-system_code, 22, 0
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_wherey_active-system_code, 22, 4
-      .byte 0, NOBJ_RELOC_ABS16
-      .word system_wherey_top-system_code, 22, 1
-system_object_end:
+      .word system_insline_args_call-system_extra_code, 8, 0
+system_extra_object_end:
 
       ; Pascal file variables are compact 16-byte descriptors:
       ;   +0 file id, +1 mode/logical-EOF flag, +2 name length,
@@ -2995,7 +4811,7 @@ file_object:
       .word 0
       .word 18
       .word file_symbols-file_object
-      .word 5
+      .word 6
       .word file_relocations-file_object
       .word 0
 
@@ -3531,6 +5347,31 @@ file_write_newline:
       STA   LIB_ARG2
       STZ   LIB_ARG2+1
 file_write_common:
+      LDY   #1
+      LDA   (NVR0L),Y
+      CMP   #$7F                         ; Printer.Lst: create spool on first write
+      BNE   file_write_ready
+      LDA   LIB_ARG1
+      PHA
+      LDA   LIB_ARG1+1
+      PHA
+      LDA   LIB_ARG2
+      PHA
+      LDA   LIB_ARG2+1
+      PHA
+      LDA   NVR0L
+      LDX   NVR0H
+file_lazy_rewrite_call = * + 1
+      JSR   file_rewrite
+      PLA
+      STA   LIB_ARG2+1
+      PLA
+      STA   LIB_ARG2
+      PLA
+      STA   LIB_ARG1+1
+      PLA
+      STA   LIB_ARG1
+file_write_ready:
       STZ   LIB_ARG1+2
       STZ   LIB_ARG1+3
       STZ   LIB_ARG2+2
@@ -3595,4 +5436,74 @@ file_relocations:
       .word file_readln_jump_keyboard+1-file_code, 14, 0
       .byte 0, NOBJ_RELOC_ABS16
       .word file_readln_jump_byte+1-file_code, 17, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word file_lazy_rewrite_call-file_code, 2, 0
 file_object_end:
+
+      ; Procedural-variable calls keep the target below any stacked arguments.
+      ; This trampoline recovers it, restores the one-argument register ABI,
+      ; and tail-jumps so the target's RTS returns directly to the caller.
+      .word indirect_object_end-indirect_object
+indirect_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word indirect_symbols-indirect_object
+      .word 1
+      .word indirect_relocations-indirect_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word indirect_code_end-indirect_code
+      .word indirect_code_end-indirect_code
+      .byte "CODE"
+indirect_code:
+indirect_call:
+      STA   NVR1L
+      AND   #$3F
+      STA   NVR1H
+      TSX
+      TXA
+      CLC
+      ADC   NVR1H
+      TAX
+      LDA   $0103,X
+      STA   NVR0L
+      LDA   $0104,X
+      STA   NVR0H
+      LDA   NVR0L
+      ORA   NVR0H
+      BNE   indirect_valid
+      LDA   #204
+      .byte $4C
+indirect_error_jump:
+      .word 0
+indirect_valid:
+      BIT   NVR1L
+      BPL   @invoke
+      TSX
+      LDA   NVR1L
+      AND   #$40
+      BEQ   @byte
+      LDA   $0104,X
+      PHA
+      LDA   $0103,X
+      PLX
+      BRA   @invoke
+@byte:
+      LDA   $0103,X
+@invoke:
+      JMP   (NVR0L)
+indirect_code_end:
+
+indirect_symbols:
+      .word indirect_call-indirect_code
+      .byte 0, NOBJ_SYM_GLOBAL, 15, "P_CALL_INDIRECT"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 15, "P_RUNTIME_ERROR"
+
+indirect_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word indirect_error_jump-indirect_code, 1, 0
+indirect_object_end:
