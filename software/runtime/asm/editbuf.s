@@ -24,6 +24,17 @@ EDITBUF_ALT_TIMEOUT_FRAMES = 15
 EDITBUF_MAX_AUTO_INDENT = 64
 ; One indent step, in spaces, for Tab / Shift-Tab.
 EDITBUF_INDENT_WIDTH = 2
+; Entries in the key -> command table at the end of RODATA.
+EDITBUF_KEYMAP_COUNT = 21
+; Entries in the two command dispatch tables.
+EDITBUF_CMD_SELF_COUNT = 12
+EDITBUF_CMD_HOST_COUNT = 11
+; Entries in the raw-key tables.
+EDITBUF_KEY_MOVE_COUNT = 19
+EDITBUF_KEY_EXT_COUNT = 6
+; Runs drawn by the save/discard/cancel dialog: three shadows, three buttons.
+EDITBUF_DLG_SHADOWS = 3
+EDITBUF_DLG_ITEMS = 6
 
 ; =====================================================================
 ; ZEROPAGE — editor working pointers
@@ -254,132 +265,22 @@ editbuf_dispatch_key:
       JMP   editbuf_dispatch_command
 
 @raw:
+      ; Same trick as the command dispatch: one table for keys that run a
+      ; handler and stay put, one for Shift+navigation, which is the same
+      ; handler with an anchor dropped before it and the selection re-asserted
+      ; after. Anything else printable is text.
       LDA   EB_T0
-      CMP   #EDITUI_KEY_LEFT
-      BNE   :+
-      JSR   editbuf_move_left
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_RIGHT
-      BNE   :+
-      JSR   editbuf_move_right
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_UP
-      BNE   :+
-      JSR   editbuf_move_up
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_DOWN
-      BNE   :+
-      JSR   editbuf_move_down
-      CLC
-      RTS
-      ; Shift + navigation drops an anchor on the first press and then extends
-      ; the selection as the cursor moves.
-:     CMP   #EDITUI_KEY_SHIFT_LEFT
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_left
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_SHIFT_RIGHT
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_right
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_SHIFT_UP
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_up
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_SHIFT_DOWN
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_down
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_SHIFT_HOME
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_home
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_SHIFT_END
-      BNE   :+
-      JSR   editbuf_anchor_selection
-      JSR   editbuf_move_end
-      JMP   editbuf_end_extend
-:     CMP   #EDITUI_KEY_TAB
-      BNE   :+
-      JSR   editbuf_indent_block
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_SHIFT_TAB
-      BNE   :+
-      JSR   editbuf_unindent_block
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_LEFT
-      BNE   :+
-      JSR   editbuf_move_word_left
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_RIGHT
-      BNE   :+
-      JSR   editbuf_move_word_right
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_BACKSPACE
-      BNE   :+
-      JSR   editbuf_delete_word_left
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_HOME
-      BNE   :+
-      JSR   editbuf_move_home
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_END
-      BNE   :+
-      JSR   editbuf_move_end
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_HOME
-      BNE   :+
-      JSR   editbuf_move_file_start
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_END
-      BNE   :+
-      JSR   editbuf_move_file_end
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_PGUP
-      BNE   :+
-      JSR   editbuf_page_up
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_PGDN
-      BNE   :+
-      JSR   editbuf_page_down
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_ENTER
-      BNE   :+
-      JSR   editbuf_newline
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_BACKSPACE
-      BEQ   @bs
-      CMP   #$14
-      BNE   :+
-@bs:  JSR   editbuf_backspace
-      CLC
-      RTS
-:     CMP   #EDITUI_KEY_DELETE
-      BNE   :+
-      JSR   editbuf_delete
-      CLC
-      RTS
-:     CMP   #$20
+      LDX   #EDITBUF_KEY_MOVE_COUNT-1
+:     CMP   editbuf_key_move,X
+      BEQ   @move
+      DEX
+      BPL   :-
+      LDX   #EDITBUF_KEY_EXT_COUNT-1
+:     CMP   editbuf_key_ext,X
+      BEQ   @extend
+      DEX
+      BPL   :-
+      CMP   #$20
       BCC   @ignore
       CMP   #$7F
       BCS   @ignore
@@ -387,198 +288,68 @@ editbuf_dispatch_key:
 @ignore:
       CLC
       RTS
+@move:
+      TXA
+      ASL   A
+      TAX
+      JSR   @call_move
+      CLC
+      RTS
+@call_move:
+      JMP   (editbuf_key_move_vec,X)
+@extend:
+      TXA
+      ASL   A
+      PHA
+      JSR   editbuf_anchor_selection
+      PLX
+      JSR   @call_ext
+      JMP   editbuf_end_extend
+@call_ext:
+      JMP   (editbuf_key_ext_vec,X)
 
 editbuf_dispatch_command:
-      CMP   #EDITUI_CMD_NEW
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_OPEN
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_SAVE_AS
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_SAVE
-      BNE   :+
-      JSR   editbuf_do_save
+      ; Three groups, three tables: commands the editor runs itself and stays
+      ; put, commands that are entirely the host's business (it owns the
+      ; compiler, the runner, the buffer list), and quit, which is the only one
+      ; whose carry decides whether the editor exits.
+      LDX   #EDITBUF_CMD_SELF_COUNT-1
+:     CMP   editbuf_cmd_self,X
+      BEQ   @self
+      DEX
+      BPL   :-
+      LDX   #EDITBUF_CMD_HOST_COUNT-1
+:     CMP   editbuf_cmd_host,X
+      BEQ   @host
+      DEX
+      BPL   :-
+      CMP   #EDITUI_CMD_QUIT
+      BEQ   @quit
       CLC
       RTS
-:     CMP   #EDITUI_CMD_QUIT
-      BNE   :+
+@host:
+      JMP   editbuf_do_host_command
+@quit:
       JMP   editbuf_do_quit          ; propagates carry (set = exit)
-:     CMP   #EDITUI_CMD_UNDO
-      BNE   :+
-      JSR   editbuf_do_undo
+@self:
+      TXA
+      ASL   A
+      TAX
+      JSR   @invoke
       CLC
       RTS
-:     CMP   #EDITUI_CMD_REDO
-      BNE   :+
-      JSR   editbuf_do_redo
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_COPY
-      BNE   :+
-      JSR   editbuf_copy
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_CUT
-      BNE   :+
-      JSR   editbuf_cut
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_PASTE
-      BNE   :+
-      JSR   editbuf_paste
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_SELECT_ALL
-      BNE   :+
-      JSR   editbuf_select_all
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_FIND
-      BNE   :+
-      JSR   editbuf_do_find
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_FIND_NEXT
-      BNE   :+
-      JSR   editbuf_do_find_next
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_REPLACE
-      BNE   :+
-      JSR   editbuf_do_replace
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_REPLACE_ALL
-      BNE   :+
-      JSR   editbuf_do_replace_all
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_GOTO_LINE
-      BNE   :+
-      JSR   editbuf_do_goto_line
-      CLC
-      RTS
-:     CMP   #EDITUI_CMD_BUFFER_NEXT
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_BUFFER_PREVIOUS
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_BUFFER_LIST
-      BNE   :+
-      JMP   editbuf_do_host_command
-      ; The toolchain commands are entirely the host's business: it owns the
-      ; compiler, the runner, and what to do with a diagnostic.
-:     CMP   #EDITUI_CMD_BUILD
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_RUN
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_STOP
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_ERROR_NEXT
-      BNE   :+
-      JMP   editbuf_do_host_command
-:     CMP   #EDITUI_CMD_SEARCH_PROJECT
-      BNE   :+
-      JMP   editbuf_do_host_command
-:
-      CLC
-      RTS
+@invoke:
+      JMP   (editbuf_cmd_self_vec,X)
 
 editbuf_key_to_command:
-      CMP   #EDITUI_KEY_CTRL_Q
-      BNE   :+
-      LDA   #EDITUI_CMD_QUIT
-      RTS
-:
-      CMP   #EDITUI_KEY_CTRL_B
-      BNE   :+
-      LDA   #EDITUI_CMD_BUFFER_LIST
-      RTS
-:
-      CMP   #EDITUI_KEY_CTRL_N
-      BNE   :+
-      LDA   #EDITUI_CMD_NEW
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_O
-      BNE   :+
-      LDA   #EDITUI_CMD_OPEN
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_S
-      BNE   :+
-      LDA   #EDITUI_CMD_SAVE
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_Z
-      BNE   :+
-      LDA   #EDITUI_CMD_UNDO
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_Y
-      BNE   :+
-      LDA   #EDITUI_CMD_REDO
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_C
-      BNE   :+
-      LDA   #EDITUI_CMD_COPY
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_X
-      BNE   :+
-      LDA   #EDITUI_CMD_CUT
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_V
-      BNE   :+
-      LDA   #EDITUI_CMD_PASTE
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_A
-      BNE   :+
-      LDA   #EDITUI_CMD_SELECT_ALL
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_F
-      BNE   :+
-      LDA   #EDITUI_CMD_FIND
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_G
-      BNE   :+
-      LDA   #EDITUI_CMD_GOTO_LINE
-      RTS
-:     CMP   #EDITUI_KEY_F3
-      BNE   :+
-      LDA   #EDITUI_CMD_FIND_NEXT
-      RTS
-:     CMP   #EDITUI_KEY_F6
-      BNE   :+
-      LDA   #EDITUI_CMD_BUFFER_NEXT
-      RTS
-:     CMP   #EDITUI_KEY_SHIFT_F6
-      BNE   :+
-      LDA   #EDITUI_CMD_BUFFER_PREVIOUS
-      RTS
-:     CMP   #EDITUI_KEY_F9
-      BNE   :+
-      LDA   #EDITUI_CMD_BUILD
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_F9
-      BNE   :+
-      LDA   #EDITUI_CMD_RUN
-      RTS
-:     CMP   #EDITUI_KEY_CTRL_BREAK
-      BNE   :+
-      LDA   #EDITUI_CMD_STOP
-      RTS
-:     CMP   #EDITUI_KEY_F8
-      BNE   :+
-      LDA   #EDITUI_CMD_ERROR_NEXT
-      RTS
-:     CMP   #EDITUI_KEY_F7
-      BNE   :+
-      LDA   #EDITUI_CMD_SEARCH_PROJECT
-      RTS
-:     CMP   #EDITUI_KEY_ALT_PREFIX
+      ; A table beats a CMP chain here by about a hundred bytes, and the editor
+      ; module has none to spare.
+      LDX   #EDITBUF_KEYMAP_COUNT-1
+:     CMP   editbuf_keymap_keys,X
+      BEQ   @found
+      DEX
+      BPL   :-
+      CMP   #EDITUI_KEY_ALT_PREFIX
       BNE   @none
       JSR   editbuf_read_command_key
       JSR   editbuf_normalize_command_key
@@ -594,6 +365,9 @@ editbuf_key_to_command:
       RTS
 @none:
       LDA   #EDITUI_CMD_NONE
+      RTS
+@found:
+      LDA   editbuf_keymap_cmds,X
       RTS
 
 editbuf_read_command_key:
@@ -931,6 +705,12 @@ editbuf_src_from_scratch:
 ; shifting the tail [cur,len) upward. Assumes len+cnt <= cap (checked by caller).
 ; After: EDITBUF_LEN += cnt. Bytes in the gap are left as-is (caller fills).
 editbuf_make_gap:
+      LDA   EDITBUF_CURL
+      STA   TEXTSVC_SPANL
+      LDA   EDITBUF_CURH
+      STA   TEXTSVC_SPANH
+      JSR   editbuf_note_span
+      JSR   textsvc_undo_inserted
       ; tailcount = LEN - CUR  -> EB_SCRATCH
       SEC
       LDA   EDITBUF_LENL
@@ -1010,6 +790,12 @@ editbuf_make_gap:
 ; shifting the tail down. After: EDITBUF_LEN -= cnt.
 ; Input: EB_SCRATCH = start offset; EB_CNT = count to remove.
 editbuf_close_gap:
+      LDA   EB_SCRATCHL
+      STA   TEXTSVC_SPANL
+      LDA   EB_SCRATCHH
+      STA   TEXTSVC_SPANH
+      JSR   editbuf_note_span
+      JSR   textsvc_undo_deleted
       ; dst = BUF + start ; src = BUF + start + cnt
       LDA   EDITBUF_BUFL
       CLC
@@ -2923,10 +2709,21 @@ editbuf_mark_dirty:
       RTS
 
 ; =====================================================================
-; Undo / redo snapshots
+; Undo / redo
 ; =====================================================================
 
-editbuf_capture_undo:
+; make_gap and close_gap are the only two routines that move buffer bytes, so
+; telling TEXTSVC about each one is enough for it to record any edit, however
+; many of them a single operation performs.
+editbuf_note_span:
+      LDA   EDITBUF_CNTL
+      STA   TEXTSVC_CNTL
+      LDA   EDITBUF_CNTH
+      STA   TEXTSVC_CNTH
+      RTS
+
+; Publish the live buffer and cursor to TEXTSVC's argument mailbox.
+editbuf_publish_buffer:
       LDA   EDITBUF_BUFL
       STA   XMC_RAML
       LDA   EDITBUF_BUFH
@@ -2939,52 +2736,69 @@ editbuf_capture_undo:
       STA   TEXTSVC_CURL
       LDA   EDITBUF_CURH
       STA   TEXTSVC_CURH
+      RTS
+
+editbuf_capture_undo:
+      JSR   editbuf_publish_buffer
       JMP   textsvc_undo_capture
 
 editbuf_do_undo:
-      LDA   EDITBUF_BUFL
-      STA   XMC_RAML
-      LDA   EDITBUF_BUFH
-      STA   XMC_RAMH
-      LDA   EDITBUF_LENL
-      STA   XMC_LENL
-      LDA   EDITBUF_LENH
-      STA   XMC_LENH
-      LDA   EDITBUF_CURL
-      STA   TEXTSVC_CURL
-      LDA   EDITBUF_CURH
-      STA   TEXTSVC_CURH
+      JSR   editbuf_publish_buffer
       JSR   textsvc_undo_apply
-      BNE   @done
-      LDA   TEXTSVC_REST_LENL
-      STA   EDITBUF_LENL
-      LDA   TEXTSVC_REST_LENH
-      STA   EDITBUF_LENH
-      LDA   TEXTSVC_REST_CURL
-      STA   EDITBUF_CURL
-      LDA   TEXTSVC_REST_CURH
-      STA   EDITBUF_CURH
-      STZ   EDITBUF_SELACT
-      JSR   editbuf_mark_dirty
-      JMP   editbuf_after_change
-@done:
-      RTS
+      BRA   editbuf_apply_result
 
 editbuf_do_redo:
+      JSR   editbuf_publish_buffer
+      JSR   textsvc_redo_apply
+editbuf_apply_result:
+      BNE   @done
+      ; TEXTSVC popped a record and described the splice; make_gap/close_gap
+      ; already know how to widen or narrow a run, so the buffer move is theirs.
+      SEC
+      LDA   TEXTSVC_SPLICE_INSL
+      SBC   TEXTSVC_SPLICE_CUTL
+      STA   EDITBUF_CNTL
+      LDA   TEXTSVC_SPLICE_INSH
+      SBC   TEXTSVC_SPLICE_CUTH
+      STA   EDITBUF_CNTH
+      BCC   @shrink
+      LDA   EDITBUF_CNTL
+      ORA   EDITBUF_CNTH
+      BEQ   @paste                     ; same width: nothing moves
+      CLC                              ; grow: open the difference after the run
+      LDA   TEXTSVC_SPLICE_OFFL
+      ADC   TEXTSVC_SPLICE_CUTL
+      STA   EDITBUF_CURL
+      LDA   TEXTSVC_SPLICE_OFFH
+      ADC   TEXTSVC_SPLICE_CUTH
+      STA   EDITBUF_CURH
+      JSR   editbuf_make_gap
+      BRA   @paste
+@shrink:
+      SEC                              ; shrink: close the difference after it
+      LDA   #0
+      SBC   EDITBUF_CNTL
+      STA   EDITBUF_CNTL
+      LDA   #0
+      SBC   EDITBUF_CNTH
+      STA   EDITBUF_CNTH
+      CLC
+      LDA   TEXTSVC_SPLICE_OFFL
+      ADC   TEXTSVC_SPLICE_INSL
+      STA   EB_SCRATCHL
+      LDA   TEXTSVC_SPLICE_OFFH
+      ADC   TEXTSVC_SPLICE_INSH
+      STA   EB_SCRATCHH
+      JSR   editbuf_close_gap
+@paste:
+      CLC
       LDA   EDITBUF_BUFL
+      ADC   TEXTSVC_SPLICE_OFFL
       STA   XMC_RAML
       LDA   EDITBUF_BUFH
+      ADC   TEXTSVC_SPLICE_OFFH
       STA   XMC_RAMH
-      LDA   EDITBUF_LENL
-      STA   XMC_LENL
-      LDA   EDITBUF_LENH
-      STA   XMC_LENH
-      LDA   EDITBUF_CURL
-      STA   TEXTSVC_CURL
-      LDA   EDITBUF_CURH
-      STA   TEXTSVC_CURH
-      JSR   textsvc_redo_apply
-      BNE   @done
+      JSR   textsvc_undo_paste
       LDA   TEXTSVC_REST_LENL
       STA   EDITBUF_LENL
       LDA   TEXTSVC_REST_LENH
@@ -3621,89 +3435,53 @@ editbuf_dialog3:
       RTS
 
 editbuf_dialog3_render:
+      ; Six near-identical runs — three button shadows on one row, three
+      ; buttons on the row above — so they come from a table rather than six
+      ; copies of the same twenty instructions.
       JSR   nui_set_screen_text
+      LDX   #0
+@item:
       LDA   #NUI_TEXT_SHADOW
-      STA   VTEXT_COLOR
-      LDA   NUI_DIALOG_TOP
-      CLC
-      ADC   #8
-      STA   VTEXT_CURY
-      LDA   NUI_DIALOG_LEFT
-      CLC
-      ADC   #7
-      STA   VTEXT_CURX
-      LDA   #<editbuf_dlg_save_shadow
-      LDY   #>editbuf_dlg_save_shadow
-      LDX   #6
-      JSR   vtext_put_run
-      BEQ   :+
-      JMP   @done
-:     LDA   NUI_DIALOG_LEFT
-      CLC
-      ADC   #21
-      STA   VTEXT_CURX
-      LDA   #<editbuf_dlg_discard_shadow
-      LDY   #>editbuf_dlg_discard_shadow
-      LDX   #9
-      JSR   vtext_put_run
-      BEQ   :+
-      JMP   @done
-:     LDA   NUI_DIALOG_LEFT
-      CLC
-      ADC   #38
-      STA   VTEXT_CURX
-      LDA   #<editbuf_dlg_cancel_shadow
-      LDY   #>editbuf_dlg_cancel_shadow
-      LDX   #8
-      JSR   vtext_put_run
-      BEQ   :+
-      JMP   @done
-:     LDA   #NUI_TEXT_BUTTON
-      STA   VTEXT_COLOR
-      LDA   NUI_DIALOG_TOP
-      CLC
-      ADC   #7
-      STA   VTEXT_CURY
-      LDA   NUI_DIALOG_LEFT
-      CLC
-      ADC   #6
-      STA   VTEXT_CURX
-      LDA   #0
-      JSR   editbuf_dialog3_attr
-      LDA   #<editbuf_dlg_save
-      LDY   #>editbuf_dlg_save
-      LDX   #6
-      JSR   vtext_put_run
-      BEQ   :+
-      JMP   @done
-:     STZ   VTEXT_ATTR
+      LDY   #8
+      CPX   #EDITBUF_DLG_SHADOWS*4
+      BCC   :+
       LDA   #NUI_TEXT_BUTTON
-      STA   VTEXT_COLOR
-      LDA   NUI_DIALOG_LEFT
+      LDY   #7
+:     STA   VTEXT_COLOR
+      TYA
       CLC
-      ADC   #20
-      STA   VTEXT_CURX
-      LDA   #1
-      JSR   editbuf_dialog3_attr
-      LDA   #<editbuf_dlg_discard
-      LDY   #>editbuf_dlg_discard
-      LDX   #9
-      JSR   vtext_put_run
-      BEQ   :+
-      JMP   @done
-:     STZ   VTEXT_ATTR
-      LDA   #NUI_TEXT_BUTTON
-      STA   VTEXT_COLOR
-      LDA   NUI_DIALOG_LEFT
+      ADC   NUI_DIALOG_TOP
+      STA   VTEXT_CURY
+      LDA   editbuf_dlg_items,X
       CLC
-      ADC   #37
+      ADC   NUI_DIALOG_LEFT
       STA   VTEXT_CURX
-      LDA   #2
+      STZ   VTEXT_ATTR
+      CPX   #EDITBUF_DLG_SHADOWS*4
+      BCC   :+
+      ; A button is highlighted when it is the selected one; the shadows are
+      ; never highlighted.
+      TXA
+      LSR   A
+      LSR   A
+      SEC
+      SBC   #EDITBUF_DLG_SHADOWS
       JSR   editbuf_dialog3_attr
-      LDA   #<editbuf_dlg_cancel
-      LDY   #>editbuf_dlg_cancel
-      LDX   #8
+:     PHX
+      LDA   editbuf_dlg_items+1,X
+      STA   EB_T0
+      LDA   editbuf_dlg_items+2,X
+      LDY   editbuf_dlg_items+3,X
+      LDX   EB_T0
       JSR   vtext_put_run
+      PLX
+      BNE   @done
+      INX
+      INX
+      INX
+      INX
+      CPX   #EDITBUF_DLG_ITEMS*4
+      BNE   @item
 @done:
       STZ   VTEXT_ATTR
       RTS
@@ -3722,49 +3500,22 @@ editbuf_dialog3_attr:
 ; =====================================================================
 ; editbuf_init_vectors — default any unset hook vector to a no-op.
 editbuf_init_vectors:
-      LDA   EDITBUF_SAVE_VECL
-      ORA   EDITBUF_SAVE_VECH
-      BNE   :+
-      LDA   #<editbuf_default_save
-      STA   EDITBUF_SAVE_VECL
-      LDA   #>editbuf_default_save
-      STA   EDITBUF_SAVE_VECH
-:     LDA   EDITBUF_INDENT_VECL
-      ORA   EDITBUF_INDENT_VECH
-      BNE   :+
-      LDA   #<editbuf_default_indent
-      STA   EDITBUF_INDENT_VECL
-      LDA   #>editbuf_default_indent
-      STA   EDITBUF_INDENT_VECH
-:     LDA   EDITBUF_HILITE_VECL
-      ORA   EDITBUF_HILITE_VECH
-      BNE   :+
-      LDA   #<editbuf_default_hilite
-      STA   EDITBUF_HILITE_VECL
-      LDA   #>editbuf_default_hilite
-      STA   EDITBUF_HILITE_VECH
-:     LDA   EDITBUF_MENU_VECL
-      ORA   EDITBUF_MENU_VECH
-      BNE   :+
-      LDA   #<editbuf_default_menu
-      STA   EDITBUF_MENU_VECL
-      LDA   #>editbuf_default_menu
-      STA   EDITBUF_MENU_VECH
-:     LDA   EDITBUF_COMMAND_VECL
-      ORA   EDITBUF_COMMAND_VECH
-      BNE   :+
-      LDA   #<editbuf_default_command
-      STA   EDITBUF_COMMAND_VECL
-      LDA   #>editbuf_default_command
-      STA   EDITBUF_COMMAND_VECH
-:     LDA   EDITBUF_CHANGED_VECL
-      ORA   EDITBUF_CHANGED_VECH
-      BNE   :+
-      LDA   #<editbuf_default_changed
-      STA   EDITBUF_CHANGED_VECL
-      LDA   #>editbuf_default_changed
-      STA   EDITBUF_CHANGED_VECH
-:     RTS
+      ; The six hook vectors are contiguous and their defaults are in the same
+      ; order, so one loop fills in whatever the host left at zero.
+      LDX   #10
+@loop:
+      LDA   EDITBUF_SAVE_VECL,X
+      ORA   EDITBUF_SAVE_VECL+1,X
+      BNE   @skip
+      LDA   editbuf_default_vec,X
+      STA   EDITBUF_SAVE_VECL,X
+      LDA   editbuf_default_vec+1,X
+      STA   EDITBUF_SAVE_VECL+1,X
+@skip:
+      DEX
+      DEX
+      BPL   @loop
+      RTS
 
 editbuf_call_menu:
       JMP   (EDITBUF_MENU_VECL)
@@ -3781,7 +3532,12 @@ editbuf_call_indent:
 editbuf_call_hilite:
       JMP   (EDITBUF_HILITE_VECL)
 
+; Every path that mutates the buffer ends in one of after_change,
+; after_change_down or after_inline_edit, and those three are the only callers
+; of this hook — so recording the delta here catches all of them, including
+; plain typing, which never reaches after_change.
 editbuf_call_changed:
+      JSR   textsvc_undo_commit
       JMP   (EDITBUF_CHANGED_VECL)
 
 ; default hook bodies (host may point vectors here)
@@ -3929,5 +3685,45 @@ editbuf_dlg_discard_shadow:
       .byte "         "
 editbuf_dlg_cancel_shadow:
       .byte "        "
+
+; dx from NUI_DIALOG_LEFT, run length, string. Shadows first, then buttons.
+editbuf_dlg_items:
+      .byte  7, 6
+      .addr editbuf_dlg_save_shadow
+      .byte 21, 9
+      .addr editbuf_dlg_discard_shadow
+      .byte 38, 8
+      .addr editbuf_dlg_cancel_shadow
+      .byte  6, 6
+      .addr editbuf_dlg_save
+      .byte 20, 9
+      .addr editbuf_dlg_discard
+      .byte 37, 8
+      .addr editbuf_dlg_cancel
+
+editbuf_default_vec:
+      .addr editbuf_default_save, editbuf_default_indent, editbuf_default_hilite
+      .addr editbuf_default_menu, editbuf_default_command, editbuf_default_changed
+
+editbuf_key_move:
+      .byte EDITUI_KEY_LEFT, EDITUI_KEY_RIGHT, EDITUI_KEY_UP, EDITUI_KEY_DOWN, EDITUI_KEY_TAB, EDITUI_KEY_SHIFT_TAB, EDITUI_KEY_CTRL_LEFT, EDITUI_KEY_CTRL_RIGHT, EDITUI_KEY_CTRL_BACKSPACE, EDITUI_KEY_HOME, EDITUI_KEY_END, EDITUI_KEY_CTRL_HOME, EDITUI_KEY_CTRL_END, EDITUI_KEY_PGUP, EDITUI_KEY_PGDN, EDITUI_KEY_ENTER, EDITUI_KEY_DELETE, EDITUI_KEY_BACKSPACE, $14
+editbuf_key_move_vec:
+      .addr editbuf_move_left, editbuf_move_right, editbuf_move_up, editbuf_move_down, editbuf_indent_block, editbuf_unindent_block, editbuf_move_word_left, editbuf_move_word_right, editbuf_delete_word_left, editbuf_move_home, editbuf_move_end, editbuf_move_file_start, editbuf_move_file_end, editbuf_page_up, editbuf_page_down, editbuf_newline, editbuf_delete, editbuf_backspace, editbuf_backspace
+editbuf_key_ext:
+      .byte EDITUI_KEY_SHIFT_LEFT, EDITUI_KEY_SHIFT_RIGHT, EDITUI_KEY_SHIFT_UP, EDITUI_KEY_SHIFT_DOWN, EDITUI_KEY_SHIFT_HOME, EDITUI_KEY_SHIFT_END
+editbuf_key_ext_vec:
+      .addr editbuf_move_left, editbuf_move_right, editbuf_move_up, editbuf_move_down, editbuf_move_home, editbuf_move_end
+
+editbuf_cmd_self:
+      .byte EDITUI_CMD_SAVE, EDITUI_CMD_UNDO, EDITUI_CMD_REDO, EDITUI_CMD_COPY, EDITUI_CMD_CUT, EDITUI_CMD_PASTE, EDITUI_CMD_SELECT_ALL, EDITUI_CMD_FIND, EDITUI_CMD_FIND_NEXT, EDITUI_CMD_REPLACE, EDITUI_CMD_REPLACE_ALL, EDITUI_CMD_GOTO_LINE
+editbuf_cmd_self_vec:
+      .addr editbuf_do_save, editbuf_do_undo, editbuf_do_redo, editbuf_copy, editbuf_cut, editbuf_paste, editbuf_select_all, editbuf_do_find, editbuf_do_find_next, editbuf_do_replace, editbuf_do_replace_all, editbuf_do_goto_line
+editbuf_cmd_host:
+      .byte EDITUI_CMD_NEW, EDITUI_CMD_OPEN, EDITUI_CMD_SAVE_AS, EDITUI_CMD_BUFFER_NEXT, EDITUI_CMD_BUFFER_PREVIOUS, EDITUI_CMD_BUFFER_LIST, EDITUI_CMD_BUILD, EDITUI_CMD_RUN, EDITUI_CMD_STOP, EDITUI_CMD_ERROR_NEXT, EDITUI_CMD_SEARCH_PROJECT
+
+editbuf_keymap_keys:
+      .byte EDITUI_KEY_CTRL_Q, EDITUI_KEY_CTRL_B, EDITUI_KEY_CTRL_N, EDITUI_KEY_CTRL_O, EDITUI_KEY_CTRL_S, EDITUI_KEY_CTRL_Z, EDITUI_KEY_CTRL_Y, EDITUI_KEY_CTRL_C, EDITUI_KEY_CTRL_X, EDITUI_KEY_CTRL_V, EDITUI_KEY_CTRL_A, EDITUI_KEY_CTRL_F, EDITUI_KEY_CTRL_G, EDITUI_KEY_F3, EDITUI_KEY_F6, EDITUI_KEY_SHIFT_F6, EDITUI_KEY_F9, EDITUI_KEY_CTRL_F9, EDITUI_KEY_CTRL_BREAK, EDITUI_KEY_F8, EDITUI_KEY_F7
+editbuf_keymap_cmds:
+      .byte EDITUI_CMD_QUIT, EDITUI_CMD_BUFFER_LIST, EDITUI_CMD_NEW, EDITUI_CMD_OPEN, EDITUI_CMD_SAVE, EDITUI_CMD_UNDO, EDITUI_CMD_REDO, EDITUI_CMD_COPY, EDITUI_CMD_CUT, EDITUI_CMD_PASTE, EDITUI_CMD_SELECT_ALL, EDITUI_CMD_FIND, EDITUI_CMD_GOTO_LINE, EDITUI_CMD_FIND_NEXT, EDITUI_CMD_BUFFER_NEXT, EDITUI_CMD_BUFFER_PREVIOUS, EDITUI_CMD_BUILD, EDITUI_CMD_RUN, EDITUI_CMD_STOP, EDITUI_CMD_ERROR_NEXT, EDITUI_CMD_SEARCH_PROJECT
 
 .endif

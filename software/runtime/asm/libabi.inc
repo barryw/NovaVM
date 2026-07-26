@@ -157,9 +157,11 @@ FIO_ST_ERR          = $03
 ; checks LIB_RESIDENT; if not $FF it re-pages the host ext from XRAM before calling.
 LIB_RESIDENT_HOSTEXT = $FF
 ; XRAM address $07C000 where the active runtime's extension is staged for re-page.
-; NOT a modtab module slot — disjoint from module slots 0-2 ($060000/$064000/$068000)
-; and within the 512KB XRAM. NovaHost must stage the active runtime's extensionRom
-; here on HW (firmware follow-on); this task does the emulator side.
+; NOT a modtab module slot — disjoint from the SHELF_N=4 slots at $060000,
+; $064000, $068000 and $06C000 — and within the 512KB XRAM. That fourth slot is
+; easy to forget: TEXTSVC's redo arena sat on top of it until deltas landed.
+; NovaHost must stage the active runtime's extensionRom here on HW (firmware
+; follow-on); this task does the emulator side.
 HOST_EXT_XRAM_L  = $00
 HOST_EXT_XRAM_M  = $C0
 HOST_EXT_XRAM_H  = $07            ; $07C000

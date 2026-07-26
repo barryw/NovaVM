@@ -1,5 +1,7 @@
 ; Generic XRAM-backed document pager for the shared EDITOR module.
 
+.include "textsvc.inc"
+
 EDITPAGER_WINDOW_TARGET = $0C00
 EDITPAGER_PAGE_CAP = 64
 ep_ptr = EDITBUF_HL_PTR
@@ -242,7 +244,10 @@ ep_inc_off:
       INC   ep_off+1
 :     RTS
 
+; Undo records describe the RAM window, so history from the outgoing window
+; cannot be applied to the incoming one — drop it with the window.
 ep_load_window:
+      JSR   textsvc_undo_reset
       SEC
       LDA   ep_doc_len+0
       SBC   ep_window_off+0
