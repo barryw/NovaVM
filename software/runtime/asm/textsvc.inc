@@ -15,20 +15,29 @@ TEXTSVC_INC_INCLUDED = 1
 
 .include "nova.inc"
 
-TEXTSVC_UNDO_ARENA_BYTES = $8000
+; Stack offsets are 16-bit throughout textsvc.s, so this cannot reach $10000
+; without widening ts_record*/ts_end* first. $FF00 is the largest value the
+; existing bound checks handle correctly.
+TEXTSVC_UNDO_ARENA_BYTES = $FF00
 TEXTSVC_CLIP_CAP_BYTES   = $4000
 
 ; NDK-owned XRAM reservations for shared text editor services.
-;   $040000-$047FFF undo snapshots
-;   $048000-$04FFFF redo snapshots
+;   $040000-$04FFFF undo snapshots
+;   $06C000-$07BFFF redo snapshots
 ;   $050000-$053FFF shared clipboard
-; $054000+ is editor/NUI scratch; docbuf owns $055000-$05CFFF.
+; $054000+ is editor/NUI scratch; docbuf owns $055000-$05CFFF. Module slots 0-2
+; own $060000-$06BFFF and the host extension stages at $07C000, so $06C000 is
+; the only free 64K block; redo moved there to let undo take all of $04xxxx.
+;
+; Records are whole-buffer snapshots, so depth is arena/document-size: this
+; buys roughly 15 steps on a 4K source where there were 7. Making depth
+; independent of document size needs delta records, not a bigger arena.
 TEXTSVC_UNDO_XRAM_L = $00
 TEXTSVC_UNDO_XRAM_M = $00
 TEXTSVC_UNDO_XRAM_H = $04
 TEXTSVC_REDO_XRAM_L = $00
-TEXTSVC_REDO_XRAM_M = $80
-TEXTSVC_REDO_XRAM_H = $04
+TEXTSVC_REDO_XRAM_M = $C0
+TEXTSVC_REDO_XRAM_H = $06
 TEXTSVC_CLIP_XRAM_L = $00
 TEXTSVC_CLIP_XRAM_M = $00
 TEXTSVC_CLIP_XRAM_H = $05
