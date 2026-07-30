@@ -123,7 +123,7 @@ NP_WINDOW_ACTIVE = $A5
 
       .segment "LIBRARY"
       .byte NLIB_MAGIC0, NLIB_MAGIC1, NLIB_MAGIC2, NLIB_MAGIC3
-        .byte NLIB_VERSION, 45
+        .byte NLIB_VERSION, 46
 
       ; P_WRITE_CHAR deliberately imports P_CHAR_DEVICE from the next member.
       ; This keeps the Pascal-facing routine independent of the hardware shim
@@ -1036,8 +1036,11 @@ device_object:
       .word device_relocations-device_object
       .word 0
 
+      ; +0..+3 window bounds, +4 window-active flag, +5..+6 window writer,
+      ; +7 the key Crt.KeyPressed removed from the input register and Crt
+      ; .ReadKey must return before it waits for a new one.
       .byte NOBJ_SEC_ALLOC | NOBJ_SEC_WRITE | NOBJ_SEC_ZEROFILL, 0, 3, 0
-      .word 7
+      .word 8
       .word 0
       .byte "BSS"
 
@@ -4810,7 +4813,7 @@ system_object:
       .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
       .byte NOBJ_VERSION, 0, 1, $FF
       .word 0
-      .word 18
+      .word 17
       .word system_symbols-system_object
       .word 16
       .word system_relocations-system_object
@@ -5050,8 +5053,6 @@ system_symbols:
       .byte 0, NOBJ_SYM_GLOBAL, 4, "HALT"
       .word VGC_CHARIN
       .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 3, "KBD"
-      .word VGC_CHARIN
-      .byte NOBJ_SYM_ABSOLUTE, NOBJ_SYM_GLOBAL, 10, "KEYPRESSED"
       .word system_ioresult-system_code
       .byte 0, NOBJ_SYM_GLOBAL, 8, "IORESULT"
 
@@ -5064,37 +5065,37 @@ system_symbols:
 
 system_relocations:
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_active-system_code, 15, 4
+      .word system_args_active-system_code, 14, 4
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_left-system_code, 15, 0
+      .word system_args_left-system_code, 14, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_top-system_code, 15, 1
+      .word system_args_top-system_code, 14, 1
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_width-system_code, 15, 2
+      .word system_args_width-system_code, 14, 2
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_args_height-system_code, 15, 3
+      .word system_args_height-system_code, 14, 3
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_home_left-system_code, 15, 0
+      .word system_home_left-system_code, 14, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_home_top-system_code, 15, 1
+      .word system_home_top-system_code, 14, 1
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_active-system_code, 15, 4
+      .word system_gotoxy_active-system_code, 14, 4
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_height-system_code, 15, 3
+      .word system_gotoxy_height-system_code, 14, 3
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_width-system_code, 15, 2
+      .word system_gotoxy_width-system_code, 14, 2
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_left-system_code, 15, 0
+      .word system_gotoxy_left-system_code, 14, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_gotoxy_top-system_code, 15, 1
+      .word system_gotoxy_top-system_code, 14, 1
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_clrscr_active-system_code, 15, 4
+      .word system_clrscr_active-system_code, 14, 4
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_clreol_args_call-system_code, 16, 0
+      .word system_clreol_args_call-system_code, 15, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_clrscr_args_call-system_code, 16, 0
+      .word system_clrscr_args_call-system_code, 15, 0
       .byte 0, NOBJ_RELOC_ABS16
-      .word system_clrscr_home_jump-system_code, 17, 0
+      .word system_clrscr_home_jump-system_code, 16, 0
 system_object_end:
 
       ; Less common CRT queries and line-editing operations live in their own
@@ -5106,7 +5107,7 @@ system_extra_object:
       .word 0
       .word 9
       .word system_extra_symbols-system_extra_object
-      .word 6
+      .word 8
       .word system_extra_relocations-system_extra_object
       .word 0
 
@@ -5116,6 +5117,14 @@ system_extra_object:
       .byte "CODE"
 system_extra_code:
 system_readkey:
+      .byte $AD                           ; LDA __NP_WINDOW+7
+system_readkey_pending: .word 0
+      BEQ   system_readkey_wait
+      .byte $9C                           ; STZ __NP_WINDOW+7
+system_readkey_clear: .word 0
+      LDX   #0
+      RTS
+system_readkey_wait:
       PASCAL_SYSTEM_CALL SYS_WAIT_KEY
       LDA   LIB_RESULT
       LDX   #0
@@ -5211,7 +5220,63 @@ system_extra_relocations:
       .word system_delline_args_call-system_extra_code, 8, 0
       .byte 0, NOBJ_RELOC_ABS16
       .word system_insline_args_call-system_extra_code, 8, 0
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_readkey_pending-system_extra_code, 7, 7
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_readkey_clear-system_extra_code, 7, 7
 system_extra_object_end:
+
+      ; KeyPressed lives alone: a program that only asks whether a key is
+      ; waiting should not link the rest of the Crt query surface. It shares
+      ; the Crt state block with ReadKey through an ordinary NOBJ import.
+      .word system_key_object_end-system_key_object
+system_key_object:
+      .byte NOBJ_MAGIC0, NOBJ_MAGIC1, NOBJ_MAGIC2, NOBJ_MAGIC3
+      .byte NOBJ_VERSION, 0, 1, $FF
+      .word 0
+      .word 2
+      .word system_key_symbols-system_key_object
+      .word 2
+      .word system_key_relocations-system_key_object
+      .word 0
+
+      .byte NOBJ_SEC_ALLOC | NOBJ_SEC_EXEC, 0, 4, 0
+      .word system_key_code_end-system_key_code
+      .word system_key_code_end-system_key_code
+      .byte "CODE"
+system_key_code:
+      ; Reading the input register consumes the key, so a true answer keeps it
+      ; for the ReadKey that Turbo programs make right afterwards.
+system_keypressed:
+      .byte $AD                           ; LDA __NP_WINDOW+7
+system_keypressed_pending: .word 0
+      BNE   system_keypressed_ready
+      LDA   VGC_CHARIN
+      BEQ   system_keypressed_idle
+      .byte $8D                           ; STA __NP_WINDOW+7
+system_keypressed_store: .word 0
+system_keypressed_ready:
+      LDA   #1
+      LDX   #0
+      RTS
+system_keypressed_idle:
+      LDA   #0
+      LDX   #0
+      RTS
+system_key_code_end:
+
+system_key_symbols:
+      .word system_keypressed-system_key_code
+      .byte 0, NOBJ_SYM_GLOBAL, 10, "KEYPRESSED"
+      .word 0
+      .byte NOBJ_SYM_UNDEFINED, NOBJ_SYM_GLOBAL, 11, "__NP_WINDOW"
+
+system_key_relocations:
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_keypressed_pending-system_key_code, 1, 7
+      .byte 0, NOBJ_RELOC_ABS16
+      .word system_keypressed_store-system_key_code, 1, 7
+system_key_object_end:
 
       ; Pascal file variables are compact 16-byte descriptors:
       ;   +0 file id, +1 mode/logical-EOF flag, +2 name length,

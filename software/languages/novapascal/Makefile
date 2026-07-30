@@ -35,7 +35,7 @@ TOOLCHAIN_ASSETS = $(NAS) $(NL) $(NBUILD) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NL
 all: novapascal.bin $(NPCFE) $(TOOL_BINS) $(PASCAL_LIBRARY) pascal-bindings $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
 
 $(NOVA_LIB_FILE): FORCE
-	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
+	$(MAKE) -C $(NOVA_ASM) build/nova.lib
 
 novapascal.bin: novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/npc_frontend.o $(BUILD_DIR)/resident_io.o novapascal.cfg $(NOVA_LIB_FILE)
 	ld65 -C novapascal.cfg -m novapascal.map -Ln $(BUILD_DIR)/novapascal.sym -o $@ novapascal.o $(BUILD_DIR)/npc_resident.o $(BUILD_DIR)/npc_frontend.o $(BUILD_DIR)/resident_io.o $(NOVA_LIB_FILE)
@@ -46,9 +46,14 @@ novapascal.o: novapascal.s shell.s tools/npproj.inc tools/npc_frontend.inc $(TOO
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(TOOLCHAIN_ASSETS): toolchain
+# A phony prerequisite cannot tell make whether the shared toolchain objects
+# changed, so a tool could keep an old nptool_io.o and ship a stale NPEDIT/NAS/NL
+# inside the disk image. Run the sub-make (a no-op when up to date) and let real
+# file timestamps drive every relink, the same way nova.lib is handled above.
+$(TOOLCHAIN_ASSETS): FORCE
+	$(MAKE) -C $(TOOLCHAIN) all
 
-toolchain:
+toolchain: FORCE
 	$(MAKE) -C $(TOOLCHAIN) all
 
 $(BUILD_DIR)/resident_io.o: $(TOOLCHAIN)/nptool_io.s $(TOOLCHAIN)/nptool.inc $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libfiles.inc | $(BUILD_DIR)
@@ -119,7 +124,7 @@ NDI_RUNTIME := novapascal.bin
 NDI_OUTPUT  := novapascal.ndi
 NDI_LABEL   := NPASCAL
 NDI_SIZE_KB := 2048
-NDI_DIRECTORY_SECTORS := 128
+NDI_DIRECTORY_SECTORS := 192
 PASCAL_UNIT_SOURCES := pascal.inc pascalrt.inc units/novagfx.pas units/graphics.inc units/graphics.npi units/graphics.s \
 	units/novainput.pas units/input.inc units/input.npi units/input.s \
 	units/novarand.pas units/random.inc units/random.npi units/random.s \
@@ -130,14 +135,29 @@ PASCAL_UNIT_SOURCES := pascal.inc pascalrt.inc units/novagfx.pas units/graphics.
 	units/overlay.pas units/overlay.asm units/overlayface.npi units/overlayface.s \
 	units/printer.pas units/printer.asm units/printer.npi units/printer.s \
 	units/strings.pas units/strings.asm units/strings.npi units/strings.s
+EXAMPLE_SOURCES := examples/STARBURST/MAIN.PAS examples/STARBURST/STARBURST.NPP \
+	examples/CUBE/MAIN.PAS examples/CUBE/CUBE.NPP \
+	examples/JUKEBOX/MAIN.PAS examples/JUKEBOX/JUKEBOX.NPP \
+	examples/SNAKE/MAIN.PAS examples/SNAKE/SNAKE.NPP \
+	examples/BREAKOUT/MAIN.PAS examples/BREAKOUT/BREAKOUT.NPP
 MICROCALC_SOURCES := microcalc/MC.PAS microcalc/MC-MOD00.INC microcalc/MC-MOD01.INC \
 	microcalc/MC-MOD02.INC microcalc/MC-MOD03.INC microcalc/MC-MOD04.INC \
 	microcalc/MC-MOD05.INC microcalc/MC.HLP microcalc/MCDEMO.MCS \
 	microcalc/MICROCALC.NPP microcalc/README.md
-NDI_ASSET_DEPS := hello.pas hello.npp fizzbuzz.pas fizzbuzz.npp life.pas life.npp novapascal-help.txt user-readme.txt $(MICROCALC_SOURCES) $(PASCAL_UNIT_SOURCES) $(NOVA_ASM)/nvr.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libsound.inc $(NOVA_ASM)/libsystem.inc $(NPCFE) $(TOOL_BINS) $(PASCAL_LIBRARY) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
+NDI_ASSET_DEPS := hello.pas hello.npp fizzbuzz.pas fizzbuzz.npp life.pas life.npp $(EXAMPLE_SOURCES) novapascal-help.txt user-readme.txt $(MICROCALC_SOURCES) $(PASCAL_UNIT_SOURCES) $(NOVA_ASM)/nvr.inc $(NOVA_ASM)/libfiles.inc $(NOVA_ASM)/libsound.inc $(NOVA_ASM)/libsystem.inc $(NPCFE) $(TOOL_BINS) $(PASCAL_LIBRARY) $(NASPP_OVERLAY) $(NASBE_OVERLAY) $(NLWORK_OVERLAY)
 NDI_ASSETS := --asset hello.pas:HELLO/MAIN.PAS --asset hello.npp:HELLO/HELLO.NPP \
 	--asset fizzbuzz.pas:FIZZBUZZ/MAIN.PAS --asset fizzbuzz.npp:FIZZBUZZ/FIZZBUZZ.NPP \
 	--asset life.pas:LIFE/MAIN.PAS --asset life.npp:LIFE/LIFE.NPP \
+	--asset examples/STARBURST/MAIN.PAS:STARBURST/MAIN.PAS \
+	--asset examples/STARBURST/STARBURST.NPP:STARBURST/STARBURST.NPP \
+	--asset examples/CUBE/MAIN.PAS:CUBE/MAIN.PAS \
+	--asset examples/CUBE/CUBE.NPP:CUBE/CUBE.NPP \
+	--asset examples/JUKEBOX/MAIN.PAS:JUKEBOX/MAIN.PAS \
+	--asset examples/JUKEBOX/JUKEBOX.NPP:JUKEBOX/JUKEBOX.NPP \
+	--asset examples/SNAKE/MAIN.PAS:SNAKE/MAIN.PAS \
+	--asset examples/SNAKE/SNAKE.NPP:SNAKE/SNAKE.NPP \
+	--asset examples/BREAKOUT/MAIN.PAS:BREAKOUT/MAIN.PAS \
+	--asset examples/BREAKOUT/BREAKOUT.NPP:BREAKOUT/BREAKOUT.NPP \
 	--asset microcalc/MC.PAS:MICROCALC/MC.PAS \
 	--asset microcalc/MC-MOD00.INC:MICROCALC/MC-MOD00.INC \
 	--asset microcalc/MC-MOD01.INC:MICROCALC/MC-MOD01.INC \

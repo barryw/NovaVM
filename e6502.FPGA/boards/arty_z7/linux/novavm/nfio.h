@@ -38,6 +38,10 @@
  * table reload flag). Call once at boot from novavm.c before the service loop.
  * Optional — the handlers lazily load the mount table on first use. */
 void nfio_init(void);
+/* Drop the CD state back to the boot drive's root. A 6502 reset restarts the
+ * shell at the root prompt, so the host must forget any CD the previous
+ * session made or DIR silently lists a directory the shell is not in. */
+void nfio_reset_cwd(void);
 
 /* ---- FIO command handlers (dispatch from the novavm.c FIO switch) ----------
  * Each reads its parameters from the FIO mailbox in 6502 RAM via peek() and

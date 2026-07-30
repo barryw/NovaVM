@@ -36,7 +36,7 @@ ABI_SOURCES = \
 	$(NOVA_ASM)/xmc.inc $(NOVA_ASM)/xmc.s
 
 $(NOVA_LIB_FILE): FORCE
-	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
+	$(MAKE) -C $(NOVA_ASM) build/nova.lib
 
 # ROM build
 basic.bin basic.sym: basic.o ehbasic.cfg $(NOVA_LIB_FILE)

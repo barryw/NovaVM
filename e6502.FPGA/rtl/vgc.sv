@@ -141,6 +141,8 @@ module vgc (
     localparam COLLST_HI_ADDR = 16'hA0EB;
     localparam COLLBG_HI_ADDR = 16'hA0EC;
     localparam TEXT_TOP_ROW_ADDR = 16'hA0ED;   // ring-scroll base: first physical text row shown
+    localparam TEXT_SCROLL_START_ADDR = 16'hA0EE;  // first display row the ring rotates
+    localparam TEXT_SCROLL_ROWS_ADDR  = 16'hA0EF;  // number of rows the ring rotates
     localparam PALETTE_INDEX_ADDR = 16'hA0F4;
     localparam PALETTE_DATA_ADDR  = 16'hA0F5;
     // Direct screen window: $A200-$B19F maps 4000 cells of the plane named by
@@ -291,15 +293,17 @@ module vgc (
     logic [8:0] pre_gfx_x;
     logic [7:0] pre_gfx_y;
     logic [5:0] scroll_offset;
-    // Software ring-scroll base ($A0ED). The render fetch shows physical row
-    // (text_row + scroll_offset + text_top_row) mod ROWS. We fold the two ring
-    // bases into a single registered offset (combined_text_scroll) so the
-    // combinational real_row -> char-RAM-address path in vgc_timing is unchanged
-    // and stays timing-closed. Command-side writes (screen_addr) keep using the
-    // raw scroll_offset, matching the emulator where top-row affects display only.
+    // Software ring-scroll base ($A0ED) and its window ($A0EE/$A0EF). The two
+    // rings are NOT interchangeable and must not be folded together: the
+    // CHAROUT ring (scroll_offset) rotates the whole plane, while this one
+    // rotates only the rows inside the window, so a full-screen app can scroll
+    // a document body while its menu bar and status line stay put. vgc_timing
+    // applies the window ring first, then the plane ring, exactly like
+    // VirtualGraphicsController.PhysicalTextRow on the reference machine.
+    // Command-side writes (screen_addr) keep using the raw scroll_offset.
     logic [5:0] text_top_row;
-    logic [5:0] combined_text_scroll;
-    wire  [6:0] cts_sum = {1'b0, scroll_offset} + {1'b0, text_top_row};
+    logic [5:0] text_scroll_start;
+    logic [6:0] text_scroll_rows;
     // Direct screen window plane select ($B1A0) and its VGC memory-space id.
     logic [1:0] screen_win_plane;
     wire  [2:0] screen_win_space = (screen_win_plane == 2'd1) ? SPACE_COLOR :
@@ -336,21 +340,12 @@ module vgc (
         .scroll_y(scroll_y_fetch),
         .scroll_gfx_enable(scroll_gfx_enable),
         .scroll_text_enable(scroll_text_enable),
-        .scroll_offset(combined_text_scroll),
+        .scroll_offset(scroll_offset),
+        .text_top_row(text_top_row),
+        .text_scroll_start(text_scroll_start),
+        .text_scroll_rows(text_scroll_rows),
         .pre_gfx_x(pre_gfx_x), .pre_gfx_y(pre_gfx_y)
     );
-
-    // Registered combine of the two ring bases, mod ROWS. Both operands are
-    // already bounded to 0..ROWS-1, so a single conditional subtract suffices
-    // (same shape as real_row in vgc_timing). Registering it keeps the extra
-    // adder off the per-pixel render path.
-    always_ff @(posedge clk) begin
-        if (vgc_module_rst)
-            combined_text_scroll <= 6'd0;
-        else
-            combined_text_scroll <= (cts_sum >= 7'(ROWS)) ? 6'(cts_sum - 7'(ROWS))
-                                                          : cts_sum[5:0];
-    end
 
     wire vblank_start = (h_count == 10'd0 && v_count == V_ACTIVE);
     wire frame_start  = (h_count == 10'd0 && v_count == 10'd0);
@@ -1282,6 +1277,8 @@ module vgc (
     wire palette_data_sel = (cpu_raddr == PALETTE_DATA_ADDR);
     wire scroll_ctl_sel = (cpu_raddr == SCROLL_CTL_ADDR);
     wire text_top_row_sel = (cpu_raddr == TEXT_TOP_ROW_ADDR);
+    wire text_scroll_start_sel = (cpu_raddr == TEXT_SCROLL_START_ADDR);
+    wire text_scroll_rows_sel  = (cpu_raddr == TEXT_SCROLL_ROWS_ADDR);
     wire screen_win_sel   = (cpu_raddr >= SCREENWIN_BASE && cpu_raddr <= SCREENWIN_END);
     wire screen_plane_sel = (cpu_raddr == SCREENWIN_PLANE);
     wire [11:0] screen_win_off = 12'(cpu_raddr - SCREENWIN_BASE);
@@ -1320,6 +1317,8 @@ module vgc (
     wire [5:0] palette_index_mod_w = palette_index_mod(r_cpu_wdata_w);
     wire scroll_ctl_sel_w = (r_cpu_addr_w == SCROLL_CTL_ADDR);
     wire text_top_row_sel_w = (r_cpu_addr_w == TEXT_TOP_ROW_ADDR);
+    wire text_scroll_start_sel_w = (r_cpu_addr_w == TEXT_SCROLL_START_ADDR);
+    wire text_scroll_rows_sel_w  = (r_cpu_addr_w == TEXT_SCROLL_ROWS_ADDR);
     wire screen_win_sel_w   = (r_cpu_addr_w >= SCREENWIN_BASE && r_cpu_addr_w <= SCREENWIN_END);
     wire screen_plane_sel_w = (r_cpu_addr_w == SCREENWIN_PLANE);
     wire [11:0] screen_win_off_w = 12'(r_cpu_addr_w - SCREENWIN_BASE);
@@ -1699,6 +1698,8 @@ module vgc (
         else if (palette_mode_sel) cpu_rdata = 8'h00;
         else if (scroll_ctl_sel) cpu_rdata = {5'b0, scroll_ctl[2:0]};
         else if (text_top_row_sel) cpu_rdata = {2'b0, text_top_row};
+        else if (text_scroll_start_sel) cpu_rdata = {2'b0, text_scroll_start};
+        else if (text_scroll_rows_sel) cpu_rdata = {1'b0, text_scroll_rows};
         else if (screen_win_sel) cpu_rdata = vram_cpu_read_latch;
         else if (screen_plane_sel) cpu_rdata = {6'b0, screen_win_plane};
         else if (text_reg_sel) begin
@@ -1904,6 +1905,8 @@ module vgc (
             text_flags <= 8'h00; text_reverse_attr <= 8'hF0; text_bg <= TEXT_BG_TRANS; charout_pcmd <= 2'd0;
             scroll_offset <= 0; scroll_pending <= 0; scroll_clearing <= 0; scroll_col <= 0;
             text_top_row <= 0;
+            text_scroll_start <= 0;
+            text_scroll_rows <= 7'(ROWS);
             screen_win_plane <= 0;
             scroll_x <= 0; scroll_y <= 0;
             cmd_busy <= 0;
@@ -2974,12 +2977,29 @@ module vgc (
 
                 if (text_top_row_sel_w) begin
                     // Clamp into 0..ROWS-1 with one conditional subtract (6-bit
-                    // input, single step suffices) so combined_text_scroll stays
-                    // single-subtract-correct. Matches the emulator for 0..63.
+                    // input, single step suffices). Matches the emulator for 0..63.
                     if (r_cpu_wdata_w[5:0] >= 6'(ROWS))
                         text_top_row <= r_cpu_wdata_w[5:0] - 6'(ROWS);
                     else
                         text_top_row <= r_cpu_wdata_w[5:0];
+                end
+
+                // Scroll window ($A0EE/$A0EF). Clamp exactly as the reference
+                // machine does: start inside the plane, rows to what is left.
+                if (text_scroll_start_sel_w) begin
+                    text_scroll_start <= (r_cpu_wdata_w[5:0] >= 6'(ROWS)) ? 6'(ROWS - 1)
+                                                                          : r_cpu_wdata_w[5:0];
+                    text_top_row <= 0;
+                end
+
+                if (text_scroll_rows_sel_w) begin
+                    if (r_cpu_wdata_w == 8'd0)
+                        text_scroll_rows <= 7'(ROWS) - {1'b0, text_scroll_start};
+                    else if ({1'b0, r_cpu_wdata_w[6:0]} + {1'b0, text_scroll_start} > 7'(ROWS))
+                        text_scroll_rows <= 7'(ROWS) - {1'b0, text_scroll_start};
+                    else
+                        text_scroll_rows <= {1'b0, r_cpu_wdata_w[6:0]};
+                    text_top_row <= 0;
                 end
 
                 if (screen_plane_sel_w)

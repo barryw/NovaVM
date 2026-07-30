@@ -92,6 +92,12 @@ FILE_PAGE      = $0E   ; (nameptr:ARG0 b0.b1, namelen:ARG0 b2,
                        ;  destaddr:ARG2 u24 b0.b1.b2, len:ARG3 u16 b0.b1)
                        ;  -> RESULT=actual bytes streamed; zero at exact EOF
 
+; CONCURRENT WRITERS: handles are independent. A caller may hold more than one
+; FILE_FCREATE handle open at a time and interleave FILE_FWRITE between them --
+; the Pascal compiler does exactly that, keeping its dependency manifest open
+; while it streams generated assembly. A host that stages writes in one shared
+; buffer must give each handle its own, or every compile fails to open output.
+;
 ; =====================================================================
 ; Low-level byte-stream file handles (fio.s)
 ; =====================================================================

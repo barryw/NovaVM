@@ -22,7 +22,7 @@ NOVA_LIB := $(NOVA_ASM)/build/nova.lib
 $(NOVA_LIB):
 	$(MAKE) -C $(NOVA_ASM)
 
-all: keyboard keyboard-test keyboard-harness music vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo spritebank-demo
+all: keyboard keyboard-test keyboard-harness music vsprite-rotate turtle editui-shell editbuf-test editbuf-demo mousedemo spritebank-demo xramcheck
 
 keyboard: $(KEYBOARD_DIR)/keyboard.bin
 keyboard-test: $(KEYBOARD_DIR)/kbdtest.bin
@@ -151,6 +151,15 @@ install-editui-shell: editui-shell
 	@echo "install-editui-shell no longer writes to a host fallback; use nova create/import to place editui_shell.bin on an NDI image." >&2
 	@false
 
+xramcheck: apps/xramcheck/xramcheck.bin
+
+# Hardware smoke test for the XRAM/file path the whole toolchain stages through.
+apps/xramcheck/xramcheck.bin: apps/xramcheck/xramcheck.o apps/xramcheck/xramcheck.cfg
+	ld65 -C apps/xramcheck/xramcheck.cfg -o $@ apps/xramcheck/xramcheck.o
+
+apps/xramcheck/xramcheck.o: apps/xramcheck/xramcheck.s $(NOVA_ASM)/nova.inc $(NOVA_ASM)/libabi.inc $(NOVA_ASM)/libmemory.inc $(NOVA_ASM)/libfiles.inc
+	ca65 --cpu w65c02 -I $(NOVA_ASM) -o $@ $<
+
 editbuf-test: $(EDITBUF_TEST_DIR)/editbuf_test.bin
 
 $(EDITBUF_TEST_DIR)/editbuf_test.bin: $(EDITBUF_TEST_DIR)/editbuf_test.o $(NOVA_LIB) $(EDITBUF_TEST_DIR)/editbuf_test.cfg
@@ -192,4 +201,4 @@ clean:
 	$(RM) $(MOUSEDEMO_DIR)/mousedemo.o $(MOUSEDEMO_DIR)/mousedemo.bin
 	$(RM) $(SPRITEBANK_DEMO_DIR)/spritebank_demo.o $(SPRITEBANK_DEMO_DIR)/spritebank_demo.bin
 
-.PHONY: all keyboard keyboard-test keyboard-harness install-keyboard music vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo spritebank-demo ball-bounce-ndi clean
+.PHONY: all xramcheck keyboard keyboard-test keyboard-harness install-keyboard music vsprite-rotate install-vsprite-rotate turtle install-turtle editui-shell install-editui-shell editbuf-test editbuf-demo spritebank-demo ball-bounce-ndi clean

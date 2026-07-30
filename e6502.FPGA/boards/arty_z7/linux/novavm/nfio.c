@@ -706,6 +706,11 @@ static ndi_t *boot_image(void) {
 }
 
 /* The slot whose disk is "current": explicit CD target, else the boot drive. */
+void nfio_reset_cwd(void) {
+    g_cwd_slot = -1;
+    g_cwd_dir[0] = '\0';
+}
+
 static int nfio_cwd_slot(void) {
     drives_refresh();
     if (g_cwd_slot >= 0 && drive_path(g_cwd_slot)[0]) return g_cwd_slot;
@@ -759,15 +764,15 @@ static struct {
     int      idx;            /* NDI dir index (read handles)                     */
     uint32_t pos;
     uint32_t size;
-    int      writing;        /* FCREATE write handle: staged in g_wbuf til FCLOSE */
+    int      writing;        /* FCREATE write handle: staged in wbuf til FCLOSE   */
+    unsigned char *wbuf;     /* per-handle staging: writers may overlap           */
     uint8_t  wtype;          /* NDI file type for the committed entry             */
     uint16_t wparent;        /* NDI parent index for the committed entry          */
     char     wname[34];      /* committed entry name                              */
 } g_fh[FH_MAX];
 
 #define WBUF_BYTES (256 * 1024)
-static unsigned char g_wbuf[WBUF_BYTES];
-static int g_wbuf_handle = -1;
+static unsigned char g_wbuf[WBUF_BYTES];   /* FIO_CMD_SAVE staging (no handle) */
 
 /* ---- name parsing (port of main.c fio_read_name / fio_name_type) ---------- */
 static int fio_read_name(char *out, int maxlen) {
@@ -1702,12 +1707,14 @@ void fio_fcreate(void) {
     if (!img) { fio_fail(FIO_ERR_NOTMOUNTED); return; }
     uint16_t parent; char fname[NDI_MAX_NAME + 1];
     if (ndi_walk(img, path, 0, &parent, fname, sizeof fname) != 0) { fio_fail(FIO_ERR_NOTFOUND); return; }
-    if (g_wbuf_handle >= 0) { fio_fail(FIO_ERR_IO); return; }   /* one writer at a time */
     int h = -1;
     for (int i = 0; i < FH_MAX; i++) if (!g_fh[i].used) { h = i; break; }
     if (h < 0) { fio_fail(FIO_ERR_IO); return; }
+    unsigned char *staging = (unsigned char *)malloc(WBUF_BYTES);
+    if (!staging) { fio_fail(FIO_ERR_IO); return; }
     g_fh[h].used = 1; g_fh[h].slot = slot; g_fh[h].idx = -1; g_fh[h].pos = 0; g_fh[h].size = 0;
     g_fh[h].writing = 1; g_fh[h].wtype = fio_name_type(fname); g_fh[h].wparent = parent;
+    g_fh[h].wbuf = staging;
     /* NDI names are capped at NDI_MAX_NAME (32) chars; copy bounded + NUL-term. */
     {
         size_t nl = strlen(fname);
@@ -1715,7 +1722,7 @@ void fio_fcreate(void) {
         memcpy(g_fh[h].wname, fname, nl);
         g_fh[h].wname[nl] = 0;
     }
-    g_wbuf_handle = h;
+
     poke(FIO_SRC_LO, (h + 1) & 0xFF); poke(FIO_SRC_HI, 0);      /* handle = slot+1 */
     poke(FIO_SIZE_LO, 0); poke(FIO_SIZE_HI, 0); poke(FIO_SIZE2, 0);
     printf("[fio] FCREATE %s -> h%d (write)\n", name, h + 1);
@@ -1735,10 +1742,10 @@ void fio_fwrite(void) {
         if (!g_xram) { fio_fail(FIO_ERR_IO); return; }
         unsigned xaddr = peek(FIO_GADDR_LO) | (peek(FIO_GADDR_HI) << 8) | (peek(FIO_GSPACE) << 16);
         if (xaddr + len > XRAM_BYTES) { fio_fail(FIO_ERR_IO); return; }
-        xram_read(xaddr, g_wbuf + g_fh[h].pos, len);
+        xram_read(xaddr, g_fh[h].wbuf + g_fh[h].pos, len);
     } else {
         unsigned src = peek(FIO_END_LO) | (peek(FIO_END_HI) << 8);
-        for (unsigned i = 0; i < len; i++) g_wbuf[g_fh[h].pos + i] = peek((src + i) & 0xFFFF);
+        for (unsigned i = 0; i < len; i++) g_fh[h].wbuf[g_fh[h].pos + i] = peek((src + i) & 0xFFFF);
     }
     g_fh[h].pos += len;
     if (g_fh[h].pos > g_fh[h].size) g_fh[h].size = g_fh[h].pos;
@@ -1759,7 +1766,7 @@ static int fio_commit_write(int h) {
     uint32_t off = 0;
     while (off < total) {
         uint32_t chunk = total - off; if (chunk > 16384) chunk = 16384;
-        if (ndi_write(img, idx, off, g_wbuf + off, chunk) != 0) {
+        if (ndi_write(img, idx, off, g_fh[h].wbuf + off, chunk) != 0) {
             ndi_delete(img, g_fh[h].wname, g_fh[h].wparent); return -1;
         }
         off += chunk;
@@ -1779,7 +1786,8 @@ void fio_fclose(void) {
         int rc = fio_commit_write(h);
         char saved[34]; snprintf(saved, sizeof saved, "%s", g_fh[h].wname);
         unsigned sz = g_fh[h].size;
-        g_fh[h].used = 0; g_fh[h].writing = 0; g_wbuf_handle = -1;
+        free(g_fh[h].wbuf); g_fh[h].wbuf = NULL;
+        g_fh[h].used = 0; g_fh[h].writing = 0;
         if (rc == 0) { printf("[fio] FCLOSE(save) %s (%u bytes)\n", saved, sz); fio_ok(); }
         else         { printf("[fio] FCLOSE(save) %s FAILED\n", saved); fio_fail(FIO_ERR_IO); }
         return;
@@ -1844,10 +1852,10 @@ void fio_fsize(void) {
 /* FIO_CMD_FRESIZE (0x35): resize a writable handle, zero-extending it. */
 void fio_fresize(void) {
     int h = fh_from_regs();
-    if (h < 0 || !g_fh[h].writing || g_wbuf_handle != h) { fio_fail(FIO_ERR_IO); return; }
+    if (h < 0 || !g_fh[h].writing) { fio_fail(FIO_ERR_IO); return; }
     unsigned size = peek(FIO_SIZE_LO) | (peek(FIO_SIZE_HI) << 8) | (peek(FIO_SIZE2) << 16);
     if (size > WBUF_BYTES) { fio_fail(FIO_ERR_IO); return; }
-    if (size > g_fh[h].size) memset(g_wbuf + g_fh[h].size, 0, size - g_fh[h].size);
+    if (size > g_fh[h].size) memset(g_fh[h].wbuf + g_fh[h].size, 0, size - g_fh[h].size);
     g_fh[h].size = size;
     if (g_fh[h].pos > size) g_fh[h].pos = size;
     fio_ok();
@@ -1938,8 +1946,11 @@ void fio_frename(void) {
  *  STARTUP STATE
  * =========================================================================== */
 void nfio_init(void) {
-    for (int i = 0; i < FH_MAX; i++) g_fh[i].used = 0;
-    g_wbuf_handle = -1;
+    for (int i = 0; i < FH_MAX; i++) {
+        if (g_fh[i].wbuf) { free(g_fh[i].wbuf); g_fh[i].wbuf = NULL; }
+        g_fh[i].used = 0;
+        g_fh[i].writing = 0;
+    }
     g_img_slot = -1;
     g_mounts_loaded = 0;
     g_mounts_mtime = 0;

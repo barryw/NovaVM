@@ -1243,8 +1243,7 @@ editbuf_paste:
       STA   EDITBUF_CNTL
       LDA   TEXTSVC_CLIPLENH
       STA   EDITBUF_CNTH
-      JSR   editbuf_close_gap
-      RTS
+      JMP   editbuf_close_gap          ; tail call: the caller's RTS is enough
 @adv:
       ; cursor += cliplen
       CLC
@@ -2015,8 +2014,7 @@ editbuf_after_change:
       JSR   editbuf_recount_lines
       JSR   editbuf_compute_linecol
       JSR   editbuf_adjust_scroll
-      JSR   editbuf_render
-      RTS
+      JMP   editbuf_render          ; tail call: the caller's RTS is enough
 
 ; editbuf_begin_move — start a cursor move: remember whether a selection was
 ; active (so its highlight can be cleared on the next repaint), then drop it.
@@ -2486,8 +2484,7 @@ editbuf_render_row:
       BRA   @attrloop
 @done:
       ; advance EB_VISLINE to next line: skip to and over the \n (if any)
-      JSR   editbuf_advance_to_next_line
-      RTS
+      JMP   editbuf_advance_to_next_line ; tail call
 
 ; editbuf_win_begin — select window plane A ($B1A0: 0=char/1=color/2=attr) and
 ; seed the zero-page run pointer EB_RUN at the window address of the row's first
@@ -2701,12 +2698,10 @@ editbuf_place_cursor:
 ; =====================================================================
 editbuf_mark_dirty:
       LDA   EDITUI_DIRTY
-      BNE   @done
+      BNE   editbuf_shared_rts
       LDA   #1
       STA   EDITUI_DIRTY
-      JSR   editui_refresh_dirty
-@done:
-      RTS
+      JMP   editui_refresh_dirty
 
 ; =====================================================================
 ; Undo / redo
@@ -2736,6 +2731,8 @@ editbuf_publish_buffer:
       STA   TEXTSVC_CURL
       LDA   EDITBUF_CURH
       STA   TEXTSVC_CURH
+; Nearby routines branch here instead of spending an RTS of their own.
+editbuf_shared_rts:
       RTS
 
 editbuf_capture_undo:
@@ -2751,7 +2748,9 @@ editbuf_do_redo:
       JSR   editbuf_publish_buffer
       JSR   textsvc_redo_apply
 editbuf_apply_result:
-      BNE   @done
+      ; The splice body is past branch range from here, so borrow the shared
+      ; RTS above rather than spending a second one.
+      BNE   editbuf_shared_rts
       ; TEXTSVC popped a record and described the splice; make_gap/close_gap
       ; already know how to widen or narrow a run, so the buffer move is theirs.
       SEC
@@ -2810,8 +2809,6 @@ editbuf_apply_result:
       STZ   EDITBUF_SELACT
       JSR   editbuf_mark_dirty
       JMP   editbuf_after_change
-@done:
-      RTS
 
 ; =====================================================================
 ; Find / goto-line requesters
@@ -3475,6 +3472,7 @@ editbuf_dialog3_render:
       LDX   EB_T0
       JSR   vtext_put_run
       PLX
+      TAY                              ; PLX flags follow X, not the run status
       BNE   @done
       INX
       INX

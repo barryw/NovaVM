@@ -33,7 +33,11 @@ P_INCLUDE_DEPTH_CAP = 8
 P_INCLUDE_COUNT_CAP = P_INCLUDE_DEPTH_CAP
 P_SOURCE_NAME_CAP = 32
 P_INCLUDE_LOAD_CAP = NPTOOL_ARG_CAP
-P_CONST_CAP = 32
+; Unit interfaces share this table with the program: Graph alone declares 21
+; colour and driver constants, so the program's own budget has to be larger
+; than the units it uses. The arena is XRAM-backed, so each slot costs nothing
+; the application can feel.
+P_CONST_CAP = 64
 P_CONST_NAME_CAP = P_IDENT_CAP
 P_TYPE_CAP = 48
 P_TYPE_NAME_CAP = P_IDENT_CAP
@@ -3439,6 +3443,46 @@ p_emit_coerce_argument:
 @done:
       CLC
 @fail:
+      RTS
+
+; The mirror of the widening in p_emit_coerce_argument: a one-byte value
+; parameter fed by a word expression takes its low byte, which the expression
+; already left in A. Only the push width changes, so the pushed byte count
+; still matches the frame the callee removes. Assignment compatibility is
+; judged separately from the unmodified expression type, so an incompatible
+; word argument is still rejected before it reaches this point.
+; Returns carry set when the argument must be pushed as a single byte.
+p_argument_needs_narrowing:
+      LDA   p_statement_typed
+      BEQ   @done
+      LDX   p_argument_count
+      LDA   p_argument_bits,X
+      AND   p_statement_refmask
+      BNE   @done
+      LDA   p_argument_bits,X
+      AND   p_statement_widthmask
+      BNE   @done
+      LDA   p_target_type
+      BEQ   @done
+      JSR   p_type_size
+      BCS   @done
+      LDA   p_array_len+1
+      BNE   @done
+      LDA   p_array_len
+      CMP   #1
+      BNE   @done
+      LDA   p_expr_type
+      JSR   p_type_size
+      BCS   @done
+      LDA   p_array_len+1
+      BNE   @done
+      LDA   p_array_len
+      CMP   #2
+      BNE   @done
+      SEC
+      RTS
+@done:
+      CLC
       RTS
 
 p_emit_read_size_argument:
@@ -7762,12 +7806,34 @@ p_const_add:
       LDY   #0
 @compare:
       CPY   p_saved_ident_len
-      BCS   @fail
+      BCS   @shadow
       LDA   p_saved_ident,Y
       CMP   (p_word),Y
       BNE   @next
       INY
       BRA   @compare
+@shadow:
+      ; Turbo lets a later unit's interface shadow a constant an earlier one
+      ; declared, which is how Crt and Graph can both export colour names. A
+      ; second declaration in the program's own scope stays an error.
+      LDA   p_importing_interface
+      BEQ   @fail
+      LDX   p_const_iter
+      JSR   p_const_meta_pointer
+      LDY   #0
+      LDA   p_saved_ident_len
+      STA   (p_word),Y
+      INY
+      LDA   p_decl_type
+      STA   (p_word),Y
+      INY
+      LDA   p_decimal
+      STA   (p_word),Y
+      INY
+      LDA   p_decimal+1
+      STA   (p_word),Y
+      CLC
+      RTS
 @next:
       LDX   p_const_iter
       INX
@@ -13140,6 +13206,8 @@ p_emit_drop_count:
       RTS
 
 p_emit_push_argument:
+      JSR   p_argument_needs_narrowing
+      BCS   @byte
       LDA   p_expr_type
       JSR   p_type_size
       BCS   @fail
@@ -13148,6 +13216,7 @@ p_emit_push_argument:
       LDA   p_array_len
       CMP   #1
       BNE   @wide
+@byte:
       LDA   #<asm_pha
       LDX   #>asm_pha
       JSR   p_emit_ax_text
@@ -14510,26 +14579,6 @@ p_parse_byte_value:
       CLC
       RTS
 @external_value_check:
-      LDX   #0
-@system_storage:
-      CPX   #SYSTEM_STORAGE_COUNT
-      BCS   @kbd_check
-      LDA   p_call_hash
-      CMP   system_storage_hash0,X
-      BNE   @system_storage_next
-      LDA   p_call_hash+1
-      CMP   system_storage_hash1,X
-      BNE   @system_storage_next
-      LDA   p_call_hash+2
-      CMP   system_storage_hash2,X
-      BEQ   @system_storage_load
-@system_storage_next:
-      INX
-      BRA   @system_storage
-@system_storage_load:
-      LDA   #TYPE_BYTE
-      STA   p_expr_type
-      JMP   p_emit_load_identifier
 @kbd_check:
       LDA   p_call_ident_len
       CMP   #3
@@ -17001,8 +17050,7 @@ SYSTEM_CALL_METADATA_COUNT = 32
 SYSTEM_CALL_VAL = 9
 SYSTEM_CALL_INSERT = 10
 SYSTEM_FUNCTION_COUNT = 19
-SYSTEM_NOARG_FUNCTION_COUNT = 4
-SYSTEM_STORAGE_COUNT = 1
+SYSTEM_NOARG_FUNCTION_COUNT = 5
 p_argument_bits:  .byte $01, $02, $04, $08, $10, $20, $40, $80
 ; Hash bytes are little-endian DJB2-24 values. Arity disambiguates the two
 ; classic READ and READLN forms.
@@ -17028,14 +17076,10 @@ system_function_kind:  .byte SYSFN_SAME,SYSFN_REAL,SYSFN_SAME,SYSFN_REAL
                        .byte SYSFN_FILE,SYSFN_FILE
                        .byte SYSFN_BYTE,SYSFN_BYTE,SYSFN_ORDINAL
 ; Turbo Crt functions may be called without an empty parenthesized argument list.
-; READKEY, WHEREX, WHEREY, IORESULT.
-system_noarg_hash0: .byte $6A,$F8,$F9,$3C
-system_noarg_hash1: .byte $D1,$F3,$F3,$53
-system_noarg_hash2: .byte $99,$0D,$0D,$08
-; Implicit System byte storage: KEYPRESSED.
-system_storage_hash0: .byte $C4
-system_storage_hash1: .byte $63
-system_storage_hash2: .byte $BD
+; READKEY, WHEREX, WHEREY, IORESULT, KEYPRESSED.
+system_noarg_hash0: .byte $6A,$F8,$F9,$3C,$C4
+system_noarg_hash1: .byte $D1,$F3,$F3,$53,$63
+system_noarg_hash2: .byte $99,$0D,$0D,$08,$BD
       .segment "RODATA"
 kw_program: .byte "PROGRAM", 0
 kw_unit:    .byte "UNIT", 0

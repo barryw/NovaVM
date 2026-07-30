@@ -104,6 +104,15 @@ public class EditBufVmTests
     {
         string path = Path.Combine(RepoRoot(), "software", "assembly", "apps", "editbuf_test", "editbuf_test.bin");
         Assert.IsTrue(File.Exists(path), $"Build the harness first: {path}");
+
+        // The harness links the editor out of nova.lib. A stale binary makes
+        // every test here judge code that is no longer in the tree, which is
+        // worse than a failure: it passes or fails for the wrong reason.
+        string library = Path.Combine(RepoRoot(), "software", "runtime", "asm", "build", "nova.lib");
+        if (File.Exists(library))
+            Assert.IsTrue(File.GetLastWriteTimeUtc(path) >= File.GetLastWriteTimeUtc(library),
+                $"{path} is older than nova.lib; rebuild it with " +
+                "'make -C software/assembly editbuf-test' before trusting these tests.");
         byte[] prg = File.ReadAllBytes(path);
         ushort load = (ushort)(prg[0] | (prg[1] << 8));
         for (int i = 2; i < prg.Length; i++)

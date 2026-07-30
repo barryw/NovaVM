@@ -53,8 +53,18 @@ module vgc_timing (
     input  logic        scroll_gfx_enable,
     input  logic        scroll_text_enable,
 
-    // Terminal text-ring scroll offset (from CHAROUT/newline handling)
+    // Terminal text-ring scroll offset (from CHAROUT/newline handling). This
+    // one rotates the whole plane: it is how the console scrolls.
     input  logic [5:0]  scroll_offset,
+
+    // Software ring-scroll base ($A0ED) and the window it applies to
+    // ($A0EE/$A0EF). Unlike scroll_offset this rotates ONLY the rows inside
+    // the window, which is what lets a full-screen app ring-scroll a document
+    // body while its menu bar and status line stay put. The reference machine
+    // models exactly this (VirtualGraphicsController.PhysicalTextRow).
+    input  logic [5:0]  text_top_row,
+    input  logic [5:0]  text_scroll_start,
+    input  logic [6:0]  text_scroll_rows,
 
     // Pre-computed gfx coordinates for sprite/gfx sampling
     output logic [8:0]  pre_gfx_x,
@@ -211,6 +221,11 @@ module vgc_timing (
     // needs 7 bits so the `>= ROWS` mod-fixup can run before wrap. Same class
     // of fix as the prior 7-row mirror bug — the extra carry bit matters.
     logic [6:0] real_row_sum;
+    logic [6:0] win_end;
+    logic [6:0] win_rel_sum;
+    logic [6:0] win_rel;
+    logic [5:0] win_row;
+    logic       in_win;
     logic [8:0] phys_gfx_x;
     logic [7:0] phys_gfx_y;
     logic [9:0] scrolled_x_sum;
@@ -244,7 +259,18 @@ module vgc_timing (
         text_line  = {1'b0, text_fetch_y, canvas_v_count[0]};
         text_row   = text_line[8:3];                // 6-bit, 0..63
         font_line  = text_line[2:0];
-        real_row_sum = {1'b0, text_row} + {1'b0, scroll_offset};
+        // Window ring first (rows outside the window are physically fixed),
+        // then the whole-plane console ring.
+        win_end     = {1'b0, text_scroll_start} + text_scroll_rows;
+        in_win      = (text_scroll_rows != 7'd0) &&
+                      ({1'b0, text_row} >= {1'b0, text_scroll_start}) &&
+                      ({1'b0, text_row} < win_end);
+        win_rel_sum = ({1'b0, text_row} - {1'b0, text_scroll_start}) + {1'b0, text_top_row};
+        win_rel     = (win_rel_sum >= text_scroll_rows) ? win_rel_sum - text_scroll_rows
+                                                        : win_rel_sum;
+        win_row     = in_win ? 6'({1'b0, text_scroll_start} + win_rel) : text_row;
+
+        real_row_sum = {1'b0, win_row} + {1'b0, scroll_offset};
         real_row   = (real_row_sum >= 7'(ROWS)) ? real_row_sum[5:0] - 6'(ROWS)
                                                 : real_row_sum[5:0];
     end

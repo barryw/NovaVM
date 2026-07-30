@@ -1,0 +1,19 @@
+NPP 2
+MAIN MAIN.PAS
+UNITPATH SYSTEM
+UNITPATH USER
+OUTPUT SNAKE.BIN
+OPTIMIZE O2
+DEFINE NOVA=1
+CONFIG INLINE
+MAP SNAKE.MAP
+LABEL SNAKE.LBL
+MEMORY {
+    RAM: start = $0900, size = $9700, file = %O;
+}
+
+SEGMENTS {
+    CODE: load = RAM, type = ro;
+    RODATA: load = RAM, type = ro;
+    BSS: load = RAM, type = bss;
+}

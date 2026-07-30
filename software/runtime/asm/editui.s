@@ -129,8 +129,13 @@ editui_ok:
       RTS
 
 editui_init:
-      LDA   #$00
-      STA   VGC_MODE
+      STZ   VGC_MODE
+      ; Take the screen from the console cleanly. CHAROUT scrolling advances a
+      ; ring base inside the VGC (the FPGA moves no memory), and only a form
+      ; feed resets it. Without this the editor draws to absolute rows that the
+      ; ring has rotated: chrome lands mid-screen with console text around it.
+      LDA   #$0C
+      STA   VGC_CHAROUT
       ; The editor paints every cell via per-cell color RAM, so it does NOT
       ; dictate the global background/border/foreground — the host runtime owns
       ; those and the active palette.
@@ -709,8 +714,7 @@ editui_menu_load_active:
       STA   EDITUI_MENU_ITEM_COUNT
       STZ   EDITUI_MENU_SELECTED
       STZ   EDITUI_MENU_CMD
-      JSR   editui_menu_select_first_enabled
-      RTS
+      JMP   editui_menu_select_first_enabled ; tail call
 
 editui_menu_select_first_enabled:
       STZ   EDITUI_MENU_SELECTED

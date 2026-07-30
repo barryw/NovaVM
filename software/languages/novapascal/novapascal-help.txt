@@ -21,3 +21,6 @@ Build commands:
   BUILD file.pas   Compile, assemble, link
   RUN project      Run a Pascal project
   RUN file.bin     Run a linked program
+Sample projects:
+  HELLO FIZZBUZZ LIFE MICROCALC
+  STARBURST CUBE JUKEBOX SNAKE BREAKOUT   (Esc leaves)

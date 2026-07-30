@@ -110,16 +110,16 @@ nptool_validate_text:
       BEQ   @text
       LDY   #0
       LDA   (io_name_ptr),Y
-      CMP   #$09
-      BEQ   @accepted
-      CMP   #$0A
-      BEQ   @accepted
-      CMP   #$0D
-      BEQ   @accepted
-      CMP   #$20
-      BCC   @binary
       CMP   #$7F
       BCS   @binary
+      CMP   #$20
+      BCS   @accepted
+      CMP   #$09
+      BCC   @binary
+      CMP   #$0E
+      BCC   @accepted                 ; tab, LF, VT, form feed, CR
+      CMP   #$1A
+      BNE   @binary                   ; CP/M end-of-file padding falls through
 @accepted:
       INC   io_name_ptr
       BNE   :+

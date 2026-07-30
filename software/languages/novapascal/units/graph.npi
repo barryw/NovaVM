@@ -2,73 +2,207 @@
 .ifndef NPI_GRAPH
 NPI_GRAPH = 1
 
+.ifndef DETECT
 DETECT = 0
+.endif
+.ifndef VGA
 VGA = 9
+.endif
+.ifndef NOVAGRAPH
 NOVAGRAPH = 9
+.endif
+.ifndef NOVA320X200
 NOVA320X200 = 0
+.endif
+.ifndef GROK
 GROK = 0
+.endif
+.ifndef BLACK
 BLACK = 0
-BLUE = 1
-GREEN = 2
+.endif
+.ifndef BLUE
+BLUE = 6
+.endif
+.ifndef GREEN
+GREEN = 5
+.endif
+.ifndef CYAN
 CYAN = 3
-RED = 4
-MAGENTA = 5
-BROWN = 6
-LIGHTGRAY = 7
-DARKGRAY = 8
-LIGHTBLUE = 9
-LIGHTGREEN = 10
-LIGHTCYAN = 11
-LIGHTRED = 12
-LIGHTMAGENTA = 13
-YELLOW = 14
-WHITE = 15
+.endif
+.ifndef RED
+RED = 2
+.endif
+.ifndef MAGENTA
+MAGENTA = 4
+.endif
+.ifndef BROWN
+BROWN = 9
+.endif
+.ifndef LIGHTGRAY
+LIGHTGRAY = 15
+.endif
+.ifndef DARKGRAY
+DARKGRAY = 11
+.endif
+.ifndef LIGHTBLUE
+LIGHTBLUE = 14
+.endif
+.ifndef LIGHTGREEN
+LIGHTGREEN = 13
+.endif
+.ifndef LIGHTCYAN
+LIGHTCYAN = 3
+.endif
+.ifndef LIGHTRED
+LIGHTRED = 10
+.endif
+.ifndef LIGHTMAGENTA
+LIGHTMAGENTA = 4
+.endif
+.ifndef YELLOW
+YELLOW = 7
+.endif
+.ifndef WHITE
+WHITE = 1
+.endif
 
+.ifndef __C8DA89E
 __C8DA89E = 1 ; Detect
+.endif
+.ifndef __C882A23
 __C882A23 = 1 ; VGA
+.endif
+.ifndef __C3A460B
 __C3A460B = 1 ; NovaGraph
+.endif
+.ifndef __C828CD8
 __C828CD8 = 1 ; Nova320x200
+.endif
+.ifndef __C8565B8
 __C8565B8 = 1 ; grOk
+.endif
+.ifndef __CD41BA2
 __CD41BA2 = 1 ; Black
+.endif
+.ifndef __C828F0D
 __C828F0D = 1 ; Blue
+.endif
+.ifndef __C31F1B6
 __C31F1B6 = 1 ; Green
+.endif
+.ifndef __C835030
 __C835030 = 1 ; Cyan
+.endif
+.ifndef __C8818E0
 __C8818E0 = 1 ; Red
+.endif
+.ifndef __CCF2D22
 __CCF2D22 = 1 ; Magenta
+.endif
+.ifndef __CD7A40D
 __CD7A40D = 1 ; Brown
+.endif
+.ifndef __C4670B0
 __C4670B0 = 1 ; LightGray
+.endif
+.ifndef __C75C89A
 __C75C89A = 1 ; DarkGray
+.endif
+.ifndef __C439BC5
 __C439BC5 = 1 ; LightBlue
+.endif
+.ifndef __C14956E
 __C14956E = 1 ; LightGreen
+.endif
+.ifndef __C445CE8
 __C445CE8 = 1 ; LightCyan
+.endif
+.ifndef __C7E6E98
 __C7E6E98 = 1 ; LightRed
+.endif
+.ifndef __CE99EDA
 __CE99EDA = 1 ; LightMagenta
+.endif
+.ifndef __C85BA21
 __C85BA21 = 1 ; Yellow
+.endif
+.ifndef __C4E10E6
 __C4E10E6 = 1 ; White
+.endif
 
+.ifndef __P189D50
 __P189D50 = $02 ; DetectGraph
+.endif
+.ifndef __P272A4B
 __P272A4B = $03 ; InitGraph
+.endif
+.ifndef __SFCA08D
 __SFCA08D = $00 ; CloseGraph
+.endif
+.ifndef __S656CD6
 __S656CD6 = $02 ; GraphResult
+.endif
+.ifndef __S35CE03
 __S35CE03 = $02 ; GetMaxX
+.endif
+.ifndef __S35CE04
 __S35CE04 = $02 ; GetMaxY
+.endif
+.ifndef __S53B4AA
 __S53B4AA = $02 ; GetMaxColor
+.endif
+.ifndef __SE9137C
 __SE9137C = $00 ; ClearDevice
+.endif
+.ifndef __S580D50
 __S580D50 = $01 ; SetColor
+.endif
+.ifndef __S4212C4
 __S4212C4 = $02 ; GetColor
+.endif
+.ifndef __S9ED67D
 __S9ED67D = $01 ; SetBkColor
+.endif
+.ifndef __S2008F1
 __S2008F1 = $02 ; GetBkColor
+.endif
+.ifndef __P1E80C0
 __P1E80C0 = $03 ; PutPixel
+.endif
+.ifndef __P2A38C7
 __P2A38C7 = $02 ; GetPixel
+.endif
+.ifndef __P42263F
 __P42263F = $02 ; MoveTo
+.endif
+.ifndef __P86E49F
 __P86E49F = $02 ; MoveRel
+.endif
+.ifndef __S852F1D
 __S852F1D = $02 ; GetX
+.endif
+.ifndef __S852F1E
 __S852F1E = $02 ; GetY
+.endif
+.ifndef __P7C0790
 __P7C0790 = $02 ; LineTo
+.endif
+.ifndef __PFCF010
 __PFCF010 = $02 ; LineRel
+.endif
+.ifndef __P87FD2D
 __P87FD2D = $04 ; Line
+.endif
+.ifndef __PEA8F5A
 __PEA8F5A = $04 ; Rectangle
+.endif
+.ifndef __P87D45A
 __P87D45A = $04 ; Bar
+.endif
+.ifndef __P7FC1D7
 __P7FC1D7 = $03 ; Circle
+.endif
+.ifndef __P251260
 __P251260 = $03 ; FloodFill
+.endif
 .endif

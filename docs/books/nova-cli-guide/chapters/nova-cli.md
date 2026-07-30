@@ -332,14 +332,20 @@ blocking `ReadKey`, cursor-position functions, blitter-backed `DelLine` and
 coordinates, and 16-bit `Delay`. Turbo-style
 parameterless functions may be called without an empty parentheses pair. The
 unit also publishes Turbo's 16 named colors from `Black` through `White` using
-Nova's default palette indexes. `Sound` and `NoSound` use the shared SOUND
-module and the NDK's math-coprocessor-backed hertz conversion.
+Nova's default palette indexes. `KeyPressed` parks the byte it takes from the
+input register in the console state block so the next `ReadKey` returns it.
+`Sound` and `NoSound` use the shared SOUND module and the NDK's
+math-coprocessor-backed hertz conversion.
 `uses Strings;` provides the Turbo `PChar` helpers, including heap-backed
 `StrNew`/`StrDispose`; `Printer.Lst` lazily spools through the ordinary Text and
 FILES path to `PRINTER.TXT`. `Dos` maps file, path, disk, and date/time services
 to the Files/System modules. `Graph` maps the familiar BGI-shaped 320-by-200
-surface to VGC. `Overlay` loads and calls generic NL `NOVO` images through the
-NDK overlay lifecycle.
+surface to VGC, using the same Turbo colour names and Nova palette indexes as
+`Crt`; a program may use both units, and a later unit shadows an earlier one's
+constants exactly as Turbo does. The development disk ships five sample
+projects (`STARBURST`, `CUBE`, `JUKEBOX`, `SNAKE`, `BREAKOUT`) that build with
+`BUILD name` and exercise those units end to end. `Overlay` loads and calls
+generic NL `NOVO` images through the NDK overlay lifecycle.
 
 An NPP 2 `TARGET OVERLAY` project compiles and optimizes Pascal normally, then
 asks the language-neutral linker to emit a versioned `NOVO` image at the

@@ -54,6 +54,31 @@ expressions and structured control flow. Life seeds a random, roughly half-full
 80-by-25 Conway board, applies B3/S23 simultaneously through two 2,000-cell
 buffers, and renders across all 320-by-200 pixels until Enter is pressed.
 
+## Sample projects
+
+The development disk also carries five complete programs, each an ordinary
+NPP 2 project built with `BUILD name` and started with `RUN name`. They exist
+to exercise the platform units the way an application would, so a regression
+in the compiler, the units, or the NDK shows up as a broken demo. Every one
+of them leaves on Esc.
+
+| Project | Uses | What it shows |
+|---|---|---|
+| `STARBURST` | `Graph`, `NovaInput` | Two hardware line fans over the whole 320x200 plane, recoloured every frame |
+| `CUBE` | `Graph`, `NovaInput`, `NovaVgc` | A rotating wireframe cube: `Real` trigonometry builds a scaled sine table once, then the frame loop is 16-bit integer maths paced by the vertical blank |
+| `JUKEBOX` | `Crt`, `NovaInput`, `NovaAudio` | MML sequences queued per SID voice, played, looped, and re-tempoed, plus a Pascal-defined SID instrument driving fire-and-forget effects |
+| `SNAKE` | `Crt`, `NovaInput`, `NovaAudio`, `NovaRandom` | A text-mode game: 2-D Boolean occupancy, a circular body buffer, single-cell repaints, and audio effects |
+| `BREAKOUT` | `Graph`, `NovaInput`, `NovaAudio`, `NovaVgc` | A graphics game: brick wall, paddle, ball physics, lives, and per-row bounce notes |
+
+`e6502UnitTests/NovaPascalExampleTests.cs` builds, runs, and exits every one of
+them on the shipped image.
+
+Two limits are worth knowing before writing programs of this size. NPC keeps
+**64 constants** per compilation including those a used unit's interface
+declares, and `Graph` alone contributes 21 of them. And `Real` is Q16.16:
+every literal and intermediate must stay inside +/-32767, so scale a fraction
+of a turn before multiplying it by 2*Pi rather than after.
+
 NPC now uses recursive-descent statement and expression parsers rather than a
 single fixed statement loop. The implemented language core is case-insensitive
 and supports `Byte`, `Boolean`, `Char`, and unsigned 16-bit `Word` variables;
@@ -262,14 +287,25 @@ functions accept Turbo syntax without empty parentheses, and `Delay` accepts a
 unit publishes Turbo's 16 named colors from `Black` through `White` using
 Nova's default palette indexes. `Sound(Frequency)` and `NoSound` drive a
 continuous SID tone through the shared SOUND module; the NDK converts hertz
-with Nova's math coprocessor.
+with Nova's math coprocessor. `KeyPressed` answers without blocking and
+without losing the keystroke: Nova's input register is consumed by reading it,
+so a true answer parks that byte in the console state block and the next
+`ReadKey` returns it before waiting on the System module again.
+
+`Crt` and `Graph` both export Turbo's colour names, and a program may use both
+units. A later unit in the `uses` clause shadows an earlier one's constant, as
+in Turbo. Both units now map those names to the same Nova palette indexes, so
+`Green` is green whether it reaches the screen through `TextColor` or
+`SetColor`, and the shadowing is invisible.
 
 The remaining Turbo-shaped compatibility units stay thin over Nova services:
 
 - `Dos` provides file search/metadata, paths, disk capacity, and packed
   date/time operations over the Files and System modules.
 - `Graph` maps the familiar 320-by-200 BGI drawing surface to the canonical VGC
-  NDK, including pixels, lines, rectangles, bars, circles, and flood fill.
+  NDK, including pixels, lines, rectangles, bars, circles, and flood fill. Its
+  colour names carry Nova palette indexes, matching `Crt`, so `GetMaxColor`
+  returns 15 rather than the index a BGI name happens to hold.
 - `Overlay` loads and invokes generic NL-produced `NOVO` overlays through the
   NDK overlay lifecycle.
 - `Printer` exposes `Lst: Text`; Nova lazily creates `PRINTER.TXT` on the first

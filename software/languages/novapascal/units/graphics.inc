@@ -3,10 +3,12 @@
 .ifndef NOVA_GRAPHICS_UNIT_INCLUDED
 NOVA_GRAPHICS_UNIT_INCLUDED = 1
 
-; Declare only this unit's canonical VGC dependencies. This keeps NAS's
-; transient symbol table focused while GRAPHICS.S still includes vgc.s itself.
+; Declare this unit's canonical VGC dependencies. The contract is included
+; rather than its guard asserted: another unit in the same program (NovaAudio,
+; NovaVgc, ...) may have pulled vgc.inc already, and a second assignment of the
+; guard is a symbol redefinition.
 .include "nova.inc"
-VGC_INC_INCLUDED = 1
+.include "vgc.inc"
 
 .global vgc_wait_cmd
 .global vgc_wait_frames

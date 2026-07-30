@@ -2,7 +2,10 @@
 .ifndef NOVA_GRAPH_UNIT_INCLUDED
 NOVA_GRAPH_UNIT_INCLUDED = 1
 .include "nova.inc"
-VGC_INC_INCLUDED = 1
+; Declare the canonical VGC contract instead of asserting its include guard:
+; another unit in the same program (NovaAudio, NovaVgc, ...) may have pulled
+; vgc.inc already, and a second assignment is a symbol redefinition.
+.include "vgc.inc"
 
 .global vgc_wait_cmd
 .global vgc_set_mode

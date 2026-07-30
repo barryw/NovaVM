@@ -9,22 +9,24 @@ const
   Nova320x200 = 0;
   grOk = 0;
 
+  { Turbo colour names mapped to Nova's default palette, exactly as Crt
+    maps them, so a name means the same colour in text and graphics. }
   Black = 0;
-  Blue = 1;
-  Green = 2;
+  Blue = 6;
+  Green = 5;
   Cyan = 3;
-  Red = 4;
-  Magenta = 5;
-  Brown = 6;
-  LightGray = 7;
-  DarkGray = 8;
-  LightBlue = 9;
-  LightGreen = 10;
-  LightCyan = 11;
-  LightRed = 12;
-  LightMagenta = 13;
-  Yellow = 14;
-  White = 15;
+  Red = 2;
+  Magenta = 4;
+  Brown = 9;
+  LightGray = 15;
+  DarkGray = 11;
+  LightBlue = 14;
+  LightGreen = 13;
+  LightCyan = 3;
+  LightRed = 10;
+  LightMagenta = 4;
+  Yellow = 7;
+  White = 1;
 
 procedure DetectGraph(var GraphDriver, GraphMode: Integer); external;
 procedure InitGraph(var GraphDriver, GraphMode: Integer;

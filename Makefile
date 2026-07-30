@@ -25,10 +25,18 @@ binaries:
 	$(MAKE) -C software/languages/ehbasic            # basic.bin, extension.bin, novavm.inc
 	$(MAKE) -C software/languages/novaforth install
 	$(MAKE) -C software/languages/novalogo install
+	$(MAKE) -C software/languages/novapascal install
 	@for m in $(MODULES); do $(MAKE) -C software/modules/$$m install || exit 1; done
 	$(MAKE) -C software/assembly                       # apps (keyboard, music, turtle, ...)
 	$(MAKE) stage-resources
 	$(MAKE) stage-web
+	# The language and module builds each re-archive nova.lib, so settle the
+	# library and then relink the apps that link against it. The editor test
+	# harness is one of them, and a stale harness makes the editor tests judge
+	# code that is no longer in the tree.
+	$(MAKE) -C software/runtime/asm build/nova.lib
+	$(MAKE) -C software/assembly
+	$(MAKE) -C software/assembly editbuf-test
 	@echo "=== binaries: all deployable artifacts built + staged from source ==="
 
 # ehbasic has no install target; stage it (renamed) + the FPGA/CLI copies here.

@@ -700,6 +700,7 @@ static void handle_mount_drive(mgmt_ctx *c, uint16_t cmd, uint32_t reqid,
     if (access(full, R_OK) != 0) { send_error(c, cmd, reqid, "not_found", "not found"); return; }
 
     drive_set(idx, path);
+    nfio_reset_cwd();                 /* the CD state belonged to the old image */
     const char *boot = drive_slot_name(drive_boot_slot());
     printf("[mgmt] mount %s = %s (boot=%s)\n", drive_slot_name(idx), path, boot ? boot : "-");
 
@@ -721,6 +722,7 @@ static void handle_unmount_drive(mgmt_ctx *c, uint16_t cmd, uint32_t reqid,
     int idx = drive_slot_index(slot);
     if (idx < 0) { send_error(c, cmd, reqid, "bad_slot", "bad slot"); return; }
     drive_set(idx, "");
+    nfio_reset_cwd();                 /* the CD state belonged to the old image */
     const char *boot = drive_slot_name(drive_boot_slot());
     printf("[mgmt] unmount %s (boot=%s)\n", drive_slot_name(idx), boot ? boot : "-");
 
@@ -733,6 +735,7 @@ static void handle_unmount_drive(mgmt_ctx *c, uint16_t cmd, uint32_t reqid,
 }
 
 static void handle_vm_reset(mgmt_ctx *c, uint16_t cmd, uint32_t reqid) {
+    nfio_reset_cwd();
     vm_reset_ctrl(0);
     printf("[mgmt] VM reset\n");
     resp_begin(c, cmd, reqid, 1, "ok", NULL);
@@ -1082,11 +1085,13 @@ static void do_get_cursor(dbg_ctx *c) {
 }
 
 static void do_reset(dbg_ctx *c) {
+    nfio_reset_cwd();
     vm_reset_ctrl_locked(0);
     dbg_respond(c, "{\"ok\":true,\"reset\":true}");
 }
 
 static void do_cold_start(dbg_ctx *c) {
+    nfio_reset_cwd();
     host_reboot_vm();
     dbg_respond(c, "{\"ok\":true,\"cold_start\":true}");
 }

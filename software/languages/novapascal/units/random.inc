@@ -3,16 +3,13 @@
 .ifndef NOVA_RANDOM_UNIT_INCLUDED
 NOVA_RANDOM_UNIT_INCLUDED = 1
 
-; Keep only this adapter's canonical dependencies in NAS's transient symbol
-; table. The values remain aliases of nova.inc; RANDOM.S still includes the
-; unmodified RNG and FIO implementations.
+; Include this adapter's canonical dependencies rather than asserting their
+; include guards: another unit in the same program (NovaAudio, NovaFio, ...)
+; may have pulled them already, and a second assignment of a guard or of an
+; alias such as RNG_VALUE0 is a symbol redefinition.
 .include "nova.inc"
-FIO_INC_INCLUDED = 1
-RNG_INC_INCLUDED = 1
-
-FIO_RESULT_OK = $00
-FIO_RESULT_ERROR = $01
-RNG_VALUE0 = FIO_RNG0
+.include "fio.inc"
+.include "rng.inc"
 
 .global fio_check
 .global fio_exec

@@ -116,6 +116,68 @@ public class NovaPascalTests
     }
 
     [TestMethod]
+    public void ByteParametersNarrowWordArguments()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"novapascal-argwidth-{Guid.NewGuid():N}");
+        string disks = Path.Combine(root, "disks");
+        Directory.CreateDirectory(disks);
+        File.Copy(
+            RepoPath("software", "languages", "novapascal", "novapascal.ndi"),
+            Path.Combine(disks, "fd0.ndi"));
+
+        try
+        {
+            using var storage = new EnvScope("NOVA_STORAGE_ROOT", root);
+            using var automount = new EnvScope("NOVA_NO_AUTOMOUNT", null);
+            using var autoboot = new EnvScope("NOAUTO", null);
+            using var bus = new CompositeBusDevice(enableSound: false);
+            var cpu = new Cpu(bus);
+            var editor = new ScreenEditor(bus.Vgc);
+            bus.Vgc.SetScreenEditor(editor);
+            cpu.Boot();
+            RunUntil(cpu, bus, s => s.Contains("NovaPascal Shell v1.0", StringComparison.Ordinal), "shell banner");
+
+            // A word-typed expression handed to a byte value parameter must be
+            // pushed as one byte: pushing both halves leaves the callee's frame
+            // teardown one byte short and corrupts its return.
+            var disk = bus.DeviceManager.GetDevice("FD0");
+            disk.Save("ARGWIDTH", Encoding.ASCII.GetBytes(
+                "program ArgWidth;\nvar G: Integer;\n\n" +
+                "procedure Blip(A, C: Byte);\nbegin\n  writeln('BLIP ', A);\n" +
+                "  writeln('C ', C)\nend;\n\n" +
+                "procedure One(A: Byte);\nbegin\n  writeln('ONE ', A)\nend;\n\n" +
+                "procedure Hit;\nvar\n  Col, Row: Integer;\nbegin\n" +
+                "  Col := G;\n  Row := G + 1;\n  Blip(72 + Row * 3, 3);\n" +
+                "  One(200 + Col);\n  Blip(Row, 3)\nend;\n\n" +
+                "begin\n  G := 3;\n  Hit;\n  writeln('ARGS DONE')\nend.\n"), ".PAS");
+            disk.Save("ARGWIDTH", Encoding.ASCII.GetBytes(
+                "NPP 1\nMAIN ARGWIDTH.PAS\nOUTPUT ARGWIDTH.BIN\nOPTIMIZE O2\nMAP ARGWIDTH.MAP\n"), ".NPP");
+
+            QueueLine(editor, "BUILD ARGWIDTH.NPP");
+            string build = RunUntil(cpu, bus,
+                s => s.Contains("Build complete: ARGWIDTH.BIN", StringComparison.Ordinal)
+                     || s.Contains(": error:", StringComparison.Ordinal)
+                     || s.Contains("syntax error", StringComparison.OrdinalIgnoreCase),
+                "narrowed argument build");
+            Assert.IsTrue(disk.FileExists("ARGWIDTH", ".BIN"), build);
+            string generated = Encoding.ASCII.GetString(disk.Load("ARGWIDTH", ".S"));
+            Assert.IsFalse(generated.Contains("PHX\nPHA\nLDA #$03\nPHA", StringComparison.Ordinal),
+                "A byte parameter must not receive both halves of a word expression.");
+
+            QueueLine(editor, "RUN ARGWIDTH.BIN");
+            string run = RunUntilProgramReturns(cpu, bus, "ARGS DONE", "narrowed argument execution");
+            foreach (string expected in new[] { "BLIP 84", "ONE 203", "BLIP 4" })
+                StringAssert.Contains(run, expected);
+            Assert.AreEqual(2, run.Split('\n').Count(line => line.Trim() == "C 3"),
+                "Both calls must return to their caller with the argument bytes removed.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
     public void EditorSupportsWordMovementAndDeletion()
     {
         string root = Path.Combine(Path.GetTempPath(), $"novapascal-word-{Guid.NewGuid():N}");
@@ -719,7 +781,7 @@ public class NovaPascalTests
                 "  GraphOK := false; PositionOK := false;\n" +
                 "  if (Driver = VGA) and (Mode = Nova320x200) and\n" +
                 "     (GetMaxX = 319) and (GetMaxY = 199) and\n" +
-                "     (GetMaxColor = White) then GraphOK := true;\n" +
+                "     (GetMaxColor = 15) then GraphOK := true;\n" +
                 "  SetBkColor(Blue); ClearDevice; SetColor(Green);\n" +
                 "  Line(0, 0, 5, 0); Rectangle(20, 20, 30, 30);\n" +
                 "  Bar(40, 40, 45, 45); Circle(60, 60, 4);\n" +
@@ -766,15 +828,17 @@ public class NovaPascalTests
             QueueLine(editor, "RUN GRAPHTST.BIN");
             string run = RunUntilProgramReturns(cpu, bus, "GRAPH DONE", "Turbo Graph runtime", loadAddress: 0x8000);
             StringAssert.Contains(run, "GRAPH OK");
-            Assert.AreEqual((byte)2, bus.Vgc.GetGfxPixelColor(0, 0));
-            Assert.AreEqual((byte)1, bus.Vgc.GetGfxPixelColor(319, 199));
-            Assert.AreEqual((byte)14, bus.Vgc.GetGfxPixelColor(10, 10));
-            Assert.AreEqual((byte)2, bus.Vgc.GetGfxPixelColor(20, 20));
-            Assert.AreEqual((byte)2, bus.Vgc.GetGfxPixelColor(42, 42));
-            Assert.AreEqual((byte)2, bus.Vgc.GetGfxPixelColor(64, 60));
-            Assert.AreEqual((byte)2, bus.Vgc.GetGfxPixelColor(78, 72));
-            Assert.AreEqual((byte)12, bus.Vgc.GetGfxPixelColor(100, 100));
-            Assert.AreEqual((byte)11, bus.Vgc.GetGfxPixelColor(105, 105));
+            // Graph's Turbo colour names carry Nova's palette indexes, the same
+            // ones Crt uses: Green 5, Blue 6, Yellow 7, LightRed 10, LightCyan 3.
+            Assert.AreEqual((byte)5, bus.Vgc.GetGfxPixelColor(0, 0));
+            Assert.AreEqual((byte)6, bus.Vgc.GetGfxPixelColor(319, 199));
+            Assert.AreEqual((byte)7, bus.Vgc.GetGfxPixelColor(10, 10));
+            Assert.AreEqual((byte)5, bus.Vgc.GetGfxPixelColor(20, 20));
+            Assert.AreEqual((byte)5, bus.Vgc.GetGfxPixelColor(42, 42));
+            Assert.AreEqual((byte)5, bus.Vgc.GetGfxPixelColor(64, 60));
+            Assert.AreEqual((byte)5, bus.Vgc.GetGfxPixelColor(78, 72));
+            Assert.AreEqual((byte)10, bus.Vgc.GetGfxPixelColor(100, 100));
+            Assert.AreEqual((byte)3, bus.Vgc.GetGfxPixelColor(105, 105));
         }
         finally
         {
@@ -1416,8 +1480,9 @@ public class NovaPascalTests
         string sourceImage = RepoPath("software", "languages", "novapascal", "novapascal.ndi");
         using (NdiImage image = NdiImage.Open(sourceImage))
         {
-            Assert.AreEqual(128u, image.Header.DirectorySectorCount,
-                "The compatibility corpus and generated user artifacts need a development-sized directory.");
+            Assert.AreEqual(192u, image.Header.DirectorySectorCount,
+                "The compatibility corpus, sample projects, and generated user artifacts need a " +
+                "development-sized directory.");
             NdiDirEntry[] entries = image.ListDirectory(0xFFFF);
             NdiDirEntry system = entries.Single(entry => entry.IsDirectory &&
                 entry.Filename.Equals("SYSTEM", StringComparison.OrdinalIgnoreCase));
@@ -4284,8 +4349,9 @@ public class NovaPascalTests
             byte[] deviceCode = ReadNobjSectionData(deviceMember, "CODE");
             byte[] unusedCode = ReadNobjSectionData(unusedMember, "CODE");
             byte[] executable = disk.Load("HELLO", ".BIN");
-            Assert.AreEqual(2 + codeLength + lineCode.Length + deviceCode.Length + 7, executable.Length,
-                "NL must extract the complete transitive member set and materialize its seven-byte device state.");
+            Assert.AreEqual(2 + codeLength + lineCode.Length + deviceCode.Length + 8, executable.Length,
+                "NL must extract the complete transitive member set and materialize its eight-byte " +
+                "console state: window geometry, the active flag, its writer, and KeyPressed's peeked key.");
             Assert.IsTrue(ContainsSequence(executable, new byte[] { 0x68, 0x28, 0x8D, 0x0E, 0xA0, 0x60 }),
                 "The default character device must emit through Nova's VGC register.");
             Assert.IsFalse(ContainsSequence(executable, unusedCode),

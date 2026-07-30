@@ -3,22 +3,54 @@
 NPI_CRT = 1
 
 ; Turbo color names mapped to Nova's default palette.
+.ifndef BLACK
 BLACK = $00
+.endif
+.ifndef BLUE
 BLUE = $06
+.endif
+.ifndef GREEN
 GREEN = $05
+.endif
+.ifndef CYAN
 CYAN = $03
+.endif
+.ifndef RED
 RED = $02
+.endif
+.ifndef MAGENTA
 MAGENTA = $04
+.endif
+.ifndef BROWN
 BROWN = $09
+.endif
+.ifndef LIGHTGRAY
 LIGHTGRAY = $0F
+.endif
+.ifndef DARKGRAY
 DARKGRAY = $0B
+.endif
+.ifndef LIGHTBLUE
 LIGHTBLUE = $0E
+.endif
+.ifndef LIGHTGREEN
 LIGHTGREEN = $0D
+.endif
+.ifndef LIGHTCYAN
 LIGHTCYAN = $03
+.endif
+.ifndef LIGHTRED
 LIGHTRED = $0A
+.endif
+.ifndef LIGHTMAGENTA
 LIGHTMAGENTA = $04
+.endif
+.ifndef YELLOW
 YELLOW = $07
+.endif
+.ifndef WHITE
 WHITE = $01
+.endif
 
 .ifndef __CD41BA2
 __CD41BA2 = 1 ; Black
@@ -71,6 +103,9 @@ __C4E10E6 = 1 ; White
 
 .ifndef __S99D16A
 __S99D16A = $02 ; ReadKey
+.endif
+.ifndef __SBD63C4
+__SBD63C4 = $02 ; KeyPressed
 .endif
 .ifndef __S0DF3F8
 __S0DF3F8 = $02 ; WhereX

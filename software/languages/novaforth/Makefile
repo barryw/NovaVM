@@ -5,7 +5,7 @@ RESOURCES = ../../../e6502.Avalonia/Resources
 all: novaforth.bin
 
 $(NOVA_LIB_FILE): FORCE
-	$(MAKE) -C $(NOVA_ASM) clean-nova-lib build/nova.lib
+	$(MAKE) -C $(NOVA_ASM) build/nova.lib
 
 novaforth.bin: novaforth.o novaforth.cfg $(NOVA_LIB_FILE)
 	ld65 -C novaforth.cfg -m novaforth.map -o $@ novaforth.o $(NOVA_LIB_FILE)

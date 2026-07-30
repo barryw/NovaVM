@@ -51,6 +51,7 @@ __PD9C5DA = $03 ; Insert
 __S59C618 = $00 ; NormVideo
 __S85A96E = $00 ; Halt
 __S99D16A = $02 ; ReadKey
+__SBD63C4 = $02 ; KeyPressed
 __S0DF3F8 = $02 ; WhereX
 __S0DF3F9 = $02 ; WhereY
 __S08533C = $02 ; IOResult
